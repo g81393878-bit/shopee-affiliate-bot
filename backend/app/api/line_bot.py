@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Header, Request
 from sqlalchemy.orm import Session
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import TextMessage, MessageEvent, TextSendMessage, StickerMessage, StickerSendMessage
+from linebot.models import TextMessage, MessageEvent, TextSendMessage, StickerMessage, StickerSendMessage, Sender
 from pydantic import BaseModel
 
 from app.db import SessionLocal, get_db
@@ -21,6 +21,10 @@ LINE_SECRET = os.getenv('LINE_CHANNEL_SECRET') or "mock_line_channel_secret"
 
 line_bot_api = LineBotApi(LINE_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_SECRET)
+
+# ชื่อร้าน/บอทที่แสดงบนข้อความตอบกลับ (ชื่อหัวแชทตั้งที่ LINE Official Account Manager)
+BOT_NAME = "ป้าเข็ม ขายของ"
+BOT_ICON_URL = "https://profile.line-scdn.net/0hERy_y3n3Gn1EJgY083hlKnhjFBAzCBw1PEVTE2UuR01sRAh-e0FdS2YmQEw-EF5_LBBcG2UiREg7"
 
 router = APIRouter(
     prefix="/webhooks",
@@ -224,7 +228,7 @@ def message_text(event):
                 reply_text = format_product_message(db, user, hits)
             else:
                 reply_text = (
-                    f"🤖 สวัสดีครับคุณ {user.name}! ยินดีต้อนรับสู่ร้านของเรา 😊\n\n"
+                    f"🤖 สวัสดีครับคุณ {user.name}! ยินดีต้อนรับสู่ร้าน{BOT_NAME} 😊\n\n"
                     "นี่คือสินค้าแนะนำวันนี้ — แตะลิงก์สั่งซื้อได้เลยครับ 🛒\n\n"
                 ) + handle_today_deals(db, user)
     except Exception as e:
@@ -238,7 +242,7 @@ def message_text(event):
     else:
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=reply_text)
+            TextSendMessage(text=reply_text, sender=Sender(name=BOT_NAME, icon_url=BOT_ICON_URL))
         )
 
 

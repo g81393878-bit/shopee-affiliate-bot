@@ -31,8 +31,8 @@ d = ImageDraw.Draw(img)
 f_main = ImageFont.truetype(r"C:\Windows\Fonts\tahomabd.ttf", 120)
 f_sub = ImageFont.truetype(r"C:\Windows\Fonts\tahoma.ttf", 58)
 
-main = "วันนี้ขายอะไรดี"
-sub = "แตะเพื่อดูสินค้าแนะนำ 3 อันดับ + ลิงก์ Affiliate"
+main = "ป้าเข็ม ขายของ"
+sub = "แตะเพื่อดูสินค้าแนะนำ + ลิงก์ Affiliate"
 
 w1 = d.textlength(main, font=f_main)
 w2 = d.textlength(sub, font=f_sub)
@@ -45,8 +45,8 @@ print("image saved:", IMG_PATH, os.path.getsize(IMG_PATH), "bytes")
 menu = {
     "size": {"width": W, "height": H},
     "selected": False,
-    "name": "Shopee Affiliate เมนูหลัก",
-    "chatBarText": "เมนู Affiliate",
+    "name": "ป้าเข็ม ขายของ เมนูหลัก",
+    "chatBarText": "เมนูป้าเข็ม",
     "areas": [
         {
             "bounds": {"x": 0, "y": 0, "width": W, "height": H},
