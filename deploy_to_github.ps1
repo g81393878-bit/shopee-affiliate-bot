@@ -92,7 +92,7 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host " 3. Go to https://render.com > New > Web Service" -ForegroundColor White
     Write-Host " 4. Connect GitHub repo: $GITHUB_USER/$REPO_NAME" -ForegroundColor White
     Write-Host " 5. Set ENV variables on Render (DATABASE_URL, LINE tokens, GEMINI_API_KEY)" -ForegroundColor White
-    Write-Host " 6. Copy Render URL and update LINE Webhook + Cloudflare Worker" -ForegroundColor White
+    Write-Host " 6. Set LINE Webhook URL to https://<render-url>/api/webhooks/line (no Cloudflare Worker needed)" -ForegroundColor White
 } else {
     Write-Host "`nPush failed. Check token permissions (needs 'repo' scope)." -ForegroundColor Red
 }

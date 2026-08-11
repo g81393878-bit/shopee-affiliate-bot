@@ -11,7 +11,7 @@ description: |
 
 ## Overview
 
-This skill deploys a **FastAPI** backend to **Render.com** (free hosting) with **Supabase** (free PostgreSQL database), providing a permanent public URL suitable for LINE Bot webhooks, Cloudflare Worker routing, or any webhook-based integration.
+This skill deploys a **FastAPI** backend to **Render.com** (free hosting) with **Supabase** (free PostgreSQL database), providing a permanent public URL suitable for LINE Bot webhooks or any webhook-based integration.
 
 **Why this stack?**
 - ✅ Permanent URL — no need for localtunnel/ngrok that changes on every restart
@@ -112,11 +112,10 @@ def get_session():
 
 ### Step 4: Update LINE Webhook
 1. Go to LINE Developers Console → Messaging API
-2. Set Webhook URL to: `https://your-service-name.onrender.com/webhook`
+2. Set Webhook URL to: `https://your-service-name.onrender.com/api/webhooks/line`
 3. Verify the webhook
 
-### Step 5: Update Cloudflare Worker
-Update the `FASTAPI_URL` constant in the Cloudflare Worker to the Render URL.
+> ⚠️ Use the plural path `/api/webhooks/line` — the old walkthrough's `/api/webhook` (singular) breaks LINE webhook verification. **No Cloudflare Worker is used anymore**: the webhook points straight at Render. A worker in the middle is a silent failure point — a stale `FASTAPI_URL` (e.g. a dead `loca.lt` tunnel) drops every LINE event while still answering 200 to LINE.
 
 ---
 
@@ -158,8 +157,6 @@ LINE User
     ↓
 LINE Platform
     ↓
-Cloudflare Worker (permanent URL)
-    ↓ (forwards to)
 Render.com FastAPI (permanent URL, always on)
     ↓
 Supabase PostgreSQL (cloud database)
