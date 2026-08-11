@@ -172,5 +172,37 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
         except Exception as e:
             logger.error(f"OpenAI API analysis failed: {e}. Falling back to mock data.")
 
+    elif provider == "groq" and settings.GROQ_API_KEY and "mock" not in settings.GROQ_API_KEY.lower():
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=settings.GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
+
+            prompt = f"""
+            Analyze this Shopee product for short-video (TikTok/Reels) affiliate marketing:
+            Product Name: {name}
+            Category: {category}
+            Price: {price} Baht
+            Rating: {rating}/5
+            Sales Count: {sales_count}
+            Commission: {commission} Baht
+            Score: {score}/100
+
+            Provide recommendations, reasons, content ideas, and a TikTok script in Thai.
+            """
+
+            response = client.chat.completions.create(
+                model=settings.GROQ_MODEL,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant. Respond only with JSON conforming to the requested schema. Use Thai language for content fields."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"}
+            )
+            data = json.loads(response.choices[0].message.content)
+            data["product_score"] = score
+            return data
+        except Exception as e:
+            logger.error(f"Groq API analysis failed: {e}. Falling back to mock data.")
+
     # Fallback to mock data if no keys configured or API calls failed
     return get_mock_analysis(name, price, rating, sales_count, commission, score)

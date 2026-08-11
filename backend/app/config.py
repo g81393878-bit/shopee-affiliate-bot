@@ -14,8 +14,11 @@ class Settings:
     
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+    # Groq model (OpenAI-compatible API): e.g. llama-3.3-70b-versatile
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
     
-    # Choose: 'gemini' or 'openai'
+    # Choose: 'gemini', 'openai', or 'groq'
     LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "gemini").lower()
     
     # LINE Messaging API Keys
