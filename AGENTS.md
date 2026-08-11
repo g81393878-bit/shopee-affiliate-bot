@@ -1,0 +1,21 @@
+# AGENTS.md
+
+## Deployment (Render + Supabase)
+
+- `backend/app/db.py` auto-converts `postgres://` → `postgresql://` (SQLAlchemy v2 rejects the former); Supabase and many cloud providers return `postgres://` URLs. Postgres pools use `pool_pre_ping=True` and `pool_recycle=300` — keep these when touching engine setup.
+- On Render, Supabase **must** use the Transaction Pooler URL (port 6543, `*.pooler.supabase.com`), never the Direct Connection — direct connections fail on Render because of IPv6.
+- `render.yaml` must declare `rootDir: backend` because its build/start commands (`pip install -r requirements.txt`, `uvicorn app.main:app --port $PORT`) only resolve when the working dir contains `requirements.txt` and the `app/` package, which both live under `backend/`. render.yaml ↔ `backend/requirements.txt` ↔ `backend/app/` must move together.
+- Env vars marked `sync: false` in `render.yaml` (DATABASE_URL, LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, GEMINI_API_KEY) are set manually in the Render dashboard; `LLM_PROVIDER=gemini` is baked in. Render free tier spins down after ~15 min of inactivity — `/health` exists solely to be pinged by cron-job.org every 10 min to keep the bot warm.
+- One-click deploy script: `.\deploy_to_github.ps1 -Token <ghp_...>` creates/pushes `watt29/shopee-affiliate-bot`; token needs the `repo` scope. The full walkthrough lives in `.agents/skills/render-supabase-deploy/SKILL.md` — read it before touching deployment.
+- Supabase free-tier projects **auto-pause after ~7 days of inactivity**; a paused project returns 400 `"Cannot reset password for non-active projects"` on the Management API. Restore with `POST /v1/projects/{ref}/restore` (Bearer = `sbp_...` access token), poll `GET /v1/projects/{ref}` until `status: ACTIVE_HEALTHY` (~2 min), then reset the DB password with `PATCH /v1/projects/{ref}/database/password` `{"password": ...}`.
+- `supabase link` writes `supabase/.temp/` containing `pooler-url` (embeds the DB password) and `project-ref` — the folder is gitignored, never commit it. The linked project is `usqhvujqmnxqrdoovvnp` ("g81393878-bit's Project", created 2025-08-04, not named `shopee-affiliate`); its DB password was reset and stored at `~/.supabase/db-password.txt`.
+
+## LINE Bot / Webhook
+
+- The real webhook endpoint is `POST /api/webhooks/line` (router mounted at `/api` + prefix `/webhooks` + route `/line`). The old deploy walkthrough documents `/api/webhook` (singular) — that URL is wrong and breaks LINE webhook verification; use the plural path.
+- Architecture: LINE → Cloudflare Worker (stable URL `throbbing-dust-a90b.regency2919.workers.dev`) → Render FastAPI → Supabase → Gemini. When the Render URL changes, both the worker's `FASTAPI_URL` constant and the LINE webhook URL must be updated together.
+- `line_bot.py` falls back to mock tokens when `LINE_CHANNEL_ACCESS_TOKEN`/`LINE_CHANNEL_SECRET` are unset, so the app starts fine in dev but the bot silently won't work — env vars are required in any real deployment.
+
+## Git & Repo Hygiene
+
+- `.gitignore` blocks drivers, `*.db`, `.env`, `*.zip`, `*.ipynb`. Pattern gap: `geckodriver*/` only matches directories, so a root `geckodriver.exe` keeps appearing as untracked in `git status` (chromedriver.exe is explicitly ignored) — don't stage it.

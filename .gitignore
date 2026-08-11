@@ -58,3 +58,6 @@ geckodriver*/
 
 # App-specific local data
 .freebuff/
+
+# Supabase CLI linked project (contains pooler URL with DB password)
+supabase/.temp/
