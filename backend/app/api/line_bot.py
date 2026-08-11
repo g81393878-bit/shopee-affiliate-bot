@@ -163,12 +163,23 @@ def search_products(db: Session, query: str) -> list:
     return [p for p in products if any(s in (p.name or "").lower() for s in subs)]
 
 
+def get_line_profile_name(line_user_id: str) -> Optional[str]:
+    """Fetch the user's real LINE display name (works only for users who added the bot)"""
+    try:
+        profile = line_bot_api.get_profile(line_user_id)
+        return (profile.display_name or "").strip() or None
+    except Exception as e:
+        logger.warning(f"Could not fetch LINE profile for {line_user_id}: {e}")
+        return None
+
+
 def get_or_create_line_user(db: Session, line_user_id: str) -> models.User:
     """Look up user by LINE user ID or register on the fly"""
     user = db.query(models.User).filter(models.User.line_user_id == line_user_id).first()
     if not user:
+        name = get_line_profile_name(line_user_id) or "LINE User"
         user = models.User(
-            name="LINE User",
+            name=name,
             line_user_id=line_user_id,
             shopee_affiliate_id="SHP_AFF_AUTO"
         )
@@ -176,6 +187,14 @@ def get_or_create_line_user(db: Session, line_user_id: str) -> models.User:
         db.commit()
         db.refresh(user)
         logger.info(f"Registered new LINE user on the fly: {line_user_id}")
+    elif user.name == "LINE User":
+        # Upgrade the placeholder name with the real LINE display name
+        name = get_line_profile_name(line_user_id)
+        if name and name != user.name:
+            user.name = name
+            db.add(user)
+            db.commit()
+            db.refresh(user)
     return user
 
 
