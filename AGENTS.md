@@ -17,6 +17,7 @@
 - The real webhook endpoint is `POST /api/webhooks/line` (router mounted at `/api` + prefix `/webhooks` + route `/line`). The old deploy walkthrough documents `/api/webhook` (singular) — that URL is wrong and breaks LINE webhook verification; use the plural path.
 - Architecture: LINE → Cloudflare Worker (stable URL `throbbing-dust-a90b.regency2919.workers.dev`) → Render FastAPI → Supabase → Gemini. When the Render URL changes, both the worker's `FASTAPI_URL` constant and the LINE webhook URL must be updated together.
 - `line_bot.py` falls back to mock tokens when `LINE_CHANNEL_ACCESS_TOKEN`/`LINE_CHANNEL_SECRET` are unset, so the app starts fine in dev but the bot silently won't work — env vars are required in any real deployment.
+- On this machine, `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`, and `GROQ_API_KEY` are ALSO set as Windows **user** environment variables — and `load_dotenv` never overrides existing env vars, so stale values in the Windows env silently beat `backend/.env`. When credentials change, update BOTH places (or `[Environment]::SetEnvironmentVariable(...,'User')`). Current valid creds: LINE token (bot "สารวัตร AI") + secret `feab701d...` (stored in `.env`), Groq `gsk_LzxL...`.
 
 ## Git & Repo Hygiene
 
