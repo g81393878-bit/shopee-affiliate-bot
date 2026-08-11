@@ -67,7 +67,11 @@ def handle_events_manually(handler: WebhookHandler, events: list, destination: s
 @router.post("/line")
 async def callback(request: Request, x_line_signature: str = Header(None)):
     body = await request.body()
-    body_str = body.decode("utf-8")
+    try:
+        body_str = body.decode("utf-8")
+    except UnicodeDecodeError as e:
+        logger.error(f"Invalid UTF-8 webhook body: {e}")
+        raise HTTPException(status_code=400, detail="chatbot handle body error: invalid UTF-8")
     
     # Bypass verification for testing/mock setup if signature is missing or secret is mock
     if not x_line_signature or LINE_SECRET == "mock_line_channel_secret" or x_line_signature == "mock":
