@@ -160,18 +160,21 @@ def message_text(event):
     print("!!!!!!!!!!!!!!!!!!!!!!")
     
     user_text = event.message.text.strip()
+    # Accept both "วันนี้ขายอะไรดี" and "วันนี้ขายอะไรดี?" — the Thai keyboard doesn't add
+    # the ?, and a bare trailing "?" from autocorrect shouldn't break the match either.
+    normalized_text = user_text.rstrip("?？ ").strip()
     line_user_id = event.source.user_id
     
     db = SessionLocal()
     try:
         user = get_or_create_line_user(db, line_user_id)
-        if user_text == "วันนี้ขายอะไรดี?":
+        if normalized_text == "วันนี้ขายอะไรดี":
             reply_text = handle_today_deals(db, user)
         else:
             reply_text = (
                 f"🤖 สวัสดีครับคุณ {user.name}!\n"
                 "ผมคือบอทผู้ช่วย AI Affiliate ของคุณ\n\n"
-                "พิมพ์คำว่า \"วันนี้ขายอะไรดี?\" - เพื่อให้ผมช่วยหาสินค้าเจ๋ง ๆ 3 อันดับแรกที่คุณน่าลุยทำคอนเทนต์ในวันนี้ครับ!"
+                "พิมพ์คำว่า \"วันนี้ขายอะไรดี\" - เพื่อให้ผมช่วยหาสินค้าเจ๋ง ๆ 3 อันดับแรกที่คุณน่าลุยทำคอนเทนต์ในวันนี้ครับ!"
             )
     except Exception as e:
         logger.error(f"Error processing LINE message: {e}")
