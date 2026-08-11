@@ -97,34 +97,32 @@ async def callback(request: Request, x_line_signature: str = Header(None)):
     return 'OK'
 
 
-def handle_today_deals(db: Session, user: models.User) -> str:
-    """Fetch top 3 highest scoring products"""
-    products = db.query(models.Product).order_by(models.Product.ai_score.desc()).limit(3).all()
-        
+def format_product_message(db: Session, user: models.User, products: list) -> str:
+    """Format a product list into the reply message"""
     if not products:
         return (
             f"สวัสดีครับคุณ {user.name} 👋\n\n"
             "⚠️ ยังไม่มีสินค้าในระบบชั่วคราวครับ\n\n"
             "คุณสามารถเพิ่มสินค้าเข้าระบบก่อนได้ผ่านหน้า Dashboard หรือ API ของเรา เพื่อให้ระบบ AI ประเมินและสร้างสคริปต์ได้ครับ"
         )
-        
+
     message_lines = [f"⭐ สินค้าแนะนำขายดีวันนี้สำหรับคุณ {user.name} ⭐\n"]
-    
+
     for i, prod in enumerate(products, 1):
         # Look for standard content script
         content = db.query(models.Content).filter(
             models.Content.product_id == prod.id,
             models.Content.style == "Standard"
         ).first()
-        
+
         # Or fall back to any style if Standard not available
         if not content:
             content = db.query(models.Content).filter(models.Content.product_id == prod.id).first()
-            
+
         hook_text = ""
         if content and content.hook:
             hook_text = f"💡 แนวทางคอนเทนต์ (Hook):\n\"{content.hook}\"\n"
-                
+
         message_lines.append(
             f"{i}. {prod.name}\n"
             f"💰 ราคา: {prod.price} บาท\n"
@@ -132,9 +130,37 @@ def handle_today_deals(db: Session, user: models.User) -> str:
             f"{hook_text}"
             f"🔗 ลิงก์ Affiliate: {prod.affiliate_url or 'ไม่มีลิงก์'}\n"
         )
-        
+
     message_lines.append("ลองนำแนวทางหัวข้อนี้ไปถ่ายทำคอนเทนต์ด่วน ๆ เลยครับ! 🚀")
     return "\n".join(message_lines)
+
+
+def handle_today_deals(db: Session, user: models.User) -> str:
+    """Fetch top 3 highest scoring products"""
+    products = db.query(models.Product).order_by(models.Product.ai_score.desc()).limit(3).all()
+    return format_product_message(db, user, products)
+
+
+DEAL_PHRASES = (
+    "ขายอะไรดี", "ขายอะไร", "อะไรขายดี", "อะไรขาย", "มีอะไรขาย", "ขายดี",
+    "สินค้าแนะนำ", "แนะนำสินค้า", "สินค้าขายดี", "ช่วยแนะนำ", "แนะนำหน่อย",
+    "สินค้า", "แนะนำ", "ขาย", "เมนู",
+)
+
+
+def search_products(db: Session, query: str) -> list:
+    """Find products whose name contains the query or any 4+ char substring of it"""
+    products = db.query(models.Product).all()
+    q = query.lower().strip()
+    if not q:
+        return []
+    # exact containment first
+    hits = [p for p in products if q in (p.name or "").lower()]
+    if hits:
+        return hits
+    # then any 4+ char substring (helps with Thai phrases like "อยากได้หูฟัง")
+    subs = {q[i:j] for i in range(len(q)) for j in range(i + 4, len(q) + 1)}
+    return [p for p in products if any(s in (p.name or "").lower() for s in subs)]
 
 
 def get_or_create_line_user(db: Session, line_user_id: str) -> models.User:
@@ -168,14 +194,20 @@ def message_text(event):
     db = SessionLocal()
     try:
         user = get_or_create_line_user(db, line_user_id)
-        if normalized_text == "วันนี้ขายอะไรดี":
+        if any(k in normalized_text for k in DEAL_PHRASES):
+            # สั่งถามสินค้าแนะนำ — ตอบ 3 อันดับตามคะแนน AI
             reply_text = handle_today_deals(db, user)
         else:
-            reply_text = (
-                f"🤖 สวัสดีครับคุณ {user.name}!\n"
-                "ผมคือบอทผู้ช่วย AI Affiliate ของคุณ\n\n"
-                "พิมพ์คำว่า \"วันนี้ขายอะไรดี\" - เพื่อให้ผมช่วยหาสินค้าเจ๋ง ๆ 3 อันดับแรกที่คุณน่าลุยทำคอนเทนต์ในวันนี้ครับ!"
-            )
+            # พิมพ์อย่างอื่น (เช่น "หูฟัง" "อยากได้กระติกน้ำ" "สวัสดี") —
+            # หาสินค้าที่ตรง หรือถ้าไม่ตรงให้ต้อนรับ + แสดงสินค้าแนะนำเลย
+            hits = search_products(db, normalized_text)
+            if hits:
+                reply_text = format_product_message(db, user, hits)
+            else:
+                reply_text = (
+                    f"🤖 สวัสดีครับคุณ {user.name}! ยินดีต้อนรับสู่ร้านของเรา 😊\n\n"
+                    "นี่คือสินค้าแนะนำวันนี้ — แตะลิงก์สั่งซื้อได้เลยครับ 🛒\n\n"
+                ) + handle_today_deals(db, user)
     except Exception as e:
         logger.error(f"Error processing LINE message: {e}")
         reply_text = "ขออภัยด้วยครับ ระบบเกิดข้อผิดพลาดชั่วคราว ลองส่งใหม่อีกครั้งนะครับ"
