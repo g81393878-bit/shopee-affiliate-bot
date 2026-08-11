@@ -5,6 +5,16 @@ from app.schemas import ScriptGeneratorResponse
 
 logger = logging.getLogger(__name__)
 
+SCRIPT_KEYS = {"hook", "problem", "solution", "cta", "caption", "hashtags", "title", "thumbnail_prompt"}
+
+
+def _require_script_keys(data: dict) -> dict:
+    """Validate the model returned the full script schema; raise so callers fall back."""
+    if not isinstance(data, dict) or not SCRIPT_KEYS.issubset(data):
+        raise ValueError(f"script JSON missing keys: {sorted(SCRIPT_KEYS - set(data)) if isinstance(data, dict) else 'not an object'}")
+    return data
+
+
 def generate_script_for_product(product_name: str, category: str, price: float, style: str = "standard") -> dict:
     """
     Generate a customized TikTok/Shorts video script for a product.
@@ -50,7 +60,7 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
                 prompt,
                 generation_config={"response_mime_type": "application/json"}
             )
-            return json.loads(response.text)
+            return _require_script_keys(json.loads(response.text))
         except Exception as e:
             logger.error(f"Gemini script generation failed: {e}. Falling back to default script.")
             
@@ -72,7 +82,7 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
                 ],
                 response_format={"type": "json_object"}
             )
-            return json.loads(response.choices[0].message.content)
+            return _require_script_keys(json.loads(response.choices[0].message.content))
         except Exception as e:
             logger.error(f"OpenAI script generation failed: {e}. Falling back to default script.")
 
@@ -94,7 +104,7 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
                 ],
                 response_format={"type": "json_object"}
             )
-            return json.loads(response.choices[0].message.content)
+            return _require_script_keys(json.loads(response.choices[0].message.content))
         except Exception as e:
             logger.error(f"Groq script generation failed: {e}. Falling back to default script.")
 

@@ -89,6 +89,24 @@ def get_mock_analysis(name: str, price: float, rating: float, sales_count: int, 
     }
 
 
+def _normalize_analysis(data: dict, score: int) -> dict:
+    """Map model output (snake_case or camelCase, possibly nested) to the expected schema.
+    LLMs often invent key names; this makes the response tolerant of both styles."""
+    rec = data.get("recommendations") if isinstance(data.get("recommendations"), dict) else {}
+    reasons = data.get("reasons") or rec.get("reasons") or []
+    content_ideas = data.get("content_ideas") or rec.get("contentIdeas") or data.get("contentIdeas") or []
+    script = data.get("script") or data.get("tiktokScript") or {}
+    if not isinstance(script, dict):
+        script = {}
+    return {
+        "product_score": score,
+        "recommendation": data.get("recommendation") or "",
+        "reasons": reasons if isinstance(reasons, list) else [],
+        "content_ideas": content_ideas if isinstance(content_ideas, list) else [],
+        "script": script,
+    }
+
+
 def analyze_product_with_ai(name: str, category: str, price: float, rating: float, sales_count: int, commission: float) -> dict:
     score = calculate_heuristic_score(sales_count, rating, commission, price)
     provider = settings.LLM_PROVIDER
@@ -134,9 +152,7 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
                 generation_config={"response_mime_type": "application/json"}
             )
             data = json.loads(response.text)
-            # Ensure the score matches the calculated score
-            data["product_score"] = score
-            return data
+            return _normalize_analysis(data, score)
         except Exception as e:
             logger.error(f"Gemini API analysis failed: {e}. Falling back to mock data.")
             
@@ -144,7 +160,7 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
         try:
             from openai import OpenAI
             client = OpenAI(api_key=settings.OPENAI_API_KEY)
-            
+
             prompt = f"""
             Analyze this Shopee product for short-video (TikTok/Reels) affiliate marketing:
             Product Name: {name}
@@ -154,10 +170,11 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
             Sales Count: {sales_count}
             Commission: {commission} Baht
             Score: {score}/100
-            
-            Provide recommendations, reasons, content ideas, and a TikTok script in Thai.
+
+            Respond ONLY in valid JSON exactly matching this schema (content fields in Thai):
+            {{"product_score": {score}, "recommendation": "string", "reasons": ["string"], "content_ideas": ["string"], "script": {{"hook": "string", "problem": "string", "solution": "string", "cta": "string", "caption": "string", "hashtags": ["string"], "title": "string", "thumbnail_prompt": "string"}}}}
             """
-            
+
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
@@ -167,8 +184,7 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
                 response_format={"type": "json_object"}
             )
             data = json.loads(response.choices[0].message.content)
-            data["product_score"] = score
-            return data
+            return _normalize_analysis(data, score)
         except Exception as e:
             logger.error(f"OpenAI API analysis failed: {e}. Falling back to mock data.")
 
@@ -187,7 +203,8 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
             Commission: {commission} Baht
             Score: {score}/100
 
-            Provide recommendations, reasons, content ideas, and a TikTok script in Thai.
+            Respond ONLY in valid JSON exactly matching this schema (content fields in Thai):
+            {{"product_score": {score}, "recommendation": "string", "reasons": ["string"], "content_ideas": ["string"], "script": {{"hook": "string", "problem": "string", "solution": "string", "cta": "string", "caption": "string", "hashtags": ["string"], "title": "string", "thumbnail_prompt": "string"}}}}
             """
 
             response = client.chat.completions.create(
@@ -199,8 +216,7 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
                 response_format={"type": "json_object"}
             )
             data = json.loads(response.choices[0].message.content)
-            data["product_score"] = score
-            return data
+            return _normalize_analysis(data, score)
         except Exception as e:
             logger.error(f"Groq API analysis failed: {e}. Falling back to mock data.")
 
