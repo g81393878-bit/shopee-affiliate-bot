@@ -94,3 +94,15 @@ CREATE INDEX IF NOT EXISTS idx_products_ai_score ON products(ai_score DESC);
 CREATE INDEX IF NOT EXISTS idx_product_analysis_product_id ON product_analysis(product_id);
 CREATE INDEX IF NOT EXISTS idx_contents_product_id ON contents(product_id);
 CREATE INDEX IF NOT EXISTS idx_performance_logs_content_id ON performance_logs(content_id);
+
+-- ประวัติสนทนาลูกค้า (PDPA: เก็บแค่ 90 วัน — ลบใน log_chat + cron)
+CREATE TABLE IF NOT EXISTS chat_logs (
+    id BIGSERIAL PRIMARY KEY,
+    line_user_id TEXT NOT NULL,
+    message_text TEXT NOT NULL,
+    intent TEXT NOT NULL DEFAULT 'unknown',
+    reply_kind TEXT NOT NULL DEFAULT 'text',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_chat_logs_user ON chat_logs(line_user_id);
+CREATE INDEX IF NOT EXISTS idx_chat_logs_created ON chat_logs(created_at);

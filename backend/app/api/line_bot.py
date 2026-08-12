@@ -11,7 +11,7 @@ from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import (TextMessage, MessageEvent, TextSendMessage, StickerMessage,
                             StickerSendMessage, QuickReply, QuickReplyButton,
-                            MessageAction, FollowEvent)
+                            MessageAction, FollowEvent, FlexSendMessage)
 from pydantic import BaseModel
 
 from app.db import SessionLocal, get_db
@@ -246,6 +246,58 @@ SEARCH_GUIDE = (
 )
 
 
+# --- ทวงถาม/ติดตามสินค้า (WISMO — Where's My Order) ---
+# เราเป็นนายหน้า — ออเดอร์/พัสดุอยู่ที่ Shopee แนวสากล (Ingrid 2025): ตอบเส้นทางตรวจเอง 24/7
+WISMO_KEYWORDS = (
+    "เลขพัสดุ", "tracking", "ติดตามพัสดุ", "ติดตามของ", "ตามพัสดุ", "ตามของ",
+    "พัสดุอยู่ไหน", "ของอยู่ไหน", "ได้ของยัง", "ได้ของเมื่อไหร่", "ของถึงยัง",
+    "ของถึงเมื่อไหร่", "ยังไม่ได้รับ", "ยังไม่ถึง", "สินค้ายังไม่มา", "รอของ",
+    "สั่งแล้ว", "สั่งของแล้ว", "ทวง", "ส่งของช้า", "ที่อยู่ผิด", "ของหาย",
+    "ไม่ได้รับของ", "สั่งไปแล้ว", "สินค้าอยู่ไหน",
+)
+
+WISMO_REPLY = (
+    '📦 เช็คสถานะสินค้าได้เลยค่ะ!\n\n'
+    'เราเป็นร้านนายหน้าจัดหาสินค้าจาก Shopee — การสั่งซื้อและส่งของจัดการโดยร้านค้าบน Shopee โดยตรง จึงเช็คสถานะได้ที่:\n\n'
+    '1️⃣ เปิดแอป Shopee → เมนู ฉัน → การสั่งซื้อของฉัน\n'
+    '2️⃣ แตะออเดอร์นั้น → เห็นสถานะ + เลขพัสดุ\n'
+    '3️⃣ มีปัญหาส่งของ → กด แชทกับร้านค้า ในหน้านั้นได้เลย\n\n'
+    '🔗 เช็คด่วน: https://shopee.co.th/orders\n\n'
+    'ถ้ายังไม่ได้สั่งซื้อ พิมพ์ชื่อสินค้าที่อยากได้ได้เลย เดี๋ยวหาลิงก์ดีๆ ให้ค่ะ 😊'
+)
+
+
+def is_wismo(text: str) -> bool:
+    t = text.lower().replace(" ", "")
+    return any(kw in t for kw in WISMO_KEYWORDS)
+
+
+# --- PDPA: สิทธิ์ลบข้อมูล (erasure) + นโยบาย ---
+DELETE_PHRASES = ("ลบข้อมูลฉัน", "ลบข้อมูล", "ลบข้อมูลของฉัน", "ลบประวัติ", "ลบประวัติฉัน")
+
+DELETE_REPLY = (
+    '🗑️ ลบข้อมูลของคุณเรียบร้อยแล้วค่ะ (ชื่อ + ประวัติการสนทนา)\n\n'
+    'ถ้าอยากกลับมาใช้บริการ พิมพ์ สวัสดี ได้เลยนะคะ 😊'
+)
+
+PRIVACY_NOTICE = (
+    '🔒 นโยบายข้อมูลส่วนบุคคล (PDPA)\n'
+    'เราเก็บเฉพาะชื่อและ ID เพื่อเรียกชื่อคุณ และประวัติการสนทนา 90 วัน (เพื่อบริการที่ดีขึ้น)\n\n'
+    'ดูรายละเอียด: https://shopee-affiliate-bot-9e9n.onrender.com/privacy\n'
+    'สั่งลบข้อมูลได้ทุกเมื่อ: พิมพ์ ลบข้อมูลฉัน'
+)
+
+
+def log_chat(db, line_user_id: str, text: str, intent: str, reply):
+    """บันทึกประวัติสนทนา (PDPA: เก็บแค่ 90 วัน — ลบของเก่าทุกครั้งที่เขียน)"""
+    kind = 'flex' if isinstance(reply, FlexSendMessage) else 'text'
+    db.add(models.ChatLog(line_user_id=line_user_id, message_text=text[:500],
+                          intent=intent, reply_kind=kind))
+    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=90)
+    db.query(models.ChatLog).filter(models.ChatLog.created_at < cutoff).delete(synchronize_session=False)
+    db.commit()
+
+
 def handle_top_sellers(db: Session, user: models.User, is_owner: bool = False) -> str:
     """อันดับขายดี — 3 อันดับตามยอดขายจริง (ลิงก์ OK + ถึงเกณฑ์ขายเท่านั้น)"""
     tops = (db.query(models.Product)
@@ -351,21 +403,37 @@ def message_text(event):
     normalized_text = user_text.rstrip("?？ ").strip()
     line_user_id = event.source.user_id
     is_owner = line_user_id == ADMIN_LINE_USER_ID
+    intent = 'unknown'
     
     db = SessionLocal()
     try:
         user = get_or_create_line_user(db, line_user_id)
-        if is_greeting(normalized_text):
+        if normalized_text in DELETE_PHRASES:
+            # PDPA: สิทธิ์ลบข้อมูล (erasure) — ลบชื่อ + ประวัติการสนทนาทันที
+            db.query(models.ChatLog).filter(models.ChatLog.line_user_id == line_user_id).delete(synchronize_session=False)
+            db.query(models.User).filter(models.User.line_user_id == line_user_id).delete(synchronize_session=False)
+            db.commit()
+            reply = TextSendMessage(text=DELETE_REPLY)
+            intent = 'delete'
+        elif is_wismo(normalized_text):
+            # ลูกค้าทวงถาม/ติดตามพัสดุ — แนะนำเส้นทางตรวจเองบน Shopee (24/7)
+            reply = TextSendMessage(text=WISMO_REPLY)
+            intent = 'wismo'
+        elif is_greeting(normalized_text):
             # แนวสากล: ทักทาย + ปุ่มทางเลือก — ไม่ยิงสินค้าจนกว่าลูกค้าจะบอกความต้องการ
             reply = TextSendMessage(text=greeting_text(user.name),
                                     quick_reply=quick_reply_items())
+            intent = 'greeting'
         elif normalized_text == "ค้นสินค้า":
             reply = TextSendMessage(text=SEARCH_GUIDE,)
+            intent = 'guide'
         elif normalized_text == "อันดับขายดี":
             reply = handle_top_sellers(db, user, is_owner=is_owner)
+            intent = 'top'
         elif is_deal_query(normalized_text):
             # สั่งถามสินค้าแนะนำ — ตอบการ์ด 3 อันดับตามคะแนน AI
             reply = handle_today_deals(db, user, is_owner=is_owner)
+            intent = 'deals'
         else:
             # พิมพ์อย่างอื่น (เช่น "หูฟัง" "อยากได้กระติกน้ำ" "หูฟังไม่เกิน 300") —
             # ค้นสินค้าที่ตรง (รองรับเงื่อนไขราคา); ไม่ตรง → แนะนำวิธีใช้ ไม่ยิงสินค้าใส่หน้า
@@ -374,13 +442,22 @@ def message_text(event):
                 reply = format_product_message(db, user, hits,
                                                title=f"🔍 สินค้าตรงกับ \"{user_text}\" ค่ะ",
                                                is_owner=is_owner)
+                intent = 'search'
             else:
                 reply = TextSendMessage(text=greeting_text(user.name),
                                         quick_reply=quick_reply_items())
+                intent = 'greeting'
     except Exception as e:
         logger.error(f"Error processing LINE message: {e}")
         reply = TextSendMessage(text="ขออภัยด้วยค่ะ ระบบขัดข้องชั่วคราว ลองส่งใหม่อีกครั้งนะคะ 🙏",)
+        intent = 'error'
     finally:
+        # คำสั่งลบข้อมูลไม่ควรถูกบันทึกใหม่หลังลบ (PDPA erasure สะอาด)
+        if intent != 'delete':
+            try:
+                log_chat(db, line_user_id, user_text, intent, reply)
+            except Exception as e:
+                logger.warning(f"log_chat failed: {e}")
         db.close()
         
     if "mock" in LINE_ACCESS_TOKEN.lower():
@@ -410,10 +487,11 @@ def follow_event(event):
         user = get_or_create_line_user(db, line_user_id)
         welcome = TextSendMessage(text=greeting_text(user.name),
                                   quick_reply=quick_reply_items())
+        privacy = TextSendMessage(text=PRIVACY_NOTICE)
         if "mock" in LINE_ACCESS_TOKEN.lower():
             logger.info(f"Mock follow welcome -> {user.name}")
         else:
-            line_bot_api.push_message(line_user_id, welcome)
+            line_bot_api.push_message(line_user_id, [welcome, privacy])
     except Exception as e:
         logger.error(f"Follow welcome error: {e}")
     finally:

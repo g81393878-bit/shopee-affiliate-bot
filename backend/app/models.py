@@ -110,6 +110,19 @@ class Content(Base):
     performance_logs = relationship("PerformanceLog", back_populates="content", cascade="all, delete-orphan")
 
 
+class ChatLog(Base):
+    """ประวัติการสนทนากับลูกค้า (PDPA: เก็บแค่ 90 วันแล้วลบอัตโนมัติ —
+    ใช้ติดตามความสนใจสินค้า/ทวงถาม; ลูกค้าสั่ง "ลบข้อมูลฉัน" ได้ทุกเมื่อ)"""
+    __tablename__ = "chat_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    line_user_id = Column(String(100), index=True, nullable=False)
+    message_text = Column(Text, nullable=False)
+    intent = Column(String(30), default="unknown", nullable=False)  # greeting|search|deals|top|wismo|privacy|delete|unknown
+    reply_kind = Column(String(20), default="text", nullable=False)  # text|flex
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, index=True)
+
+
 class PerformanceLog(Base):
     __tablename__ = "performance_logs"
 
