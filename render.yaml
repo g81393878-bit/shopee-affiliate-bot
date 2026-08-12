@@ -20,5 +20,7 @@ services:
         sync: false
       - key: CRON_TOKEN
         sync: false
+      - key: ADMIN_DASHBOARD_PASSWORD
+        sync: false  # รหัสผ่านแดชบอร์ดแอดมิน (/admin) — ไม่ตั้ง = ใช้ CRON_TOKEN แทน
       - key: LLM_PROVIDER
         value: groq

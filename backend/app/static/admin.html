@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ป้าเข็ม Admin</title>
+<style>
+:root { --red:#E74C3C; --green:#27AE60; --gray:#666; --light:#f5f5f5; --border:#ddd; }
+* { box-sizing:border-box; }
+body { font-family:'Leelawadee UI',Tahoma,sans-serif; margin:0; background:var(--light); color:#222; }
+header { background:#fff; border-bottom:1px solid var(--border); padding:10px 20px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+header h1 { font-size:18px; margin:0; color:var(--red); }
+nav { display:flex; gap:8px; flex:1; }
+nav button { border:1px solid var(--border); background:#fff; padding:6px 14px; border-radius:20px; cursor:pointer; font-size:14px; }
+nav button.active { background:var(--red); color:#fff; border-color:var(--red); }
+#logout { border:1px solid var(--border); background:#fff; padding:6px 12px; border-radius:20px; cursor:pointer; }
+main { max-width:1100px; margin:20px auto; padding:0 16px; }
+.hidden { display:none; }
+/* login */
+#login { max-width:360px; margin:80px auto; background:#fff; border:1px solid var(--border); border-radius:12px; padding:32px; text-align:center; }
+#login h2 { color:var(--red); margin-top:0; }
+#login input { width:100%; padding:10px; border:1px solid var(--border); border-radius:8px; font-size:16px; margin:12px 0; }
+#login button { width:100%; padding:10px; background:var(--red); color:#fff; border:none; border-radius:8px; font-size:16px; cursor:pointer; }
+#login .err { color:var(--red); font-size:13px; min-height:18px; }
+/* stats */
+.cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:20px; }
+.card { background:#fff; border:1px solid var(--border); border-radius:10px; padding:14px; }
+.card .num { font-size:26px; font-weight:bold; color:var(--red); }
+.card .lbl { font-size:13px; color:var(--gray); }
+.card.green .num { color:var(--green); }
+section.panel { background:#fff; border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:20px; }
+section.panel h3 { margin:0 0 12px; font-size:15px; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th,td { padding:8px 6px; border-bottom:1px solid var(--light); text-align:left; vertical-align:top; }
+th { color:var(--gray); font-weight:normal; white-space:nowrap; }
+.badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:bold; }
+.ok { background:#E8F8F0; color:var(--green); }
+.dead { background:#FDECEA; color:var(--red); }
+.suspect,.unknown,.none { background:#FEF9E7; color:#B7950B; }
+/* products */
+.filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+.filters input,.filters select { padding:8px; border:1px solid var(--border); border-radius:8px; font-size:14px; }
+.filters input { flex:1; min-width:200px; }
+.pager { display:flex; align-items:center; gap:10px; justify-content:center; margin-top:12px; font-size:13px; color:var(--gray); }
+.pager button { padding:5px 12px; border:1px solid var(--border); background:#fff; border-radius:6px; cursor:pointer; }
+.pager button:disabled { opacity:.4; cursor:default; }
+a.edit { color:#2E86C1; cursor:pointer; text-decoration:underline; }
+a.del { color:var(--red); cursor:pointer; text-decoration:underline; margin-left:8px; }
+/* modal */
+.modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.4); display:flex; align-items:center; justify-content:center; z-index:10; }
+.modal { background:#fff; border-radius:12px; padding:20px; width:min(520px,94vw); max-height:88vh; overflow:auto; }
+.modal h3 { margin:0 0 12px; color:var(--red); }
+.modal label { display:block; font-size:13px; color:var(--gray); margin:10px 0 4px; }
+.modal input,.modal select { width:100%; padding:8px; border:1px solid var(--border); border-radius:8px; font-size:14px; }
+.modal .actions { display:flex; gap:10px; margin-top:16px; }
+.modal .actions button { flex:1; padding:9px; border:none; border-radius:8px; font-size:14px; cursor:pointer; }
+#saveBtn { background:var(--red); color:#fff; }
+#cancelBtn { background:#eee; color:#333; }
+.url-box { font-size:11px; color:var(--gray); word-break:break-all; background:var(--light); padding:6px; border-radius:6px; margin-top:10px; }
+</style>
+</head>
+<body>
+
+<div id="login" class="hidden">
+  <h2>🛍️ ป้าเข็ม Admin</h2>
+  <div class="err" id="loginErr"></div>
+  <input type="password" id="pw" placeholder="รหัสผ่านแอดมิน" autocomplete="current-password">
+  <button id="loginBtn">เข้าสู่ระบบ</button>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <h1>🛍️ ป้าเข็ม Admin</h1>
+    <nav>
+      <button id="tabStats" class="active" onclick="showTab('stats')">📊 สถิติ</button>
+      <button id="tabProducts" onclick="showTab('products')">📦 สินค้า</button>
+    </nav>
+    <button id="logout">ออกจากระบบ</button>
+  </header>
+
+  <main>
+    <!-- สถิติ -->
+    <div id="viewStats">
+      <div class="cards" id="statCards"></div>
+      <section class="panel">
+        <h3>🔥 หมวดที่มีสินค้ามากสุด</h3>
+        <table><thead><tr><th>หมวด</th><th>จำนวน</th></tr></thead><tbody id="catRows"></tbody></table>
+      </section>
+      <section class="panel">
+        <h3>🏆 ขายดี 5 อันดับ</h3>
+        <table><thead><tr><th>#</th><th>สินค้า</th><th>ราคา</th><th>ยอดขาย</th><th>คอม</th></tr></thead><tbody id="topRows"></tbody></table>
+      </section>
+      <section class="panel">
+        <h3>🆕 เข้าใหม่ล่าสุด</h3>
+        <table><thead><tr><th>#</th><th>สินค้า</th><th>หมวด</th><th>ราคา</th></tr></thead><tbody id="newRows"></tbody></table>
+      </section>
+    </div>
+
+    <!-- สินค้า -->
+    <div id="viewProducts" class="hidden">
+      <div class="filters">
+        <input id="fq" placeholder="🔍 ค้นชื่อ/หมวดสินค้า..." oninput="debouncedLoad()">
+        <select id="fcat" onchange="loadProducts()"><option value="">ทุกหมวด</option></select>
+        <select id="fstatus" onchange="loadProducts()">
+          <option value="">ทุกสถานะ</option>
+          <option value="ok">ok — ขายได้</option>
+          <option value="dead">dead — ลิงก์ตาย</option>
+          <option value="suspect">suspect — สงสัย</option>
+          <option value="unknown">unknown</option>
+          <option value="none">none</option>
+        </select>
+        <select id="fsort" onchange="loadProducts()">
+          <option value="new">ใหม่สุด</option>
+          <option value="sales">ยอดขาย</option>
+          <option value="price">ราคา</option>
+          <option value="score">คะแนน AI</option>
+        </select>
+      </div>
+      <section class="panel">
+        <table>
+          <thead><tr><th>ID</th><th>สินค้า</th><th>หมวด</th><th>ราคา</th><th>ยอดขาย</th><th>คอม</th><th>คะแนน</th><th>สถานะ</th><th></th></tr></thead>
+          <tbody id="prodRows"></tbody>
+        </table>
+        <div class="pager">
+          <button id="prevBtn" onclick="page(-1)">← ก่อนหน้า</button>
+          <span id="pageInfo"></span>
+          <button id="nextBtn" onclick="page(1)">ถัดไป →</button>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- modal แก้สินค้า -->
+<div class="modal-bg hidden" id="modalBg">
+  <div class="modal">
+    <h3>✏️ แก้สินค้า #<span id="mId"></span></h3>
+    <label>ชื่อสินค้า</label><input id="mName">
+    <label>หมวด</label><input id="mCat" list="catList"><datalist id="catList"></datalist>
+    <label>ราคา (฿)</label><input id="mPrice" type="number" step="0.01" min="0">
+    <label>ค่านายหน้า (฿)</label><input id="mComm" type="number" step="0.01" min="0">
+    <label>ยอดขาย</label><input id="mSales" type="number" min="0">
+    <label>คะแนน AI (0-100)</label><input id="mScore" type="number" min="0" max="100">
+    <label>เรตติ้ง (0-5)</label><input id="mRating" type="number" step="0.1" min="0" max="5">
+    <label>สถานะลิงก์</label>
+    <select id="mStatus">
+      <option value="ok">ok — ขายได้</option>
+      <option value="dead">dead — ลิงก์ตาย</option>
+      <option value="suspect">suspect — สงสัย</option>
+      <option value="unknown">unknown</option>
+      <option value="none">none</option>
+    </select>
+    <div class="url-box" id="mUrl"></div>
+    <div class="actions">
+      <button id="saveBtn" onclick="saveProduct()">💾 บันทึก</button>
+      <button id="cancelBtn" onclick="closeModal()">ยกเลิก</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let state = { page: 1, perPage: 25, editingId: null, debounce: null };
+
+async function api(url, opts) {
+  const r = await fetch(url, opts);
+  if (r.status === 401) { location.reload(); throw new Error("unauth"); }
+  if (!r.ok) { const j = await r.json().catch(()=>({})); throw new Error(j.detail || j.error || r.status); }
+  return r.json();
+}
+
+// ---- login ----
+async function init() {
+  try {
+    await api('/api/admin/session');
+    $('login').classList.add('hidden');
+    $('app').classList.remove('hidden');
+    loadStats(); loadCategories(); loadProducts();
+  } catch (e) {
+    if (e.message === 'unauth') { $('app').classList.add('hidden'); $('login').classList.remove('hidden'); }
+  }
+}
+$('loginBtn').onclick = async () => {
+  $('loginErr').textContent = '';
+  try {
+    const fd = new FormData(); fd.append('password', $('pw').value);
+    await api('/admin/login', { method: 'POST', body: fd });
+    location.reload();
+  } catch (e) { $('loginErr').textContent = e.message; }
+};
+$('pw').addEventListener('keydown', e => { if (e.key === 'Enter') $('loginBtn').click(); });
+$('logout').onclick = () => { fetch('/admin/logout', { method: 'POST' }).then(() => location.reload()); };
+
+// ---- tabs ----
+function showTab(t) {
+  $('viewStats').classList.toggle('hidden', t !== 'stats');
+  $('viewProducts').classList.toggle('hidden', t !== 'products');
+  $('tabStats').classList.toggle('active', t === 'stats');
+  $('tabProducts').classList.toggle('active', t === 'products');
+  if (t === 'stats') loadStats();
+}
+
+// ---- stats ----
+async function loadStats() {
+  try {
+    const s = await api('/api/admin/stats');
+    const t = s.totals;
+    $('statCards').innerHTML = [
+      ['สินค้าทั้งหมด', t.total, ''],
+      ['ขายได้ (ok)', t.sellable, 'green'],
+      ['ซ่อน (suspect)', t.hidden, ''],
+      ['ลิงก์ตาย', t.dead, ''],
+      ['ยังไม่มีคอนเทนต์', t.no_content, ''],
+      ['ลูกค้า', t.users, 'green'],
+      ['คุย 24 ชม.', s.today.chats, 'green'],
+      ['ค้น 24 ชม. (คน)', s.today.searchers, 'green'],
+      ['ทวงถาม 24 ชม.', s.today.wismo, ''],
+    ].map(([l, n, cls]) => `<div class="card ${cls}"><div class="num">${n}</div><div class="lbl">${l}</div></div>`).join('');
+    $('catRows').innerHTML = s.by_category.map(c => `<tr><td>${c.category}</td><td>${c.count}</td></tr>`).join('');
+    $('topRows').innerHTML = s.top_sellers.map((p, i) => `<tr><td>${i+1}</td><td>${esc(p.name)}</td><td>฿${p.price.toLocaleString()}</td><td>${p.sales.toLocaleString()}</td><td>฿${p.commission.toLocaleString()}</td></tr>`).join('');
+    $('newRows').innerHTML = s.newest.map((p, i) => `<tr><td>${i+1}</td><td>${esc(p.name)}</td><td>${esc(p.category || '')}</td><td>฿${p.price.toLocaleString()}</td></tr>`).join('');
+  } catch (e) { alert(e.message); }
+}
+
+// ---- products ----
+async function loadCategories() {
+  try {
+    const cats = await api('/api/admin/categories');
+    $('fcat').innerHTML = '<option value="">ทุกหมวด</option>' + cats.map(c => `<option value="${esc(c.category)}">${esc(c.category)} (${c.count})</option>`).join('');
+    $('catList').innerHTML = cats.map(c => `<option value="${esc(c.category)}">`).join('');
+  } catch (e) { /* ignore */ }
+}
+function debouncedLoad() { clearTimeout(state.debounce); state.debounce = setTimeout(loadProducts, 300); }
+function page(d) { state.page = Math.max(1, state.page + d); loadProducts(); }
+
+async function loadProducts() {
+  try {
+    state.page = state.page || 1;
+    const params = new URLSearchParams({
+      q: $('fq').value.trim(), cat: $('fcat').value, status: $('fstatus').value,
+      sort: $('fsort').value, page: state.page, per_page: state.perPage,
+    });
+    const d = await api('/api/admin/products?' + params.toString());
+    $('prodRows').innerHTML = d.items.map(p => `
+      <tr>
+        <td>${p.id}</td>
+        <td>${esc(p.name)}</td>
+        <td>${esc(p.category)}</td>
+        <td>฿${p.price.toLocaleString()}</td>
+        <td>${p.sales_count.toLocaleString()}</td>
+        <td>฿${p.commission.toLocaleString()}</td>
+        <td>${p.ai_score}</td>
+        <td><span class="badge ${p.link_status}">${p.link_status}</span></td>
+        <td><a class="edit" onclick="openEdit(${p.id})">แก้</a><a class="del" onclick="delProduct(${p.id})">ลบ</a></td>
+      </tr>`).join('');
+    $('pageInfo').textContent = `หน้า ${d.page}/${d.pages} · ${d.total} รายการ`;
+    $('prevBtn').disabled = d.page <= 1;
+    $('nextBtn').disabled = d.page >= d.pages;
+    window._rowsCache = d.items;  // ใช้ใน edit modal
+  } catch (e) { alert(e.message); }
+}
+
+// ---- edit / delete ----
+async function openEdit(id) {
+  try {
+    const d = await api(`/api/admin/products?q=&page=1&per_page=1`);
+    // ดึงรายการที่ต้องการ: โหลดหน้าปัจจุบันหาชื่อไม่ได้ — ดึงจากตารางที่โชว์อยู่แทน
+    const row = window._rowsCache && window._rowsCache.find(r => r.id === id);
+    if (!row) return alert('ไม่พบสินค้าในหน้าที่แสดง — ค้นหาเพื่อเจอตัวนี้ก่อน');
+    state.editingId = id;
+    $('mId').textContent = id;
+    $('mName').value = row.name; $('mCat').value = row.category;
+    $('mPrice').value = row.price; $('mComm').value = row.commission;
+    $('mSales').value = row.sales_count; $('mScore').value = row.ai_score;
+    $('mRating').value = row.rating; $('mStatus').value = row.link_status;
+    $('mUrl').textContent = row.affiliate_url || '';
+    $('modalBg').classList.remove('hidden');
+  } catch (e) { alert(e.message); }
+}
+async function saveProduct() {
+  const fd = new FormData();
+  fd.append('name', $('mName').value);
+  fd.append('category', $('mCat').value);
+  fd.append('price', $('mPrice').value);
+  fd.append('commission', $('mComm').value);
+  fd.append('sales_count', $('mSales').value);
+  fd.append('ai_score', $('mScore').value);
+  fd.append('rating', $('mRating').value);
+  fd.append('link_status', $('mStatus').value);
+  try {
+    await api(`/api/admin/products/${state.editingId}`, { method: 'POST', body: fd });
+    closeModal(); loadProducts();
+  } catch (e) { alert(e.message); }
+}
+async function delProduct(id) {
+  if (!confirm(`ลบสินค้า #${id} จริงไหม? (ลบแล้วกู้คืนไม่ได้)`)) return;
+  try { await api(`/api/admin/products/${id}`, { method: 'DELETE' }); loadProducts(); loadStats(); }
+  catch (e) { alert(e.message); }
+}
+function closeModal() { $('modalBg').classList.add('hidden'); }
+$('modalBg').onclick = e => { if (e.target === $('modalBg')) closeModal(); };
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+init();
+</script>
+</body>
+</html>

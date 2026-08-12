@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse
 import httpx
 
 from app.db import engine, Base
-from app.api import users, products, performance, line_bot, cron
+from app.api import users, products, performance, line_bot, cron, admin_dashboard
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -67,6 +67,7 @@ app.include_router(products.router, prefix="/api")
 app.include_router(performance.router, prefix="/api")
 app.include_router(line_bot.router, prefix="/api")
 app.include_router(cron.router, prefix="/api")
+app.include_router(admin_dashboard.router)  # แดชบอร์ดแอดมิน (/admin + /api/admin/*)
 
 @app.get("/")
 def read_root():
