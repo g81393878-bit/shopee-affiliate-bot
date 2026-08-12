@@ -141,12 +141,16 @@ def get_catalog_badges(db: Session) -> dict:
     top_n = max(1, len(rows) // 5)
     sales_threshold = sales[top_n - 1] if sales else 0
     comm_threshold = comms[top_n - 1] if comms else 0
-    now = datetime.datetime.utcnow()
+    # Postgres (Supabase) คืน created_at แบบ timezone-aware, SQLite คืน naive
+    # → normalize เป็น UTC ทั้งคู่ก่อนลบกัน (กัน TypeError ที่ทำให้บอทตอบ error)
+    now = datetime.datetime.now(datetime.timezone.utc)
     badges = {}
     for rid, sales_count, commission, created_at in rows:
         b = []
-        if created_at and (now - created_at).days <= 14:
-            b.append(BADGE_NEW)
+        if created_at:
+            created = created_at if created_at.tzinfo else created_at.replace(tzinfo=datetime.timezone.utc)
+            if (now - created).days <= 14:
+                b.append(BADGE_NEW)
         if (sales_count or 0) > 0 and (sales_count or 0) >= sales_threshold:
             b.append(BADGE_HOT)
         if float(commission or 0) > 0 and float(commission or 0) >= comm_threshold:
