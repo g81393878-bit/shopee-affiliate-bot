@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 import datetime
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import TextMessage, MessageEvent, TextSendMessage, StickerMessage, StickerSendMessage, Sender
+from linebot.models import (TextMessage, MessageEvent, TextSendMessage, StickerMessage,
+                            StickerSendMessage, Sender, QuickReply, QuickReplyButton, MessageAction)
 from pydantic import BaseModel
 
 from app.db import SessionLocal, get_db
@@ -244,6 +245,57 @@ def is_deal_query(text: str) -> bool:
     return t in DEAL_PHRASES or "วันนี้ขายอะไรดี" in t
 
 
+GREETING_WORDS = ("hello", "hi", "hey", "หวัดดี", "ทักทาย", "ดีจ้า", "สวัสดี",
+                  "สวัสดีครับ", "สวัสดีค่ะ", "ฮัลโหล", "ไหว้")
+
+
+def is_greeting(text: str) -> bool:
+    """แยกคำทักทายล้วนๆ ออกจากคำค้น — 'สวัสดี อยากได้หูฟัง' ต้องไปค้น ไม่ใช่ทักทาย"""
+    t = text.rstrip("?？!. ").strip().lower()
+    if t in GREETING_WORDS:
+        return True
+    return t.startswith("สวัสดี") and len(t) <= 12
+
+
+def quick_reply_items() -> QuickReply:
+    """ปุ่มลัดแบบสากล (Quick Reply) — ลูกค้าแตะแทนพิมพ์"""
+    return QuickReply(items=[
+        QuickReplyButton(action=MessageAction(label="🔍 ค้นสินค้า", text="ค้นสินค้า")),
+        QuickReplyButton(action=MessageAction(label="⭐ ขายดีวันนี้", text="วันนี้ขายอะไรดี")),
+        QuickReplyButton(action=MessageAction(label="🔥 อันดับขายดี", text="อันดับขายดี")),
+    ])
+
+
+def greeting_text(user_name: str) -> str:
+    """แนวสากล: ทักทาย + ทางเลือก — ไม่ยิงสินค้าใส่หน้าจนกว่าลูกค้าจะบอกความต้องการ"""
+    return (
+        f"🤗 สวัสดีค่ะคุณ {user_name}! ยินดีต้อนรับสู่ร้าน{BOT_NAME} 💕\n\n"
+        "พิมพ์ชื่อสินค้าที่อยากได้ได้เลย เช่น\n"
+        "\"หูฟังไม่เกิน 300\" หรือ \"กระติกน้ำ\"\n\n"
+        "หรือแตะปุ่มด้านล่าง 👇"
+    )
+
+
+SEARCH_GUIDE = (
+    "🔍 ค้นสินค้าค่ะ! ลองพิมพ์แบบนี้:\n\n"
+    "• \"หูฟัง\" — ค้นตามชื่อ\n"
+    "• \"หูฟังไม่เกิน 300\" — ค้นตามงบ\n"
+    "• \"กระติก 200-400\" — ค้นช่วงราคา\n\n"
+    "พิมพ์มาได้เลย เดี๋ยวป้าเข็มหาให้ค่ะ 😊"
+)
+
+
+def handle_top_sellers(db: Session, user: models.User) -> str:
+    """อันดับขายดี — 3 อันดับตามยอดขายจริง (ลิงก์ OK + ถึงเกณฑ์ขายเท่านั้น)"""
+    tops = (db.query(models.Product)
+              .filter(models.Product.link_status == "ok",
+                      models.Product.sales_count >= MIN_SALES)
+              .order_by(models.Product.sales_count.desc()).limit(3).all())
+    if not tops:
+        return "ตอนนี้ยังไม่มีสินค้าขายดีค่ะ ลองค้นชื่อสินค้าดูได้นะคะ 😊"
+    return format_product_message(db, user, tops, title="🔥 อันดับสินค้าขายดีประจำร้าน\n")
+
+
 def search_products(db: Session, query: str) -> list:
     """ค้นสินค้า: ตรงชื่อ/หมวด + เข้าใจเงื่อนไขราคา ('หูฟังไม่เกิน 300', 'งบ 500',
     'กระติก 200-400') — จัดอันดับความตรง แล้วตอบสูงสุด 3 ตัว
@@ -341,36 +393,45 @@ def message_text(event):
     db = SessionLocal()
     try:
         user = get_or_create_line_user(db, line_user_id)
-        if is_deal_query(normalized_text):
+        if is_greeting(normalized_text):
+            # แนวสากล: ทักทาย + ปุ่มทางเลือก — ไม่ยิงสินค้าจนกว่าลูกค้าจะบอกความต้องการ
+            reply = TextSendMessage(text=greeting_text(user.name),
+                                    sender=Sender(name=BOT_NAME, icon_url=BOT_ICON_URL),
+                                    quick_reply=quick_reply_items())
+        elif normalized_text == "ค้นสินค้า":
+            reply = TextSendMessage(text=SEARCH_GUIDE,
+                                    sender=Sender(name=BOT_NAME, icon_url=BOT_ICON_URL))
+        elif normalized_text == "อันดับขายดี":
+            reply = TextSendMessage(text=handle_top_sellers(db, user),
+                                    sender=Sender(name=BOT_NAME, icon_url=BOT_ICON_URL))
+        elif is_deal_query(normalized_text):
             # สั่งถามสินค้าแนะนำ — ตอบ 3 อันดับตามคะแนน AI
-            reply_text = handle_today_deals(db, user)
+            reply = TextSendMessage(text=handle_today_deals(db, user),
+                                    sender=Sender(name=BOT_NAME, icon_url=BOT_ICON_URL))
         else:
             # พิมพ์อย่างอื่น (เช่น "หูฟัง" "อยากได้กระติกน้ำ" "หูฟังไม่เกิน 300") —
-            # ค้นสินค้าที่ตรง (รองรับเงื่อนไขราคา) หรือถ้าไม่ตรงให้ต้อนรับ + แสดงสินค้าแนะนำเลย
+            # ค้นสินค้าที่ตรง (รองรับเงื่อนไขราคา); ไม่ตรง → แนะนำวิธีใช้ ไม่ยิงสินค้าใส่หน้า
             hits = search_products(db, normalized_text)
             if hits:
-                reply_text = format_product_message(
-                    db, user, hits,
-                    title=f"🔍 สินค้าตรงกับ \"{user_text}\" ค่ะ\n"
-                )
+                reply = TextSendMessage(
+                    text=format_product_message(db, user, hits,
+                                                title=f"🔍 สินค้าตรงกับ \"{user_text}\" ค่ะ\n"),
+                    sender=Sender(name=BOT_NAME, icon_url=BOT_ICON_URL))
             else:
-                reply_text = (
-                    f"🤖 สวัสดีครับคุณ {user.name}! ยินดีต้อนรับสู่ร้าน{BOT_NAME} 😊\n\n"
-                    "นี่คือสินค้าแนะนำวันนี้ — แตะลิงก์สั่งซื้อได้เลยครับ 🛒\n\n"
-                ) + handle_today_deals(db, user)
+                reply = TextSendMessage(text=greeting_text(user.name),
+                                        sender=Sender(name=BOT_NAME, icon_url=BOT_ICON_URL),
+                                        quick_reply=quick_reply_items())
     except Exception as e:
         logger.error(f"Error processing LINE message: {e}")
-        reply_text = "ขออภัยด้วยครับ ระบบเกิดข้อผิดพลาดชั่วคราว ลองส่งใหม่อีกครั้งนะครับ"
+        reply = TextSendMessage(text="ขออภัยด้วยค่ะ ระบบขัดข้องชั่วคราว ลองส่งใหม่อีกครั้งนะคะ 🙏",
+                                sender=Sender(name=BOT_NAME, icon_url=BOT_ICON_URL))
     finally:
         db.close()
         
     if "mock" in LINE_ACCESS_TOKEN.lower():
-        logger.info(f"Mock reply sent. ReplyToken: {event.reply_token}, Message: {reply_text}")
+        logger.info(f"Mock reply sent. ReplyToken: {event.reply_token}, Message: {getattr(reply, 'text', reply)}")
     else:
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text=reply_text, sender=Sender(name=BOT_NAME, icon_url=BOT_ICON_URL))
-        )
+        line_bot_api.reply_message(event.reply_token, reply)
 
 
 @handler.add(MessageEvent, message=StickerMessage)
