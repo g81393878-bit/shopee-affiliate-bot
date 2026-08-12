@@ -550,16 +550,30 @@ def search_products(db: Session, query: str) -> list:
     # คำหลักจริงๆ: ตัดคำนำหน้าเล่นๆ + เงื่อนไขราคา → "อยากได้หูฟังไม่เกิน 300" = "หูฟัง"
     q_core = strip_price_phrase(strip_filler_prefix(q))
 
-    def match_weight(p) -> int:
+    def strong_match(name: str, phrase: str) -> bool:
+        """คำหลักต้องอยู่ช่วงต้นชื่อ (55% แรก) หรือซ้ำ ≥2 ครั้ง — กันชื่อที่ยัดคำท้าย
+        เพื่อ SEO เช่น "แก้วสแตนเลส...แก้วเยติ...กระติกน้ำเก็บอุณหภูมิ" (กระติก 73%)
+        ปนมากับกระติกจริงที่อยู่หัวชื่อ (0-13%)"""
+        pos = name.find(phrase)
+        return pos >= 0 and (pos <= len(name) * 0.55 or name.count(phrase) >= 2)
+
+    def match_weight(p) -> tuple:
+        """คืน (คะแนน, strong) — strong = แมตช์ที่น่าเชื่อถือ (คำหลักอยู่ต้นชื่อ/ซ้ำ)
+        ถ้ามี strong อย่างน้อย 1 ตัว → แสดงเฉพาะ strong (กันของยัดท้ายปน)"""
         name = (p.name or "").lower()
         cat = (p.category or "").lower()
         w = 0
+        strong = False
         # แมตช์ทั้งคำ/ทั้งประโยคในชื่อ — ไม่จับซับสตริงกลางคำ (กันคำสามัญอย่าง
         # "เครื่อง"/"ความเย็น" ไปโดนของคนละหมวด เช่น "เครื่องฟอกอากาศ" → เครื่องตัดหญ้า)
         if q in name or q_core in name:
+            phrase = q_core if q_core else q
             w += 3
+            if strong_match(name, phrase):
+                strong = True
         if q in cat or q_core in cat:
             w += 2
+            strong = True  # ตรงหมวดตรงๆ เชื่อถือได้
         # ระดับคำ (keyword ที่รู้จัก): คำค้นมีคำค้นหมวดตรงกับที่อยู่ในชื่อสินค้า
         # เช่น "หูฟัง bluetooth" → เจอชื่อที่มีทั้ง "หูฟัง" และ "bluetooth"
         # ต้องยาว ≥4 ตัว — คำสั้น 3 ตัวอย่าง "จาน"/"แมว" เป็นคำสามัญ
@@ -567,17 +581,28 @@ def search_products(db: Session, query: str) -> list:
         for kw, _kcat in CATEGORY_KEYWORDS:
             if len(kw) >= 4 and kw in q_core and kw != q_core and kw in name:
                 w += 1
-        return w
+                if strong_match(name, kw):
+                    strong = True
+        return w, strong
 
     def in_budget(p) -> bool:
         price = float(p.price or 0)
         return (min_price is None or price >= min_price) and (max_price is None or price <= max_price)
 
-    hits = [(p, w) for p in products if (w := match_weight(p)) > 0]
+    hits = []
+    for p in products:
+        w, s = match_weight(p)
+        if w > 0:
+            hits.append((p, w, s))
     if not hits:
         return []  # ไม่มีอะไรตรงเลย → ตอบสุจริต (ไม่เอาของมั่วๆ มาแทน)
+    # ถ้ามีแมตช์ที่เชื่อถือได้ → แสดงเฉพาะแมตช์นั้น (กันชื่อยัดคำท้ายปน)
+    # ถ้าไม่มีเลย → แสดงแมตช์อ่อนทั้งหมด (ดีกว่าไม่ตอบ)
+    strong_hits = [h for h in hits if h[2]]
+    if strong_hits:
+        hits = strong_hits
     if min_price is not None or max_price is not None:
-        budget_hits = [(p, w) for p, w in hits if in_budget(p)]
+        budget_hits = [(p, w, s) for p, w, s in hits if in_budget(p)]
         if budget_hits:
             hits = budget_hits
         else:
@@ -585,7 +610,7 @@ def search_products(db: Session, query: str) -> list:
             return []
 
     hits.sort(key=lambda pw: (pw[1], pw[0].ai_score or 0), reverse=True)
-    return [p for p, _ in hits[:3]]
+    return [p for p, _, _ in hits[:3]]
 
 
 def get_line_profile_name(line_user_id: str) -> Optional[str]:
