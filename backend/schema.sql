@@ -108,3 +108,12 @@ CREATE TABLE IF NOT EXISTS chat_logs (
 CREATE INDEX IF NOT EXISTS idx_chat_logs_user ON chat_logs(line_user_id);
 CREATE INDEX IF NOT EXISTS idx_chat_logs_created ON chat_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_chat_logs_category ON chat_logs(category);
+
+-- บันทึกแคมเปญที่เอเจนต์ส่ง (กันส่งซ้ำ + ตรวจสอบ)
+CREATE TABLE IF NOT EXISTS campaign_logs (
+    id BIGSERIAL PRIMARY KEY,
+    category TEXT NOT NULL,
+    recipients INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'dryrun',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);

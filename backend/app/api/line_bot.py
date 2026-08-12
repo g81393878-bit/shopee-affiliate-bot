@@ -352,6 +352,123 @@ def handle_top_sellers(db: Session, user: models.User, is_owner: bool = False) -
     return product_cards_message(db, user, tops, title="🔥 อันดับสินค้าขายดีประจำร้าน", is_owner=is_owner)
 
 
+# --- สินค้าใหม่ส่วนตัว (Amazon-style: จำที่ลูกค้าสนใจ ไม่ต้องเริ่มใหม่) ---
+NEW_PHRASES = ("มีอะไรใหม่", "ของใหม่", "สินค้าใหม่", "อะไรใหม่", "มีของใหม่", "ของใหม่มีอะไร")
+
+
+def _customer_categories(db, line_user_id: str) -> list:
+    """หมวดที่ลูกค้าคนนี้เคยค้น (chat_logs) เรียงตามความถี่ — ใช้แนะนำส่วนตัว"""
+    from collections import Counter
+    rows = (db.query(models.ChatLog.category)
+              .filter(models.ChatLog.line_user_id == line_user_id,
+                      models.ChatLog.intent == "search",
+                      models.ChatLog.category.isnot(None)).all())
+    c = Counter(r[0] for r in rows)
+    return [k for k, _ in c.most_common()]
+
+
+def handle_new_arrivals(db, user, line_user_id: str, is_owner: bool = False):
+    """มีอะไรใหม่ — ดันสินค้าใหม่ในหมวดที่ลูกค้าเคยสนใจก่อน (แล้วค่อยของใหม่ทั่วไป)"""
+    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
+    recent = (db.query(models.Product)
+                .filter(models.Product.link_status == "ok",
+                        models.Product.sales_count >= MIN_SALES,
+                        models.Product.created_at >= cutoff)
+                .order_by(models.Product.created_at.desc()).limit(50).all())
+    cats = _customer_categories(db, line_user_id)
+    if cats:
+        matched = [p for p in recent if (p.category or "") in cats]
+        if matched:
+            return product_cards_message(db, user, matched[:3],
+                                         "🆕 สินค้าใหม่ที่อาจถูกใจคุณ! (ตามหมวดที่เคยสนใจ)",
+                                         is_owner=is_owner)
+    if recent:
+        return product_cards_message(db, user, recent[:3],
+                                     "🆕 สินค้าใหม่เข้าคลังล่าสุด", is_owner=is_owner)
+    return TextSendMessage(text="ตอนนี้ยังไม่มีสินค้าใหม่ค่ะ ลองค้นชื่อสินค้าดู หรือแตะ ขายดีวันนี้ ได้เลยนะคะ 😊")
+
+
+# --- เอเจนต์ทำแคมเปญ (Alibaba-style: เลือกกลุ่มจากความสนใจจริง → ส่งการ์ด) ---
+CAMPAIGN_LIMIT = 20  # สูงสุดต่อแคมเปญ — LINE OA จำกัด push/เดือน กันเกินโควตา
+
+
+def _campaign_targets(db, category: str) -> list:
+    """ลูกค้าที่เคยค้นหมวดนี้ (dedupe, ล่าสุดก่อน) — ไม่รวมเจ้าของร้าน"""
+    targets = {}
+    rows = (db.query(models.ChatLog.line_user_id, models.ChatLog.created_at)
+              .filter(models.ChatLog.intent == "search",
+                      models.ChatLog.category == category)
+              .order_by(models.ChatLog.created_at.desc()).all())
+    for uid, _ in rows:
+        if uid not in targets and uid != ADMIN_LINE_USER_ID:
+            targets[uid] = True
+    return list(targets.keys())[:CAMPAIGN_LIMIT]
+
+
+def _campaign_products(db, category: str, limit: int = 3) -> list:
+    return (db.query(models.Product)
+              .filter(models.Product.link_status == "ok",
+                      models.Product.sales_count >= MIN_SALES,
+                      models.Product.category == category)
+              .order_by(models.Product.ai_score.desc()).limit(limit).all())
+
+
+def handle_campaign(db, raw_text: str, is_owner: bool):
+    """แคมเปญ <หมวด> = dry-run | แคมเปญ <หมวด> ส่งเลย = push จริง | แคมเปญ ประวัติ"""
+    if not is_owner:
+        return None
+    parts = raw_text.split()
+    if not parts or parts[0] != "แคมเปญ":
+        return None
+    if len(parts) >= 2 and parts[1] == "ประวัติ":
+        rows = (db.query(models.CampaignLog)
+                  .order_by(models.CampaignLog.id.desc()).limit(10).all())
+        if not rows:
+            return TextSendMessage(text="ยังไม่มีแคมเปญที่เคยส่งค่ะ")
+        lines = ['📜 ประวัติแคมเปญ']
+        for r in rows:
+            st = '✅ ส่ง' if r.status == "sent" else '📋 dry-run'
+            lines.append(f'• {r.category}: {r.recipients} คน ({st}) — {r.created_at:%d/%m %H:%M}')
+        return TextSendMessage(text='\n'.join(lines))
+    send_now = any(p in ("ส่งเลย", "ส่ง") for p in parts)
+    cat_raw = next((p for p in parts[1:] if p not in ("ส่งเลย", "ส่ง")), "")
+    if not cat_raw:
+        return TextSendMessage(text="วิธีใช้: แคมเปญ <หมวด> (เช่น แคมเปญ ครีม) เพื่อดูกลุ่มเป้าหมาย\nแล้วสั่ง แคมเปญ <หมวด> ส่งเลย เพื่อส่งจริง")
+    category = guess_category(cat_raw)
+    products = _campaign_products(db, category)
+    targets = _campaign_targets(db, category)
+    if not products:
+        return TextSendMessage(text=f"แคมเปญ {category}: ยังไม่มีสินค้าลิงก์ดีในหมวดนี้ (นำเข้า CSV ก่อนได้)")
+    if not targets:
+        return TextSendMessage(text=f"แคมเปญ {category}: ยังไม่มีลูกค้าที่สนใจหมวดนี้ (เก็บสถิติไปก่อน — ยิ่งคุยยิ่งรู้กลุ่มลูกค้า)")
+    if not send_now:
+        sample = ", ".join(u[:10] for u in targets[:5])
+        more = "..." if len(targets) > 5 else ""
+        return TextSendMessage(text=f"🎯 แคมเปญ {category} (DRY-RUN — ยังไม่ส่ง)\n"
+                                     f"สินค้าที่จะส่ง: {len(products)} ตัว → ลูกค้าเป้าหมาย {len(targets)} คน\n"
+                                     f"กลุ่ม: {sample}{more}\n\n"
+                                     f"สั่งส่งจริง: แคมเปญ {category} ส่งเลย")
+    sent, failed = 0, 0
+    for uid in targets:
+        u = db.query(models.User).filter(models.User.line_user_id == uid).first()
+        name = u.name if u else "LINE User"
+        card = product_cards_message(db, type("U", (), {"name": name})(), products,
+                                     f"🎁 โปรโมชั่นหมวด {category} สำหรับคุณ!", is_owner=False)
+        if "mock" in LINE_ACCESS_TOKEN.lower():
+            sent += 1
+            continue
+        try:
+            line_bot_api.push_message(uid, card)
+            sent += 1
+        except Exception as e:
+            logger.warning(f"campaign push fail {uid}: {e}")
+            failed += 1
+    db.add(models.CampaignLog(category=category, recipients=sent, status="sent"))
+    db.commit()
+    tail = f" (ล้ม {failed})" if failed else ""
+    return TextSendMessage(text=f"✅ ส่งแคมเปญ {category} แล้ว: {sent} คน{tail}\n\nดูประวัติ: แคมเปญ ประวัติ")
+
+
 def search_products(db: Session, query: str) -> list:
     """ค้นสินค้า: ตรงชื่อ/หมวด + เข้าใจเงื่อนไขราคา ('หูฟังไม่เกิน 300', 'งบ 500',
     'กระติก 200-400') — จัดอันดับความตรง แล้วตอบสูงสุด 3 ตัว
@@ -464,6 +581,14 @@ def message_text(event):
             # ลิงก์อยู่ในปุ่มการ์ด (ไม่ใช่ข้อความ) — กัน LINE ธง "ไม่ปลอดภัย"
             reply = [TextSendMessage(text=WISMO_REPLY), WISMO_BUTTON]
             intent = 'wismo'
+        elif normalized_text in NEW_PHRASES:
+            # มีอะไรใหม่ — ดันสินค้าใหม่หมวดที่เคนสนใจ (จำจาก chat_logs)
+            reply = handle_new_arrivals(db, user, line_user_id, is_owner)
+            intent = 'new'
+        elif is_owner and normalized_text.startswith("แคมเปญ"):
+            # เอเจนต์ทำแคมเปญ (เฉพาะเจ้าของ) — dry-run ก่อนส่งจริง
+            reply = handle_campaign(db, normalized_text, is_owner)
+            intent = 'campaign'
         elif is_greeting(normalized_text):
             # แนวสากล: ทักทาย + ปุ่มทางเลือก — ไม่ยิงสินค้าจนกว่าลูกค้าจะบอกความต้องการ
             reply = TextSendMessage(text=greeting_text(user.name),

@@ -124,6 +124,17 @@ class ChatLog(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, index=True)
 
 
+class CampaignLog(Base):
+    """บันทึกแคมเปญที่ส่ง — กันส่งซ้ำ + ตรวจสอบ (เฉพาะเจ้าของร้านสั่ง)"""
+    __tablename__ = "campaign_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    category = Column(String(50), nullable=False)
+    recipients = Column(Integer, default=0, nullable=False)
+    status = Column(String(10), default="dryrun", nullable=False)  # dryrun | sent
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+
+
 class PerformanceLog(Base):
     __tablename__ = "performance_logs"
 
