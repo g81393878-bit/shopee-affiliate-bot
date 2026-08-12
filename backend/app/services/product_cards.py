@@ -96,6 +96,7 @@ def _bubble(db, prod: models.Product, idx: int, badges_map: dict, is_owner: bool
     color = _card_color(prod.ai_score)
 
     # --- ข้อมูลลูกค้า (ทุกคนเห็น) ---
+    # ราคา = ราคาเริ่มต้น (ราคาจริงตามโปรฯ ในลิงก์) — ไม่การันตีราคาคงที่
     body = [
         {
             "type": "box",
@@ -103,9 +104,11 @@ def _bubble(db, prod: models.Product, idx: int, badges_map: dict, is_owner: bool
             "contents": [
                 {"type": "text", "text": f"฿{_fmt_price(prod.price)}", "size": "xxl",
                  "weight": "bold", "color": color, "flex": 0},
-                {"type": "text", "text": " บาท", "size": "sm", "color": "#8C8C8C", "flex": 0},
+                {"type": "text", "text": " เริ่มต้น", "size": "xs", "color": "#8C8C8C", "flex": 0},
             ],
         },
+        {"type": "text", "text": "ราคาจริงตามโปรโมชันในลิงก์", "size": "xxs",
+         "color": "#AAAAAA", "wrap": True},
     ]
 
     badge = badges_map.get(prod.id, "")
@@ -122,6 +125,12 @@ def _bubble(db, prod: models.Product, idx: int, badges_map: dict, is_owner: bool
 
     # --- ข้อมูลแอดมิน (เฉพาะเจ้าของร้าน) ---
     if is_owner:
+        if prod.price_checked_at:
+            checked = prod.price_checked_at
+            if checked.tzinfo is None:
+                checked = checked.replace(tzinfo=datetime.timezone.utc)
+            body.append({"type": "text", "text": f"🕒 ราคาอัปเดตล่าสุด: {checked.strftime('%d/%m %H:%M')} UTC",
+                         "size": "xxs", "color": "#BBBBBB"})
         if prod.commission and float(prod.commission) > 0:
             body.append({"type": "text", "text": f"💸 ค่านายหน้า: ฿{_fmt_price(prod.commission)}",
                          "size": "sm", "color": "#27AE60", "weight": "bold"})

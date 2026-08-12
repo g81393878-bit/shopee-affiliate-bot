@@ -24,6 +24,7 @@ from app.db import SessionLocal
 from app import models
 from app.services.link_checker import check_affiliate_link
 from app.services.ai_generator import generate_script_for_product
+from app.services.price_refresh import refresh_price
 
 logger = logging.getLogger(__name__)
 
@@ -103,5 +104,42 @@ def cron_analyze(token: str = "", limit: int = 5):
                 logger.error(f"analyze failed for {p.id}: {e}")
                 failed.append({"id": p.id, "name": p.name[:50], "error": str(e)[:80]})
         return {"generated": done, "failed": failed, "still_missing": max(0, len(missing) - len(done))}
+    finally:
+        db.close()
+
+
+@router.post("/refresh-prices")
+def cron_refresh_prices(token: str = "", limit: int = 300):
+    """อัปเดตราคาปัจจุบันจากหน้าเว็บ Shopee (best-effort)
+    - เปิดหน้าเว็บสินค้าทุกตัว (ลิงก์ affiliate) → อ่านราคาจาก HTML → อัปเดต
+    - โดนบล็อก/หาไม่เจอ → คงราคาเดิม ไม่พัง (การ์ดลูกค้าแสดง "ราคาเริ่มต้น")
+    - พอได้ Open API จะแทนที่ด้วยข้อมูลทางการ (productOfferV2 priceMin/priceMax)
+    """
+    if not _authorized(token):
+        raise HTTPException(status_code=401, detail="invalid token")
+    import datetime
+    db = SessionLocal()
+    try:
+        prods = [p for p in db.query(models.Product).all()
+                 if p.affiliate_url and p.link_status == "ok"][:limit]
+        updated, unchanged, blocked = [], 0, 0
+        for p in prods:
+            changed, detail = refresh_price(p)
+            if changed:
+                p.price_checked_at = datetime.datetime.now(datetime.timezone.utc)
+                updated.append({"id": p.id, "name": p.name[:45], "price": str(p.price), "detail": detail})
+            elif detail == "ok":
+                p.price_checked_at = datetime.datetime.now(datetime.timezone.utc)
+                unchanged += 1
+            else:
+                blocked += 1
+        db.commit()
+        return {
+            "checked": len(prods),
+            "updated": updated,
+            "unchanged": unchanged,
+            "skipped_blocked": blocked,
+            "note": "ราคา = ราคาเริ่มต้นจริงในหน้าเว็บ; โดนบล็อก = คงราคาเดิม",
+        }
     finally:
         db.close()

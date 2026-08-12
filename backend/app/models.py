@@ -67,6 +67,7 @@ class Product(Base):
     affiliate_url = Column(Text, nullable=True)
     link_status = Column(String(20), default="unknown", nullable=False)  # ok | dead | suspect | unknown | none
     ai_score = Column(Integer, default=0, nullable=True)
+    price_checked_at = Column(DateTime(timezone=True), nullable=True)  # ครั้งสุดท้ายที่อัปเดตราคาจริง
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 
     @property

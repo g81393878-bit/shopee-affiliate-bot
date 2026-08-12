@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS products (
     affiliate_url TEXT,
     link_status VARCHAR(20) NOT NULL DEFAULT 'unknown', -- ok | dead | suspect | unknown | none (บอทตอบเฉพาะ ok)
     ai_score INTEGER DEFAULT 0,
+    price_checked_at TIMESTAMPTZ,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
