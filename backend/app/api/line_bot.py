@@ -872,6 +872,27 @@ def _starts_with_keyword(t: str) -> bool:
     return any(t.startswith(kw) for kw, _c in CATEGORY_KEYWORDS if len(kw) >= 2)
 
 
+# คำประสมที่หน้าตาเหมือนคำค้นสั้นแต่คนละชนิดของ: ค้น "ที่นอน" ต้องไม่เด้ง
+# "ผ้าปูที่นอน" (ผ้าปู ≠ ฟูก) — key = คำสั้นที่ user พิมพ์, value = คำประสมที่
+# ถ้าเจอในชื่อให้ถือว่าไม่ตรง (user ยังค้น "ผ้าปูที่นอน" ได้ปกติ — key ไม่ตรงกับคำนั้น)
+FALSE_FRIEND_COMPOUNDS = {
+    "ที่นอน": ("ผ้าปูที่นอน",),
+}
+
+
+# คำสามัญ/คุณสมบัติ ที่เป็นคำกลางๆ ติดมากับของหลายชนิด — อย่าบังคับให้ชื่อสินค้ามี:
+# - คำบ่งชี้เครื่องที่ normalize แปลงเป็นไทยแล้ว (iphone→ไอโฟน) — "สายชาร์จ iphone"
+#   ต้องตอบสาย Universal ที่รองรับ iPhone ได้
+# - "น้ำ" ใน "แก้วน้ำ" — แก้วกาแฟ/แก้วเยติก็เป็นแก้วน้ำ ใช้ได้ (น้ำ = 3 ตัวอักษร น+้+ำ)
+REST_SKIP_WORDS = frozenset({"ไอโฟน", "แอนดรอยด์", "ซัมซุง", "บลูทูธ",
+                             "ไร้สาย", "รุ่น", "ใหม่", "ชุด", "น้ำ"})
+
+
+def _is_false_friend(name: str, phrase: str) -> bool:
+    """กันคำค้นสั้นไปโดนคำประสมชนิดอื่น (ผ้าปูที่นอน ≠ ที่นอน)"""
+    return any(word in name for word in FALSE_FRIEND_COMPOUNDS.get(phrase, ()))
+
+
 def strip_filler_prefix(q: str) -> str:
     # ตัดเฉพาะเมื่อส่วนที่เหลือเป็นคำค้นจริง (ขึ้นต้นด้วย keyword ที่รู้จัก) —
     # กัน "มีด" โดนตัด "มี" เหลือ "ด" / "ของเล่นแมว" โดนตัด "ขอ" เหลือ
@@ -990,7 +1011,7 @@ def search_products(db: Session, query: str) -> list:
         # "เครื่อง"/"ความเย็น" ไปโดนของคนละหมวด เช่น "เครื่องฟอกอากาศ" → เครื่องตัดหญ้า)
         if q in name or q_core in name:
             phrase = q_core if q_core else q
-            if substring_ok(name, phrase):
+            if substring_ok(name, phrase) and not _is_false_friend(name, phrase):
                 w += 3
                 tier = max(tier, strong_tier(name, phrase))
         if q in cat or q_core in cat:
@@ -1025,6 +1046,21 @@ def search_products(db: Session, query: str) -> list:
                 return 0, 0
             w += 2
             tier = max(tier, 1)
+        # คำที่เหลือในคำค้นซึ่งไม่ใช่ keyword ที่รู้จัก (เช่น "ยางพารา" ใน
+        # "ที่นอนยางพารา", "ข้าง" ใน "หมอนข้าง", "ต้ม" ใน "หม้อต้ม") —
+        # ถ้าเป็นคำไทยยาวพอ (≥3 ตัว) และไม่ใช่คำบ่งชี้เครื่อง (ไอโฟน/แอนดรอยด์
+        # ที่ normalize แปลงมา) ต้องมีในชื่อด้วย — กัน "ที่นอนยางพารา" ไปโดน
+        # "ที่นอนลม"/"ผ้าปูที่นอน", "หมอนข้าง" ไปโดน "หมอนเด็ก" ที่มีแค่คำหลัก
+        # (ไม่บังคับคำสั้นอย่าง "น้ำ" ใน "แก้วน้ำ" — แก้วกาแฟก็ตอบได้)
+        if not q_core_is_keyword:
+            rest = q_core
+            for kw, _c in CATEGORY_KEYWORDS:
+                if len(kw) >= 2 and kw in q_core:
+                    rest = rest.replace(kw, " ")
+            rest_words = [w for w in re.split(r"[^\u0E00-\u0E7F]+", rest)
+                          if len(w) >= 3 and w not in REST_SKIP_WORDS]
+            if rest_words and not all(w in name for w in rest_words):
+                return 0, 0
         return w, tier
 
     def in_budget(p) -> bool:
