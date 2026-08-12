@@ -10,6 +10,7 @@ Commands:
   python tools/product_pipeline.py import-csv <file.csv> [--analyze] [--top N] [--style standard|funny|educational|unboxing]
   python tools/product_pipeline.py analyze [--top N] [--style standard]
   python tools/product_pipeline.py report
+  python tools/product_pipeline.py check-links [--delete]  # ตรวจลิงก์ s.shopee.co.th ตายหรือยัง (--delete = ลบตัว DEAD)
   python tools/product_pipeline.py fix-scores            # คำนวณ ai_score ใหม่ให้ทุกตัว (หลังแก้ข้อมูล)
 
 CSV columns (จากพอร์ทัล Shopee Affiliate "สร้างลิงก์"):
@@ -28,8 +29,12 @@ import datetime
 import pathlib
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
+from urllib.parse import urlparse
+
+import requests
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "backend"))
 
@@ -235,6 +240,96 @@ def cmd_fix_scores(args):
     db.close()
 
 
+BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+              "(KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36")
+DEAD_MARKERS = ("item_not_found", "item not found", "ไม่พบสินค้า", "สินค้าหาย",
+                "product is no longer", "product_not_found", "ไม่มีสินค้านี้")
+BLOCK_MARKERS = ("เข้าสู่หน้าที่ต้องการไม่สำเร็จ", "traffic verification", "captcha",
+                 "แคปต์ชา", "page unavailable", "verify you are human")
+ITEM_URL_RE = re.compile(r"/product/|/opaanlp/|-[a-z0-9-]+-i\.\d+\.\d+", re.IGNORECASE)
+
+
+def check_affiliate_link(url: str) -> Tuple[str, str]:
+    """ตรวจลิงก์สั้น s.shopee.co.th → (status, detail)
+    OK / DEAD / SUSPECT (ต้องเช็คมือ) / UNKNOWN (ยิงไม่สำเร็จ) / NO_URL
+    """
+    if not url:
+        return "NO_URL", "ไม่มีลิงก์"
+    try:
+        r = requests.get(url, timeout=20, allow_redirects=True,
+                         headers={"User-Agent": BROWSER_UA, "Accept-Language": "th-TH,th;q=0.9"},
+                         stream=True)
+        with r:
+            status = r.status_code
+            final = r.url or ""
+            if status != 200:
+                if status in (400, 404, 410):
+                    # 400 = short code ไม่ valid/หมดอายุ, 404/410 = ของหาย
+                    return "DEAD", f"HTTP {status}"
+                if status in (401, 403):
+                    return "SUSPECT", f"HTTP {status} (ถูกบล็อก)"
+                if 500 <= status < 600:
+                    return "UNKNOWN", f"HTTP {status}"
+                return "SUSPECT", f"HTTP {status}"
+            body = (r.content[:80000] or b"").decode("utf-8", errors="ignore").lower()
+            if any(m in body for m in DEAD_MARKERS):
+                return "DEAD", "เจอหน้า 'ไม่พบสินค้า'"
+            if any(m in body for m in BLOCK_MARKERS):
+                return "SUSPECT", "โดนหน้า verify/anti-bot"
+            if "shopee.co.th" in final and ITEM_URL_RE.search(urlparse(final).path):
+                return "OK", final[:95]
+            return "SUSPECT", f"redirect ไป {final[:75]} (ไม่ยืนยันว่ามีของ)"
+    except requests.exceptions.Timeout:
+        return "UNKNOWN", "timeout 20s"
+    except requests.exceptions.RequestException as e:
+        return "UNKNOWN", type(e).__name__
+
+
+def cmd_check_links(args):
+    db = sessionmaker(bind=get_engine(args.sqlite))()
+    prods = db.query(models.Product).all()
+    with_link = [p for p in prods if p.affiliate_url]
+    no_url = [p for p in prods if not p.affiliate_url]
+    print(f"สินค้าทั้งหมด: {len(prods)} | มีลิงก์: {len(with_link)} | ไม่มีลิงก์: {len(no_url)}")
+
+    groups: Dict[str, List[Tuple[models.Product, str]]] = {"OK": [], "DEAD": [], "SUSPECT": [], "UNKNOWN": [], "NO_URL": []}
+    if with_link:
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            futures = {ex.submit(check_affiliate_link, p.affiliate_url): p for p in with_link}
+            for fut in as_completed(futures):
+                p = futures[fut]
+                status, detail = fut.result()
+                groups.setdefault(status, []).append((p, detail))
+
+    for p in no_url:
+        groups["NO_URL"].append((p, "ไม่มีลิงก์"))
+
+    order = ["DEAD", "SUSPECT", "UNKNOWN", "NO_URL", "OK"]
+    for st in order:
+        items = groups.get(st, [])
+        if not items:
+            continue
+        print(f"\n=== {st} ({len(items)}) ===")
+        for p, detail in items:
+            print(f"  [{st:<7}] ฿{p.price:>8} | [{p.ai_score:>3}] {p.name[:48]} — {detail}")
+
+    n_dead = len(groups.get("DEAD", []))
+    n_suspect = len(groups.get("SUSPECT", []))
+    n_ok = len(groups.get("OK", []))
+    print(f"\nสรุป: OK {n_ok} | DEAD {n_dead} | SUSPECT {n_suspect} | UNKNOWN {len(groups.get('UNKNOWN', []))} | NO_URL {len(groups.get('NO_URL', []))}")
+
+    if args.delete and n_dead:
+        for p, _ in groups["DEAD"]:
+            db.delete(p)
+        db.commit()
+        print(f"🗑️ ลบสินค้า DEAD {n_dead} ตัวออกจากตารางแล้ว")
+    elif args.delete and not n_dead:
+        print("ไม่มีตัว DEAD — ไม่ได้ลบอะไร")
+    else:
+        print("(ยังไม่ลบ — ถ้าต้องการให้ลบตัว DEAD อัตโนมัติ ใช้ --delete)")
+    db.close()
+
+
 def main():
     ap = argparse.ArgumentParser(prog="product_pipeline", description="จัดการสินค้า Shopee Affiliate ครบวงจร")
     ap.add_argument("--sqlite", action="store_true", help="ใช้ local dev DB (SQLite) แทน Supabase")
@@ -251,11 +346,14 @@ def main():
     p_an.add_argument("--style", default="standard")
 
     sub.add_parser("report", help="รายงานตรวจสอบละเอียด")
+    p_links = sub.add_parser("check-links", help="ตรวจลิงก์ affiliate ว่าตาย/redirect ผิดหรือยัง")
+    p_links.add_argument("--delete", action="store_true", help="ลบสินค้าที่ตรวจว่า DEAD ออกจากตาราง")
     sub.add_parser("fix-scores", help="คำนวณคะแนนใหม่ทุกตัว")
 
     args = ap.parse_args()
     {"import-csv": cmd_import_csv, "analyze": cmd_analyze,
-     "report": cmd_report, "fix-scores": cmd_fix_scores}[args.cmd](args)
+     "report": cmd_report, "check-links": cmd_check_links,
+     "fix-scores": cmd_fix_scores}[args.cmd](args)
 
 
 if __name__ == "__main__":
