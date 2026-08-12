@@ -351,6 +351,33 @@ def _fmt_num(n) -> str:
         return str(n)
 
 
+def compare_invite_message(hits: list) -> Optional[TextSendMessage]:
+    """ค้นเจอ 2-3 ตัวคล้ายกัน (หมวดเดียวกัน) → ชวนเทียบ (แบบ Amazon Rufus)
+    ปุ่มลัด 'เทียบ #1 กับ #2' — การ์ดสินค้าโชว์เลข 1/2/3 อยู่แล้ว ลูกค้าแตะจบไม่ต้องพิมพ์เอง
+    คนละหมวด = ไม่ใช่ของใกล้กัน → ไม่ชวน (กันคำค้นกว้างๆ อย่าง 'ขวด' เด้งปุ่มรก)"""
+    if len(hits) < 2:
+        return None
+    if (hits[0].category or "") != (hits[1].category or ""):
+        return None
+    buttons = []
+    for i in range(1, len(hits)):
+        if len(buttons) >= 2:
+            break
+        a, b = hits[0], hits[i]
+        name_a = (a.name or "").strip()
+        name_b = (b.name or "").strip()
+        if not name_a or not name_b:
+            continue
+        buttons.append(QuickReplyButton(
+            action=MessageAction(label=f"⚖️ เทียบ #1 กับ #{i + 1}",
+                                 text=f"เทียบ {name_a[:25]} กับ {name_b[:25]}")))
+    if not buttons:
+        return None
+    return TextSendMessage(
+        text="👀 มี 2 ตัวใกล้กัน จะเทียบให้ดูไหม? แตะปุ่มด้านล่างจ๊ะ 👇",
+        quick_reply=QuickReply(items=buttons))
+
+
 def handle_compare(db, raw_text: str, user, is_owner: bool = False):
     """เทียบ A กับ B — การ์ด 2 คอลัมน์ (ราคา/ยอดขาย/คอม/คะแนน) + ปุ่มซื้อทั้งคู่"""
     pair = _compare_pair(raw_text)
@@ -1038,6 +1065,10 @@ def message_text(event):
                 reply = format_product_message(db, user, hits,
                                                title=f"🔍 สินค้าตรงกับ \"{user_text}\" ค่ะ",
                                                is_owner=is_owner)
+                # ค้นเจอ 2-3 ตัวคล้ายกัน → ชวนเทียบต่อท้าย (แบบ Rufus)
+                invite = compare_invite_message(hits)
+                if invite:
+                    reply = [reply, invite]
                 intent = 'search'
                 interest_cat = guess_category(normalized_text)
             else:
