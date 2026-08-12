@@ -3,6 +3,7 @@ import logging
 import math
 from app.config import settings
 from app.schemas import AIAnalysisResult, ScriptGeneratorResponse
+from app.services.persona import persona_system_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -70,14 +71,14 @@ def get_mock_analysis(name: str, price: float, rating: float, sales_count: int, 
     ]
     
     script = {
-        "hook": f"รู้ไหมครับว่าทำไมคนถึงหาซื้อ {name} กันเยอะขนาดนี้ในตอนนี้?",
-        "problem": f"หลายคนเจอปัญหาที่ต้องใช้เวลาจัดการนาน หรือสินค้าทั่วไปใช้งานไม่ได้ดั่งใจ...",
-        "solution": f"ตัวนี้ช่วยได้เลยครับ ด้วยดีไซน์และฟังก์ชันที่ตอบโจทย์ สะดวกขึ้นเยอะมาก",
-        "cta": f"ใครสนใจ พิกัดลิงก์ตะกร้า Shopee ในคอมเมนต์หรือหน้าโปรไฟล์เลยครับ!",
-        "caption": f"ไอเทมเด็ดที่ต้องมีติดตัว! รีวิว {name} ใช้ง่ายดีต่อใจมาก #ShopeeAffiliate #ป้ายยา #ของดีบอกต่อ",
-        "hashtags": ["ShopeeAffiliate", "รีวิวของดี", "ของดีบอกต่อ", "ป้ายยา"],
-        "title": f"รีวิวเจาะลึก {name}",
-        "thumbnail_prompt": f"Close-up high-quality photo of {name} on a clean table with soft warm lighting, minimalist style"
+        "hook": f"หยุดก่อนจ๊ะ! ป้าเพิ่งเจอ {name} ของดี ราคาไม่แพงแต่ใช้ดีจริง ต้องมาบอกต่อ",
+        "problem": f"หลายคนบ่นว่าของแบบนี้ซื้อมาแล้วพังง่าย หรือแพงเกินราคา จนบางทีก็ไม่รู้จะเชื่อใคร",
+        "solution": f"ตัวนี้ป้าลองใช้เองแล้วจ๊ะ ดีไซน์ตอบโจทย์ใช้จริง สะดวกขึ้นเยอะ คุ้มมาก",
+        "cta": f"ใครสนใจกดลิงก์ในตะกร้า Shopee ได้เลยจ๊ะ ป้าจัดให้ ของแท้ราคาดี",
+        "caption": f"ป้าใช้เองมาสักพักแล้วจ๊ะ {name} ดีจริง คุ้มมาก ลองดูจ๊ะ ไม่ลองไม่รู้! #ของดีบอกต่อ #ป้าป้ายยา #คุ้มมาก",
+        "hashtags": ["ของดีบอกต่อ", "ป้าป้ายยา", "คุ้มมาก", "ShopeeAffiliate"],
+        "title": f"ป้าป้ายยา {name}",
+        "thumbnail_prompt": f"Warm friendly photo of {name} on a wooden shop counter with soft daylight, cozy local shop vibe"
     }
     
     return {
@@ -116,10 +117,10 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
         try:
             import google.generativeai as genai
             genai.configure(api_key=settings.GEMINI_API_KEY)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=persona_system_prompt())
             
             prompt = f"""
-            You are an AI Affiliate Marketing Specialist. Analyze this Shopee product:
+            Analyze this Shopee product for affiliate marketing:
             Product Name: {name}
             Category: {category}
             Price: {price} Baht
@@ -178,7 +179,7 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant. Respond only with JSON conforming to the requested schema. Use Thai language for content fields."},
+                    {"role": "system", "content": persona_system_prompt("You are a Shopee affiliate marketing analyst. Respond only with JSON conforming to the requested schema. Use Thai language for content fields.")},
                     {"role": "user", "content": prompt}
                 ],
                 response_format={"type": "json_object"}
@@ -210,7 +211,7 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
                 response = client.chat.completions.create(
                     model=settings.GROQ_MODEL,
                     messages=[
-                        {"role": "system", "content": "You are a helpful assistant. Respond only with JSON conforming to the requested schema. Use Thai language for content fields."},
+                        {"role": "system", "content": persona_system_prompt("You are a Shopee affiliate marketing analyst. Respond only with JSON conforming to the requested schema. Use Thai language for content fields.")},
                         {"role": "user", "content": prompt}
                     ],
                     response_format={"type": "json_object"}

@@ -2,6 +2,7 @@ import json
 import logging
 from app.config import settings
 from app.schemas import ScriptGeneratorResponse
+from app.services.persona import persona_system_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +36,10 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
         try:
             import google.generativeai as genai
             genai.configure(api_key=settings.GEMINI_API_KEY)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=persona_system_prompt())
             
             prompt = f"""
-            You are a professional TikTok creator. Write a short video script (15-30s) in Thai for this product:
+            Write a short video script (15-30s) in Thai for this product:
             Product Name: {product_name}
             Category: {category}
             Price: {price} Baht
@@ -77,7 +78,7 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": "You are a creative social media script writer. Respond only in JSON format with Thai texts."},
+                    {"role": "system", "content": persona_system_prompt("Respond only in JSON format with Thai texts.")},
                     {"role": "user", "content": prompt}
                 ],
                 response_format={"type": "json_object"}
@@ -100,7 +101,7 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
                 response = client.chat.completions.create(
                     model=settings.GROQ_MODEL,
                     messages=[
-                        {"role": "system", "content": "You are a creative social media script writer. Respond only in JSON format with Thai texts."},
+                        {"role": "system", "content": persona_system_prompt("Respond only in JSON format with Thai texts.")},
                         {"role": "user", "content": prompt}
                     ],
                     response_format={"type": "json_object"}
@@ -111,14 +112,14 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
                 logger.warning(f"Groq key {client.api_key[:8]}... failed: {e} — ลอง key ถัดไป")
         logger.error(f"Groq script generation failed with all keys: {last_err}. Falling back to default script.")
 
-    # Mock script generation fallback
+    # Mock script generation fallback (เสียงป้าเข็ม)
     return {
-        "hook": f"หยุดดูคลิปนี้ก่อน! ถ้าคุณกำลังมองหา {product_name} ที่คุ้มค่าที่สุดในตอนนี้",
-        "problem": f"หลายคนบ่นว่าซื้อสินค้าแบบนี้มาใช้แล้วพังง่าย หรือราคาแพงเกินไปสำหรับสไตล์นี้",
-        "solution": f"แต่ตัวนี้ออกแบบมาเน้นสไตล์ {style} คุณภาพดีสมราคา ใช้งานง่ายมากครับ",
-        "cta": f"พิกัดจิ้มหน้าโปรไฟล์หรือลิงก์ด้านล่างได้เลย ของแท้ราคาดีที่สุดในสัปดาห์นี้!",
-        "caption": f"ตามหา {product_name} ดี ๆ อยู่ใช่ไหม? รีวิวสั้นแบบเน้น ๆ สไตล์ {style}! #TikTokป้ายยา #รีวิวของดี #ใช้ดีบอกต่อ",
-        "hashtags": ["TikTokป้ายยา", "รีวิวของดี", "ใช้ดีบอกต่อ", style],
-        "title": f"ป้ายยา {product_name} สไตล์ {style}",
-        "thumbnail_prompt": f"Dramatic photo of {product_name} package opening with light rays coming out, studio lighting"
+        "hook": f"หยุดก่อนจ๊ะ! ป้าเพิ่งเจอ {product_name} ของดี ราคาไม่แพงแต่ใช้ดีจริง ต้องมาบอกต่อ",
+        "problem": f"หลายคนบ่นว่าของแบบนี้ซื้อมาแล้วพังง่าย หรือแพงเกินราคา จนบางทีก็ไม่รู้จะเชื่อใคร",
+        "solution": f"ตัวนี้ป้าลองใช้เองแล้วจ๊ะ สไตล์ {style} คุณภาพดีสมราคา ใช้ประจำได้เรื่อย ๆ คุ้มมาก",
+        "cta": f"ใครสนใจกดลิงก์ในตะกร้า Shopee ได้เลยจ๊ะ ป้าจัดให้ ของแท้ราคาดี",
+        "caption": f"ป้าใช้เองมาสักพักแล้วจ๊ะ {product_name} ดีจริง คุ้มมาก ลองดูจ๊ะ ไม่ลองไม่รู้! #ของดีบอกต่อ #ป้าป้ายยา #คุ้มมาก",
+        "hashtags": ["ของดีบอกต่อ", "ป้าป้ายยา", "คุ้มมาก", style],
+        "title": f"ป้าป้ายยา {product_name} สไตล์ {style}",
+        "thumbnail_prompt": f"Warm friendly photo of {product_name} on a wooden shop counter with soft daylight, cozy local shop vibe"
     }
