@@ -9,6 +9,26 @@ logger = logging.getLogger(__name__)
 SCRIPT_KEYS = {"hook", "problem", "solution", "cta", "caption", "hashtags", "title", "thumbnail_prompt"}
 
 
+def format_hashtags_text(tags) -> str:
+    """แปลง hashtags จาก model เป็นบรรทัด #tag1 #tag2 ... (รองรับทั้ง list และ string)
+    Model บางครั้งส่ง string "#หูฟัง #ดี #คุ้ม" หรือ list — ถ้า iter string ตรงๆ จะ
+    กลายเป็น "#ห #ู #ฟ" (ต่อทีละตัวอักษร) — ต้อง normalize ก่อนเสมอ"""
+    raw = tags if isinstance(tags, list) else str(tags).replace(",", " ").split()
+    out = []
+    for t in raw:
+        t = str(t).strip().lstrip("#").strip()
+        if t:
+            out.append(t)
+    seen, cleaned = set(), []
+    for t in out:
+        if t not in seen:
+            seen.add(t)
+            cleaned.append(t)
+    if not cleaned:
+        return ""
+    return " ".join(f"#{t}" for t in cleaned[:8])
+
+
 def _require_script_keys(data: dict) -> dict:
     """Validate the model returned the full script schema; raise so callers fall back."""
     if not isinstance(data, dict) or not SCRIPT_KEYS.issubset(data):

@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from app.db import SessionLocal
 from app import models
 from app.services.link_checker import check_affiliate_link
-from app.services.ai_generator import generate_script_for_product
+from app.services.ai_generator import format_hashtags_text, generate_script_for_product
 from app.services.price_refresh import refresh_price
 from app.services.product_cards import product_cards_message
 from linebot import LineBotApi
@@ -95,9 +95,9 @@ def cron_analyze(token: str = "", limit: int = 5):
             try:
                 data = generate_script_for_product(p.name, p.category or "", float(p.price or 0), "Standard")
                 caption = data.get("caption", "")
-                tags = data.get("hashtags", [])
-                if tags:
-                    caption = (caption + "\n\n" + " ".join(f"#{t}" for t in tags)).strip()
+                hashtags = format_hashtags_text(data.get("hashtags"))
+                if hashtags:
+                    caption = (caption + "\n\n" + hashtags).strip()
                 db.add(models.Content(
                     product_id=p.id, style="Standard",
                     hook=data.get("hook"), problem=data.get("problem"),
