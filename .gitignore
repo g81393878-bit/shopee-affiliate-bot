@@ -61,3 +61,7 @@ geckodriver*/
 
 # Supabase CLI linked project (contains pooler URL with DB password)
 supabase/.temp/
+
+# Shopee session data (contains session cookies + personal info)
+affiliate_open_api_application.json
+.tmp_cookies/
