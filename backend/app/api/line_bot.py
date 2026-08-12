@@ -28,6 +28,10 @@ handler = WebhookHandler(LINE_SECRET)
 BOT_NAME = "ป้าเข็ม ขายของ"
 BOT_ICON_URL = "https://profile.line-scdn.net/0hERy_y3n3Gn1EJgY083hlKnhjFBAzCBw1PEVTE2UuR01sRAh-e0FdS2YmQEw-EF5_LBBcG2UiREg7"
 
+# ยอดขายขั้นต่ำ (จากคอลัมน์ "ขาย" ตอน import) — สินค้าขายน้อยกว่าเกณฑ์ไม่โผล่หน้าลูกค้า
+# (กันสินค้ายอดขายน้อยแทรกหน้าแนะนำ; ตั้ง env MIN_SALES ปรับได้ เช่น 5000/10000)
+MIN_SALES = int(os.getenv("MIN_SALES", "2000"))
+
 router = APIRouter(
     prefix="/webhooks",
     tags=["chatbot"],
@@ -213,9 +217,10 @@ def format_product_message(db: Session, user: models.User, products: list, title
 def handle_today_deals(db: Session, user: models.User) -> str:
     """วันนี้ขายอะไรดี — หมุนเวียนสินค้าจากกลุ่มคะแนนสูงสุด (เลื่อนวันละ 1 ตัว)
     เพื่อให้สินค้าใหม่ ๆ ได้โผล่หน้าแนะนำด้วย ไม่ใช่ซ้ำชุดเดิมทุกวัน
-    นโยบายเด็ดขาด: ตอบเฉพาะสินค้าที่ตรวจลิงก์แล้วว่า OK เท่านั้น"""
+    นโยบายเด็ดขาด: ตอบเฉพาะสินค้าลิงก์ OK + ยอดขายถึงเกณฑ์เท่านั้น"""
     pool = (db.query(models.Product)
-              .filter(models.Product.link_status == "ok")
+              .filter(models.Product.link_status == "ok",
+                      models.Product.sales_count >= MIN_SALES)
               .order_by(models.Product.ai_score.desc()).limit(9).all())
     if not pool:
         return format_product_message(db, user, [])
@@ -243,7 +248,10 @@ def search_products(db: Session, query: str) -> list:
     """ค้นสินค้า: ตรงชื่อ/หมวด + เข้าใจเงื่อนไขราคา ('หูฟังไม่เกิน 300', 'งบ 500',
     'กระติก 200-400') — จัดอันดับความตรง แล้วตอบสูงสุด 3 ตัว
     นโยบายเด็ดขาด: ตอบเฉพาะสินค้าที่ตรวจลิงก์แล้วว่า OK เท่านั้น"""
-    products = db.query(models.Product).filter(models.Product.link_status == "ok").all()
+    products = (db.query(models.Product)
+                  .filter(models.Product.link_status == "ok",
+                          models.Product.sales_count >= MIN_SALES)
+                  .all())
     q = query.lower().strip()
     if not q:
         return []
