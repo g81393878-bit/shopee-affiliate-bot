@@ -189,36 +189,38 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
             logger.error(f"OpenAI API analysis failed: {e}. Falling back to mock data.")
 
     elif provider == "groq" and settings.GROQ_API_KEY and "mock" not in settings.GROQ_API_KEY.lower():
-        try:
-            from openai import OpenAI
-            client = OpenAI(api_key=settings.GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
+        from app.services.llm_clients import groq_clients
+        clients = groq_clients()
+        prompt = f"""
+        Analyze this Shopee product for short-video (TikTok/Reels) affiliate marketing:
+        Product Name: {name}
+        Category: {category}
+        Price: {price} Baht
+        Rating: {rating}/5
+        Sales Count: {sales_count}
+        Commission: {commission} Baht
+        Score: {score}/100
 
-            prompt = f"""
-            Analyze this Shopee product for short-video (TikTok/Reels) affiliate marketing:
-            Product Name: {name}
-            Category: {category}
-            Price: {price} Baht
-            Rating: {rating}/5
-            Sales Count: {sales_count}
-            Commission: {commission} Baht
-            Score: {score}/100
-
-            Respond ONLY in valid JSON exactly matching this schema (content fields in Thai):
-            {{"product_score": {score}, "recommendation": "string", "reasons": ["string"], "content_ideas": ["string"], "script": {{"hook": "string", "problem": "string", "solution": "string", "cta": "string", "caption": "string", "hashtags": ["string"], "title": "string", "thumbnail_prompt": "string"}}}}
-            """
-
-            response = client.chat.completions.create(
-                model=settings.GROQ_MODEL,
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant. Respond only with JSON conforming to the requested schema. Use Thai language for content fields."},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"}
-            )
-            data = json.loads(response.choices[0].message.content)
-            return _normalize_analysis(data, score)
-        except Exception as e:
-            logger.error(f"Groq API analysis failed: {e}. Falling back to mock data.")
+        Respond ONLY in valid JSON exactly matching this schema (content fields in Thai):
+        {{"product_score": {score}, "recommendation": "string", "reasons": ["string"], "content_ideas": ["string"], "script": {{"hook": "string", "problem": "string", "solution": "string", "cta": "string", "caption": "string", "hashtags": ["string"], "title": "string", "thumbnail_prompt": "string"}}}}
+        """
+        last_err = None
+        for client in clients:
+            try:
+                response = client.chat.completions.create(
+                    model=settings.GROQ_MODEL,
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant. Respond only with JSON conforming to the requested schema. Use Thai language for content fields."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={"type": "json_object"}
+                )
+                data = json.loads(response.choices[0].message.content)
+                return _normalize_analysis(data, score)
+            except Exception as e:
+                last_err = e
+                logger.warning(f"Groq key {client.api_key[:8]}... failed: {e} — ลอง key ถัดไป")
+        logger.error(f"Groq API analysis failed with all keys: {last_err}. Falling back to mock data.")
 
     # Fallback to mock data if no keys configured or API calls failed
     return get_mock_analysis(name, price, rating, sales_count, commission, score)

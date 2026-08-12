@@ -87,26 +87,29 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
             logger.error(f"OpenAI script generation failed: {e}. Falling back to default script.")
 
     elif provider == "groq" and settings.GROQ_API_KEY and "mock" not in settings.GROQ_API_KEY.lower():
-        try:
-            from openai import OpenAI
-            client = OpenAI(api_key=settings.GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
-
-            prompt = f"""
-            Write a TikTok script in Thai for {product_name} ({category}) priced at {price} Baht.
-            Style: {style} ({style_desc})
-            Format the response exactly as JSON matching the fields: hook, problem, solution, cta, caption, hashtags, title, thumbnail_prompt.
-            """
-            response = client.chat.completions.create(
-                model=settings.GROQ_MODEL,
-                messages=[
-                    {"role": "system", "content": "You are a creative social media script writer. Respond only in JSON format with Thai texts."},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"}
-            )
-            return _require_script_keys(json.loads(response.choices[0].message.content))
-        except Exception as e:
-            logger.error(f"Groq script generation failed: {e}. Falling back to default script.")
+        from app.services.llm_clients import groq_clients
+        clients = groq_clients()
+        prompt = f"""
+        Write a TikTok script in Thai for {product_name} ({category}) priced at {price} Baht.
+        Style: {style} ({style_desc})
+        Format the response exactly as JSON matching the fields: hook, problem, solution, cta, caption, hashtags, title, thumbnail_prompt.
+        """
+        last_err = None
+        for client in clients:
+            try:
+                response = client.chat.completions.create(
+                    model=settings.GROQ_MODEL,
+                    messages=[
+                        {"role": "system", "content": "You are a creative social media script writer. Respond only in JSON format with Thai texts."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={"type": "json_object"}
+                )
+                return _require_script_keys(json.loads(response.choices[0].message.content))
+            except Exception as e:
+                last_err = e
+                logger.warning(f"Groq key {client.api_key[:8]}... failed: {e} — ลอง key ถัดไป")
+        logger.error(f"Groq script generation failed with all keys: {last_err}. Falling back to default script.")
 
     # Mock script generation fallback
     return {
