@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.db import engine, Base
-from app.api import users, products, performance, line_bot
+from app.api import users, products, performance, line_bot, cron
 from app.config import settings
 
 # Create database tables on startup (especially helpful for SQLite/Supabase development)
@@ -27,6 +27,7 @@ app.include_router(users.router, prefix="/api")
 app.include_router(products.router, prefix="/api")
 app.include_router(performance.router, prefix="/api")
 app.include_router(line_bot.router, prefix="/api")
+app.include_router(cron.router, prefix="/api")
 
 @app.get("/")
 def read_root():
