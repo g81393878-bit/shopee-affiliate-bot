@@ -508,6 +508,33 @@ def handle_campaign(db, raw_text: str, is_owner: bool):
     return TextSendMessage(text=f"✅ ส่งแคมเปญ {category} แล้ว: {sent} คน{tail}\n\nดูประวัติ: แคมเปญ ประวัติ")
 
 
+# คำนำหน้าเล่นๆ ที่คนไทยมักพิมพ์นำหน้าคำค้น ("อยากได้หูฟัง") — ตัดออกแล้ว
+# เหลือคำหลักจริง ๆ เพื่อแมตช์ชื่อสินค้าได้แม่นขึ้น (กันแมตช์พลาดจากซับสตริงสั้นๆ)
+FILLER_PREFIXES = ("อยากได้", "อยาก", "ขอ", "หา", "หาสินค้า", "มี", "ขาย",
+                   "ซื้อ", "ช่วย", "เอา", "แนะนำ", "เห็น", "ส่ง")
+
+PRICE_PHRASE_RES = (
+    r"(?:ไม่เกิน|ไม่แพงกว่า|ไม่แพง|ต่ำกว่า|ถูกกว่า|งบ|ในงบ|ราคา|ประมาณ|ภายใน|ซื้อได้ใน)\s*\d+(?:\.\d+)?",
+    r"\d+\s*(?:-|–|ถึง)\s*\d+",
+    r"\d+(?:\.\d+)?\s*บาท",
+)
+
+
+def strip_filler_prefix(q: str) -> str:
+    for f in FILLER_PREFIXES:
+        if q.startswith(f):
+            return q[len(f):].strip()
+    return q
+
+
+def strip_price_phrase(q: str) -> str:
+    """ตัดเงื่อนไขราคาออกจากคำค้น: 'หูฟังไม่เกิน 300' → 'หูฟัง', 'กระติก 200-400' → 'กระติก'"""
+    t = q
+    for pat in PRICE_PHRASE_RES:
+        t = re.sub(pat, "", t)
+    return t.strip(" -–,")
+
+
 def search_products(db: Session, query: str) -> list:
     """ค้นสินค้า: ตรงชื่อ/หมวด + เข้าใจเงื่อนไขราคา ('หูฟังไม่เกิน 300', 'งบ 500',
     'กระติก 200-400') — จัดอันดับความตรง แล้วตอบสูงสุด 3 ตัว
@@ -520,17 +547,21 @@ def search_products(db: Session, query: str) -> list:
     if not q:
         return []
     min_price, max_price = parse_price_conditions(query)
+    # คำหลักจริงๆ: ตัดคำนำหน้าเล่นๆ + เงื่อนไขราคา → "อยากได้หูฟังไม่เกิน 300" = "หูฟัง"
+    q_core = strip_price_phrase(strip_filler_prefix(q))
 
     def match_weight(p) -> int:
         name = (p.name or "").lower()
         cat = (p.category or "").lower()
         w = 0
-        if q in name:
+        if q in name or q_core in name:
             w += 3
-        if q in cat:
+        if q in cat or q_core in cat:
             w += 2
-        # 4+ char substrings (helps with Thai phrases like "อยากได้หูฟัง")
-        subs = {q[i:j] for i in range(len(q)) for j in range(i + 4, len(q) + 1)}
+        # ซับสตริงยาวพอเท่านั้น (≥6 โค้ดพอยต์ หรือครึ่งหนึ่งของคำ) — กันคำกลางๆ
+        # อย่าง "ล้าง" (4) แมตช์ "ลดล้างสต็อค" หรือ "างจาน" (5) แมตช์ "วางจาน"
+        min_sub = max(6, len(q_core) // 2)
+        subs = {q_core[i:j] for i in range(len(q_core)) for j in range(i + min_sub, len(q_core) + 1)}
         if any(s in name for s in subs):
             w += 1
         if any(s in cat for s in subs):
@@ -542,14 +573,15 @@ def search_products(db: Session, query: str) -> list:
         return (min_price is None or price >= min_price) and (max_price is None or price <= max_price)
 
     hits = [(p, w) for p in products if (w := match_weight(p)) > 0]
+    if not hits:
+        return []  # ไม่มีอะไรตรงเลย → ตอบสุจริต (ไม่เอาของมั่วๆ มาแทน)
     if min_price is not None or max_price is not None:
         budget_hits = [(p, w) for p, w in hits if in_budget(p)]
         if budget_hits:
             hits = budget_hits
         else:
-            # ไม่มีตัวที่ตรงชื่อ+งบพร้อมกัน → เอาตามงบแทน (ดีกว่าไม่ตอบ)
-            budget_all = sorted([p for p in products if in_budget(p)], key=lambda p: p.ai_score or 0, reverse=True)
-            return budget_all[:3]
+            # มีชื่อตรงแต่ไม่มีตัวในงบ → ไม่เอาของมั่วมาแทน ตอบว่าง (สุจริต)
+            return []
 
     hits.sort(key=lambda pw: (pw[1], pw[0].ai_score or 0), reverse=True)
     return [p for p, _ in hits[:3]]
@@ -649,7 +681,8 @@ def message_text(event):
             intent = 'deals'
         else:
             # พิมพ์อย่างอื่น (เช่น "หูฟัง" "อยากได้กระติกน้ำ" "หูฟังไม่เกิน 300") —
-            # ค้นสินค้าที่ตรง (รองรับเงื่อนไขราคา); ไม่ตรง → แนะนำวิธีใช้ ไม่ยิงสินค้าใส่หน้า
+            # ค้นสินค้าที่ตรง (รองรับเงื่อนไขราคา); ไม่ตรง → บอกตรงๆ ไม่มโน
+            # + เสนอของใกล้เคียงในหมวดเดียวกัน (ข้อมูลจริงจากคลัง)
             hits = search_products(db, normalized_text)
             if hits:
                 reply = format_product_message(db, user, hits,
@@ -658,9 +691,28 @@ def message_text(event):
                 intent = 'search'
                 interest_cat = guess_category(normalized_text)
             else:
-                reply = TextSendMessage(text=greeting_text(user.name),
-                                        quick_reply=quick_reply_items())
-                intent = 'greeting'
+                cat = guess_category(normalized_text)
+                alt = []
+                if cat and cat != "อื่นๆ":
+                    alt = (db.query(models.Product)
+                             .filter(models.Product.link_status == "ok",
+                                     models.Product.sales_count >= MIN_SALES,
+                                     models.Product.category == cat)
+                             .order_by(models.Product.ai_score.desc()).limit(3).all())
+                if alt:
+                    reply = [
+                        TextSendMessage(text=f"🔍 ยังไม่มี \"{user_text}\" ในร้านป้าเข็มตอนนี้จ๊ะ\n\n"
+                                             f"ลองดูของใกล้เคียงในหมวด {cat} ด้านล่าง หรือพิมพ์ชื่ออื่นได้เลยค่ะ 😊"),
+                        product_cards_message(db, user, alt, title=f"🛍️ ของในหมวด {cat}",
+                                              is_owner=is_owner),
+                    ]
+                else:
+                    reply = TextSendMessage(text=f"🔍 ยังไม่มี \"{user_text}\" ในร้านป้าเข็มตอนนี้จ๊ะ\n\n"
+                                                 "ลองพิมพ์ชื่อสินค้าสั้นๆ เช่น \"หูฟัง\" \"กระติกน้ำ\" "
+                                                 "หรือแตะปุ่มด้านล่างได้เลยค่ะ 👇",
+                                            quick_reply=quick_reply_items())
+                intent = 'nosearch'  # รู้ว่าลูกค้าค้นอะไรไม่เจอ → เอาไปหาสินค้ามาเติม
+                interest_cat = cat if cat != "อื่นๆ" else None
     except Exception as e:
         logger.error(f"Error processing LINE message: {e}")
         reply = TextSendMessage(text="ขออภัยด้วยค่ะ ระบบขัดข้องชั่วคราว ลองส่งใหม่อีกครั้งนะคะ 🙏",)
