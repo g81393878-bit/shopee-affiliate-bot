@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from app.db import SessionLocal, get_db
 from app import models
 from app.services.product_cards import product_cards_message, link_button_message
-from app.services.category import guess_category
+from app.services.category import guess_category, CATEGORY_KEYWORDS
 
 logger = logging.getLogger(__name__)
 
@@ -554,18 +554,19 @@ def search_products(db: Session, query: str) -> list:
         name = (p.name or "").lower()
         cat = (p.category or "").lower()
         w = 0
+        # แมตช์ทั้งคำ/ทั้งประโยคในชื่อ — ไม่จับซับสตริงกลางคำ (กันคำสามัญอย่าง
+        # "เครื่อง"/"ความเย็น" ไปโดนของคนละหมวด เช่น "เครื่องฟอกอากาศ" → เครื่องตัดหญ้า)
         if q in name or q_core in name:
             w += 3
         if q in cat or q_core in cat:
             w += 2
-        # ซับสตริงยาวพอเท่านั้น (≥6 โค้ดพอยต์ หรือครึ่งหนึ่งของคำ) — กันคำกลางๆ
-        # อย่าง "ล้าง" (4) แมตช์ "ลดล้างสต็อค" หรือ "างจาน" (5) แมตช์ "วางจาน"
-        min_sub = max(6, len(q_core) // 2)
-        subs = {q_core[i:j] for i in range(len(q_core)) for j in range(i + min_sub, len(q_core) + 1)}
-        if any(s in name for s in subs):
-            w += 1
-        if any(s in cat for s in subs):
-            w += 1
+        # ระดับคำ (keyword ที่รู้จัก): คำค้นมีคำค้นหมวดตรงกับที่อยู่ในชื่อสินค้า
+        # เช่น "หูฟัง bluetooth" → เจอชื่อที่มีทั้ง "หูฟัง" และ "bluetooth"
+        # ต้องยาว ≥4 ตัว — คำสั้น 3 ตัวอย่าง "จาน"/"แมว" เป็นคำสามัญ
+        # ("ของเล่นแมว" ต้องไม่หลุดไป "หูฟังหูแมว", "น้ำยาล้างจาน" ไม่หลุดไป "ที่คว่ำจาน")
+        for kw, _kcat in CATEGORY_KEYWORDS:
+            if len(kw) >= 4 and kw in q_core and kw != q_core and kw in name:
+                w += 1
         return w
 
     def in_budget(p) -> bool:
