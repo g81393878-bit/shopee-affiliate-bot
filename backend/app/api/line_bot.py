@@ -352,7 +352,7 @@ def _fmt_num(n) -> str:
 
 
 def handle_compare(db, raw_text: str, user, is_owner: bool = False):
-    """เทียบ A กับ B — ตารางข้อเท็จจริง (ราคา/ยอดขาย/คอม/คะแนน) + ปุ่มซื้อทั้งคู่"""
+    """เทียบ A กับ B — การ์ด 2 คอลัมน์ (ราคา/ยอดขาย/คอม/คะแนน) + ปุ่มซื้อทั้งคู่"""
     pair = _compare_pair(raw_text)
     if not pair:
         return TextSendMessage(text=COMPARE_HELP)
@@ -370,21 +370,6 @@ def handle_compare(db, raw_text: str, user, is_owner: bool = False):
                                      f"เจอตัวเดียว: {found.name[:45]}\n"
                                      "ลองพิมพ์ชื่อที่อยู่ในร้านให้สั้นลงจ๊ะ 😊")
 
-    def name_of(p):
-        return p.name[:40] + ("..." if len(p.name) > 40 else "")
-
-    lines = [
-        "⚖️ เทียบสินค้า", "",
-        f"🅰️ {name_of(a)}",
-        f"🅱️ {name_of(b)}", "",
-        f"💰 ราคา: {float(a.price or 0):,.0f}฿  vs  {float(b.price or 0):,.0f}฿",
-        f"📦 ยอดขาย: {_fmt_num(a.sales_count)}  vs  {_fmt_num(b.sales_count)}",
-        f"💸 ค่านายหน้า: {float(a.commission or 0):,.0f}฿  vs  {float(b.commission or 0):,.0f}฿",
-        f"📈 คะแนนความน่าทำคลิป: {a.ai_score or 0}/100  vs  {b.ai_score or 0}/100",
-    ]
-    if a.category and a.category == b.category:
-        lines.append(f"🏷️ หมวด: {a.category}")
-
     facts = []
     if (a.sales_count or 0) != (b.sales_count or 0):
         better = a if (a.sales_count or 0) > (b.sales_count or 0) else b
@@ -394,15 +379,51 @@ def handle_compare(db, raw_text: str, user, is_owner: bool = False):
         better = a if (a.commission or 0) > (b.commission or 0) else b
         tag = "🅰️" if better is a else "🅱️"
         facts.append(f"{tag} ค่านายหน้าสูงกว่า (฿{float(better.commission or 0):,.0f})")
-    lines.append("")
-    if facts:
-        lines.append("💡 ข้อเท็จจริง: " + " · ".join(facts))
-    else:
-        lines.append("💡 ทั้งคู่ใกล้เคียงกันมาก เลือกตามงบ/ความชอบได้เลยจ๊ะ")
-    lines += ["", "👇 กดปุ่มด้านล่างเพื่อสั่งซื้อได้เลย"]
+    return compare_flex_message(a, b, facts)
 
-    cards = product_cards_message(db, user, [a, b], title="🛒 กดซื้อได้เลย", is_owner=is_owner)
-    return [TextSendMessage(text="\n".join(lines)), cards]
+
+def compare_flex_message(a, b, facts: list) -> FlexSendMessage:
+    """การ์ดเทียบ 2 คอลัมน์ใบเดียว (แบบตาราง Amazon) — ชื่อ/ราคา/ยอดขาย/คอม/คะแนน + ปุ่มซื้อทั้ง 2 ข้าง
+    ชื่อไทยยาว: size xs + maxLines 3 + wrap — ไม่ล้นการ์ด"""
+    def col(p, tag):
+        return {
+            "type": "box", "layout": "vertical", "flex": 1, "spacing": "sm",
+            "contents": [
+                {"type": "text", "text": tag, "size": "xs", "align": "center", "color": "#999999"},
+                {"type": "text", "text": p.name, "size": "xs", "wrap": True, "maxLines": 3, "weight": "bold"},
+                {"type": "separator"},
+                {"type": "text", "text": f"💰 {float(p.price or 0):,.0f}฿", "size": "sm",
+                 "weight": "bold", "color": "#E74C3C", "align": "center"},
+                {"type": "text", "text": f"📦 ขาย {_fmt_num(p.sales_count)}", "size": "xxs",
+                 "color": "#666666", "align": "center", "wrap": True},
+                {"type": "text", "text": f"💸 คอม {float(p.commission or 0):,.0f}฿", "size": "xxs",
+                 "color": "#666666", "align": "center", "wrap": True},
+                {"type": "text", "text": f"📈 {p.ai_score or 0}/100", "size": "xxs",
+                 "color": "#666666", "align": "center", "wrap": True},
+                {"type": "button", "style": "primary", "color": "#E74C3C", "height": "sm",
+                 "action": {"type": "uri", "label": "🛒 ซื้อเลย", "uri": p.affiliate_url}},
+            ],
+        }
+
+    header = {
+        "type": "box", "layout": "vertical", "contents": [
+            {"type": "text", "text": "⚖️ เทียบสินค้า", "weight": "bold", "size": "md",
+             "align": "center", "color": "#E74C3C"},
+        ],
+    }
+    body = {
+        "type": "box", "layout": "horizontal", "spacing": "lg",
+        "contents": [col(a, "🅰️"), col(b, "🅱️")],
+    }
+    contents = {"type": "bubble", "header": header, "body": body}
+    if facts:
+        contents["footer"] = {
+            "type": "box", "layout": "vertical", "contents": [
+                {"type": "text", "text": "💡 " + " · ".join(facts),
+                 "size": "xxs", "color": "#999999", "wrap": True, "align": "center"},
+            ],
+        }
+    return FlexSendMessage(alt_text="⚖️ เทียบสินค้า 2 ตัว", contents=contents)
 
 
 def why_us_text() -> str:
