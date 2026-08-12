@@ -10,7 +10,7 @@ import datetime
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import (TextMessage, MessageEvent, TextSendMessage, StickerMessage,
-                            StickerSendMessage, Sender, QuickReply, QuickReplyButton,
+                            StickerSendMessage, QuickReply, QuickReplyButton,
                             MessageAction, FollowEvent)
 from pydantic import BaseModel
 
@@ -397,18 +397,14 @@ def message_text(event):
         if is_greeting(normalized_text):
             # แนวสากล: ทักทาย + ปุ่มทางเลือก — ไม่ยิงสินค้าจนกว่าลูกค้าจะบอกความต้องการ
             reply = TextSendMessage(text=greeting_text(user.name),
-                                    sender=Sender(name=BOT_NAME, icon_url=BOT_ICON_URL),
                                     quick_reply=quick_reply_items())
         elif normalized_text == "ค้นสินค้า":
-            reply = TextSendMessage(text=SEARCH_GUIDE,
-                                    sender=Sender(name=BOT_NAME, icon_url=BOT_ICON_URL))
+            reply = TextSendMessage(text=SEARCH_GUIDE,)
         elif normalized_text == "อันดับขายดี":
-            reply = TextSendMessage(text=handle_top_sellers(db, user),
-                                    sender=Sender(name=BOT_NAME, icon_url=BOT_ICON_URL))
+            reply = TextSendMessage(text=handle_top_sellers(db, user),)
         elif is_deal_query(normalized_text):
             # สั่งถามสินค้าแนะนำ — ตอบ 3 อันดับตามคะแนน AI
-            reply = TextSendMessage(text=handle_today_deals(db, user),
-                                    sender=Sender(name=BOT_NAME, icon_url=BOT_ICON_URL))
+            reply = TextSendMessage(text=handle_today_deals(db, user),)
         else:
             # พิมพ์อย่างอื่น (เช่น "หูฟัง" "อยากได้กระติกน้ำ" "หูฟังไม่เกิน 300") —
             # ค้นสินค้าที่ตรง (รองรับเงื่อนไขราคา); ไม่ตรง → แนะนำวิธีใช้ ไม่ยิงสินค้าใส่หน้า
@@ -416,16 +412,13 @@ def message_text(event):
             if hits:
                 reply = TextSendMessage(
                     text=format_product_message(db, user, hits,
-                                                title=f"🔍 สินค้าตรงกับ \"{user_text}\" ค่ะ\n"),
-                    sender=Sender(name=BOT_NAME, icon_url=BOT_ICON_URL))
+                                                title=f"🔍 สินค้าตรงกับ \"{user_text}\" ค่ะ\n"),)
             else:
                 reply = TextSendMessage(text=greeting_text(user.name),
-                                        sender=Sender(name=BOT_NAME, icon_url=BOT_ICON_URL),
                                         quick_reply=quick_reply_items())
     except Exception as e:
         logger.error(f"Error processing LINE message: {e}")
-        reply = TextSendMessage(text="ขออภัยด้วยค่ะ ระบบขัดข้องชั่วคราว ลองส่งใหม่อีกครั้งนะคะ 🙏",
-                                sender=Sender(name=BOT_NAME, icon_url=BOT_ICON_URL))
+        reply = TextSendMessage(text="ขออภัยด้วยค่ะ ระบบขัดข้องชั่วคราว ลองส่งใหม่อีกครั้งนะคะ 🙏",)
     finally:
         db.close()
         
@@ -455,7 +448,6 @@ def follow_event(event):
     try:
         user = get_or_create_line_user(db, line_user_id)
         welcome = TextSendMessage(text=greeting_text(user.name),
-                                  sender=Sender(name=BOT_NAME, icon_url=BOT_ICON_URL),
                                   quick_reply=quick_reply_items())
         if "mock" in LINE_ACCESS_TOKEN.lower():
             logger.info(f"Mock follow welcome -> {user.name}")
