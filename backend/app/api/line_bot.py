@@ -546,6 +546,9 @@ def search_products(db: Session, query: str) -> list:
     q = query.lower().strip()
     if not q:
         return []
+    # คำพ้องที่คนไทยนิยมเขียนหลายแบบ: ชาร์ท/ชารท = ชาร์จ (ไม่มีสินค้าไหนมีคำว่า
+    # "ชาร์ท"/"ชารท" ในชื่อ — แปลงเฉพาะฝั่งคำค้น ปลอดภัย)
+    q = q.replace("ชาร์ท", "ชาร์จ").replace("ชารท", "ชาร์จ")
     min_price, max_price = parse_price_conditions(query)
     # คำหลักจริงๆ: ตัดคำนำหน้าเล่นๆ + เงื่อนไขราคา → "อยากได้หูฟังไม่เกิน 300" = "หูฟัง"
     q_core = strip_price_phrase(strip_filler_prefix(q))
@@ -596,6 +599,20 @@ def search_products(db: Session, query: str) -> list:
             hits.append((p, w, s))
     if not hits:
         return []  # ไม่มีอะไรตรงเลย → ตอบสุจริต (ไม่เอาของมั่วๆ มาแทน)
+    # --- กรองตามประเภทเครื่องที่ผู้ใช้ระบุ (กัน "สายชาร์จ android" ได้สาย Lightning/Apple) ---
+    # ผู้ใช้ระบุ android/type-c/usb แต่ไม่ได้ระบุ apple → กันของที่ Apple เท่านั้น
+    # (lightning / type c to L / สำหรับ apple / iphone) — สาย universal ยังโชว์ได้
+    ANDROID_MARKERS = ("android", "แอนดรอยด์", "ซัมซุง", "samsung", "oppo",
+                       "huawei", "xiaomi", "type c", "type-c", "usb")
+    APPLE_MARKERS = ("apple", "iphone", "ไอโฟน", "ios", "lightning")
+    APPLE_ONLY = ("lightning", "type c to l", "type-c to l", "apple", "iphone", "ไอโฟน")
+    req_android = any(m in q for m in ANDROID_MARKERS)
+    req_apple = any(m in q for m in APPLE_MARKERS)
+    if req_android and not req_apple:
+        hits = [h for h in hits
+                if not any(m in (h[0].name or "").lower() for m in APPLE_ONLY)]
+        if not hits:
+            return []  # ไม่มีสายที่เข้ากับ android จริง → ตอบสุจริต ไม่เอาสาย Apple มาแทน
     # ถ้ามีแมตช์ที่เชื่อถือได้ → แสดงเฉพาะแมตช์นั้น (กันชื่อยัดคำท้ายปน)
     # ถ้าไม่มีเลย → แสดงแมตช์อ่อนทั้งหมด (ดีกว่าไม่ตอบ)
     strong_hits = [h for h in hits if h[2]]
