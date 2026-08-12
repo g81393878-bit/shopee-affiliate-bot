@@ -5,6 +5,7 @@ import inspect
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Header, Request
 from sqlalchemy.orm import Session
+import datetime
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import TextMessage, MessageEvent, TextSendMessage, StickerMessage, StickerSendMessage, Sender
@@ -127,9 +128,14 @@ def format_product_message(db: Session, user: models.User, products: list) -> st
         if content and content.hook:
             hook_text = f"💡 แนวทางคอนเทนต์ (Hook):\n\"{content.hook}\"\n"
 
+        commission_text = ""
+        if prod.commission and float(prod.commission) > 0:
+            commission_text = f"💸 ค่านายหน้า: {prod.commission} บาท\n"
+
         message_lines.append(
             f"{i}. {prod.name}\n"
             f"💰 ราคา: {prod.price} บาท\n"
+            f"{commission_text}"
             f"📈 คะแนนความน่าทำคลิป: {prod.ai_score}/100\n"
             f"{hook_text}"
             f"🔗 ลิงก์ Affiliate: {prod.affiliate_url or 'ไม่มีลิงก์'}\n"
@@ -140,9 +146,16 @@ def format_product_message(db: Session, user: models.User, products: list) -> st
 
 
 def handle_today_deals(db: Session, user: models.User) -> str:
-    """Fetch top 3 highest scoring products"""
-    products = db.query(models.Product).order_by(models.Product.ai_score.desc()).limit(3).all()
-    return format_product_message(db, user, products)
+    """วันนี้ขายอะไรดี — หมุนเวียนสินค้าจากกลุ่มคะแนนสูงสุด (เลื่อนวันละ 1 ตัว)
+    เพื่อให้สินค้าใหม่ ๆ ได้โผล่หน้าแนะนำด้วย ไม่ใช่ซ้ำชุดเดิมทุกวัน"""
+    pool = db.query(models.Product).order_by(models.Product.ai_score.desc()).limit(9).all()
+    if not pool:
+        return format_product_message(db, user, [])
+    # เลื่อนหน้าต่าง 3 ตัว ตามวันที่ (day-of-year) → วันใหม่ได้ชุดใหม่ ไม่ซ้ำ
+    day_of_year = int(datetime.datetime.utcnow().strftime("%j"))
+    start = day_of_year % len(pool)
+    window = (pool + pool)[start:start + 3]
+    return format_product_message(db, user, window)
 
 
 DEAL_PHRASES = (
