@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 from app.db import SessionLocal, get_db
 from app import models
-from app.services.product_cards import product_cards_message
+from app.services.product_cards import product_cards_message, link_button_message
 from app.services.category import guess_category
 
 logger = logging.getLogger(__name__)
@@ -264,9 +264,14 @@ WISMO_REPLY = (
     '1️⃣ เปิดแอป Shopee → เมนู ฉัน → การสั่งซื้อของฉัน\n'
     '2️⃣ แตะออเดอร์นั้น → เห็นสถานะ + เลขพัสดุ\n'
     '3️⃣ มีปัญหาส่งของ → กด แชทกับร้านค้า ในหน้านั้นได้เลย\n\n'
-    '🔗 เช็คด่วน: https://shopee.co.th/orders\n\n'
     'ถ้ายังไม่ได้สั่งซื้อ พิมพ์ชื่อสินค้าที่อยากได้ได้เลย เดี๋ยวหาลิงก์ดีๆ ให้ค่ะ 😊'
 )
+
+# ลิงก์แยกไว้เป็นปุ่มการ์ด (กัน LINE ธง "ไม่ปลอดภัย" เวลา URL อยู่ในข้อความ)
+WISMO_BUTTON = link_button_message(
+    '🔗 กดปุ่มด้านล่างเพื่อตรวจสถานะออเดอร์และเลขพัสดุบน Shopee',
+    'https://shopee.co.th/orders', '📦 ตรวจพัสดุ')
+
 
 
 def is_wismo(text: str) -> bool:
@@ -285,15 +290,19 @@ DELETE_REPLY = (
 PRIVACY_NOTICE = (
     '🔒 นโยบายข้อมูลส่วนบุคคล (PDPA)\n'
     'เราเก็บเฉพาะชื่อและ ID เพื่อเรียกชื่อคุณ และประวัติการสนทนา 90 วัน (เพื่อบริการที่ดีขึ้น)\n\n'
-    'ดูรายละเอียด: https://shopee-affiliate-bot-9e9n.onrender.com/privacy\n'
-    'สั่งลบข้อมูลได้ทุกเมื่อ: พิมพ์ ลบข้อมูลฉัน'
+    'ดูรายละเอียดได้จากปุ่มด้านล่าง / สั่งลบข้อมูลได้ทุกเมื่อ: พิมพ์ ลบข้อมูลฉัน'
 )
+
+PRIVACY_URL = (os.getenv("RENDER_EXTERNAL_URL") or "https://shopee-affiliate-bot-9e9n.onrender.com").rstrip("/") + "/privacy"
+PRIVACY_BUTTON = link_button_message('🔒 นโยบายความเป็นส่วนตัว (PDPA) ของร้าน', PRIVACY_URL, '🔒 นโยบาย PDPA')
+
 
 
 def log_chat(db, line_user_id: str, text: str, intent: str, reply, category: Optional[str] = None):
     """บันทึกประวัติสนทนา + หมวดที่ลูกค้าสนใจ (PDPA: เก็บแค่ 90 วัน — ลบของเก่าทุกครั้งที่เขียน)
     category ต่อยอด: รู้ว่าลูกค้าสนใจหมวดอะไร → วิเคราะห์/แนะนำสินค้า/ทำการตลาด"""
-    kind = 'flex' if isinstance(reply, FlexSendMessage) else 'text'
+    kind = 'flex' if (isinstance(reply, FlexSendMessage) or
+                       (isinstance(reply, list) and any(isinstance(m, FlexSendMessage) for m in reply))) else 'text'
     db.add(models.ChatLog(line_user_id=line_user_id, message_text=text[:500],
                           intent=intent, category=category, reply_kind=kind))
     cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=90)
@@ -452,7 +461,8 @@ def message_text(event):
             intent = 'delete'
         elif is_wismo(normalized_text):
             # ลูกค้าทวงถาม/ติดตามพัสดุ — แนะนำเส้นทางตรวจเองบน Shopee (24/7)
-            reply = TextSendMessage(text=WISMO_REPLY)
+            # ลิงก์อยู่ในปุ่มการ์ด (ไม่ใช่ข้อความ) — กัน LINE ธง "ไม่ปลอดภัย"
+            reply = [TextSendMessage(text=WISMO_REPLY), WISMO_BUTTON]
             intent = 'wismo'
         elif is_greeting(normalized_text):
             # แนวสากล: ทักทาย + ปุ่มทางเลือก — ไม่ยิงสินค้าจนกว่าลูกค้าจะบอกความต้องการ
@@ -530,7 +540,7 @@ def follow_event(event):
         if "mock" in LINE_ACCESS_TOKEN.lower():
             logger.info(f"Mock follow welcome -> {user.name}")
         else:
-            line_bot_api.push_message(line_user_id, [welcome, privacy])
+            line_bot_api.push_message(line_user_id, [welcome, privacy, PRIVACY_BUTTON])
     except Exception as e:
         logger.error(f"Follow welcome error: {e}")
     finally:

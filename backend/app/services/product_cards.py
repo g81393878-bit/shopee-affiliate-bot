@@ -167,6 +167,31 @@ def _bubble(db, prod: models.Product, idx: int, badges_map: dict, is_owner: bool
     }
 
 
+def link_button_message(text: str, uri: str, label: str = "เปิดลิงก์"):
+    """การ์ดปุ่มเดียว (URI action) — ใช้แทนการแปะ URL ลงในข้อความ
+    เหตุผล: LINE ธง "ข้อความนี้อาจไม่ปลอดภัย" เวลามี URL อยู่ใน text message
+    (โดยเฉพาะลิงก์สั้น) แต่ปุ่ม flex ไม่โดน — ลูกค้าเห็นหน้าจอสะอาด"""
+    return FlexSendMessage(
+        alt_text=label,
+        contents={
+            "type": "bubble",
+            "body": {
+                "type": "box", "layout": "vertical", "spacing": "sm",
+                "contents": [
+                    {"type": "text", "text": text, "size": "sm", "wrap": True},
+                ],
+            },
+            "footer": {
+                "type": "box", "layout": "vertical", "spacing": "sm",
+                "contents": [
+                    {"type": "button", "style": "primary", "color": "#E74C3C", "height": "sm",
+                     "action": {"type": "uri", "label": label, "uri": uri}},
+                ],
+            },
+        },
+    )
+
+
 def product_cards_message(db, user: models.User, products: List[models.Product],
                           title: Optional[str] = None, is_owner: bool = False):
     """สร้าง Flex Carousel จากสินค้า (สูงสุด 3 ใบ)
