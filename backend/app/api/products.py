@@ -6,8 +6,23 @@ from app.db import get_db
 from app import models, schemas
 from app.services.ai_analyzer import analyze_product_with_ai, calculate_heuristic_score
 from app.services.ai_generator import generate_script_for_product
+from app.services.link_checker import check_affiliate_link
 
 router = APIRouter(prefix="/products", tags=["Products"])
+
+
+def verify_affiliate_link(url: str) -> str:
+    """นโยบายเด็ดขาด: สินค้าทุกตัวต้องมีลิงก์ affiliate ที่ตรวจผ่านแล้ว (OK) เท่านั้น"""
+    url = (url or "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="ต้องระบุ affiliate_url (ลิงก์สั้น s.shopee.co.th)")
+    status, detail = check_affiliate_link(url)
+    if status != "OK":
+        raise HTTPException(
+            status_code=400,
+            detail=f"ลิงก์ affiliate ตรวจไม่ผ่าน ({status}: {detail}) — สินค้าที่ไม่มีค่านายหน้า/ลิงก์เสียห้ามเข้าระบบ",
+        )
+    return url
 
 @router.get("/", response_model=List[schemas.ProductOut])
 def list_products(
@@ -52,7 +67,8 @@ def create_product(product_in: schemas.ProductCreate, db: Session = Depends(get_
         rating=product_in.rating,
         sales_count=product_in.sales_count,
         commission=product_in.commission,
-        affiliate_url=product_in.affiliate_url,
+        affiliate_url=verify_affiliate_link(product_in.affiliate_url),
+        link_status="ok",
         ai_score=ai_score
     )
     db.add(db_product)
@@ -68,7 +84,15 @@ def update_product(product_id: int, product_in: schemas.ProductUpdate, db: Sessi
         raise HTTPException(status_code=404, detail="Product not found")
         
     update_data = product_in.model_dump(exclude_unset=True)
-    
+
+    # ลิงก์เปลี่ยน → ต้องตรวจใหม่ก่อนบันทึก (นโยบายเด็ดขาด)
+    if "affiliate_url" in update_data:
+        if not update_data["affiliate_url"]:
+            raise HTTPException(status_code=400, detail="affiliate_url ห้ามว่าง — สินค้าต้องมีลิงก์ affiliate")
+        if update_data["affiliate_url"] != db_product.affiliate_url:
+            update_data["affiliate_url"] = verify_affiliate_link(update_data["affiliate_url"])
+            update_data["link_status"] = "ok"
+
     # Recalculate score if needed
     if any(k in update_data for k in ["sales_count", "rating", "commission", "price"]):
         sales_count = update_data.get("sales_count", db_product.sales_count or 0)

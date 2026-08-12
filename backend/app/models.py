@@ -65,6 +65,7 @@ class Product(Base):
     sales_count = Column(Integer, default=0, nullable=True)
     commission = Column(Numeric(10, 2), default=0.00, nullable=True)
     affiliate_url = Column(Text, nullable=True)
+    link_status = Column(String(20), default="unknown", nullable=False)  # ok | dead | suspect | unknown | none
     ai_score = Column(Integer, default=0, nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 

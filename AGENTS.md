@@ -19,6 +19,12 @@
 - `line_bot.py` falls back to mock tokens when `LINE_CHANNEL_ACCESS_TOKEN`/`LINE_CHANNEL_SECRET` are unset, so the app starts fine in dev but the bot silently won't work — env vars are required in any real deployment.
 - On this machine, `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`, and `GROQ_API_KEY` are ALSO set as Windows **user** environment variables — and `load_dotenv` never overrides existing env vars, so stale values in the Windows env silently beat `backend/.env`. When credentials change, update BOTH places (or `[Environment]::SetEnvironmentVariable(...,'User')`). Current valid creds: LINE token (bot "สารวัตร AI") + secret `feab701d...` (stored in `.env`), Groq `gsk_LzxL...`.
 
+## Product link policy (เด็ดขาด)
+
+- สินค้าทุกตัวที่เข้าระบบ**ต้องมีลิงก์ affiliate ที่ตรวจผ่านแล้วเท่านั้น**: `link_status` ในตาราง `products` (ok | dead | suspect | unknown | none) — ตรวจด้วย `backend/app/services/link_checker.py` (GET ลิงก์สั้น + ดูหน้า "ไม่พบสินค้า" + redirect ไปหน้า `/opaanlp/`/item = OK, HTTP 400/404/410 = DEAD)
+- **บอท LINE ตอบเฉพาะ `link_status == 'ok'`** (`line_bot.py` filter ทั้ง search และ หมุนเวียน) — ลิงก์เสีย/ยังไม่ตรวจ ไม่เด้งขึ้นหน้าลูกค้าเด็ดขาด
+- API `POST/PUT /products` ตรวจลิงก์ก่อนบันทึก (ไม่ OK → 400) และ `tools/product_pipeline.py import-csv` ตรวจก่อน insert (ข้ามตัวไม่ผ่าน) — `check-links` อัปเดตสถานะลงตาราง (รันเป็นระยะ; `--delete` ลบตัว DEAD)
+
 ## Git & Repo Hygiene
 
 - `.gitignore` blocks drivers, `*.db`, `.env`, `*.zip`, `*.ipynb`. Pattern gap: `geckodriver*/` only matches directories, so a root `geckodriver.exe` keeps appearing as untracked in `git status` (chromedriver.exe is explicitly ignored) — don't stage it.

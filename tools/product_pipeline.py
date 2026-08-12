@@ -21,6 +21,7 @@ Notes:
   - เขียนลง Supabase production โดยตรง (อ่าน pooler-url + db-password.txt)
   - ใช้ --sqlite เพื่อทดสอบกับ local dev DB
   - ต้องรันด้วย venv ของ backend:  backend/.venv/Scripts/python tools/product_pipeline.py ...
+  - นโยบายเด็ดขาด: import/API ตรวจลิงก์ก่อนเข้าระบบ (ผ่านเท่านั้น) — บอท LINE ตอบเฉพาะ link_status == 'ok'
 """
 
 import argparse
@@ -32,9 +33,6 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal
 from typing import Dict, List, Optional, Tuple
-from urllib.parse import urlparse
-
-import requests
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "backend"))
 
@@ -43,6 +41,7 @@ from sqlalchemy.orm import sessionmaker
 from app import models
 from app.services.ai_analyzer import calculate_heuristic_score
 from app.services.ai_generator import generate_script_for_product
+from app.services.link_checker import check_affiliate_link
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -144,24 +143,43 @@ def cmd_import_csv(args):
     existing_names = {p.name for p in db.query(models.Product).all()}
     existing_urls = {p.affiliate_url for p in db.query(models.Product).all() if p.affiliate_url}
 
-    inserted, skipped = [], []
+    inserted, skipped_dupe, skipped_link = [], [], []
+    fresh = []
     for r in rows:
         if r["name"] in existing_names or r["affiliate_url"] in existing_urls:
-            skipped.append(r["name"])
+            skipped_dupe.append(r["name"])
             continue
-        score = calculate_heuristic_score(r["sales"], 0.0, float(r["commission"]), float(r["price"]))
-        p = models.Product(
-            name=r["name"], category=r["category"], price=r["price"], rating=0.0,
-            sales_count=r["sales"], commission=r["commission"],
-            affiliate_url=r["affiliate_url"], ai_score=score,
-        )
-        db.add(p)
-        db.flush()
-        inserted.append(p)
-        existing_names.add(r["name"])
-        existing_urls.add(r["affiliate_url"])
+        if not r["affiliate_url"]:
+            skipped_link.append((r["name"], "ไม่มีลิงก์ข้อเสนอใน CSV"))
+            continue
+        fresh.append(r)
+
+    # นโยบายเด็ดขาด: ตรวจลิงก์ก่อน insert — ผ่าน (OK) เท่านั้นถึงเข้าระบบ
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        futures = {ex.submit(check_affiliate_link, r["affiliate_url"]): r for r in fresh}
+        for fut in as_completed(futures):
+            r = futures[fut]
+            status, detail = fut.result()
+            if status != "OK":
+                skipped_link.append((r["name"], f"{status}: {detail}"))
+                continue
+            score = calculate_heuristic_score(r["sales"], 0.0, float(r["commission"]), float(r["price"]))
+            p = models.Product(
+                name=r["name"], category=r["category"], price=r["price"], rating=0.0,
+                sales_count=r["sales"], commission=r["commission"],
+                affiliate_url=r["affiliate_url"], link_status="ok", ai_score=score,
+            )
+            db.add(p)
+            db.flush()
+            inserted.append(p)
+            existing_names.add(r["name"])
+            existing_urls.add(r["affiliate_url"])
     db.commit()
-    print(f"imported {len(inserted)} / skipped(dupe) {len(skipped)} / จากไฟล์ {len(rows)}")
+    print(f"imported {len(inserted)} / dupe {len(skipped_dupe)} / ลิงก์ไม่ผ่าน {len(skipped_link)} / จากไฟล์ {len(rows)}")
+    if skipped_link:
+        print("\n--- ข้าม (ลิงก์ไม่ผ่านการตรวจ) ---")
+        for name, why in skipped_link:
+            print(f"   ✗ {name[:50]} — {why}")
 
     if inserted and args.analyze:
         top = sorted(inserted, key=lambda p: p.ai_score or 0, reverse=True)[: args.top]
@@ -240,51 +258,6 @@ def cmd_fix_scores(args):
     db.close()
 
 
-BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-              "(KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36")
-DEAD_MARKERS = ("item_not_found", "item not found", "ไม่พบสินค้า", "สินค้าหาย",
-                "product is no longer", "product_not_found", "ไม่มีสินค้านี้")
-BLOCK_MARKERS = ("เข้าสู่หน้าที่ต้องการไม่สำเร็จ", "traffic verification", "captcha",
-                 "แคปต์ชา", "page unavailable", "verify you are human")
-ITEM_URL_RE = re.compile(r"/product/|/opaanlp/|-[a-z0-9-]+-i\.\d+\.\d+", re.IGNORECASE)
-
-
-def check_affiliate_link(url: str) -> Tuple[str, str]:
-    """ตรวจลิงก์สั้น s.shopee.co.th → (status, detail)
-    OK / DEAD / SUSPECT (ต้องเช็คมือ) / UNKNOWN (ยิงไม่สำเร็จ) / NO_URL
-    """
-    if not url:
-        return "NO_URL", "ไม่มีลิงก์"
-    try:
-        r = requests.get(url, timeout=20, allow_redirects=True,
-                         headers={"User-Agent": BROWSER_UA, "Accept-Language": "th-TH,th;q=0.9"},
-                         stream=True)
-        with r:
-            status = r.status_code
-            final = r.url or ""
-            if status != 200:
-                if status in (400, 404, 410):
-                    # 400 = short code ไม่ valid/หมดอายุ, 404/410 = ของหาย
-                    return "DEAD", f"HTTP {status}"
-                if status in (401, 403):
-                    return "SUSPECT", f"HTTP {status} (ถูกบล็อก)"
-                if 500 <= status < 600:
-                    return "UNKNOWN", f"HTTP {status}"
-                return "SUSPECT", f"HTTP {status}"
-            body = (r.content[:80000] or b"").decode("utf-8", errors="ignore").lower()
-            if any(m in body for m in DEAD_MARKERS):
-                return "DEAD", "เจอหน้า 'ไม่พบสินค้า'"
-            if any(m in body for m in BLOCK_MARKERS):
-                return "SUSPECT", "โดนหน้า verify/anti-bot"
-            if "shopee.co.th" in final and ITEM_URL_RE.search(urlparse(final).path):
-                return "OK", final[:95]
-            return "SUSPECT", f"redirect ไป {final[:75]} (ไม่ยืนยันว่ามีของ)"
-    except requests.exceptions.Timeout:
-        return "UNKNOWN", "timeout 20s"
-    except requests.exceptions.RequestException as e:
-        return "UNKNOWN", type(e).__name__
-
-
 def cmd_check_links(args):
     db = sessionmaker(bind=get_engine(args.sqlite))()
     prods = db.query(models.Product).all()
@@ -303,6 +276,12 @@ def cmd_check_links(args):
 
     for p in no_url:
         groups["NO_URL"].append((p, "ไม่มีลิงก์"))
+
+    # บันทึกสถานะลิงก์ลงตาราง (บอทจะตอบเฉพาะ ok)
+    for st, items in groups.items():
+        for p, _ in items:
+            p.link_status = st.lower()
+    db.commit()
 
     order = ["DEAD", "SUSPECT", "UNKNOWN", "NO_URL", "OK"]
     for st in order:

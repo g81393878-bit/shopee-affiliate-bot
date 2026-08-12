@@ -208,8 +208,11 @@ def format_product_message(db: Session, user: models.User, products: list, title
 
 def handle_today_deals(db: Session, user: models.User) -> str:
     """วันนี้ขายอะไรดี — หมุนเวียนสินค้าจากกลุ่มคะแนนสูงสุด (เลื่อนวันละ 1 ตัว)
-    เพื่อให้สินค้าใหม่ ๆ ได้โผล่หน้าแนะนำด้วย ไม่ใช่ซ้ำชุดเดิมทุกวัน"""
-    pool = db.query(models.Product).order_by(models.Product.ai_score.desc()).limit(9).all()
+    เพื่อให้สินค้าใหม่ ๆ ได้โผล่หน้าแนะนำด้วย ไม่ใช่ซ้ำชุดเดิมทุกวัน
+    นโยบายเด็ดขาด: ตอบเฉพาะสินค้าที่ตรวจลิงก์แล้วว่า OK เท่านั้น"""
+    pool = (db.query(models.Product)
+              .filter(models.Product.link_status == "ok")
+              .order_by(models.Product.ai_score.desc()).limit(9).all())
     if not pool:
         return format_product_message(db, user, [])
     # เลื่อนหน้าต่าง 3 ตัว ตามวันที่ (day-of-year) → วันใหม่ได้ชุดใหม่ ไม่ซ้ำ
@@ -234,8 +237,9 @@ def is_deal_query(text: str) -> bool:
 
 def search_products(db: Session, query: str) -> list:
     """ค้นสินค้า: ตรงชื่อ/หมวด + เข้าใจเงื่อนไขราคา ('หูฟังไม่เกิน 300', 'งบ 500',
-    'กระติก 200-400') — จัดอันดับความตรง แล้วตอบสูงสุด 3 ตัว"""
-    products = db.query(models.Product).all()
+    'กระติก 200-400') — จัดอันดับความตรง แล้วตอบสูงสุด 3 ตัว
+    นโยบายเด็ดขาด: ตอบเฉพาะสินค้าที่ตรวจลิงก์แล้วว่า OK เท่านั้น"""
+    products = db.query(models.Product).filter(models.Product.link_status == "ok").all()
     q = query.lower().strip()
     if not q:
         return []
