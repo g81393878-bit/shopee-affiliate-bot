@@ -29,3 +29,15 @@
 ## Git & Repo Hygiene
 
 - `.gitignore` blocks drivers, `*.db`, `.env`, `*.zip`, `*.ipynb`. Pattern gap: `geckodriver*/` only matches directories, so a root `geckodriver.exe` keeps appearing as untracked in `git status` (chromedriver.exe is explicitly ignored) — don't stage it.
+
+## Multi-Agent Handoff Protocol (บังคับ — ทุก AI ที่ทำงานใน repo นี้ต้องทำตาม)
+
+AI หลายตัว (Codebuff / Claude Code / Cursor …) อาจสลับกันทำงานใน checkout เดียวกัน — บริบทของแต่ละตัวเริ่มว่าง ไม่รู้ว่าใครทำอะไรค้างไว้ กฎนี้กันการแก้ทับกันจนโค้ดพัง:
+
+1. **ก่อนเริ่มงานเสมอ: ตรวจ `git status`** — ถ้า working tree ไม่สะอาด (มี modified/untracked ที่ไม่รู้จัก) ห้ามเริ่มแก้ไฟล์ ให้ถาม user ก่อนว่าของค้างคืออะไร ใครเป็นคนทำ จะ commit หรือ revert
+2. **จบงานแต่ละชิ้น = commit ทันที** — ห้ามทิ้งงานค้างข้าม session เด็ดขาด งานที่ยังไม่ commit คือ "ของใครก็ไม่รู้" ที่ AI ตัวถัดไปอาจทับ
+3. **Commit แยกตามงาน (atomic)** — แต่ละ commit ครอบ 1 งาน (เช่น แก้บั๊กค้นหา = 1 commit, เพิ่ม docs = 1 commit) อย่าใช้ `git add -A` อย่า stage ไฟล์ที่ไม่เกี่ยวกับงาน (เช่น `geckodriver.exe`, `chat_logs_export.csv`)
+4. **ห้ามรัน AI หลายตัวพร้อมกันบน checkout เดียว** — ต้องรอให้ตัวก่อน commit เสร็จก่อน อยากขนานต้องแยก branch/โฟลเดอร์
+5. **งานใหญ่ที่หยุดกลางคัน: เขียน HANDOFF.md ที่ root** (แล้ว commit) — ระบุ: งานที่ทำแล้ว / งานค้าง / ขั้นตอนต่อไป / ไฟล์ที่ถืออยู่ AI ตัวถัดไปต้องอ่านก่อนเริ่ม
+6. **ห้ามทิ้งสคริปต์ชั่วคราวใน repo** — ไฟล์ `_*` ที่สร้างเพื่อ debug/รันเทสต์ ต้องลบก่อน commit (ดู `tools/search_test.py` docstring: ชั่วคราว ไม่ commit ใช้งาน)
+7. **อย่าเชื่อสถานะจากความจำ — ตรวจไฟล์จริง** — ไฟล์อาจถูก agent ตัวอื่น/IDE/user แก้ระหว่างทำงาน (เปลี่ยน branch ได้ด้วย) ก่อนแก้ไฟล์ใด ให้ `git diff` เทียบกับ HEAD เสมอ เพื่อแยกงานของตัวเองออกจากของคนอื่น
