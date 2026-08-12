@@ -18,5 +18,7 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
+      - key: CRON_TOKEN
+        sync: false
       - key: LLM_PROVIDER
         value: groq
