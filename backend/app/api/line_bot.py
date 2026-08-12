@@ -310,6 +310,100 @@ SEARCH_GUIDE = (
 # --- ทำไมต้องซื้อกับป้าเข็ม (คุณค่าที่ประชาชนได้ — ข้อมูลจริง ไม่โฆษณาเกินจริง) ---
 WHY_US_PHRASES = ("ทำไมต้องซื้อกับป้าเข็ม", "ทำไมต้องป้าเข็ม", "ทำไมต้องซื้อ", "เหตุผล", "ข้อดีของร้าน", "ป้าเข็มดียังไง")
 
+# --- เทียบสินค้า A กับ B (แบบ Amazon "Compare with": ข้อมูลจริงในคลัง ไม่ AI เดา) ---
+COMPARE_PREFIXES = ("เปรียบเทียบราคา", "เปรียบเทียบ", "เทียบราคา", "เทียบ")
+COMPARE_SEPS = (" กับ ", " และ ", "กับ", "และ")
+COMPARE_HELP = (
+    "⚖️ เทียบสินค้าจ๊ะ! พิมพ์แบบนี้:\n\n"
+    "• \"เทียบ GOOJODOQ กับ Jeep\"\n"
+    "• \"เทียบราคากระติก ESKIMO กับ YTL\"\n"
+    "• \"เปรียบเทียบหูฟัง A กับ B\"\n\n"
+    "ป้าเข็มจะเทียบ ราคา/ยอดขาย/ค่านายหน้า/คะแนน ให้ดูจ๊ะ"
+)
+
+
+def _compare_pair(raw_text: str) -> Optional[Tuple[str, str]]:
+    """แยก \"เทียบ A กับ B\" → (A, B) — ตัดคำนำหน้า + คำต่อท้ายเล่นๆ"""
+    t = raw_text.strip()
+    for p in COMPARE_PREFIXES:  # เรียงคำยาวก่อน (เปรียบเทียบ > เทียบ)
+        if t.startswith(p):
+            t = t[len(p):]
+            break
+    # ลบคำต่อท้ายแบบระบุชัด (ห้าม strip ตัวอักษรไทย — "ห" ใน "หูฟัง" จะโดนกิน)
+    for suf in (" หน่อย", " ให้หน่อย", " ให้ที", " ที", " ให้", " จ๊ะ", " ค่ะ", "หน่อย", "จ๊ะ", "ค่ะ"):
+        if t.endswith(suf):
+            t = t[: -len(suf)]
+            break
+    t = t.strip()
+    for sep in COMPARE_SEPS:
+        if sep in t:
+            q1, q2 = t.split(sep, 1)
+            q1, q2 = q1.strip(), q2.strip()
+            if len(q1) >= 2 and len(q2) >= 2:
+                return q1, q2
+    return None
+
+
+def _fmt_num(n) -> str:
+    try:
+        return f"{int(n):,}"
+    except (TypeError, ValueError):
+        return str(n)
+
+
+def handle_compare(db, raw_text: str, user, is_owner: bool = False):
+    """เทียบ A กับ B — ตารางข้อเท็จจริง (ราคา/ยอดขาย/คอม/คะแนน) + ปุ่มซื้อทั้งคู่"""
+    pair = _compare_pair(raw_text)
+    if not pair:
+        return TextSendMessage(text=COMPARE_HELP)
+    q1, q2 = pair
+    h1 = search_products(db, q1)
+    h2 = search_products(db, q2)
+    a = h1[0] if h1 else None
+    b = h2[0] if h2 else None
+    if not a and not b:
+        return TextSendMessage(text=f"หาทั้ง \"{q1}\" และ \"{q2}\" ไม่เจอในร้านจ๊ะ "
+                                     "ลองพิมพ์ชื่อสั้นๆ เช่น \"เทียบ GOOJODOQ กับ Jeep\" 😊")
+    if not a or not b:
+        found, missing = (a, q2) if a else (b, q1)
+        return TextSendMessage(text=f"หา \"{missing}\" ไม่เจอในร้านจ๊ะ\n\n"
+                                     f"เจอตัวเดียว: {found.name[:45]}\n"
+                                     "ลองพิมพ์ชื่อที่อยู่ในร้านให้สั้นลงจ๊ะ 😊")
+
+    def name_of(p):
+        return p.name[:40] + ("..." if len(p.name) > 40 else "")
+
+    lines = [
+        "⚖️ เทียบสินค้า", "",
+        f"🅰️ {name_of(a)}",
+        f"🅱️ {name_of(b)}", "",
+        f"💰 ราคา: {float(a.price or 0):,.0f}฿  vs  {float(b.price or 0):,.0f}฿",
+        f"📦 ยอดขาย: {_fmt_num(a.sales_count)}  vs  {_fmt_num(b.sales_count)}",
+        f"💸 ค่านายหน้า: {float(a.commission or 0):,.0f}฿  vs  {float(b.commission or 0):,.0f}฿",
+        f"📈 คะแนนความน่าทำคลิป: {a.ai_score or 0}/100  vs  {b.ai_score or 0}/100",
+    ]
+    if a.category and a.category == b.category:
+        lines.append(f"🏷️ หมวด: {a.category}")
+
+    facts = []
+    if (a.sales_count or 0) != (b.sales_count or 0):
+        better = a if (a.sales_count or 0) > (b.sales_count or 0) else b
+        tag = "🅰️" if better is a else "🅱️"
+        facts.append(f"{tag} ขายดีกว่า ({_fmt_num(better.sales_count)} ชิ้น)")
+    if (a.commission or 0) != (b.commission or 0):
+        better = a if (a.commission or 0) > (b.commission or 0) else b
+        tag = "🅰️" if better is a else "🅱️"
+        facts.append(f"{tag} ค่านายหน้าสูงกว่า (฿{float(better.commission or 0):,.0f})")
+    lines.append("")
+    if facts:
+        lines.append("💡 ข้อเท็จจริง: " + " · ".join(facts))
+    else:
+        lines.append("💡 ทั้งคู่ใกล้เคียงกันมาก เลือกตามงบ/ความชอบได้เลยจ๊ะ")
+    lines += ["", "👇 กดปุ่มด้านล่างเพื่อสั่งซื้อได้เลย"]
+
+    cards = product_cards_message(db, user, [a, b], title="🛒 กดซื้อได้เลย", is_owner=is_owner)
+    return [TextSendMessage(text="\n".join(lines)), cards]
+
 
 def why_us_text() -> str:
     return (
@@ -910,6 +1004,10 @@ def message_text(event):
             # สั่งถามสินค้าแนะนำ — ตอบการ์ด 3 อันดับตามคะแนน AI
             reply = handle_today_deals(db, user, is_owner=is_owner)
             intent = 'deals'
+        elif normalized_text.startswith(COMPARE_PREFIXES):
+            # เทียบสินค้า A กับ B — ตารางข้อเท็จจริงจากข้อมูลจริง (ราคา/ยอดขาย/คอม)
+            reply = handle_compare(db, normalized_text, user, is_owner)
+            intent = 'compare'
         else:
             # พิมพ์อย่างอื่น (เช่น "หูฟัง" "อยากได้กระติกน้ำ" "หูฟังไม่เกิน 300") —
             # ค้นสินค้าที่ตรง (รองรับเงื่อนไขราคา); ไม่ตรง → บอกตรงๆ ไม่มโน
