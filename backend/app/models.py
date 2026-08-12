@@ -22,6 +22,21 @@ class User(Base):
         self.shopee_affiliate_id = value
 
 
+class UserPreference(Base):
+    """Account Memory (Amazon-style): สิ่งที่ลูกค้าบอกให้ป้าเข็มจำไว้
+    — ตารางแยก (ไม่ใช่ users เพราะ users = auth.users ของ Supabase)
+    categories: ["แมว", "หูฟัง"] หมวดที่ลูกค้าบอกว่าชอบ
+    notes: ["เลี้ยงแมว 2 ตัว"] สิ่งที่ลูกค้าบอกให้จำ
+    """
+    __tablename__ = "user_preferences"
+
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    line_user_id = Column(String(100), unique=True, index=True, nullable=False)
+    categories = Column(JSON, nullable=True)
+    notes = Column(JSON, nullable=True)
+    updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+
+
 class ShopeeProduct(Base):
     """Raw products pulled from Shopee Affiliate Open API (productOfferV2) — staging table.
     Bulk-fetched catalog; curated picks get promoted into `products` for the LINE bot.

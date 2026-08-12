@@ -120,6 +120,17 @@ CREATE INDEX IF NOT EXISTS idx_chat_logs_user ON chat_logs(line_user_id);
 CREATE INDEX IF NOT EXISTS idx_chat_logs_created ON chat_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_chat_logs_category ON chat_logs(category);
 
+-- Account Memory (Amazon-style): สิ่งที่ลูกค้าบอกให้ป้าเข็มจำไว้
+-- ใช้ตารางแยก — users คือ auth.users ของ Supabase (preferences มีอยู่แล้ว เป็นของ auth)
+CREATE TABLE IF NOT EXISTS user_preferences (
+    id BIGSERIAL PRIMARY KEY,
+    line_user_id TEXT NOT NULL UNIQUE,
+    categories JSONB,
+    notes JSONB,
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_user_preferences_user ON user_preferences(line_user_id);
+
 -- บันทึกแคมเปญที่เอเจนต์ส่ง (กันส่งซ้ำ + ตรวจสอบ)
 CREATE TABLE IF NOT EXISTS campaign_logs (
     id BIGSERIAL PRIMARY KEY,

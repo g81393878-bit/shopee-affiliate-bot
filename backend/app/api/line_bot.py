@@ -395,15 +395,98 @@ def handle_top_sellers(db: Session, user: models.User, is_owner: bool = False) -
 NEW_PHRASES = ("มีอะไรใหม่", "ของใหม่", "สินค้าใหม่", "อะไรใหม่", "มีของใหม่", "ของใหม่มีอะไร")
 
 
+# --- Account Memory (Amazon-style): ลูกค้าบอกให้ป้าเข็มจำไว้ ---
+REMEMBER_SAVE_PREFIXES = ("จำไว้", "จำไว้ว่า", "จดไว้", "จำให้หน่อย", "ช่วยจำ", "จำได้มั้ยว่า")
+REMEMBER_SHOW_PHRASES = ("จำได้ไหม", "ป้าเข็มจำ", "จำอะไรไว้", "จำอะไรบ้าง")
+
+
+def _saved_categories(db, line_user_id: str) -> list:
+    """หมวดที่ลูกค้าบอกให้จำไว้ (user_preferences) — ข้อมูลที่ลูกค้าระบุเอง"""
+    pref = (db.query(models.UserPreference)
+              .filter(models.UserPreference.line_user_id == line_user_id).first())
+    if pref and pref.categories:
+        return [c for c in pref.categories if c]
+    return []
+
+
+def _saved_notes(db, line_user_id: str) -> list:
+    pref = (db.query(models.UserPreference)
+              .filter(models.UserPreference.line_user_id == line_user_id).first())
+    if pref and pref.notes:
+        return [n for n in pref.notes if n]
+    return []
+
+
+def _remember_categories_from_note(note: str) -> list:
+    """หา "หมวด" ที่ลูกค้าพูดถึงในโน้ต (เช่น "เลี้ยงแมว 2 ตัว" → แมว) —
+    ใช้ keyword เดียวกับ guess_category (แมตช์ยาวสุดก่อน) + guess_category รวม"""
+    cats = []
+    for kw, cat in CATEGORY_KEYWORDS:
+        if kw in note and cat not in cats:
+            cats.append(cat)
+    fallback = guess_category(note)
+    if fallback and fallback not in cats:
+        cats.append(fallback)
+    return cats
+
+
+def handle_remember(db, raw_text: str, line_user_id: str, user) -> TextSendMessage:
+    """Account Memory — "จำไว้ <อะไร>" เก็บหมวด/โน้ต; "ป้าเข็มจำได้ไหม" อ่านคืน"""
+    if any(raw_text.startswith(p) for p in REMEMBER_SHOW_PHRASES):
+        cats = _saved_categories(db, line_user_id)
+        notes = _saved_notes(db, line_user_id)
+        if not cats and not notes:
+            return TextSendMessage(text=f"ยังไม่มีอะไรให้ป้าเข็มจำจ๊ะ {user.name} 😊\n\n"
+                                        "ลองบอกป้าเข็มได้เลย เช่น \"จำไว้ จริงๆ ชอบหูฟังไม่เกิน 300\" "
+                                        "เดี๋ยวมีของใหม่ป้าเข็มจะนึกถึงคุณก่อนเลยจ๊ะ")
+        parts = []
+        if cats:
+            parts.append(f"• หมวดที่ชอบ: {' '.join(cats)}")
+        if notes:
+            parts.append(f"• ที่จำไว้: {' / '.join(notes)}")
+        return TextSendMessage(text=f"ป้าเข็มจำได้จ๊ะ {user.name} 😊\n\n" + "\n".join(parts) +
+                                "\n\nมีของใหม่ในหมวดนี้ป้าเข็มจะนึกถึงคุณก่อนเลยจ๊ะ 🎯")
+    for p in REMEMBER_SAVE_PREFIXES:
+        if raw_text.startswith(p):
+            note = raw_text[len(p):].strip(" ว่า :,")
+            if not note:
+                return TextSendMessage(text="จะให้ป้าเข็มจำอะไรดีจ๊ะ เช่น \"จำไว้ ชอบหูฟังไม่เกิน 300\" 😊")
+            cats = _remember_categories_from_note(note)
+            pref = (db.query(models.UserPreference)
+                      .filter(models.UserPreference.line_user_id == line_user_id).first())
+            if not pref:
+                pref = models.UserPreference(line_user_id=line_user_id, categories=[], notes=[])
+                db.add(pref)
+            merged_cats = list(dict.fromkeys(list(pref.categories or []) + cats))
+            merged_notes = list(dict.fromkeys(list(pref.notes or []) + [note]))
+            pref.categories = merged_cats
+            pref.notes = merged_notes
+            db.commit()
+            line = f"จำไว้แล้วจ๊ะ {user.name} 😊\n\n📝 {note}"
+            if cats:
+                line += f"\n\n🛍️ ป้าเข็มจะแนะนำของหมวด {', '.join(cats)} ให้คุณก่อนเลย"
+            line += "\n\nพิมพ์ \"ป้าเข็มจำได้ไหม\" เพื่อดูว่าป้าเข็มจำอะไรไว้บ้างจ๊ะ"
+            return TextSendMessage(text=line)
+    return None
+
+
 def _customer_categories(db, line_user_id: str) -> list:
-    """หมวดที่ลูกค้าคนนี้เคยค้น (chat_logs) เรียงตามความถี่ — ใช้แนะนำส่วนตัว"""
+    """หมวดที่ลูกค้าคนนี้สนใจ: (1) สิ่งที่บอกให้จำไว้ก่อน (2) เคยค้น (chat_logs) ตามความถี่"""
     from collections import Counter
+    saved = _saved_categories(db, line_user_id)
     rows = (db.query(models.ChatLog.category)
               .filter(models.ChatLog.line_user_id == line_user_id,
                       models.ChatLog.intent == "search",
                       models.ChatLog.category.isnot(None)).all())
     c = Counter(r[0] for r in rows)
-    return [k for k, _ in c.most_common()]
+    merged = []
+    for cat in saved:
+        if cat not in merged:
+            merged.append(cat)
+    for k, _ in c.most_common():
+        if k not in merged:
+            merged.append(k)
+    return merged
 
 
 def handle_new_arrivals(db, user, line_user_id: str, is_owner: bool = False):
@@ -432,8 +515,13 @@ CAMPAIGN_LIMIT = 20  # สูงสุดต่อแคมเปญ — LINE OA
 
 
 def _campaign_targets(db, category: str) -> list:
-    """ลูกค้าที่เคยค้นหมวดนี้ (dedupe, ล่าสุดก่อน) — ไม่รวมเจ้าของร้าน"""
+    """ลูกค้าเป้าหมาย: (1) บอกให้จำไว้ว่าชอบหมวดนี้ (2) เคยค้นหมวดนี้ (dedupe, ล่าสุดก่อน) — ไม่รวมเจ้าของร้าน"""
     targets = {}
+    # กลุ่มที่บอกให้ป้าเข็มจำไว้ว่าชอบหมวดนี้ (กรองใน Python — ตารางเล็ก + กัน SQLite/Postgres ต่างกัน)
+    for pref in db.query(models.UserPreference).all():
+        if pref.categories and category in pref.categories:
+            if pref.line_user_id not in targets and pref.line_user_id != ADMIN_LINE_USER_ID:
+                targets[pref.line_user_id] = True
     rows = (db.query(models.ChatLog.line_user_id, models.ChatLog.created_at)
               .filter(models.ChatLog.intent == "search",
                       models.ChatLog.category == category)
@@ -680,8 +768,9 @@ def message_text(event):
     try:
         user = get_or_create_line_user(db, line_user_id)
         if normalized_text in DELETE_PHRASES:
-            # PDPA: สิทธิ์ลบข้อมูล (erasure) — ลบชื่อ + ประวัติการสนทนาทันที
+            # PDPA: สิทธิ์ลบข้อมูล (erasure) — ลบชื่อ + ประวัติการสนทนา + สิ่งที่ให้จำไว้ทันที
             db.query(models.ChatLog).filter(models.ChatLog.line_user_id == line_user_id).delete(synchronize_session=False)
+            db.query(models.UserPreference).filter(models.UserPreference.line_user_id == line_user_id).delete(synchronize_session=False)
             db.query(models.User).filter(models.User.line_user_id == line_user_id).delete(synchronize_session=False)
             db.commit()
             reply = TextSendMessage(text=DELETE_REPLY)
@@ -697,9 +786,13 @@ def message_text(event):
             reply = handle_product_link(db, user, extract_shopee_link(normalized_text), is_owner)
             intent = 'link'
         elif normalized_text in NEW_PHRASES:
-            # มีอะไรใหม่ — ดันสินค้าใหม่หมวดที่เคนสนใจ (จำจาก chat_logs)
+            # มีอะไรใหม่ — ดันสินค้าใหม่หมวดที่เคนสนใจ (จำจาก chat_logs + ที่บอกให้จำไว้)
             reply = handle_new_arrivals(db, user, line_user_id, is_owner)
             intent = 'new'
+        elif normalized_text.startswith(REMEMBER_SAVE_PREFIXES) or normalized_text.startswith(REMEMBER_SHOW_PHRASES):
+            # Account Memory (Amazon-style): ลูกค้าบอก "จำไว้ ชอบหูฟัง" / ถาม "ป้าเข็มจำได้ไหม"
+            reply = handle_remember(db, normalized_text, line_user_id, user)
+            intent = 'remember'
         elif is_owner and normalized_text.startswith("แคมเปญ"):
             # เอเจนต์ทำแคมเปญ (เฉพาะเจ้าของ) — dry-run ก่อนส่งจริง
             reply = handle_campaign(db, normalized_text, is_owner)
