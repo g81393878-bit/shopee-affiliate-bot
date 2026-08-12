@@ -10,7 +10,8 @@ import datetime
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import (TextMessage, MessageEvent, TextSendMessage, StickerMessage,
-                            StickerSendMessage, Sender, QuickReply, QuickReplyButton, MessageAction)
+                            StickerSendMessage, Sender, QuickReply, QuickReplyButton,
+                            MessageAction, FollowEvent)
 from pydantic import BaseModel
 
 from app.db import SessionLocal, get_db
@@ -443,3 +444,24 @@ def sticker_text(event):
             event.reply_token,
             StickerSendMessage(package_id='6136', sticker_id='10551379')
         )
+
+
+@handler.add(FollowEvent)
+def follow_event(event):
+    """ข้อความต้อนรับแรก (สากล): เมื่อลูกค้าแอดเพื่อน -> ส่งทักทาย + ปุ่มให้แตะทันที
+    (LINE OA console ตั้ง welcome ธรรมดาได้แค่ข้อความ ไม่มีปุ่ม — ส่งจากบอทเองมีปุ่มได้)"""
+    line_user_id = event.source.user_id
+    db = SessionLocal()
+    try:
+        user = get_or_create_line_user(db, line_user_id)
+        welcome = TextSendMessage(text=greeting_text(user.name),
+                                  sender=Sender(name=BOT_NAME, icon_url=BOT_ICON_URL),
+                                  quick_reply=quick_reply_items())
+        if "mock" in LINE_ACCESS_TOKEN.lower():
+            logger.info(f"Mock follow welcome -> {user.name}")
+        else:
+            line_bot_api.push_message(line_user_id, welcome)
+    except Exception as e:
+        logger.error(f"Follow welcome error: {e}")
+    finally:
+        db.close()
