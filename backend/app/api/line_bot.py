@@ -269,6 +269,16 @@ def quick_reply_items() -> QuickReply:
     ])
 
 
+def welcome_text(user_name: str) -> str:
+    """ข้อความต้อนรับแรก (สั้น + คุณค่าชัด) — ลูกค้าใหม่เห็นทันทีว่าทำไมต้องอยู่กับป้าเข็ม"""
+    return (
+        f"🤗 สวัสดีค่ะคุณ {user_name}! ยินดีต้อนรับสู่ร้าน{BOT_NAME} 💕\n\n"
+        "ที่นี่ราคาเท่ากับ Shopee เป๊ะ แต่ป้าเข็มคัดของดีให้"
+        " + จำได้ว่าคุณชอบอะไร 😊\n\n"
+        "แตะปุ่มด้านล่างได้เลยจ๊ะ 👇"
+    )
+
+
 def greeting_text(user_name: str) -> str:
     """แนวสากล: ทักทาย + ทางเลือก — ไม่ยิงสินค้าใส่หน้าจนกว่าลูกค้าจะบอกความต้องการ"""
     return (
@@ -277,6 +287,16 @@ def greeting_text(user_name: str) -> str:
         "\"หูฟังไม่เกิน 300\" หรือ \"กระติกน้ำ\"\n\n"
         "หรือแตะปุ่มด้านล่าง 👇"
     )
+
+
+def welcome_quick_reply() -> QuickReply:
+    """ปุ่มตอนแอดครั้งแรก — คุณค่าก่อน (ทำไมต้องป้าเข็ม) แล้วค่อยค้นหา"""
+    return QuickReply(items=[
+        QuickReplyButton(action=MessageAction(label="💛 ทำไมต้องป้าเข็ม", text="ทำไมต้องซื้อกับป้าเข็ม")),
+        QuickReplyButton(action=MessageAction(label="🔍 ค้นสินค้า", text="ค้นสินค้า")),
+        QuickReplyButton(action=MessageAction(label="⭐ ขายดีวันนี้", text="วันนี้ขายอะไรดี")),
+        QuickReplyButton(action=MessageAction(label="🔥 อันดับขายดี", text="อันดับขายดี")),
+    ])
 
 
 SEARCH_GUIDE = (
@@ -962,8 +982,8 @@ def follow_event(event):
     db = SessionLocal()
     try:
         user = get_or_create_line_user(db, line_user_id)
-        welcome = TextSendMessage(text=greeting_text(user.name),
-                                  quick_reply=quick_reply_items())
+        welcome = TextSendMessage(text=welcome_text(user.name),
+                                  quick_reply=welcome_quick_reply())
         privacy = TextSendMessage(text=PRIVACY_NOTICE)
         if "mock" in LINE_ACCESS_TOKEN.lower():
             logger.info(f"Mock follow welcome -> {user.name}")
