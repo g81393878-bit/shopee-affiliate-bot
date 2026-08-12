@@ -11,17 +11,16 @@ SCRIPT_KEYS = {"hook", "problem", "solution", "cta", "caption", "hashtags", "tit
 
 def format_hashtags_text(tags) -> str:
     """แปลง hashtags จาก model เป็นบรรทัด #tag1 #tag2 ... (รองรับทั้ง list และ string)
-    Model บางครั้งส่ง string "#หูฟัง #ดี #คุ้ม" หรือ list — ถ้า iter string ตรงๆ จะ
-    กลายเป็น "#ห #ู #ฟ" (ต่อทีละตัวอักษร) — ต้อง normalize ก่อนเสมอ"""
+    - Model ส่ง string "#หูฟัง #ดี" หรือ list — ถ้า iter string ตรงๆ จะกลายเป็น
+      "#ห #ู #ฟ" (ต่อทีละตัวอักษร) → normalize ก่อนเสมอ
+    - บางที model ส่ง single-char tokens ("#ไ #ฟ #โ") — แท็กตัวเดียวไม่มีความหมาย
+      (เป็นแฮชที่ model เกิดแยกตัวอักษร) → ตัดทิ้ง เหลือแต่แท็กยาว ≥2 ตัว
+    - กำจัด # ซ้ำ/ตัวเปล่า, จำกัด 8 แท็ก"""
     raw = tags if isinstance(tags, list) else str(tags).replace(",", " ").split()
-    out = []
+    seen, cleaned = set(), []
     for t in raw:
         t = str(t).strip().lstrip("#").strip()
-        if t:
-            out.append(t)
-    seen, cleaned = set(), []
-    for t in out:
-        if t not in seen:
+        if len(t) >= 2 and t not in seen:  # ตัด single-char (แฮชที่เละ) + ซ้ำ
             seen.add(t)
             cleaned.append(t)
     if not cleaned:
