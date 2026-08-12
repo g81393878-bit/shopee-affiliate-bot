@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from app.db import SessionLocal, get_db
 from app import models
+from app.services.product_cards import product_cards_message
 
 logger = logging.getLogger(__name__)
 
@@ -165,55 +166,9 @@ def get_catalog_badges(db: Session) -> dict:
     return badges
 
 
-def format_product_message(db: Session, user: models.User, products: list, title: Optional[str] = None) -> str:
-    """Format a product list into the reply message (พร้อมป้าย 🆕/🔥/💎)"""
-    if not products:
-        return (
-            f"สวัสดีครับคุณ {user.name} 👋\n\n"
-            "⚠️ ยังไม่มีสินค้าในระบบชั่วคราวครับ\n\n"
-            "คุณสามารถเพิ่มสินค้าเข้าระบบก่อนได้ผ่านหน้า Dashboard หรือ API ของเรา เพื่อให้ระบบ AI ประเมินและสร้างสคริปต์ได้ครับ"
-        )
-
-    header = title or f"⭐ สินค้าแนะนำขายดีวันนี้สำหรับคุณ {user.name} ⭐\n"
-    message_lines = [header]
-    badges_map = get_catalog_badges(db)
-
-    for i, prod in enumerate(products, 1):
-        # Look for standard content script
-        content = db.query(models.Content).filter(
-            models.Content.product_id == prod.id,
-            models.Content.style == "Standard"
-        ).first()
-
-        # Or fall back to any style if Standard not available
-        if not content:
-            content = db.query(models.Content).filter(models.Content.product_id == prod.id).first()
-
-        hook_text = ""
-        if content and content.hook:
-            hook_text = f"💡 แนวทางคอนเทนต์ (Hook):\n\"{content.hook}\"\n"
-
-        commission_text = ""
-        if prod.commission and float(prod.commission) > 0:
-            commission_text = f"💸 ค่านายหน้า: {prod.commission} บาท\n"
-
-        badge_line = ""
-        badge = badges_map.get(prod.id, "")
-        if badge:
-            badge_line = f"{badge}\n"
-
-        message_lines.append(
-            f"{i}. {prod.name}\n"
-            f"{badge_line}"
-            f"💰 ราคา: {prod.price} บาท\n"
-            f"{commission_text}"
-            f"📈 คะแนนความน่าทำคลิป: {prod.ai_score}/100\n"
-            f"{hook_text}"
-            f"🔗 ลิงก์ Affiliate: {prod.affiliate_url or 'ไม่มีลิงก์'}\n"
-        )
-
-    message_lines.append("ลองนำแนวทางหัวข้อนี้ไปถ่ายทำคอนเทนต์ด่วน ๆ เลยครับ! 🚀")
-    return "\n".join(message_lines)
+def format_product_message(db: Session, user: models.User, products: list, title: Optional[str] = None):
+    """สร้างการ์ดสินค้า Flex (หัวสี/ป้าย/ราคา/ปุ่มซื้อ) — delegate ไปที่ product_cards"""
+    return product_cards_message(db, user, products, title)
 
 
 def handle_today_deals(db: Session, user: models.User) -> str:
@@ -225,12 +180,12 @@ def handle_today_deals(db: Session, user: models.User) -> str:
                       models.Product.sales_count >= MIN_SALES)
               .order_by(models.Product.ai_score.desc()).limit(9).all())
     if not pool:
-        return format_product_message(db, user, [])
+        return product_cards_message(db, user, [])
     # เลื่อนหน้าต่าง 3 ตัว ตามวันที่ (day-of-year) → วันใหม่ได้ชุดใหม่ ไม่ซ้ำ
     day_of_year = int(datetime.datetime.utcnow().strftime("%j"))
     start = day_of_year % len(pool)
     window = (pool + pool)[start:start + 3]
-    return format_product_message(db, user, window)
+    return product_cards_message(db, user, window)
 
 
 DEAL_PHRASES = (
@@ -293,8 +248,8 @@ def handle_top_sellers(db: Session, user: models.User) -> str:
                       models.Product.sales_count >= MIN_SALES)
               .order_by(models.Product.sales_count.desc()).limit(3).all())
     if not tops:
-        return "ตอนนี้ยังไม่มีสินค้าขายดีค่ะ ลองค้นชื่อสินค้าดูได้นะคะ 😊"
-    return format_product_message(db, user, tops, title="🔥 อันดับสินค้าขายดีประจำร้าน\n")
+        return TextSendMessage(text="ตอนนี้ยังไม่มีสินค้าขายดีค่ะ ลองค้นชื่อสินค้าดูได้นะคะ 😊")
+    return product_cards_message(db, user, tops, title="🔥 อันดับสินค้าขายดีประจำร้าน")
 
 
 def search_products(db: Session, query: str) -> list:
@@ -401,18 +356,17 @@ def message_text(event):
         elif normalized_text == "ค้นสินค้า":
             reply = TextSendMessage(text=SEARCH_GUIDE,)
         elif normalized_text == "อันดับขายดี":
-            reply = TextSendMessage(text=handle_top_sellers(db, user),)
+            reply = handle_top_sellers(db, user)
         elif is_deal_query(normalized_text):
-            # สั่งถามสินค้าแนะนำ — ตอบ 3 อันดับตามคะแนน AI
-            reply = TextSendMessage(text=handle_today_deals(db, user),)
+            # สั่งถามสินค้าแนะนำ — ตอบการ์ด 3 อันดับตามคะแนน AI
+            reply = handle_today_deals(db, user)
         else:
             # พิมพ์อย่างอื่น (เช่น "หูฟัง" "อยากได้กระติกน้ำ" "หูฟังไม่เกิน 300") —
             # ค้นสินค้าที่ตรง (รองรับเงื่อนไขราคา); ไม่ตรง → แนะนำวิธีใช้ ไม่ยิงสินค้าใส่หน้า
             hits = search_products(db, normalized_text)
             if hits:
-                reply = TextSendMessage(
-                    text=format_product_message(db, user, hits,
-                                                title=f"🔍 สินค้าตรงกับ \"{user_text}\" ค่ะ\n"),)
+                reply = format_product_message(db, user, hits,
+                                               title=f"🔍 สินค้าตรงกับ \"{user_text}\" ค่ะ")
             else:
                 reply = TextSendMessage(text=greeting_text(user.name),
                                         quick_reply=quick_reply_items())
