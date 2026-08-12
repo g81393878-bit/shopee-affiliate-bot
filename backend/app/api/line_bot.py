@@ -35,6 +35,10 @@ BOT_ICON_URL = "https://profile.line-scdn.net/0hERy_y3n3Gn1EJgY083hlKnhjFBAzCBw1
 # (กันสินค้ายอดขายน้อยแทรกหน้าแนะนำ; ตั้ง env MIN_SALES ปรับได้ เช่น 5000/10000)
 MIN_SALES = int(os.getenv("MIN_SALES", "2000"))
 
+# LINE userId ของเจ้าของร้าน (คุณ) — เห็นมุมมองแอดมิน (ค่านายหน้า/คะแนน/Hook)
+# ลูกค้าคนอื่นเห็นแค่การ์ดสะอาด (ราคา/ยอดขาย/ปุ่มซื้อ) ไม่รกตา
+ADMIN_LINE_USER_ID = os.getenv("ADMIN_LINE_USER_ID", "Uc88eb3896b0e4bcc5fbaa9b78ac1294e")
+
 router = APIRouter(
     prefix="/webhooks",
     tags=["chatbot"],
@@ -166,12 +170,13 @@ def get_catalog_badges(db: Session) -> dict:
     return badges
 
 
-def format_product_message(db: Session, user: models.User, products: list, title: Optional[str] = None):
-    """สร้างการ์ดสินค้า Flex (หัวสี/ป้าย/ราคา/ปุ่มซื้อ) — delegate ไปที่ product_cards"""
-    return product_cards_message(db, user, products, title)
+def format_product_message(db: Session, user: models.User, products: list,
+                           title: Optional[str] = None, is_owner: bool = False):
+    """สร้างการ์ดสินค้า Flex — ลูกค้าเห็นเฉพาะข้อมูลซื้อ, เจ้าของเห็นข้อมูลแอดมินเพิ่ม"""
+    return product_cards_message(db, user, products, title, is_owner=is_owner)
 
 
-def handle_today_deals(db: Session, user: models.User) -> str:
+def handle_today_deals(db: Session, user: models.User, is_owner: bool = False) -> str:
     """วันนี้ขายอะไรดี — หมุนเวียนสินค้าจากกลุ่มคะแนนสูงสุด (เลื่อนวันละ 1 ตัว)
     เพื่อให้สินค้าใหม่ ๆ ได้โผล่หน้าแนะนำด้วย ไม่ใช่ซ้ำชุดเดิมทุกวัน
     นโยบายเด็ดขาด: ตอบเฉพาะสินค้าลิงก์ OK + ยอดขายถึงเกณฑ์เท่านั้น"""
@@ -180,12 +185,12 @@ def handle_today_deals(db: Session, user: models.User) -> str:
                       models.Product.sales_count >= MIN_SALES)
               .order_by(models.Product.ai_score.desc()).limit(9).all())
     if not pool:
-        return product_cards_message(db, user, [])
+        return product_cards_message(db, user, [], is_owner=is_owner)
     # เลื่อนหน้าต่าง 3 ตัว ตามวันที่ (day-of-year) → วันใหม่ได้ชุดใหม่ ไม่ซ้ำ
     day_of_year = int(datetime.datetime.utcnow().strftime("%j"))
     start = day_of_year % len(pool)
     window = (pool + pool)[start:start + 3]
-    return product_cards_message(db, user, window)
+    return product_cards_message(db, user, window, is_owner=is_owner)
 
 
 DEAL_PHRASES = (
@@ -241,7 +246,7 @@ SEARCH_GUIDE = (
 )
 
 
-def handle_top_sellers(db: Session, user: models.User) -> str:
+def handle_top_sellers(db: Session, user: models.User, is_owner: bool = False) -> str:
     """อันดับขายดี — 3 อันดับตามยอดขายจริง (ลิงก์ OK + ถึงเกณฑ์ขายเท่านั้น)"""
     tops = (db.query(models.Product)
               .filter(models.Product.link_status == "ok",
@@ -249,7 +254,7 @@ def handle_top_sellers(db: Session, user: models.User) -> str:
               .order_by(models.Product.sales_count.desc()).limit(3).all())
     if not tops:
         return TextSendMessage(text="ตอนนี้ยังไม่มีสินค้าขายดีค่ะ ลองค้นชื่อสินค้าดูได้นะคะ 😊")
-    return product_cards_message(db, user, tops, title="🔥 อันดับสินค้าขายดีประจำร้าน")
+    return product_cards_message(db, user, tops, title="🔥 อันดับสินค้าขายดีประจำร้าน", is_owner=is_owner)
 
 
 def search_products(db: Session, query: str) -> list:
@@ -345,6 +350,7 @@ def message_text(event):
     # the ?, and a bare trailing "?" from autocorrect shouldn't break the match either.
     normalized_text = user_text.rstrip("?？ ").strip()
     line_user_id = event.source.user_id
+    is_owner = line_user_id == ADMIN_LINE_USER_ID
     
     db = SessionLocal()
     try:
@@ -356,17 +362,18 @@ def message_text(event):
         elif normalized_text == "ค้นสินค้า":
             reply = TextSendMessage(text=SEARCH_GUIDE,)
         elif normalized_text == "อันดับขายดี":
-            reply = handle_top_sellers(db, user)
+            reply = handle_top_sellers(db, user, is_owner=is_owner)
         elif is_deal_query(normalized_text):
             # สั่งถามสินค้าแนะนำ — ตอบการ์ด 3 อันดับตามคะแนน AI
-            reply = handle_today_deals(db, user)
+            reply = handle_today_deals(db, user, is_owner=is_owner)
         else:
             # พิมพ์อย่างอื่น (เช่น "หูฟัง" "อยากได้กระติกน้ำ" "หูฟังไม่เกิน 300") —
             # ค้นสินค้าที่ตรง (รองรับเงื่อนไขราคา); ไม่ตรง → แนะนำวิธีใช้ ไม่ยิงสินค้าใส่หน้า
             hits = search_products(db, normalized_text)
             if hits:
                 reply = format_product_message(db, user, hits,
-                                               title=f"🔍 สินค้าตรงกับ \"{user_text}\" ค่ะ")
+                                               title=f"🔍 สินค้าตรงกับ \"{user_text}\" ค่ะ",
+                                               is_owner=is_owner)
             else:
                 reply = TextSendMessage(text=greeting_text(user.name),
                                         quick_reply=quick_reply_items())
