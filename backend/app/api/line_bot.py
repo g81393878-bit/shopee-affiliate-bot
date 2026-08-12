@@ -318,7 +318,7 @@ COMPARE_HELP = (
     "• \"เทียบ GOOJODOQ กับ Jeep\"\n"
     "• \"เทียบราคากระติก ESKIMO กับ YTL\"\n"
     "• \"เปรียบเทียบหูฟัง A กับ B\"\n\n"
-    "ป้าเข็มจะเทียบ ราคา/ยอดขาย/ค่านายหน้า/คะแนน ให้ดูจ๊ะ"
+    "ป้าเข็มจะเทียบ ราคา/ยอดขาย/รีวิว ให้ดูจ๊ะ"
 )
 
 
@@ -426,7 +426,7 @@ def compare_invite_message(hits: list) -> Optional[TextSendMessage]:
 
 
 def handle_compare(db, raw_text: str, user, is_owner: bool = False):
-    """เทียบ A กับ B — การ์ด 2 คอลัมน์ (ราคา/ยอดขาย/คอม/คะแนน) + ปุ่มซื้อทั้งคู่"""
+    """เทียบ A กับ B — การ์ด 2 คอลัมน์ (ลูกค้า: ราคา/ยอดขาย/รีวิว; เจ้าของ: +ค่านายหน้า/คะแนน AI) + ปุ่มซื้อทั้งคู่"""
     pair = _compare_pair(raw_text)
     if not pair:
         return TextSendMessage(text=COMPARE_HELP)
@@ -472,15 +472,19 @@ def handle_compare(db, raw_text: str, user, is_owner: bool = False):
         better = a if (a.sales_count or 0) > (b.sales_count or 0) else b
         tag = "🅰️" if better is a else "🅱️"
         facts.append(f"{tag} ขายดีกว่า ({_fmt_num(better.sales_count)} ชิ้น)")
-    if (a.commission or 0) != (b.commission or 0):
+    # ค่านายหน้า = ข้อมูลฝั่งคนขาย → เฉพาะเจ้าของร้านถึงเห็น (ลูกค้าเห็นการ์ดสะอาด)
+    if is_owner and (a.commission or 0) != (b.commission or 0):
         better = a if (a.commission or 0) > (b.commission or 0) else b
         tag = "🅰️" if better is a else "🅱️"
         facts.append(f"{tag} ค่านายหน้าสูงกว่า (฿{float(better.commission or 0):,.0f})")
-    return compare_flex_message(a, b, facts, spec_a, spec_b)
+    return compare_flex_message(a, b, facts, spec_a, spec_b, is_owner=is_owner)
 
 
-def compare_flex_message(a, b, facts: list, spec_a: str = "", spec_b: str = "") -> FlexSendMessage:
-    """การ์ดเทียบ 2 คอลัมน์ใบเดียว (แบบตาราง Amazon) — ชื่อ/สเปค/ราคา/ยอดขาย/คอม/คะแนน + ปุ่มซื้อ
+def compare_flex_message(a, b, facts: list, spec_a: str = "", spec_b: str = "",
+                         is_owner: bool = False) -> FlexSendMessage:
+    """การ์ดเทียบ 2 คอลัมน์ใบเดียว (แบบตาราง Amazon) — ชื่อ/สเปค/ราคา/ยอดขาย + ปุ่มซื้อ
+    is_owner=True (เจ้าของ): เพิ่ม 💸 คอม + 📈 คะแนน AI (ข้อมูลฝั่งคนขาย — ลูกค้าไม่เห็น)
+    ลูกค้าเห็น ⭐ รีวิวแทน (ข้อมูลซื้อสาธารณะเหมือนการ์ดปกติ)
     โชว์ 📐 ขนาด/จำนวน (เช่น 2L vs 6L-30L) กันเทียบคนละขนาดโดยไม่รู้ตัว
     ชื่อไทยยาว: size xs + maxLines 3 + wrap — ไม่ล้นการ์ด"""
     def col(p, tag, spec):
@@ -497,13 +501,20 @@ def compare_flex_message(a, b, facts: list, spec_a: str = "", spec_b: str = "") 
              "weight": "bold", "color": "#E74C3C", "align": "center"},
             {"type": "text", "text": f"📦 ขาย {_fmt_num(p.sales_count)}", "size": "xxs",
              "color": "#666666", "align": "center", "wrap": True},
-            {"type": "text", "text": f"💸 คอม {float(p.commission or 0):,.0f}฿", "size": "xxs",
-             "color": "#666666", "align": "center", "wrap": True},
-            {"type": "text", "text": f"📈 {p.ai_score or 0}/100", "size": "xxs",
-             "color": "#666666", "align": "center", "wrap": True},
-            {"type": "button", "style": "primary", "color": "#E74C3C", "height": "sm",
-             "action": {"type": "uri", "label": "🛒 ซื้อเลย", "uri": p.affiliate_url}},
         ]
+        # ข้อมูลฝั่งคนขาย (ค่านายหน้า/คะแนน AI) เฉพาะเจ้าของ — ลูกค้าเห็น ⭐ รีวิวแทน
+        if is_owner:
+            contents += [
+                {"type": "text", "text": f"💸 คอม {float(p.commission or 0):,.0f}฿", "size": "xxs",
+                 "color": "#666666", "align": "center", "wrap": True},
+                {"type": "text", "text": f"📈 {p.ai_score or 0}/100", "size": "xxs",
+                 "color": "#666666", "align": "center", "wrap": True},
+            ]
+        elif p.rating and float(p.rating) > 0:
+            contents.append({"type": "text", "text": f"⭐ {float(p.rating):.1f}", "size": "xxs",
+                             "color": "#666666", "align": "center", "wrap": True})
+        contents.append({"type": "button", "style": "primary", "color": "#E74C3C", "height": "sm",
+                         "action": {"type": "uri", "label": "🛒 ซื้อเลย", "uri": p.affiliate_url}})
         return {"type": "box", "layout": "vertical", "flex": 1, "spacing": "sm", "contents": contents}
 
     header = {
