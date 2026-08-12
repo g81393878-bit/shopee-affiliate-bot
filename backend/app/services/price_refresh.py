@@ -70,11 +70,12 @@ def fetch_product_price(url: str) -> Tuple[Optional[float], str]:
         return None, type(e).__name__
 
 
-def refresh_price(prod: models.Product) -> Tuple[bool, str]:
-    """อัปเดตราคาของสินค้า 1 ตัว → (updated, detail)"""
+def refresh_price(prod: models.Product) -> Tuple[bool, float, float, str]:
+    """อัปเดตราคาของสินค้า 1 ตัว → (updated, old, new, detail)
+    old/new เป็นราคาบาทจริง (ใช้บันทึก price_history + คำนวณ % ลด)"""
     price, detail = fetch_product_price(prod.affiliate_url)
-    if price is None:
-        return False, detail
     old = float(prod.price or 0)
+    if price is None:
+        return False, old, old, detail
     prod.price = price
-    return (old != price), f"{old:,.2f} -> {price:,.2f}"
+    return (old != price), old, price, f"{old:,.2f} -> {price:,.2f}"

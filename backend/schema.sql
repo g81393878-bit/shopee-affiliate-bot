@@ -96,6 +96,16 @@ CREATE INDEX IF NOT EXISTS idx_product_analysis_product_id ON product_analysis(p
 CREATE INDEX IF NOT EXISTS idx_contents_product_id ON contents(product_id);
 CREATE INDEX IF NOT EXISTS idx_performance_logs_content_id ON performance_logs(content_id);
 
+-- ประวัติราคา (ราคาเก่า→ใหม่ ตอน refresh-prices)
+CREATE TABLE IF NOT EXISTS price_history (
+    id SERIAL PRIMARY KEY,
+    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    price_old NUMERIC(12, 2),
+    price_new NUMERIC(12, 2),
+    drop_pct NUMERIC(6, 2),
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- ประวัติสนทนาลูกค้า (PDPA: เก็บแค่ 90 วัน — ลบใน log_chat + cron)
 CREATE TABLE IF NOT EXISTS chat_logs (
     id BIGSERIAL PRIMARY KEY,

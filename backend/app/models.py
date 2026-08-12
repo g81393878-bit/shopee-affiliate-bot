@@ -125,6 +125,19 @@ class ChatLog(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, index=True)
 
 
+class PriceHistory(Base):
+    """ประวัติราคา — บันทึกราคาเก่า→ใหม่ทุกครั้งที่ refresh-prices เจอราคาเปลี่ยน
+    ใช้แจ้งเตือนราคาตกให้ลูกค้าที่สนใจหมวดนั้น (ต่อยอดจาก chat_logs)"""
+    __tablename__ = "price_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
+    price_old = Column(Numeric(12, 2), nullable=True)
+    price_new = Column(Numeric(12, 2), nullable=True)
+    drop_pct = Column(Numeric(6, 2), nullable=True)  # % ที่ลดลง (ติดลบ = ขึ้นราคา)
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+
+
 class CampaignLog(Base):
     """บันทึกแคมเปญที่ส่ง — กันส่งซ้ำ + ตรวจสอบ (เฉพาะเจ้าของร้านสั่ง)"""
     __tablename__ = "campaign_logs"
@@ -132,7 +145,7 @@ class CampaignLog(Base):
     id = Column(Integer, primary_key=True, index=True)
     category = Column(String(50), nullable=False)
     recipients = Column(Integer, default=0, nullable=False)
-    status = Column(String(10), default="dryrun", nullable=False)  # dryrun | sent
+    status = Column(String(10), default="dryrun", nullable=False)  # dryrun | sent | pricedrop | reengage
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 
 

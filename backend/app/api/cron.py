@@ -26,6 +26,7 @@ from app import models
 from app.services.link_checker import check_affiliate_link
 from app.services.ai_generator import generate_script_for_product
 from app.services.price_refresh import refresh_price
+from app.services.product_cards import product_cards_message
 from linebot import LineBotApi
 from linebot.models import TextSendMessage
 
@@ -117,37 +118,150 @@ def cron_analyze(token: str = "", limit: int = 5):
 def cron_refresh_prices(token: str = "", limit: int = 300):
     """อัปเดตราคาปัจจุบันจากหน้าเว็บ Shopee (best-effort)
     - เปิดหน้าเว็บสินค้าทุกตัว (ลิงก์ affiliate) → อ่านราคาจาก HTML → อัปเดต
+    - ราคาเปลี่ยน → บันทึก price_history + ถ้าลด ≥ PRICE_DROP_PCT (ค่าเริ่มต้น 5%)
+      แจ้งเตือนราคาตกให้ลูกค้าที่สนใจหมวดนั้น (จำกัดคน/ตัว กันสแปม)
     - โดนบล็อก/หาไม่เจอ → คงราคาเดิม ไม่พัง (การ์ดลูกค้าแสดง "ราคาเริ่มต้น")
     - พอได้ Open API จะแทนที่ด้วยข้อมูลทางการ (productOfferV2 priceMin/priceMax)
     """
     if not _authorized(token):
         raise HTTPException(status_code=401, detail="invalid token")
     import datetime
+    from sqlalchemy import func as _func
     db = SessionLocal()
     try:
+        drop_pct_min = float(os.getenv("PRICE_DROP_PCT", "5") or 5)
+        admin_uid = os.getenv("ADMIN_LINE_USER_ID", "Uc88eb3896b0e4bcc5fbaa9b78ac1294e")
+        now = datetime.datetime.now(datetime.timezone.utc)
         prods = [p for p in db.query(models.Product).all()
                  if p.affiliate_url and p.link_status == "ok"][:limit]
         updated, unchanged, blocked = [], 0, 0
+        drops = []  # (product, old, new, drop_pct) — ใช้แจ้งราคาตก
         for p in prods:
-            changed, detail = refresh_price(p)
+            changed, old, new, detail = refresh_price(p)
             if changed:
-                p.price_checked_at = datetime.datetime.now(datetime.timezone.utc)
+                p.price_checked_at = now
                 updated.append({"id": p.id, "name": p.name[:45], "price": str(p.price), "detail": detail})
+                drop_pct = round((old - new) / old * 100, 2) if old > 0 else 0.0
+                db.add(models.PriceHistory(product_id=p.id, price_old=old, price_new=new,
+                                           drop_pct=drop_pct if drop_pct > 0 else None))
+                if drop_pct >= drop_pct_min:
+                    drops.append((p, old, new, drop_pct))
             elif detail == "ok":
-                p.price_checked_at = datetime.datetime.now(datetime.timezone.utc)
+                p.price_checked_at = now
                 unchanged += 1
             else:
                 blocked += 1
         db.commit()
+
+        # แจ้งเตือนราคาตก — เฉพาะข้อมูลจริง: ลูกค้าที่เคยค้นหมวดนี้ (90 วัน, ไม่ใช่เจ้าของ)
+        alerted, alerted_detail = 0, []
+        for prod, old, new, dp in drops[:5]:
+            interested = (db.query(models.ChatLog.line_user_id)
+                            .filter(models.ChatLog.intent == "search",
+                                    models.ChatLog.category == (prod.category or ""),
+                                    models.ChatLog.line_user_id != admin_uid)
+                            .distinct().limit(10).all())
+            uids = [u[0] for u in interested]
+            if not uids:
+                continue
+            for uid in uids:
+                u = db.query(models.User).filter(models.User.line_user_id == uid).first()
+                name = u.name if u else "LINE User"
+                card = product_cards_message(db, type("U", (), {"name": name})(),
+                                             [prod],
+                                             title=f"💰 ราคาลดลง! ฿{_fmt(old)} → ฿{_fmt(new)} (-{dp:g}%)",
+                                             is_owner=False)
+                if "mock" in (os.getenv("LINE_CHANNEL_ACCESS_TOKEN") or "").lower():
+                    alerted += 1
+                    continue
+                try:
+                    line_bot_api.push_message(uid, card)
+                    alerted += 1
+                except Exception as e:
+                    logger.warning(f"pricedrop push fail {uid}: {e}")
+            if alerted and "mock" not in (os.getenv("LINE_CHANNEL_ACCESS_TOKEN") or "").lower():
+                db.add(models.CampaignLog(category=(prod.category or "อื่นๆ"),
+                                          recipients=len(uids), status="pricedrop"))
+                db.commit()
+                alerted_detail.append(f"{prod.name[:35]} (-{dp:g}%) -> {len(uids)} คน")
         return {
             "checked": len(prods),
             "updated": updated,
             "unchanged": unchanged,
             "skipped_blocked": blocked,
+            "price_drop_alerts": alerted_detail or (f"({alerted} ใน mock)" if alerted else []),
             "note": "ราคา = ราคาเริ่มต้นจริงในหน้าเว็บ; โดนบล็อก = คงราคาเดิม",
         }
     finally:
         db.close()
+
+
+@router.post("/re-engage")
+def cron_reengage(token: str = "", days_silent: int = 7, limit: int = 10):
+    """ดึงดูดกลับ — ลูกค้าที่เงียบ ≥ days_silent วัน และเคยสนใจหมวด X
+    ที่เพิ่งมีสินค้าใหม่ (7 วัน) → push การ์ดสินค้าใหม่หมวดนั้นให้ (ไม่สแปม:
+    จำกัด limit คน/รอบ + ข้อมูลจริงจาก chat_logs เท่านั้น)
+    """
+    if not _authorized(token):
+        raise HTTPException(status_code=401, detail="invalid token")
+    import datetime
+    from sqlalchemy import func as _func
+    db = SessionLocal()
+    try:
+        admin_uid = os.getenv("ADMIN_LINE_USER_ID", "Uc88eb3896b0e4bcc5fbaa9b78ac1294e")
+        min_sales = int(os.getenv("MIN_SALES", "2000") or 2000)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        new_cutoff = now - datetime.timedelta(days=7)
+        silent_cutoff = now - datetime.timedelta(days=days_silent)
+
+        last_act = (db.query(models.ChatLog.line_user_id, _func.max(models.ChatLog.created_at))
+                      .group_by(models.ChatLog.line_user_id).all())
+        quiet = [uid for uid, last in last_act
+                 if last is not None and last <= silent_cutoff and uid != admin_uid]
+        pushed, skipped = [], []
+        for uid in quiet[:limit]:
+            top_cat = (db.query(models.ChatLog.category, _func.count(models.ChatLog.id))
+                         .filter(models.ChatLog.line_user_id == uid,
+                                 models.ChatLog.intent == "search",
+                                 models.ChatLog.category.isnot(None))
+                         .group_by(models.ChatLog.category)
+                         .order_by(_func.count(models.ChatLog.id).desc()).first())
+            if not top_cat or not top_cat[0]:
+                skipped.append((uid, "ไม่มีหมวดที่สนใจ"))
+                continue
+            cat = top_cat[0]
+            new_prods = (db.query(models.Product)
+                           .filter(models.Product.category == cat,
+                                   models.Product.link_status == "ok",
+                                   models.Product.sales_count >= min_sales,
+                                   models.Product.created_at >= new_cutoff)
+                           .order_by(models.Product.created_at.desc()).limit(3).all())
+            if not new_prods:
+                skipped.append((uid, f"หมวด {cat} ไม่มีของใหม่"))
+                continue
+            u = db.query(models.User).filter(models.User.line_user_id == uid).first()
+            name = u.name if u else "LINE User"
+            card = product_cards_message(db, type("U", (), {"name": name})(), new_prods,
+                                         f"🆕 ของใหม่หมวด {cat} มาแล้วจ๊ะ (เผื่อยังสนใจอยู่)",
+                                         is_owner=False)
+            if "mock" in (os.getenv("LINE_CHANNEL_ACCESS_TOKEN") or "").lower():
+                pushed.append((uid, f"{cat} ({len(new_prods)} ตัว, mock)"))
+                continue
+            try:
+                line_bot_api.push_message(uid, card)
+                db.add(models.CampaignLog(category=cat, recipients=len(new_prods), status="reengage"))
+                db.commit()
+                pushed.append((uid, f"{cat} ({len(new_prods)} ตัว)"))
+            except Exception as e:
+                logger.warning(f"reengage push fail {uid}: {e}")
+                skipped.append((uid, f"push ล้ม: {str(e)[:40]}"))
+        return {"candidates": len(quiet), "pushed": pushed, "skipped": skipped}
+    finally:
+        db.close()
+
+
+def _fmt(n: float) -> str:
+    return f"{n:,.2f}".rstrip("0").rstrip(".")
 
 
 @router.post("/daily-report")
