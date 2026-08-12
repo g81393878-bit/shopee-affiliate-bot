@@ -20,6 +20,8 @@ ENV/
 .env
 *.env
 !.env.example
+# Cron setup doc with real CRON_TOKEN — NEVER commit! (template: cron-setup.example.md)
+docs/cron-setup.md
 
 # Databases
 *.db
