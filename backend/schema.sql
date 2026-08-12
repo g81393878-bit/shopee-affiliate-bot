@@ -58,6 +58,35 @@ CREATE TABLE IF NOT EXISTS performance_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Staging: raw products from Shopee Affiliate Open API (productOfferV2) — bulk catalog
+CREATE TABLE IF NOT EXISTS shopee_products (
+    id BIGSERIAL PRIMARY KEY,
+    item_id BIGINT NOT NULL UNIQUE,
+    shop_id BIGINT,
+    shop_name TEXT,
+    product_name TEXT NOT NULL,
+    product_link TEXT,
+    offer_link TEXT,
+    image_url TEXT,
+    price_min NUMERIC(12, 2),
+    price_max NUMERIC(12, 2),
+    price_discount_rate DOUBLE PRECISION,
+    sales INTEGER,
+    rating_star DOUBLE PRECISION,
+    commission_rate TEXT,
+    seller_commission_rate TEXT,
+    shopee_commission_rate TEXT,
+    commission NUMERIC(12, 2),
+    shop_type INTEGER,
+    category_id BIGINT,
+    period_start_time BIGINT,
+    period_end_time BIGINT,
+    raw_json JSONB,
+    fetched_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_shopee_products_item_id ON shopee_products(item_id);
+CREATE INDEX IF NOT EXISTS idx_shopee_products_shop_id ON shopee_products(shop_id);
+
 -- Indexes for optimal querying
 CREATE INDEX IF NOT EXISTS idx_users_line_id ON users(line_user_id);
 CREATE INDEX IF NOT EXISTS idx_products_ai_score ON products(ai_score DESC);

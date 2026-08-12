@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, Integer, String, Numeric, Text, Date, DateTime, ForeignKey, Float
+from sqlalchemy import Column, Integer, BigInteger, String, Numeric, Text, Date, DateTime, ForeignKey, Float, JSON
 from sqlalchemy.orm import relationship
 from app.db import Base
 
@@ -20,6 +20,38 @@ class User(Base):
     @affiliate_id.setter
     def affiliate_id(self, value):
         self.shopee_affiliate_id = value
+
+
+class ShopeeProduct(Base):
+    """Raw products pulled from Shopee Affiliate Open API (productOfferV2) — staging table.
+    Bulk-fetched catalog; curated picks get promoted into `products` for the LINE bot.
+    """
+    __tablename__ = "shopee_products"
+
+    # BIGSERIAL on Postgres; INTEGER on SQLite (dev) so autoincrement works on both
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    item_id = Column(BigInteger, unique=True, index=True, nullable=False)
+    shop_id = Column(BigInteger, index=True, nullable=True)
+    shop_name = Column(Text, nullable=True)
+    product_name = Column(Text, nullable=False)
+    product_link = Column(Text, nullable=True)
+    offer_link = Column(Text, nullable=True)
+    image_url = Column(Text, nullable=True)
+    price_min = Column(Numeric(12, 2), nullable=True)
+    price_max = Column(Numeric(12, 2), nullable=True)
+    price_discount_rate = Column(Float, nullable=True)
+    sales = Column(Integer, nullable=True)
+    rating_star = Column(Float, nullable=True)
+    commission_rate = Column(Text, nullable=True)
+    seller_commission_rate = Column(Text, nullable=True)
+    shopee_commission_rate = Column(Text, nullable=True)
+    commission = Column(Numeric(12, 2), nullable=True)
+    shop_type = Column(Integer, nullable=True)
+    category_id = Column(BigInteger, nullable=True)
+    period_start_time = Column(BigInteger, nullable=True)
+    period_end_time = Column(BigInteger, nullable=True)
+    raw_json = Column(JSON, nullable=True)
+    fetched_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, nullable=False)
 
 
 class Product(Base):

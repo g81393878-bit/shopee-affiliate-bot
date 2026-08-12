@@ -25,4 +25,13 @@ class Settings:
     LINE_CHANNEL_ACCESS_TOKEN: str = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
     LINE_CHANNEL_SECRET: str = os.getenv("LINE_CHANNEL_SECRET", "")
 
+    # Shopee Affiliate Open API (จากอีเมล Shopee หลังอนุมัติ)
+    SHOPEE_AFFILIATE_PARTNER_ID: str = os.getenv("SHOPEE_AFFILIATE_PARTNER_ID", "")
+    SHOPEE_AFFILIATE_SECRET: str = os.getenv("SHOPEE_AFFILIATE_SECRET", "")
+
+    # Supabase REST keys (Project: usqhvujqmnxqrdoovvnp)
+    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
+    SUPABASE_PUBLISHABLE_KEY: str = os.getenv("SUPABASE_PUBLISHABLE_KEY", "")
+    SUPABASE_SECRET_KEY: str = os.getenv("SUPABASE_SECRET_KEY", "")
+
 settings = Settings()
