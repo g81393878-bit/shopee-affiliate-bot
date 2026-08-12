@@ -12,22 +12,35 @@ batch_generate_content — เติมคอนเทนต์ AI ให้ส�
 รัน: backend/.venv/Scripts/python tools/batch_generate_content.py [--limit N] [--sleep S] [--style Standard]
 """
 import argparse
+import os
 import pathlib
 import sys
 import time
 
+# บังคับ UTF-8 ตอน print (กัน crash ตอน stdout ไปไฟล์/console ไทย: UnicodeEncodeError)
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "backend"))
 
+from dotenv import load_dotenv
 from sqlalchemy.orm import sessionmaker
 
 from app import models
+from app.config import settings
 from app.services.ai_generator import format_hashtags_text, generate_script_for_product
 from csv_batch_rebuild import get_engine
+
+# .env ชนะเสมอ (Windows user env เก่าอาจมีค่าเก่า — load_dotenv ธรรมดาไม่ override)
+load_dotenv(dotenv_path=pathlib.Path(__file__).resolve().parent.parent / "backend" / ".env", override=True)
 
 MOCK_HOOK_PREFIX = "หยุดก่อนจ๊ะ"  # signature ของ mock fallback (ทุก key ล้ม) — ต้องไม่เข้าร้าน
 
 
-def gen_with_retry(product, style: str, attempts: int = 3):
+def gen_with_retry(product, style: str, attempts: int = 2):
     last = None
     for a in range(attempts):
         try:
@@ -39,22 +52,32 @@ def gen_with_retry(product, style: str, attempts: int = 3):
         except Exception as e:
             last = e
             if a < attempts - 1:
-                time.sleep(20 * (a + 1))
+                time.sleep(10)
     raise last
 
 
 def main():
     ap = argparse.ArgumentParser(description="เติมคอนเทนต์ AI ให้สินค้าที่ยังไม่มี")
     ap.add_argument("--limit", type=int, default=0, help="จำกัดจำนวน (0 = หมด)")
+    ap.add_argument("--offset", type=int, default=0, help="ข้ามไปตัวที่ offset (รันขนานหลาย process: แต่ละตัวคนละ key/ช่วง)")
     ap.add_argument("--sleep", type=float, default=1.2, help="วินาทีพักระหว่างตัว")
+    ap.add_argument("--key-index", type=int, default=-1,
+                    help="ใช้ key ตัวที่ N จาก .env (รันขนาน: แต่ละ worker คนละ key ไม่ชน rate limit)")
     ap.add_argument("--style", default="Standard", choices=["Standard", "Funny", "Educational", "Unboxing"])
     args = ap.parse_args()
+
+    keys = [k.strip() for k in (os.getenv("GROQ_API_KEY") or "").split(",") if k.strip()]
+    if args.key_index >= 0 and keys:
+        settings.GROQ_API_KEY = keys[args.key_index % len(keys)]
+        print(f"worker ใช้ key index {args.key_index} ({settings.GROQ_API_KEY[:12]}...)", flush=True)
 
     db = sessionmaker(bind=get_engine())()
     try:
         with_content = {c.product_id for c in db.query(models.Content).all()}
         missing = [p for p in db.query(models.Product).all() if p.id not in with_content]
         missing.sort(key=lambda p: p.ai_score or 0, reverse=True)
+        if args.offset:
+            missing = missing[args.offset:]
         if args.limit:
             missing = missing[:args.limit]
         total = len(missing)
