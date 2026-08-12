@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+"""tools/_test_search.py — ตรวจความแม่นของค้นหาบอทกับคลังจริง (ชั่วคราว ไม่ commit ใช้งาน)
+
+รัน: cd backend && .venv/Scripts/python ../tools/_test_search.py
+"""
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "backend"))
+
+from dotenv import load_dotenv
+from sqlalchemy.orm import Session
+from app.db import engine
+from app.api.line_bot import search_products
+
+QUERIES = [
+    # เคสที่เคยผิด
+    "น้ำยาล้างจาน", "น้ำยาซักผ้า", "กระติก", "กระติกน้ำแข็ง", "กระติกเก็บความเย็น",
+    "สายชาร์จ android", "สายชาร์จ apple", "สายชาร์จ iphone", "สายชารท", "สายชาร์จ",
+    "หูฟัง", "หูฟังไม่เกิน 300", "งบ 500 หูฟัง", "บลูทูธ", "บลูธูธ", "หูฟัง bluetooth",
+    "ไอโฟน", "iphone", "โคมไฟ", "พัดลม", "พัดลมตั้งโต๊ะ", "โต๊ะสนาม",
+    "หม้อหุงข้าว", "หม้อทอด", "ที่นอน", "ที่นอนยางพารา", "ไม้ถูพื้น",
+    "ทิชชู่", "กระดาษชำระ", "รองเท้า", "กางเกง", "เครื่องฟอกอากาศ", "เครื่องดูดฝุ่น",
+    "ของเล่นแมว", "ที่คว่ำจาน", "ไม้กวาด", "เตารีด", "แก้วน้ำ", "แก้วสแตนเลส",
+    "น้ำยาล้างจานไม่เกิน 100", "เคสไอโฟน", "ถุงขยะ", "ยาสีฟัน", "แปรงสีฟัน",
+]
+
+def main():
+    db = Session(engine)
+    try:
+        for q in QUERIES:
+            res = search_products(db, q)
+            print(f"\n### {q}  → {len(res)} ตัว")
+            for i, p in enumerate(res, 1):
+                name = (p.name or "")[:58]
+                print(f"  {i}. [{p.category}] {name} | {p.price}฿ | ขาย {p.sales_count}")
+    finally:
+        db.close()
+
+if __name__ == "__main__":
+    main()

@@ -794,12 +794,19 @@ PRICE_PHRASE_RES = (
 )
 
 
+def _starts_with_keyword(t: str) -> bool:
+    return any(t.startswith(kw) for kw, _c in CATEGORY_KEYWORDS if len(kw) >= 2)
+
+
 def strip_filler_prefix(q: str) -> str:
-    # ตัดเฉพาะเมื่อส่วนที่เหลือยังยาวพอ (≥2 ตัว) — กัน "มีด" โดนตัด "มี" เหลือ "ด"
-    # (ตัวเดียวแมตช์ทุกชื่อ!) / "หาม" เหลือ "ม"
+    # ตัดเฉพาะเมื่อส่วนที่เหลือเป็นคำค้นจริง (ขึ้นต้นด้วย keyword ที่รู้จัก) —
+    # กัน "มีด" โดนตัด "มี" เหลือ "ด" / "ของเล่นแมว" โดนตัด "ขอ" เหลือ
+    # "งเล่นแมว" (ขอ เป็นแค่ส่วนของคำว่า "ของ")
     for f in FILLER_PREFIXES:
-        if q.startswith(f) and len(q) - len(f) >= 2:
-            return q[len(f):].strip()
+        if q.startswith(f):
+            rest = q[len(f):].strip()
+            if len(rest) >= 2 and _starts_with_keyword(rest):
+                return rest
     return q
 
 
@@ -828,29 +835,55 @@ def strip_price_phrase(q: str) -> str:
     return t.strip(" -–,")
 
 
+MIN_SALES_FLOOR = int(os.getenv("MIN_SALES_FLOOR", "500") or 500)
+
+
+def _nfc(s: str) -> str:
+    """รวมอักษรไทยเป็นรูปแบบเดียว: 'น้ําแข็ง' → 'น้ำแข็ง'
+    สระอำมี 3 รูปแบบในคลัง: U+0E33 เดี่ยว / U+0E4D+U+0E33 / U+0E4D+U+0E32
+    (นิคหิต+สระอา) — การรวมเป็นแบบ compat NFC ไม่รวมให้ ต้องแทนที่ด้วยมือ
+    กันคลังที่พิมพ์ต่างกันค้นไม่เจอ/จัดอันดับผิด"""
+    try:
+        import unicodedata
+        s = unicodedata.normalize("NFC", s)
+    except Exception:
+        pass
+    return (s.replace("\u0e4d\u0e32", "\u0e33")   # นิคหิต+สระอา → สระอำ
+             .replace("\u0e4d\u0e33", "\u0e33"))  # กันรูปแบบซ้ำ (เผื่อ)
+
+
 def search_products(db: Session, query: str) -> list:
     """ค้นสินค้า: ตรงชื่อ/หมวด + เข้าใจเงื่อนไขราคา ('หูฟังไม่เกิน 300', 'งบ 500',
     'กระติก 200-400') — จัดอันดับความตรง แล้วตอบสูงสุด 3 ตัว
     นโยบายเด็ดขาด: ตอบเฉพาะสินค้าที่ตรวจลิงก์แล้วว่า OK เท่านั้น"""
-    products = (db.query(models.Product)
+    def fetch(floor: int) -> list:
+        return (db.query(models.Product)
                   .filter(models.Product.link_status == "ok",
-                          models.Product.sales_count >= MIN_SALES)
+                          models.Product.sales_count >= floor)
                   .all())
+
     q = query.lower().strip()
     if not q:
         return []
     # คำพ้อง/การันต์ไทย (ชาร์ท=ชาร์จ, บลูธูธ=บลูทูธ, iphone=ไอโฟน, type-c=type c)
-    q = normalize_query(q)
+    q = _nfc(normalize_query(q))
     min_price, max_price = parse_price_conditions(query)
     # คำหลักจริงๆ: ตัดคำนำหน้าเล่นๆ + เงื่อนไขราคา → "อยากได้หูฟังไม่เกิน 300" = "หูฟัง"
     q_core = strip_price_phrase(strip_filler_prefix(q))
 
-    def strong_match(name: str, phrase: str) -> bool:
-        """คำหลักต้องอยู่ช่วงต้นชื่อ (55% แรก) หรือซ้ำ ≥2 ครั้ง — กันชื่อที่ยัดคำท้าย
-        เพื่อ SEO เช่น "แก้วสแตนเลส...แก้วเยติ...กระติกน้ำเก็บอุณหภูมิ" (กระติก 73%)
-        ปนมากับกระติกจริงที่อยู่หัวชื่อ (0-13%)"""
+    def strong_tier(name: str, phrase: str) -> int:
+        """ชั้นความน่าเชื่อถือของแมตช์:
+        2 = คำหลักอยู่ต้นชื่อ (≤25% แรก) หรือซ้ำ ≥2 ครั้ง — เชื่อถือได้สุด
+        1 = อยู่ช่วงต้นชื่อ (≤55%) — ใช้ได้
+        0 = ยัดไว้ท้ายชื่อเพื่อ SEO → ไม่นับ (ตอบสุจริตดีกว่าเอาของมั่วขึ้นหน้า)"""
         pos = name.find(phrase)
-        return pos >= 0 and (pos <= len(name) * 0.55 or name.count(phrase) >= 2)
+        if pos < 0:
+            return 0
+        if name.count(phrase) >= 2 or pos <= len(name) * 0.25:
+            return 2
+        if pos <= len(name) * 0.55:
+            return 1
+        return 0
 
     def substring_ok(name: str, phrase: str) -> bool:
         """กันคำสั้นแมตช์ซับสตริงกลางคำยาว:
@@ -873,23 +906,22 @@ def search_products(db: Session, query: str) -> list:
         return True
 
     def match_weight(p) -> tuple:
-        """คืน (คะแนน, strong) — strong = แมตช์ที่น่าเชื่อถือ (คำหลักอยู่ต้นชื่อ/ซ้ำ)
-        ถ้ามี strong อย่างน้อย 1 ตัว → แสดงเฉพาะ strong (กันของยัดท้ายปน)"""
-        name = (p.name or "").lower()
-        cat = (p.category or "").lower()
+        """คืน (คะแนน, tier) — tier = ชั้นความเชื่อถือ (0/1/2)
+        ถ้ามีแมตช์ tier ≥1 อย่างน้อย 1 ตัว → แสดงเฉพาะชั้นนั้น (กันของยัดท้ายปน)"""
+        name = _nfc((p.name or "").lower())
+        cat = _nfc((p.category or "").lower())
         w = 0
-        strong = False
+        tier = 0
         # แมตช์ทั้งคำ/ทั้งประโยคในชื่อ — ไม่จับซับสตริงกลางคำ (กันคำสามัญอย่าง
         # "เครื่อง"/"ความเย็น" ไปโดนของคนละหมวด เช่น "เครื่องฟอกอากาศ" → เครื่องตัดหญ้า)
         if q in name or q_core in name:
             phrase = q_core if q_core else q
             if substring_ok(name, phrase):
                 w += 3
-                if strong_match(name, phrase):
-                    strong = True
+                tier = max(tier, strong_tier(name, phrase))
         if q in cat or q_core in cat:
             w += 2
-            strong = True  # ตรงหมวดตรงๆ เชื่อถือได้
+            tier = max(tier, 1)  # ตรงหมวดตรงๆ เชื่อถือได้
         # ระดับคำ (keyword ที่รู้จัก): ใช้เฉพาะ keyword ที่เฉพาะที่สุด — keyword ที่
         # เป็นซับสตริงของ keyword อื่นในคำค้นจะถูกตัด (กัน "หม้อหุงข้าว" ไปโดน
         # "หม้อทอด" / "โต๊ะสนาม" ไปโดน "พัดลมตั้งโต๊ะ") เช่น "หูฟัง bluetooth"
@@ -902,53 +934,89 @@ def search_products(db: Session, query: str) -> list:
                      if len(kw) >= 4 and kw in q_core and kw != q_core]
             q_kws = [kw for kw in q_kws
                      if not any(kw in other for other in q_kws if other != kw)]
-            for kw in q_kws:
-                if kw in name:
-                    w += 1
-                    if strong_match(name, kw):
-                        strong = True
-        return w, strong
+            # ต้องมีทุกคำย่อยในชื่อ (AND) — กัน "กระติกน้ำแข็ง" ไปโดนกางเกง
+            # "ผ้าไหมน้ำแข็ง" (มีแค่คำว่า น้ำแข็ง คำเดียว)
+            if q_kws and all(kw in name for kw in q_kws):
+                w += len(q_kws)
+                tier = max(tier, max(strong_tier(name, kw) for kw in q_kws))
+        # คำผสม: ถ้าคำค้นแยกเป็นหลายคำย่อยที่รู้จัก (≥2) → ต้องมีครบทุกคำในชื่อ
+        # (บังคับ ไม่ใช่โบนัส) — กัน "ของเล่นแมว" ไปโดนของเล่นคลายเครียดที่ไม่มีแมว /
+        # "กระติกน้ำแข็ง" ไปโดนกางเกงผ้าไหมน้ำแข็ง / "แก้วสแตนเลส" ต้องเป็นแก้วสแตนเลสจริง
+        all_kws = [kw for kw, _c in CATEGORY_KEYWORDS
+                   if len(kw) >= 2 and kw in q_core]
+        uniq_kws = [kw for kw in all_kws
+                    if not any(kw in other for other in all_kws if other != kw)]
+        if len(uniq_kws) >= 2:
+            if not all(kw in name for kw in uniq_kws):
+                return 0, 0
+            w += 2
+            tier = max(tier, 1)
+        return w, tier
 
     def in_budget(p) -> bool:
         price = float(p.price or 0)
         return (min_price is None or price >= min_price) and (max_price is None or price <= max_price)
 
-    hits = []
-    for p in products:
-        w, s = match_weight(p)
-        if w > 0:
-            hits.append((p, w, s))
-    if not hits:
-        return []  # ไม่มีอะไรตรงเลย → ตอบสุจริต (ไม่เอาของมั่วๆ มาแทน)
     # --- กรองตามประเภทเครื่องที่ผู้ใช้ระบุ (กัน "สายชาร์จ android" ได้สาย Lightning/Apple) ---
-    # ผู้ใช้ระบุ android/type-c/usb แต่ไม่ได้ระบุ apple → กันของที่ Apple เท่านั้น
-    # (lightning / type c to L / สำหรับ apple / iphone) — สาย universal ยังโชว์ได้
     ANDROID_MARKERS = ("android", "แอนดรอยด์", "ซัมซุง", "samsung", "oppo",
                        "huawei", "xiaomi", "type c", "type-c", "usb")
     APPLE_MARKERS = ("apple", "iphone", "ไอโฟน", "ios", "lightning")
     APPLE_ONLY = ("lightning", "type c to l", "type-c to l", "apple", "iphone", "ไอโฟน")
     req_android = any(m in q for m in ANDROID_MARKERS)
     req_apple = any(m in q for m in APPLE_MARKERS)
-    if req_android and not req_apple:
-        hits = [h for h in hits
-                if not any(m in (h[0].name or "").lower() for m in APPLE_ONLY)]
-        if not hits:
-            return []  # ไม่มีสายที่เข้ากับ android จริง → ตอบสุจริต ไม่เอาสาย Apple มาแทน
-    # ถ้ามีแมตช์ที่เชื่อถือได้ → แสดงเฉพาะแมตช์นั้น (กันชื่อยัดคำท้ายปน)
-    # ถ้าไม่มีเลย → แสดงแมตช์อ่อนทั้งหมด (ดีกว่าไม่ตอบ)
-    strong_hits = [h for h in hits if h[2]]
-    if strong_hits:
-        hits = strong_hits
-    if min_price is not None or max_price is not None:
-        budget_hits = [(p, w, s) for p, w, s in hits if in_budget(p)]
-        if budget_hits:
-            hits = budget_hits
-        else:
-            # มีชื่อตรงแต่ไม่มีตัวในงบ → ไม่เอาของมั่วมาแทน ตอบว่าง (สุจริต)
-            return []
 
-    hits.sort(key=lambda pw: (pw[1], pw[0].ai_score or 0), reverse=True)
-    return [p for p, _, _ in hits[:3]]
+    def blocked(p) -> bool:
+        """สินค้าที่คนไม่ได้ถาม: ฝาครอบ/เคส ไม่ใช่ "สายชาร์จ" ที่ต้องการ
+        (คลุมทั้ง "สายชาร์จ", "สายชาร์จ apple", "สายชาร์จ android") """
+        name = (p.name or "").lower()
+        if "สายชาร์จ" in q_core and ("ฝาครอบ" in name or "เคส" in name):
+            return True
+        return False
+
+    def finalize(hits) -> list:
+        """กรอง (เครื่อง/งบ/ความเชื่อถือ) → จัดอันดับ → คืน top-3
+        ว่าง = ไม่มีของที่น่าเชื่อถือ → ตอบสุจริต (ไม่เอาของมั่วขึ้นหน้า)"""
+        if not hits:
+            return []
+        if req_android and not req_apple:
+            hits = [h for h in hits
+                    if not any(m in _nfc((h[0].name or "").lower()) for m in APPLE_ONLY)]
+            if not hits:
+                return []  # ไม่มีที่เข้ากับ android จริง → สุจริต ไม่เอาสาย Apple มาแทน
+        strong_hits = [h for h in hits if h[2] >= 1]
+        if not strong_hits:
+            return []  # แมตช์ท้ายชื่อ (ยัด SEO) เท่านั้น → ไม่เอาขึ้นหน้า (สุจริต)
+        hits = strong_hits
+        if min_price is not None or max_price is not None:
+            budget_hits = [h for h in hits if in_budget(h[0])]
+            if not budget_hits:
+                return []  # มีชื่อตรงแต่ไม่มีตัวในงบ → ไม่เอาของมั่วมาแทน (สุจริต)
+            hits = budget_hits
+        hits.sort(key=lambda pw: (pw[2], pw[1], pw[0].ai_score or 0), reverse=True)
+        return [p for p, _, _ in hits[:3]]
+
+    hits = []
+    for p in fetch(MIN_SALES):
+        if blocked(p):
+            continue
+        w, tier = match_weight(p)
+        if w > 0:
+            hits.append((p, w, tier))
+    result = finalize(hits)
+    if not result:
+        # เกณฑ์ยืดหยุ่น: คำค้นที่ตรงหมวด (มี keyword ในคำ) แต่ไม่มีตัวขายถึงเกณฑ์
+        # (เช่น "ของเล่นแมว" มีตัวเดียว ขาย 1,000) → ลองคลังขาย ≥ MIN_SALES_FLOOR
+        q_has_kw = any(kw in q_core for kw, _c in CATEGORY_KEYWORDS if len(kw) >= 2)
+        if q_has_kw and len(q_core) >= 4:
+            hits2 = []
+            for p in fetch(MIN_SALES_FLOOR):
+                if blocked(p):
+                    continue
+                w, tier = match_weight(p)
+                if w > 0:
+                    hits2.append((p, w, tier))
+            result = finalize(hits2)
+    return result
 
 
 def get_line_profile_name(line_user_id: str) -> Optional[str]:
