@@ -609,9 +609,28 @@ PRICE_PHRASE_RES = (
 
 
 def strip_filler_prefix(q: str) -> str:
+    # ตัดเฉพาะเมื่อส่วนที่เหลือยังยาวพอ (≥2 ตัว) — กัน "มีด" โดนตัด "มี" เหลือ "ด"
+    # (ตัวเดียวแมตช์ทุกชื่อ!) / "หาม" เหลือ "ม"
     for f in FILLER_PREFIXES:
-        if q.startswith(f):
+        if q.startswith(f) and len(q) - len(f) >= 2:
             return q[len(f):].strip()
+    return q
+
+
+# การันต์/คำพ้องที่คนไทยพิมพ์หลากหลาย → แบบมาตรฐาน (กันพิมพ์เพี้ยนแล้วหาไม่เจอ)
+# ใช้เฉพาะฝั่งคำค้น — ชื่อสินค้าในคลังเขียนแบบมาตรฐานอยู่แล้ว
+THAI_VARIANT_MAP = {
+    "บลูธูธ": "บลูทูธ", "บลูทูท": "บลูทูธ", "บลูธูท": "บลูทูธ", "บลูทูต": "บลูทูธ",
+    "ชาร์ท": "ชาร์จ", "ชารท": "ชาร์จ",
+    "ไอแพท": "ไอแพด", "ไอแพ็ด": "ไอแพด",
+    "iphone": "ไอโฟน", "ipad": "ไอแพด",
+    "type-c": "type c", "typec": "type c",
+}
+
+
+def normalize_query(q: str) -> str:
+    for a, b in THAI_VARIANT_MAP.items():
+        q = q.replace(a, b)
     return q
 
 
@@ -634,9 +653,8 @@ def search_products(db: Session, query: str) -> list:
     q = query.lower().strip()
     if not q:
         return []
-    # คำพ้องที่คนไทยนิยมเขียนหลายแบบ: ชาร์ท/ชารท = ชาร์จ (ไม่มีสินค้าไหนมีคำว่า
-    # "ชาร์ท"/"ชารท" ในชื่อ — แปลงเฉพาะฝั่งคำค้น ปลอดภัย)
-    q = q.replace("ชาร์ท", "ชาร์จ").replace("ชารท", "ชาร์จ")
+    # คำพ้อง/การันต์ไทย (ชาร์ท=ชาร์จ, บลูธูธ=บลูทูธ, iphone=ไอโฟน, type-c=type c)
+    q = normalize_query(q)
     min_price, max_price = parse_price_conditions(query)
     # คำหลักจริงๆ: ตัดคำนำหน้าเล่นๆ + เงื่อนไขราคา → "อยากได้หูฟังไม่เกิน 300" = "หูฟัง"
     q_core = strip_price_phrase(strip_filler_prefix(q))
@@ -647,6 +665,26 @@ def search_products(db: Session, query: str) -> list:
         ปนมากับกระติกจริงที่อยู่หัวชื่อ (0-13%)"""
         pos = name.find(phrase)
         return pos >= 0 and (pos <= len(name) * 0.55 or name.count(phrase) >= 2)
+
+    def substring_ok(name: str, phrase: str) -> bool:
+        """กันคำสั้นแมตช์ซับสตริงกลางคำยาว:
+        - "หมา" ต้องไม่โดน "เหมาะ" (ตัวหน้าก่อนเป็นตัวไทย = กลางคำไทย)
+        - "cap" ต้องไม่โดน "Cappuvini" (ตัวตามหลังเป็นตัวละติน = กลางคำอังกฤษ)
+        - แต่ "จาน" ใน "ที่คว่ำจาน" ยังผ่านได้เพราะซ้ำ ≥2 ครั้ง
+        """
+        if len(phrase) >= 4:
+            return True
+        if name.count(phrase) >= 2:
+            return True
+        pos = name.find(phrase)
+        if pos < 0:
+            return False
+        if pos > 0 and 0x0E00 <= ord(name[pos - 1]) <= 0x0E7F:
+            return False  # ติดกับตัวอักษรไทย = กลางคำไทย
+        after = name[pos + len(phrase):pos + len(phrase) + 1]
+        if after and after.isalnum() and not (0x0E00 <= ord(after) <= 0x0E7F):
+            return False  # ติดกับตัวอักษรละติน = กลางคำอังกฤษ (cap ≠ cappuvini)
+        return True
 
     def match_weight(p) -> tuple:
         """คืน (คะแนน, strong) — strong = แมตช์ที่น่าเชื่อถือ (คำหลักอยู่ต้นชื่อ/ซ้ำ)
@@ -659,21 +697,30 @@ def search_products(db: Session, query: str) -> list:
         # "เครื่อง"/"ความเย็น" ไปโดนของคนละหมวด เช่น "เครื่องฟอกอากาศ" → เครื่องตัดหญ้า)
         if q in name or q_core in name:
             phrase = q_core if q_core else q
-            w += 3
-            if strong_match(name, phrase):
-                strong = True
+            if substring_ok(name, phrase):
+                w += 3
+                if strong_match(name, phrase):
+                    strong = True
         if q in cat or q_core in cat:
             w += 2
             strong = True  # ตรงหมวดตรงๆ เชื่อถือได้
-        # ระดับคำ (keyword ที่รู้จัก): คำค้นมีคำค้นหมวดตรงกับที่อยู่ในชื่อสินค้า
-        # เช่น "หูฟัง bluetooth" → เจอชื่อที่มีทั้ง "หูฟัง" และ "bluetooth"
-        # ต้องยาว ≥4 ตัว — คำสั้น 3 ตัวอย่าง "จาน"/"แมว" เป็นคำสามัญ
-        # ("ของเล่นแมว" ต้องไม่หลุดไป "หูฟังหูแมว", "น้ำยาล้างจาน" ไม่หลุดไป "ที่คว่ำจาน")
-        for kw, _kcat in CATEGORY_KEYWORDS:
-            if len(kw) >= 4 and kw in q_core and kw != q_core and kw in name:
-                w += 1
-                if strong_match(name, kw):
-                    strong = True
+        # ระดับคำ (keyword ที่รู้จัก): ใช้เฉพาะ keyword ที่เฉพาะที่สุด — keyword ที่
+        # เป็นซับสตริงของ keyword อื่นในคำค้นจะถูกตัด (กัน "หม้อหุงข้าว" ไปโดน
+        # "หม้อทอด" / "โต๊ะสนาม" ไปโดน "พัดลมตั้งโต๊ะ") เช่น "หูฟัง bluetooth"
+        # ใช้ทั้ง 2 (ไม่มีตัวไหนซ้อนกัน)
+        # ถ้า q_core เป็น keyword เอง (หม้อหุงข้าว/โต๊ะสนาม/ที่นอนลม) → ใช้แค่
+        # แมตช์เต็มคำ (full-phrase ข้างบน) ห้ามใช้คำย่อยมาแทน (หม้อ/โต๊ะ/ที่นอน)
+        q_core_is_keyword = any(kw == q_core for kw, _c in CATEGORY_KEYWORDS)
+        if not q_core_is_keyword:
+            q_kws = [kw for kw, _c in CATEGORY_KEYWORDS
+                     if len(kw) >= 4 and kw in q_core and kw != q_core]
+            q_kws = [kw for kw in q_kws
+                     if not any(kw in other for other in q_kws if other != kw)]
+            for kw in q_kws:
+                if kw in name:
+                    w += 1
+                    if strong_match(name, kw):
+                        strong = True
         return w, strong
 
     def in_budget(p) -> bool:
