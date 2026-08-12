@@ -440,9 +440,21 @@ def handle_compare(db, raw_text: str, user, is_owner: bool = False):
                                      "ลองพิมพ์ชื่อสั้นๆ เช่น \"เทียบ GOOJODOQ กับ Jeep\" 😊")
     if not a or not b:
         found, missing = (a, q2) if a else (b, q1)
-        return TextSendMessage(text=f"หา \"{missing}\" ไม่เจอในร้านจ๊ะ\n\n"
-                                     f"เจอตัวเดียว: {found.name[:45]}\n"
-                                     "ลองพิมพ์ชื่อที่อยู่ในร้านให้สั้นลงจ๊ะ 😊")
+        # คู่เทียบไม่เจอ → แนะนำของใกล้เคียงหมวดเดียวกันแทน (ลูกค้าได้ทางเลือก ไม่สะดุด)
+        title = f"🔎 หา \"{missing}\" ไม่เจอ"
+        if found.category:
+            title += f" — ลองดูของใกล้เคียงหมวด \"{found.category}\" แทนจ๊ะ"
+        else:
+            title += " — ลองดูของใกล้เคียงแทนจ๊ะ"
+        if not found.category:
+            return product_cards_message(db, user, [found], title=title, is_owner=is_owner)
+        similar = (db.query(models.Product)
+                     .filter(models.Product.link_status == "ok",
+                             models.Product.sales_count >= MIN_SALES,
+                             models.Product.category == found.category,
+                             models.Product.id != found.id)
+                     .order_by(models.Product.ai_score.desc()).limit(2).all())
+        return product_cards_message(db, user, [found] + similar, title=title, is_owner=is_owner)
 
     # สเปค (ขนาด/จำนวน) จากชื่อ — โชว์ในการ์ด + ใช้เทียบว่าคนละขนาด/ชนิดหรือไม่
     spec_a, spec_b = extract_specs(a.name), extract_specs(b.name)
