@@ -1,8 +1,9 @@
 import os
 import json
+import re
 import logging
 import inspect
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from fastapi import APIRouter, HTTPException, Header, Request
 from sqlalchemy.orm import Session
 import datetime
@@ -102,8 +103,60 @@ async def callback(request: Request, x_line_signature: str = Header(None)):
     return 'OK'
 
 
-def format_product_message(db: Session, user: models.User, products: list) -> str:
-    """Format a product list into the reply message"""
+BADGE_NEW = "🆕 ของใหม่"
+BADGE_HOT = "🔥 ขายดี"
+BADGE_COMMISSION = "💎 คอมสูง"
+
+
+def parse_price_conditions(text: str) -> Tuple[Optional[float], Optional[float]]:
+    """เข้าใจเงื่อนไขราคาแบบไทย: 'ไม่เกิน 300', '300 บาท', 'งบ 500', '300-500', 'ไม่แพงกว่า 150'"""
+    t = text.replace(",", "").replace(" ", "").lower()
+    # ช่วงราคา เช่น 300-500 / 300ถึง500 / 300–500
+    m = re.search(r"(\d{2,})\s*(?:-|–|ถึง)\s*(\d{2,})", t)
+    if m:
+        return float(m.group(1)), float(m.group(2))
+    # "ไม่เกิน 300" / "งบ 300" / "ราคา 300" / "ประมาณ 300" / "ถูกกว่า 150"
+    m = re.search(r"(?:ไม่เกิน|ไม่แพงกว่า|ไม่แพง|ต่ำกว่า|ถูกกว่า|งบ|ในงบ|ราคา|ประมาณ|ภายใน|ซื้อได้ใน)\s*(\d+(?:\.\d+)?)", t)
+    if m:
+        return None, float(m.group(1))
+    # "300 บาท"
+    m = re.search(r"(\d+(?:\.\d+)?)\s*บาท", t)
+    if m:
+        return None, float(m.group(1))
+    return None, None
+
+
+def get_catalog_badges(db: Session) -> dict:
+    """id -> badge text, คำนวณเทียบกับทั้งคลัง (NEW 14 วัน / ขายดี คอมสูง อันดับ 1 ใน 5)"""
+    rows = db.query(
+        models.Product.id,
+        models.Product.sales_count,
+        models.Product.commission,
+        models.Product.created_at,
+    ).all()
+    if not rows:
+        return {}
+    sales = sorted([(r.sales_count or 0) for r in rows], reverse=True)
+    comms = sorted([float(r.commission or 0) for r in rows], reverse=True)
+    top_n = max(1, len(rows) // 5)
+    sales_threshold = sales[top_n - 1] if sales else 0
+    comm_threshold = comms[top_n - 1] if comms else 0
+    now = datetime.datetime.utcnow()
+    badges = {}
+    for rid, sales_count, commission, created_at in rows:
+        b = []
+        if created_at and (now - created_at).days <= 14:
+            b.append(BADGE_NEW)
+        if (sales_count or 0) > 0 and (sales_count or 0) >= sales_threshold:
+            b.append(BADGE_HOT)
+        if float(commission or 0) > 0 and float(commission or 0) >= comm_threshold:
+            b.append(BADGE_COMMISSION)
+        badges[rid] = " ".join(b)
+    return badges
+
+
+def format_product_message(db: Session, user: models.User, products: list, title: Optional[str] = None) -> str:
+    """Format a product list into the reply message (พร้อมป้าย 🆕/🔥/💎)"""
     if not products:
         return (
             f"สวัสดีครับคุณ {user.name} 👋\n\n"
@@ -111,7 +164,9 @@ def format_product_message(db: Session, user: models.User, products: list) -> st
             "คุณสามารถเพิ่มสินค้าเข้าระบบก่อนได้ผ่านหน้า Dashboard หรือ API ของเรา เพื่อให้ระบบ AI ประเมินและสร้างสคริปต์ได้ครับ"
         )
 
-    message_lines = [f"⭐ สินค้าแนะนำขายดีวันนี้สำหรับคุณ {user.name} ⭐\n"]
+    header = title or f"⭐ สินค้าแนะนำขายดีวันนี้สำหรับคุณ {user.name} ⭐\n"
+    message_lines = [header]
+    badges_map = get_catalog_badges(db)
 
     for i, prod in enumerate(products, 1):
         # Look for standard content script
@@ -132,8 +187,14 @@ def format_product_message(db: Session, user: models.User, products: list) -> st
         if prod.commission and float(prod.commission) > 0:
             commission_text = f"💸 ค่านายหน้า: {prod.commission} บาท\n"
 
+        badge_line = ""
+        badge = badges_map.get(prod.id, "")
+        if badge:
+            badge_line = f"{badge}\n"
+
         message_lines.append(
             f"{i}. {prod.name}\n"
+            f"{badge_line}"
             f"💰 ราคา: {prod.price} บาท\n"
             f"{commission_text}"
             f"📈 คะแนนความน่าทำคลิป: {prod.ai_score}/100\n"
@@ -165,19 +226,53 @@ DEAL_PHRASES = (
 )
 
 
+def is_deal_query(text: str) -> bool:
+    """แยก 'ขอสินค้าแนะนำ' ออกจาก 'คำค้นสินค้า' — 'หูฟังขายดี' ต้องไปค้น ไม่ใช่เมนูแนะนำ"""
+    t = text.rstrip("?？ ").strip()
+    return t in DEAL_PHRASES or "วันนี้ขายอะไรดี" in t
+
+
 def search_products(db: Session, query: str) -> list:
-    """Find products whose name contains the query or any 4+ char substring of it"""
+    """ค้นสินค้า: ตรงชื่อ/หมวด + เข้าใจเงื่อนไขราคา ('หูฟังไม่เกิน 300', 'งบ 500',
+    'กระติก 200-400') — จัดอันดับความตรง แล้วตอบสูงสุด 3 ตัว"""
     products = db.query(models.Product).all()
     q = query.lower().strip()
     if not q:
         return []
-    # exact containment first
-    hits = [p for p in products if q in (p.name or "").lower()]
-    if hits:
-        return hits
-    # then any 4+ char substring (helps with Thai phrases like "อยากได้หูฟัง")
-    subs = {q[i:j] for i in range(len(q)) for j in range(i + 4, len(q) + 1)}
-    return [p for p in products if any(s in (p.name or "").lower() for s in subs)]
+    min_price, max_price = parse_price_conditions(query)
+
+    def match_weight(p) -> int:
+        name = (p.name or "").lower()
+        cat = (p.category or "").lower()
+        w = 0
+        if q in name:
+            w += 3
+        if q in cat:
+            w += 2
+        # 4+ char substrings (helps with Thai phrases like "อยากได้หูฟัง")
+        subs = {q[i:j] for i in range(len(q)) for j in range(i + 4, len(q) + 1)}
+        if any(s in name for s in subs):
+            w += 1
+        if any(s in cat for s in subs):
+            w += 1
+        return w
+
+    def in_budget(p) -> bool:
+        price = float(p.price or 0)
+        return (min_price is None or price >= min_price) and (max_price is None or price <= max_price)
+
+    hits = [(p, w) for p in products if (w := match_weight(p)) > 0]
+    if min_price is not None or max_price is not None:
+        budget_hits = [(p, w) for p, w in hits if in_budget(p)]
+        if budget_hits:
+            hits = budget_hits
+        else:
+            # ไม่มีตัวที่ตรงชื่อ+งบพร้อมกัน → เอาตามงบแทน (ดีกว่าไม่ตอบ)
+            budget_all = sorted([p for p in products if in_budget(p)], key=lambda p: p.ai_score or 0, reverse=True)
+            return budget_all[:3]
+
+    hits.sort(key=lambda pw: (pw[1], pw[0].ai_score or 0), reverse=True)
+    return [p for p, _ in hits[:3]]
 
 
 def get_line_profile_name(line_user_id: str) -> Optional[str]:
@@ -230,15 +325,18 @@ def message_text(event):
     db = SessionLocal()
     try:
         user = get_or_create_line_user(db, line_user_id)
-        if any(k in normalized_text for k in DEAL_PHRASES):
+        if is_deal_query(normalized_text):
             # สั่งถามสินค้าแนะนำ — ตอบ 3 อันดับตามคะแนน AI
             reply_text = handle_today_deals(db, user)
         else:
-            # พิมพ์อย่างอื่น (เช่น "หูฟัง" "อยากได้กระติกน้ำ" "สวัสดี") —
-            # หาสินค้าที่ตรง หรือถ้าไม่ตรงให้ต้อนรับ + แสดงสินค้าแนะนำเลย
+            # พิมพ์อย่างอื่น (เช่น "หูฟัง" "อยากได้กระติกน้ำ" "หูฟังไม่เกิน 300") —
+            # ค้นสินค้าที่ตรง (รองรับเงื่อนไขราคา) หรือถ้าไม่ตรงให้ต้อนรับ + แสดงสินค้าแนะนำเลย
             hits = search_products(db, normalized_text)
             if hits:
-                reply_text = format_product_message(db, user, hits)
+                reply_text = format_product_message(
+                    db, user, hits,
+                    title=f"🔍 สินค้าตรงกับ \"{user_text}\" ค่ะ\n"
+                )
             else:
                 reply_text = (
                     f"🤖 สวัสดีครับคุณ {user.name}! ยินดีต้อนรับสู่ร้าน{BOT_NAME} 😊\n\n"
