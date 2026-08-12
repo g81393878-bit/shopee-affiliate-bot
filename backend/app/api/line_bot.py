@@ -351,6 +351,53 @@ def _fmt_num(n) -> str:
         return str(n)
 
 
+_SPEC_SIZE_RE = re.compile(
+    r"\d+(?:[.,]\d+)?\s*(?:ลิตร|แกลลอน|L\b|ML\b|มล\.?|Oz\b|ออนซ์|ฟุต|นิ้ว|ซม\.?|CM\b|เมตร|M\b|Kg\b|กก\.?|กรัม|G\b|W\b|วัตต์|ว)"
+    r"|\d+(?:/\d+)+\s*ฟุต", re.IGNORECASE)
+_SPEC_QTY_RE = re.compile(
+    r"(?:แพ็ค|แพ็ก|พัค|กล่อง|ถุง|ชิ้น|ตัว|คู่|แผ่น|ม้วน|อัน|หลอด|ขวด)\s*\d+"
+    r"|\d+\s*(?:ชิ้น|ตัว|ถุง|กล่อง|แพ็ค|แพ็ก|คู่|แผ่น|ม้วน|หลอด|ขวด|อัน|กระปุก|ก้อน)", re.IGNORECASE)
+
+
+def extract_specs(name: str) -> str:
+    """ดึงสเปคสำคัญจากชื่อ (ขนาด/ปริมาตร/จำนวน) — โชว์ในการ์ดเทียบ
+    กันเทียบแบบไม่รู้ว่าเทียบขนาดอะไร ('2L' กับ '6-30L' ควรเห็นชัด)"""
+    t = (name or "").strip()
+    if not t:
+        return ""
+    def dedupe(items):
+        """ตัดค่าซ้ำ — '2L' กับ '2 ลิตร' คือขนาดเดียวกัน เก็บแค่ตัวแรก (สั้น/อ่านง่ายกว่า)"""
+        seen, seen_nums = [], []
+        for s in items:
+            s = s.strip()
+            num = re.sub(r"[^0-9.,]", "", s).replace(",", ".")
+            try:
+                key = round(float(num), 2)
+            except ValueError:
+                key = None
+            if s and s not in seen and (key is None or key not in seen_nums):
+                seen.append(s)
+                if key is not None:
+                    seen_nums.append(key)
+        return seen
+
+    sizes = re.findall(_SPEC_SIZE_RE, t)
+    qties = re.findall(_SPEC_QTY_RE, t)
+    parts = []
+    if sizes:
+        parts.append("ขนาด " + "/".join(dedupe(sizes)[:4]))
+    if qties:
+        parts.append("จำนวน " + "/".join(dedupe(qties)[:3]))
+    return " · ".join(parts)
+
+
+def spec_size_numbers(spec: str) -> list:
+    """ตัวเลขขนาดจากสเปค (สำหรับเทียบว่าขนาดต่างกันหรือไม่)"""
+    if not spec:
+        return []
+    return [float(m.replace(",", ".")) for m in re.findall(r"\d+(?:[.,]\d+)?", spec)]
+
+
 def compare_invite_message(hits: list) -> Optional[TextSendMessage]:
     """ค้นเจอ 2-3 ตัวคล้ายกัน (หมวดเดียวกัน) → ชวนเทียบ (แบบ Amazon Rufus)
     ปุ่มลัด 'เทียบ #1 กับ #2' — การ์ดสินค้าโชว์เลข 1/2/3 อยู่แล้ว ลูกค้าแตะจบไม่ต้องพิมพ์เอง
@@ -397,7 +444,18 @@ def handle_compare(db, raw_text: str, user, is_owner: bool = False):
                                      f"เจอตัวเดียว: {found.name[:45]}\n"
                                      "ลองพิมพ์ชื่อที่อยู่ในร้านให้สั้นลงจ๊ะ 😊")
 
+    # สเปค (ขนาด/จำนวน) จากชื่อ — โชว์ในการ์ด + ใช้เทียบว่าคนละขนาด/ชนิดหรือไม่
+    spec_a, spec_b = extract_specs(a.name), extract_specs(b.name)
+    nums_a, nums_b = spec_size_numbers(spec_a), spec_size_numbers(spec_b)
     facts = []
+    # เตือนเมื่อขนาดต่างกันมาก (เทียบคนละประเภท เช่น กระติก 2L กับกล่องแคมป์ปิ้ง 6-30L)
+    if nums_a and nums_b:
+        mn, mx = min(min(nums_a), min(nums_b)), max(max(nums_a), max(nums_b))
+        if mn > 0 and mx / mn >= 3:
+            facts.append(f"⚠️ ขนาดต่างกันมาก ({spec_a} vs {spec_b}) — ดูขนาด/จำนวนให้ตรงกับที่ต้องการ")
+    # เตือนเมื่อคนละหมวด (กันเทียบคนละชนิดโดยไม่รู้ตัว — ตัวเลขเทียบได้คร่าวๆ เท่านั้น)
+    if (a.category or "") != (b.category or "") and a.category and b.category:
+        facts.append(f"⚠️ {a.category} vs {b.category} — คนละหมวด ควรดูคุณสมบัติ/ขนาดประกอบ")
     if (a.sales_count or 0) != (b.sales_count or 0):
         better = a if (a.sales_count or 0) > (b.sales_count or 0) else b
         tag = "🅰️" if better is a else "🅱️"
@@ -406,31 +464,35 @@ def handle_compare(db, raw_text: str, user, is_owner: bool = False):
         better = a if (a.commission or 0) > (b.commission or 0) else b
         tag = "🅰️" if better is a else "🅱️"
         facts.append(f"{tag} ค่านายหน้าสูงกว่า (฿{float(better.commission or 0):,.0f})")
-    return compare_flex_message(a, b, facts)
+    return compare_flex_message(a, b, facts, spec_a, spec_b)
 
 
-def compare_flex_message(a, b, facts: list) -> FlexSendMessage:
-    """การ์ดเทียบ 2 คอลัมน์ใบเดียว (แบบตาราง Amazon) — ชื่อ/ราคา/ยอดขาย/คอม/คะแนน + ปุ่มซื้อทั้ง 2 ข้าง
+def compare_flex_message(a, b, facts: list, spec_a: str = "", spec_b: str = "") -> FlexSendMessage:
+    """การ์ดเทียบ 2 คอลัมน์ใบเดียว (แบบตาราง Amazon) — ชื่อ/สเปค/ราคา/ยอดขาย/คอม/คะแนน + ปุ่มซื้อ
+    โชว์ 📐 ขนาด/จำนวน (เช่น 2L vs 6L-30L) กันเทียบคนละขนาดโดยไม่รู้ตัว
     ชื่อไทยยาว: size xs + maxLines 3 + wrap — ไม่ล้นการ์ด"""
-    def col(p, tag):
-        return {
-            "type": "box", "layout": "vertical", "flex": 1, "spacing": "sm",
-            "contents": [
-                {"type": "text", "text": tag, "size": "xs", "align": "center", "color": "#999999"},
-                {"type": "text", "text": p.name, "size": "xs", "wrap": True, "maxLines": 3, "weight": "bold"},
-                {"type": "separator"},
-                {"type": "text", "text": f"💰 {float(p.price or 0):,.0f}฿", "size": "sm",
-                 "weight": "bold", "color": "#E74C3C", "align": "center"},
-                {"type": "text", "text": f"📦 ขาย {_fmt_num(p.sales_count)}", "size": "xxs",
-                 "color": "#666666", "align": "center", "wrap": True},
-                {"type": "text", "text": f"💸 คอม {float(p.commission or 0):,.0f}฿", "size": "xxs",
-                 "color": "#666666", "align": "center", "wrap": True},
-                {"type": "text", "text": f"📈 {p.ai_score or 0}/100", "size": "xxs",
-                 "color": "#666666", "align": "center", "wrap": True},
-                {"type": "button", "style": "primary", "color": "#E74C3C", "height": "sm",
-                 "action": {"type": "uri", "label": "🛒 ซื้อเลย", "uri": p.affiliate_url}},
-            ],
-        }
+    def col(p, tag, spec):
+        contents = [
+            {"type": "text", "text": tag, "size": "xs", "align": "center", "color": "#999999"},
+            {"type": "text", "text": p.name, "size": "xs", "wrap": True, "maxLines": 3, "weight": "bold"},
+        ]
+        if spec:
+            contents.append({"type": "text", "text": f"📐 {spec}", "size": "xxs",
+                             "color": "#B8860B", "align": "center", "wrap": True})
+        contents += [
+            {"type": "separator"},
+            {"type": "text", "text": f"💰 {float(p.price or 0):,.0f}฿", "size": "sm",
+             "weight": "bold", "color": "#E74C3C", "align": "center"},
+            {"type": "text", "text": f"📦 ขาย {_fmt_num(p.sales_count)}", "size": "xxs",
+             "color": "#666666", "align": "center", "wrap": True},
+            {"type": "text", "text": f"💸 คอม {float(p.commission or 0):,.0f}฿", "size": "xxs",
+             "color": "#666666", "align": "center", "wrap": True},
+            {"type": "text", "text": f"📈 {p.ai_score or 0}/100", "size": "xxs",
+             "color": "#666666", "align": "center", "wrap": True},
+            {"type": "button", "style": "primary", "color": "#E74C3C", "height": "sm",
+             "action": {"type": "uri", "label": "🛒 ซื้อเลย", "uri": p.affiliate_url}},
+        ]
+        return {"type": "box", "layout": "vertical", "flex": 1, "spacing": "sm", "contents": contents}
 
     header = {
         "type": "box", "layout": "vertical", "contents": [
@@ -440,7 +502,7 @@ def compare_flex_message(a, b, facts: list) -> FlexSendMessage:
     }
     body = {
         "type": "box", "layout": "horizontal", "spacing": "lg",
-        "contents": [col(a, "🅰️"), col(b, "🅱️")],
+        "contents": [col(a, "🅰️", spec_a), col(b, "🅱️", spec_b)],
     }
     contents = {"type": "bubble", "header": header, "body": body}
     if facts:
