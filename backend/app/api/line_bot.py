@@ -553,10 +553,6 @@ def get_or_create_line_user(db: Session, line_user_id: str) -> models.User:
 
 @handler.add(MessageEvent, message=TextMessage)
 def message_text(event):
-    print("!!!!!!!!!!!!!!!!!!!!!!")
-    print(event)
-    print("!!!!!!!!!!!!!!!!!!!!!!")
-    
     user_text = event.message.text.strip()
     # Accept both "วันนี้ขายอะไรดี" and "วันนี้ขายอะไรดี?" — the Thai keyboard doesn't add
     # the ?, and a bare trailing "?" from autocorrect shouldn't break the match either.
