@@ -18,6 +18,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
@@ -25,6 +26,10 @@ from app import models
 from app.services.link_checker import check_affiliate_link
 from app.services.ai_generator import generate_script_for_product
 from app.services.price_refresh import refresh_price
+from linebot import LineBotApi
+from linebot.models import TextSendMessage
+
+line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN") or "mock_line_channel_token")
 
 logger = logging.getLogger(__name__)
 
@@ -141,5 +146,63 @@ def cron_refresh_prices(token: str = "", limit: int = 300):
             "skipped_blocked": blocked,
             "note": "ราคา = ราคาเริ่มต้นจริงในหน้าเว็บ; โดนบล็อก = คงราคาเดิม",
         }
+    finally:
+        db.close()
+
+
+@router.post("/daily-report")
+def cron_daily_report(token: str = "", hours: int = 24):
+    """รายงานประจำวัน — สรุปตัวเลขจริงจาก DB แล้ว push ข้อความให้เจ้าของร้าน
+    (เรียกจาก cron-job.org ทุกเช้า เช่น 08:00; ข้อมูลทั้งหมดมาจากตารางจริง ไม่มีตัวเลขมโน)
+    """
+    if not _authorized(token):
+        raise HTTPException(status_code=401, detail="invalid token")
+    import datetime
+    db = SessionLocal()
+    try:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        cutoff = now - datetime.timedelta(hours=hours)
+        min_sales = int(os.getenv("MIN_SALES", "2000") or 2000)
+        admin_uid = os.getenv("ADMIN_LINE_USER_ID", "Uc88eb3896b0e4bcc5fbaa9b78ac1294e")
+
+        total = db.query(models.Product).count()
+        sellable = (db.query(models.Product)
+                      .filter(models.Product.link_status == "ok",
+                              models.Product.sales_count >= min_sales).count())
+        new_prods = (db.query(models.Product)
+                       .filter(models.Product.created_at >= cutoff).count())
+        dead = db.query(models.Product).filter(models.Product.link_status == "dead").count()
+        with_content = {c.product_id for c in db.query(models.Content).all()}
+        no_content = max(0, total - len(with_content))
+
+        msgs = db.query(models.ChatLog).filter(models.ChatLog.created_at >= cutoff).count()
+        searchers = (db.query(models.ChatLog.line_user_id)
+                        .filter(models.ChatLog.created_at >= cutoff,
+                                models.ChatLog.intent == "search").distinct().count())
+        wismo = (db.query(models.ChatLog)
+                   .filter(models.ChatLog.created_at >= cutoff,
+                           models.ChatLog.intent == "wismo").count())
+        cat_rows = (db.query(models.ChatLog.category, func.count(models.ChatLog.id))
+                      .filter(models.ChatLog.created_at >= cutoff,
+                              models.ChatLog.category.isnot(None))
+                      .group_by(models.ChatLog.category)
+                      .order_by(func.count(models.ChatLog.id).desc()).limit(5).all())
+
+        lines = [f"📊 รายงานร้านป้าเข็ม ({cutoff:%d/%m %H:%M} - {now:%d/%m %H:%M})", "",
+                 f"🛍️ สินค้าในคลัง: {total} ตัว (ขายได้ {sellable})",
+                 f"🆕 เข้าใหม่ {hours}h: {new_prods} ตัว",
+                 f"💀 ลิงก์ตาย: {dead} ตัว (ซ่อนจากลูกค้าอัตโนมัติ)",
+                 f"📝 ยังไม่มีคอนเทนต์: {no_content} ตัว"]
+        lines += ["", f"💬 ลูกค้าคุย {msgs} ครั้ง ({searchers} คนค้นสินค้า, ทวงถาม {wismo} ครั้ง)"]
+        if cat_rows:
+            lines.append("🔥 หมวดที่ถูกถาม: " + ", ".join(f"{c}({n})" for c, n in cat_rows))
+        lines.append("\n— สรุปจากข้อมูลจริงของร้าน 🛒")
+        text = "\n".join(lines)
+
+        if "mock" in (os.getenv("LINE_CHANNEL_ACCESS_TOKEN") or "").lower():
+            logger.info(f"Mock daily report (ไม่ push จริง):\n{text}")
+            return {"pushed": False, "report": text}
+        line_bot_api.push_message(admin_uid, TextSendMessage(text=text))
+        return {"pushed": True, "recipient": admin_uid, "report": text}
     finally:
         db.close()

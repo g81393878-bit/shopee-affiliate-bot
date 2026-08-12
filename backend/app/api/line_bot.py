@@ -121,6 +121,45 @@ BADGE_HOT = "🔥 ขายดี"
 BADGE_COMMISSION = "💎 คอมสูง"
 
 
+SHOPEE_LINK_RE = re.compile(r'(?:https?://)?(?:www\.)?(?:s\.)?shopee\.co\.th/\S+', re.IGNORECASE)
+ITEM_LINK_RE = re.compile(r'/product/(\d+)/(\d+)')
+
+
+def extract_shopee_link(text: str) -> Optional[str]:
+    """เจอลิงก์ Shopee ในข้อความ → คืนลิงก์ (ตัดเครื่องหมายท้าย), ไม่เจอ → None"""
+    m = SHOPEE_LINK_RE.search(text or "")
+    if not m:
+        return None
+    return m.group(0).rstrip('.,;!?)\"\u201d')
+
+
+def handle_product_link(db: Session, user, link: str, is_owner: bool = False):
+    """รับลิงก์สินค้าจากลูกค้า — ตอบด้วยข้อมูลจริงเท่านั้น (ไม่เดา/ไม่มโน):
+    - ลิงก์ตรงกับสินค้าในคลัง (ลิงก์สั้น affiliate ของเรา) → ตอบการ์ดสินค้านั้น
+    - ลิงก์อื่น (ยังไม่เข้าร้าน) → ตอบสุจริต ชี้ทางค้นชื่อแทน (เราตอบเฉพาะของที่ตรวจแล้ว)
+    """
+    link = (link or "").strip().rstrip('.,;!?)\"\u201d')
+    prod = (db.query(models.Product)
+              .filter(models.Product.affiliate_url == link,
+                      models.Product.link_status == "ok").first())
+    if prod:
+        return product_cards_message(db, user, [prod],
+                                     title="🔗 สินค้าจากลิงก์ของคุณ", is_owner=is_owner)
+    if ITEM_LINK_RE.search(link):
+        return TextSendMessage(text=(
+            "🔗 ลิงก์นี้ยังไม่เข้าร้านป้าเข็มจ๊ะ\n\n"
+            "ร้านเราตอบเฉพาะสินค้าที่ตรวจแล้วว่าลิงก์ใช้ได้จริง "
+            "(กันลูกค้าเจอของตาย/ของปลอม)\n\n"
+            "ลองพิมพ์ชื่อสินค้าค้นดูได้เลย เช่น \"หูฟัง\" \"กระติกน้ำ\" "
+            "เดี๋ยวป้าเข็มหาของดีราคาคุ้มให้ค่ะ 😊"
+        ))
+    return TextSendMessage(text=(
+        "🔗 ลิงก์นี้ยังไม่เข้าร้านป้าเข็มจ๊ะ\n\n"
+        "ลองค้นชื่อสินค้าดูได้เลย เช่น \"หูฟังไม่เกิน 300\" "
+        "เดี๋ยวป้าเข็มหาของดีราคาคุ้มให้ค่ะ 😊"
+    ))
+
+
 def parse_price_conditions(text: str) -> Tuple[Optional[float], Optional[float]]:
     """เข้าใจเงื่อนไขราคาแบบไทย: 'ไม่เกิน 300', '300 บาท', 'งบ 500', '300-500', 'ไม่แพงกว่า 150'"""
     t = text.replace(",", "").replace(" ", "").lower()
@@ -577,6 +616,11 @@ def message_text(event):
             # ลิงก์อยู่ในปุ่มการ์ด (ไม่ใช่ข้อความ) — กัน LINE ธง "ไม่ปลอดภัย"
             reply = [TextSendMessage(text=WISMO_REPLY), WISMO_BUTTON]
             intent = 'wismo'
+        elif extract_shopee_link(normalized_text):
+            # ลูกค้าส่งลิงก์ Shopee มา — ตอบด้วยข้อมูลจริงเท่านั้น
+            # (ตรงกับคลัง = การ์ดสินค้า, ไม่ตรง = บอกสุจริตว่ายังไม่เข้าร้าน)
+            reply = handle_product_link(db, user, extract_shopee_link(normalized_text), is_owner)
+            intent = 'link'
         elif normalized_text in NEW_PHRASES:
             # มีอะไรใหม่ — ดันสินค้าใหม่หมวดที่เคนสนใจ (จำจาก chat_logs)
             reply = handle_new_arrivals(db, user, line_user_id, is_owner)
