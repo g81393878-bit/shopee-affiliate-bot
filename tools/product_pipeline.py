@@ -12,6 +12,7 @@ Commands:
   python tools/product_pipeline.py report
   python tools/product_pipeline.py check-links [--delete]  # ตรวจลิงก์ s.shopee.co.th ตายหรือยัง (--delete = ลบตัว DEAD)
   python tools/product_pipeline.py fix-scores            # คำนวณ ai_score ใหม่ให้ทุกตัว (หลังแก้ข้อมูล)
+  python tools/product_pipeline.py customers [--export x.csv]  # สรุปความสนใจลูกค้าจาก chat_logs
 
 CSV columns (จากพอร์ทัล Shopee Affiliate "สร้างลิงก์"):
   รหัสสินค้า, ชื่อสินค้า, ราคา, ขาย, ชื่อร้านค้า, อัตราค่าคอมมิชชัน, คอมมิชชัน, ลิงก์สินค้า, ลิงก์ข้อเสนอ
@@ -42,30 +43,9 @@ from app import models
 from app.services.ai_analyzer import calculate_heuristic_score
 from app.services.ai_generator import generate_script_for_product
 from app.services.link_checker import check_affiliate_link
+from app.services.category import guess_category
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
-
-CATEGORY_KEYWORDS = [
-    ("หูฟัง", "หูฟัง"), ("bluetooth", "หูฟัง"), ("earbud", "หูฟัง"), ("tws", "หูฟัง"),
-    ("พัดลม", "พัดลม"), ("เครื่องทำความเย็น", "พัดลม"),
-    ("ทิชชู่", "กระดาษทิชชู่"),
-    ("แก้วน้ำ", "แก้วน้ำ"), ("tumbler", "แก้วน้ำ"), ("กระติก", "แก้วน้ำ"),
-    ("โคมไฟ", "โคมไฟ"), ("หลอดไฟ", "โคมไฟ"),
-    ("powerbank", "อุปกรณ์เสริม"), ("usb", "อุปกรณ์เสริม"), ("hub", "อุปกรณ์เสริม"),
-    ("สายชาร์จ", "อุปกรณ์เสริม"), ("ที่ชาร์จ", "อุปกรณ์เสริม"),
-    ("ขาตั้ง", "อุปกรณ์เสริม"), ("selfie", "อุปกรณ์เสริม"),
-    ("กันแดด", "ความงาม"), ("ครีม", "ความงาม"), ("สกินแคร์", "ความงาม"),
-    ("นาฬิกา", "แฟชั่น"), ("เสื้อ", "แฟชั่น"), ("แจ็กเก็ต", "แฟชั่น"), ("jacket", "แฟชั่น"),
-    ("จักรยาน", "กีฬา"), ("แคมป์ปิ้ง", "กีฬา"), ("โต๊ะสนาม", "กีฬา"),
-]
-
-
-def guess_category(name: str) -> str:
-    n = (name or "").lower()
-    for kw, cat in CATEGORY_KEYWORDS:
-        if kw in n:
-            return cat
-    return "อื่นๆ"
 
 
 def parse_number(s: Optional[str]) -> float:
@@ -309,6 +289,55 @@ def cmd_check_links(args):
     db.close()
 
 
+def cmd_customers(args):
+    """สรุปความสนใจลูกค้าจาก chat_logs — ต่อยอด: รู้ว่าลูกค้าอยากได้อะไร (การตลาด/เลือกสินค้า)"""
+    from sqlalchemy import func
+    db = sessionmaker(bind=get_engine(args.sqlite))()
+    total = db.query(models.ChatLog).count()
+    searchers = (db.query(models.ChatLog.line_user_id)
+                   .filter(models.ChatLog.intent == "search").distinct().count())
+    wismo = db.query(models.ChatLog).filter(models.ChatLog.intent == "wismo").count()
+    print("=== ลูกค้า (chat_logs, 90 วัน) ===")
+    print(f"ข้อความรวม: {total} | ลูกค้าที่ค้นสินค้า: {searchers} | ทวงถามพัสดุ: {wismo}")
+
+    cat_rows = (db.query(models.ChatLog.category, func.count(models.ChatLog.id))
+                  .filter(models.ChatLog.category.isnot(None))
+                  .group_by(models.ChatLog.category)
+                  .order_by(func.count(models.ChatLog.id).desc()).limit(8).all())
+    print("\n--- หมวดที่ลูกค้าสนใจ ---")
+    for c, n in cat_rows:
+        print(f"  {c}: {n} ครั้ง")
+
+    kw_rows = (db.query(models.ChatLog.message_text, func.count(models.ChatLog.id))
+                 .filter(models.ChatLog.intent == "search")
+                 .group_by(models.ChatLog.message_text)
+                 .order_by(func.count(models.ChatLog.id).desc()).limit(10).all())
+    print("\n--- คำค้นยอดนิยม ---")
+    for k, n in kw_rows:
+        print(f"  {k[:50]}: {n} ครั้ง")
+
+    act_rows = (db.query(models.ChatLog.line_user_id, func.count(models.ChatLog.id))
+                  .group_by(models.ChatLog.line_user_id)
+                  .order_by(func.count(models.ChatLog.id).desc()).limit(5).all())
+    print("\n--- ลูกค้าที่คุยมากสุด (กลุ่มเป้าหมาย/รีมาร์เก็ตติ้ง) ---")
+    for uid, n in act_rows:
+        top = (db.query(models.ChatLog.category, func.count(models.ChatLog.id))
+                 .filter(models.ChatLog.line_user_id == uid, models.ChatLog.category.isnot(None))
+                 .group_by(models.ChatLog.category)
+                 .order_by(func.count(models.ChatLog.id).desc()).first())
+        print(f"  {uid[:24]}: {n} ข้อความ" + (f" | สนใจ {top[0]}" if top else ""))
+
+    if args.export:
+        import csv
+        with open(args.export, "w", encoding="utf-8-sig", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["line_user_id", "message_text", "intent", "category", "created_at"])
+            for r in db.query(models.ChatLog).all():
+                w.writerow([r.line_user_id, r.message_text, r.intent, r.category, r.created_at])
+        print(f"\n💾 export -> {args.export}")
+    db.close()
+
+
 def main():
     ap = argparse.ArgumentParser(prog="product_pipeline", description="จัดการสินค้า Shopee Affiliate ครบวงจร")
     ap.add_argument("--sqlite", action="store_true", help="ใช้ local dev DB (SQLite) แทน Supabase")
@@ -328,11 +357,13 @@ def main():
     p_links = sub.add_parser("check-links", help="ตรวจลิงก์ affiliate ว่าตาย/redirect ผิดหรือยัง")
     p_links.add_argument("--delete", action="store_true", help="ลบสินค้าที่ตรวจว่า DEAD ออกจากตาราง")
     sub.add_parser("fix-scores", help="คำนวณคะแนนใหม่ทุกตัว")
+    p_cust = sub.add_parser("customers", help="สรุปความสนใจลูกค้าจาก chat_logs (ต่อยอดการตลาด)")
+    p_cust.add_argument("--export", help="ส่งออก chat_logs ทั้งหมดเป็น CSV")
 
     args = ap.parse_args()
     {"import-csv": cmd_import_csv, "analyze": cmd_analyze,
      "report": cmd_report, "check-links": cmd_check_links,
-     "fix-scores": cmd_fix_scores}[args.cmd](args)
+     "fix-scores": cmd_fix_scores, "customers": cmd_customers}[args.cmd](args)
 
 
 if __name__ == "__main__":

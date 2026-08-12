@@ -101,8 +101,10 @@ CREATE TABLE IF NOT EXISTS chat_logs (
     line_user_id TEXT NOT NULL,
     message_text TEXT NOT NULL,
     intent TEXT NOT NULL DEFAULT 'unknown',
+    category TEXT,
     reply_kind TEXT NOT NULL DEFAULT 'text',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_chat_logs_user ON chat_logs(line_user_id);
 CREATE INDEX IF NOT EXISTS idx_chat_logs_created ON chat_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_chat_logs_category ON chat_logs(category);

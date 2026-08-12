@@ -119,6 +119,7 @@ class ChatLog(Base):
     line_user_id = Column(String(100), index=True, nullable=False)
     message_text = Column(Text, nullable=False)
     intent = Column(String(30), default="unknown", nullable=False)  # greeting|search|deals|top|wismo|privacy|delete|unknown
+    category = Column(String(50), nullable=True)  # หมวดที่ลูกค้าสนใจ (แท็กตอนค้น — ต่อยอดวิเคราะห์/แนะนำ)
     reply_kind = Column(String(20), default="text", nullable=False)  # text|flex
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, index=True)
 

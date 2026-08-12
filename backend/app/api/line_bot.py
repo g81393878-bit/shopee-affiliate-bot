@@ -5,6 +5,7 @@ import logging
 import inspect
 from typing import List, Optional, Tuple
 from fastapi import APIRouter, HTTPException, Header, Request
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 import datetime
 from linebot import LineBotApi, WebhookHandler
@@ -17,6 +18,7 @@ from pydantic import BaseModel
 from app.db import SessionLocal, get_db
 from app import models
 from app.services.product_cards import product_cards_message
+from app.services.category import guess_category
 
 logger = logging.getLogger(__name__)
 
@@ -288,14 +290,46 @@ PRIVACY_NOTICE = (
 )
 
 
-def log_chat(db, line_user_id: str, text: str, intent: str, reply):
-    """บันทึกประวัติสนทนา (PDPA: เก็บแค่ 90 วัน — ลบของเก่าทุกครั้งที่เขียน)"""
+def log_chat(db, line_user_id: str, text: str, intent: str, reply, category: Optional[str] = None):
+    """บันทึกประวัติสนทนา + หมวดที่ลูกค้าสนใจ (PDPA: เก็บแค่ 90 วัน — ลบของเก่าทุกครั้งที่เขียน)
+    category ต่อยอด: รู้ว่าลูกค้าสนใจหมวดอะไร → วิเคราะห์/แนะนำสินค้า/ทำการตลาด"""
     kind = 'flex' if isinstance(reply, FlexSendMessage) else 'text'
     db.add(models.ChatLog(line_user_id=line_user_id, message_text=text[:500],
-                          intent=intent, reply_kind=kind))
+                          intent=intent, category=category, reply_kind=kind))
     cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=90)
     db.query(models.ChatLog).filter(models.ChatLog.created_at < cutoff).delete(synchronize_session=False)
     db.commit()
+
+
+ADMIN_STATS_CMDS = ("แอดมิน สถิติ", "สถิติลูกค้า", "รายงานลูกค้า", "แอดมินรายงาน")
+
+
+def admin_customer_stats(db) -> str:
+    """สรุปความสนใจลูกค้าจาก chat_logs — ต่อยอดการตลาด/เลือกสินค้า/ตอบปัญหา"""
+    total = db.query(models.ChatLog).count()
+    searchers = (db.query(models.ChatLog.line_user_id)
+                   .filter(models.ChatLog.intent == "search").distinct().count())
+    wismo = db.query(models.ChatLog).filter(models.ChatLog.intent == "wismo").count()
+
+    cat_rows = (db.query(models.ChatLog.category, func.count(models.ChatLog.id))
+                  .filter(models.ChatLog.category.isnot(None))
+                  .group_by(models.ChatLog.category)
+                  .order_by(func.count(models.ChatLog.id).desc()).limit(6).all())
+    kw_rows = (db.query(models.ChatLog.message_text, func.count(models.ChatLog.id))
+                 .filter(models.ChatLog.intent == "search")
+                 .group_by(models.ChatLog.message_text)
+                 .order_by(func.count(models.ChatLog.id).desc()).limit(8).all())
+
+    lines = ['📊 สถิติลูกค้า (90 วัน)', f'• ข้อความรวม: {total} ครั้ง', f'• ลูกค้าที่ค้นสินค้า: {searchers} คน',
+             f'• ทวงถาม/ติดตามพัสดุ: {wismo} ครั้ง']
+    if cat_rows:
+        lines.append('\n🔥 หมวดที่ลูกค้าสนใจ')
+        lines += [f'• {c}: {n} ครั้ง' for c, n in cat_rows]
+    if kw_rows:
+        lines.append('\n🔍 คำค้นยอดนิยม')
+        lines += [f'• {k[:40]}: {n} ครั้ง' for k, n in kw_rows]
+    lines.append('\n💡 นำไปใช้: เอาไปหาสินค้าหมวดที่ฮิต + เขียนคอนเทนต์ตามคำค้น')
+    return '\n'.join(lines)
 
 
 def handle_top_sellers(db: Session, user: models.User, is_owner: bool = False) -> str:
@@ -404,6 +438,7 @@ def message_text(event):
     line_user_id = event.source.user_id
     is_owner = line_user_id == ADMIN_LINE_USER_ID
     intent = 'unknown'
+    interest_cat = None
     
     db = SessionLocal()
     try:
@@ -427,6 +462,9 @@ def message_text(event):
         elif normalized_text == "ค้นสินค้า":
             reply = TextSendMessage(text=SEARCH_GUIDE,)
             intent = 'guide'
+        elif is_owner and normalized_text in ADMIN_STATS_CMDS:
+            reply = TextSendMessage(text=admin_customer_stats(db))
+            intent = 'admin'
         elif normalized_text == "อันดับขายดี":
             reply = handle_top_sellers(db, user, is_owner=is_owner)
             intent = 'top'
@@ -443,6 +481,7 @@ def message_text(event):
                                                title=f"🔍 สินค้าตรงกับ \"{user_text}\" ค่ะ",
                                                is_owner=is_owner)
                 intent = 'search'
+                interest_cat = guess_category(normalized_text)
             else:
                 reply = TextSendMessage(text=greeting_text(user.name),
                                         quick_reply=quick_reply_items())
@@ -455,7 +494,7 @@ def message_text(event):
         # คำสั่งลบข้อมูลไม่ควรถูกบันทึกใหม่หลังลบ (PDPA erasure สะอาด)
         if intent != 'delete':
             try:
-                log_chat(db, line_user_id, user_text, intent, reply)
+                log_chat(db, line_user_id, user_text, intent, reply, interest_cat)
             except Exception as e:
                 logger.warning(f"log_chat failed: {e}")
         db.close()
