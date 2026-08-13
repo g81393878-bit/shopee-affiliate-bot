@@ -25,10 +25,15 @@ function getSheet_() {
     ? SpreadsheetApp.openById(SPREADSHEET_ID)
     : SpreadsheetApp.getActiveSpreadsheet();
   var sh = ss.getSheetByName(SHEET_NAME);
+  var HEADER = ['เวลา', 'ผู้ใช้', 'ข้อความ', 'ประเภท', 'หมวด', 'ตอบแบบ', 'คำตอบ'];
   if (!sh) {
     sh = ss.insertSheet(SHEET_NAME);
-    sh.appendRow(['เวลา', 'ผู้ใช้', 'ข้อความ', 'ประเภท', 'หมวด', 'ตอบแบบ']);
-    sh.getRange(1, 1, 1, 6).setFontWeight('bold');
+  }
+  // ตรวจ/สร้างหัวตารางให้ตรงเสมอ (รองรับชีทที่สร้างด้วยโค้ดเวอร์ชันเก่า 6 คอลัมน์)
+  var lastCol = sh.getLastColumn();
+  if (lastCol < 1 || sh.getRange(1, 1, 1, 7).getValues()[0].join('') !== HEADER.join('')) {
+    sh.getRange(1, 1, 1, 7).setValues([HEADER]);
+    sh.getRange(1, 1, 1, 7).setFontWeight('bold');
   }
   return sh;
 }
@@ -57,7 +62,8 @@ function doPost(e) {
       data.message_text || '',
       data.intent_label || data.intent || '',
       data.category || '',
-      data.reply_kind || 'text'
+      data.reply_kind || 'text',
+      data.reply_text || ''
     ]);
 
     // ลบแถวเก่ากว่า 90 วัน (PDPA — กันชีทโตไม่มีที่สิ้นสุด)

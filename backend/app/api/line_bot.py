@@ -832,6 +832,21 @@ def _push_to_sheet(row: dict) -> None:
         logger.debug(f"sheet push failed: {e}")
 
 
+def _reply_text(reply) -> str:
+    """ดึงข้อความที่บอทตอบ (เก็บลงชีท "คำตอบ") — การ์ด Flex เก็บแค่ป้ายสั้น ไม่เก็บทั้งการ์ด"""
+    if isinstance(reply, str):
+        return reply[:300]
+    if isinstance(reply, TextSendMessage):
+        return (reply.text or "")[:300]
+    if isinstance(reply, FlexSendMessage):
+        alt = getattr(reply, "alt_text", "") or ""
+        return (alt or "[การ์ดสินค้า]")[:300]
+    if isinstance(reply, (list, tuple)):
+        parts = [_reply_text(m) for m in reply]
+        return " | ".join(p for p in parts if p)[:300]
+    return ""
+
+
 def _push_sheet_async(row: dict) -> None:
     """รัน push ชีทใน thread แยก — ตอบ LINE ทันที ไม่รอ Google"""
     try:
@@ -861,6 +876,7 @@ def log_chat(db, line_user_id: str, text: str, intent: str, reply, category: Opt
         "intent_label": INTENT_LABELS.get(intent, intent),
         "category": category,
         "reply_kind": kind,
+        "reply_text": _reply_text(reply),
     })
 
 
