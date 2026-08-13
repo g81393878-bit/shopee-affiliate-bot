@@ -169,4 +169,6 @@ Register them on cron-job.org automatically with `python tools/cron_jobs.py`.
 
 ## 📜 License
 
-Open source (see repo). For commercial use or resale, contact the owner.
+Custom license — see [LICENSE](LICENSE).
+
+Free for personal, educational, and non-commercial use. Commercial use or resale requires prior written permission from the owner.
