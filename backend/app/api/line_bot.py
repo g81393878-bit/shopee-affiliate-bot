@@ -271,6 +271,7 @@ def quick_reply_items() -> QuickReply:
     """ปุ่มลัดแบบสากล (Quick Reply) — ลูกค้าแตะแทนพิมพ์"""
     return QuickReply(items=[
         QuickReplyButton(action=MessageAction(label="🔍 ค้นสินค้า", text="ค้นสินค้า")),
+        QuickReplyButton(action=MessageAction(label="🛍️ หมวดสินค้า", text="หมวดสินค้า")),
         QuickReplyButton(action=MessageAction(label="⭐ ขายดีวันนี้", text="วันนี้ขายอะไรดี")),
         QuickReplyButton(action=MessageAction(label="🔥 อันดับขายดี", text="อันดับขายดี")),
         QuickReplyButton(action=MessageAction(label="💛 ทำไมต้องป้าเข็ม", text="ทำไมต้องซื้อกับป้าเข็ม")),
@@ -303,6 +304,7 @@ def welcome_quick_reply() -> QuickReply:
     return QuickReply(items=[
         QuickReplyButton(action=MessageAction(label="💛 ทำไมต้องป้าเข็ม", text="ทำไมต้องซื้อกับป้าเข็ม")),
         QuickReplyButton(action=MessageAction(label="🔍 ค้นสินค้า", text="ค้นสินค้า")),
+        QuickReplyButton(action=MessageAction(label="🛍️ หมวดสินค้า", text="หมวดสินค้า")),
         QuickReplyButton(action=MessageAction(label="⭐ ขายดีวันนี้", text="วันนี้ขายอะไรดี")),
         QuickReplyButton(action=MessageAction(label="🔥 อันดับขายดี", text="อันดับขายดี")),
         QuickReplyButton(action=MessageAction(label="🤖 คุยกับป้าเข็ม", text="คุยกับป้าเข็ม")),
@@ -384,6 +386,7 @@ BOT_MANUAL = (
     "⚖️ เทียบสินค้า — พิมพ์ \"เทียบ A กับ B\" เช่น \"เทียบกระติก ESKIMO กับ YTL\"\n"
     "⭐ วันนี้ขายอะไรดี — ป้าเข็มแนะนำของขายดี/คะแนนดี\n"
     "🔥 อันดับขายดี — เรียงสินค้าที่ยอดขายสูงสุด\n"
+    "🛍️ หมวดสินค้า — แตะปุ่ม หมวดสินค้า แล้วเดินดูของทั้งร้านตามหมวด\n"
     "💛 ทำไมต้องป้าเข็ม — ข้อดีที่ประชาชนได้\n"
     "🧠 จำไว้ — พิมพ์ \"จำไว้ ชอบหูฟัง\" → ป้าเข็มจำความชอบ จะแจ้งของใหม่/ราคาลง\n"
     "📦 ทวงถามพัสดุ — ถาม \"สั่งแล้วได้ของเมื่อไหร่\" → ป้าเข็มบอกวิธีตรวจในแอป Shopee\n"
@@ -864,7 +867,7 @@ INTENT_LABELS = {
     "wismo": "ทวงพัสดุ", "remember": "จำความชอบ", "delete": "ลบข้อมูล",
     "new": "มีอะไรใหม่", "link": "ส่งลิงก์", "guide": "คู่มือค้น",
     "campaign": "แคมเปญ", "admin": "แอดมิน", "error": "ผิดพลาด",
-    "emotion": "ระบายอารมณ์", "web": "ค้นเน็ต",
+    "emotion": "ระบายอารมณ์", "web": "ค้นเน็ต", "browse": "ดูหมวดสินค้า",
 }
 
 
@@ -969,6 +972,74 @@ def handle_top_sellers(db: Session, user: models.User, is_owner: bool = False) -
     if not tops:
         return TextSendMessage(text="ตอนนี้ยังไม่มีสินค้าขายดีค่ะ ลองค้นชื่อสินค้าดูได้นะคะ 😊")
     return product_cards_message(db, user, tops, title="🔥 อันดับสินค้าขายดีประจำร้าน", is_owner=is_owner)
+
+
+# --- เมนูหมวดสินค้า (เดินดูร้านเองได้ เหมือนเข้าร้านจริง — ไม่ต้องรู้ชื่อสินค้า) ---
+CATEGORY_MENU_PHRASES = (
+    "หมวดสินค้า", "หมวด", "เมนูสินค้า", "หมวดหมู่", "ดูหมวด",
+    "ดูหมวดสินค้า", "ดูสินค้า", "เดินดูร้าน", "ดูร้าน", "หมวดอะไร", "มีหมวดอะไร",
+    "มีหมวดอะไรบ้าง", "หมวดสินค้ามีอะไรบ้าง", "สินค้ามีอะไร", "สินค้ามีอะไรบ้าง",
+)
+CATEGORY_PICK_PREFIX = "ดูหมวด"
+CATEGORY_MENU_MAX_BUTTONS = 13
+
+
+def _sellable_categories(db: Session) -> list:
+    """หมวด + จำนวนที่ขายได้จริง (ลิงก์ ok + ถึงเกณฑ์ขาย) เรียงมาก→น้อย, อื่นๆ ไว้ท้าย"""
+    rows = (db.query(models.Product.category, func.count(models.Product.id))
+              .filter(models.Product.link_status == "ok",
+                      models.Product.sales_count >= MIN_SALES)
+              .group_by(models.Product.category).all())
+    cats = [(c or "อื่นๆ", n) for c, n in rows if c]
+    real = [(c, n) for c, n in cats if c != "อื่นๆ"]
+    real.sort(key=lambda r: (-r[1], r[0]))
+    other = [r for r in cats if r[0] == "อื่นๆ"]
+    return real + other
+
+
+def _category_menu_quick_reply(db: Session) -> QuickReply:
+    """ปุ่มหมวดยอดนิยม (แตะแล้วดูของขายดีหมวดนั้นทันที) — หมวดจริง 12 + อื่นๆ"""
+    cats = _sellable_categories(db)
+    real = [c for c in cats if c[0] != "อื่นๆ"]
+    other = [c for c in cats if c[0] == "อื่นๆ"]
+    picked = real[:CATEGORY_MENU_MAX_BUTTONS - 1] + other[:1]
+    items = []
+    for cat, _n in picked:
+        label = cat if cat != "อื่นๆ" else "✨ อื่นๆ"
+        items.append(QuickReplyButton(action=MessageAction(label=label, text=f"{CATEGORY_PICK_PREFIX}{cat}")))
+    return QuickReply(items=items)
+
+
+def category_menu_message(db: Session) -> TextSendMessage:
+    """เมนูหมวดสินค้า — แตะหมวด → ของขายดีหมวดนั้น"""
+    cats = _sellable_categories(db)
+    if not cats:
+        return TextSendMessage(text="🛍️ ยังไม่มีสินค้าในร้านตอนนี้จ๊ะ ลองใหม่พรุ่งนี้นะคะ 😊")
+    total = sum(n for _c, n in cats)
+    return TextSendMessage(
+        text=f"🛍️ ร้านป้าเข็มมีสินค้า {total:,} ตัว — แตะหมวดที่อยากเดินดูได้เลยจ๊ะ 👇",
+        quick_reply=_category_menu_quick_reply(db))
+
+
+def browse_category_message(db: Session, user, cat: str, is_owner: bool = False):
+    """แตะหมวด → ของขายดีในหมวดนั้น (5 ตัว) + ปุ่มหมวดให้เดินดูต่อ"""
+    cat = (cat or "").strip()
+    if not cat:
+        return category_menu_message(db)
+    prods = (db.query(models.Product)
+               .filter(models.Product.link_status == "ok",
+                       models.Product.sales_count >= MIN_SALES,
+                       models.Product.category == cat)
+               .order_by(models.Product.ai_score.desc()).limit(5).all())
+    if not prods:
+        return TextSendMessage(
+            text=f"หมวด {cat} ยังไม่มีของขายดีในตอนนี้จ๊ะ — แตะหมวดอื่นด้านล่างได้เลย 👇",
+            quick_reply=_category_menu_quick_reply(db))
+    return [
+        TextSendMessage(text=f"🛍️ ของขายดีในหมวด {cat} จ๊ะ — แตะหมวดอื่นต่อได้เลย 👇",
+                        quick_reply=_category_menu_quick_reply(db)),
+        product_cards_message(db, user, prods, title=f"🛍️ หมวด {cat}", is_owner=is_owner),
+    ]
 
 
 # --- สินค้าใหม่ส่วนตัว (Amazon-style: จำที่ลูกค้าสนใจ ไม่ต้องเริ่มใหม่) ---
@@ -1655,6 +1726,14 @@ def message_text(event):
         elif normalized_text == "ค้นสินค้า":
             reply = TextSendMessage(text=SEARCH_GUIDE,)
             intent = 'guide'
+        elif normalized_text in CATEGORY_MENU_PHRASES:
+            # เดินดูร้านเอง — เมนูหมวดสินค้า (แตะหมวด → ของขายดีหมวดนั้น) แบบเข้าร้านจริง
+            reply = category_menu_message(db)
+            intent = 'browse'
+        elif normalized_text.startswith(CATEGORY_PICK_PREFIX):
+            # แตะปุ่มหมวด (เช่น "ดูหมวดหูฟัง") → ของขายดีในหมวดนั้น
+            reply = browse_category_message(db, user, normalized_text[len(CATEGORY_PICK_PREFIX):], is_owner)
+            intent = 'browse'
         elif is_bot_manual_request(normalized_text):
             # คุยกับป้าเข็ม = ตอบเรื่องบอทจากคู่มือเท่านั้น (ค้น/เทียบ/จำ/พัสดุ...) — ไม่ AI เดา
             reply = TextSendMessage(text=bot_manual_reply(normalized_text, is_owner))
