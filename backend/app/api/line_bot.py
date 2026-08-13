@@ -1388,7 +1388,7 @@ PRICE_PHRASE_RES = (
 )
 
 # ท้ายคำถามแบบคนพิมพ์ (มีมั้ย/ได้ไหม/หน่อย...) — กันไปบังคับให้ชื่อสินค้าต้องมีคำถาม
-# ระวัง "ผ้าไหม" (ไหม = ผ้าไหม) — คำสั้นอย่าง ไหม/มั้ย/บ้าง ตัดต่อเมื่อมีเว้นวรรคก่อนหน้า
+# ระวัง "ผ้าไหม" (ไหม = ผ้าเนื้อไหม ไม่ใช่คำถาม) — เฉพาะกรณีนี้เท่านั้นที่ยกเว้น
 QUESTION_SUFFIXES = ("มีมั้ย", "มีไหม", "ได้ไหม", "ได้มั้ย", "หน่อย", "เหรอ", "หรอ")
 QUESTION_SUFFIXES_SHORT = ("ไหม", "มั้ย", "บ้าง")
 
@@ -1400,9 +1400,11 @@ def strip_question_suffix(q: str) -> str:
             return rest if len(rest) >= 2 else q
     for s in QUESTION_SUFFIXES_SHORT:
         if q.endswith(s):
-            rest = q[: -len(s)]
-            if rest.endswith(" "):  # มีเว้นวรรคก่อน = แยกคำถามชัดเจน (ผ้าไหมไม่ตัด)
-                return rest.rstrip()
+            if s == "ไหม" and q.endswith("ผ้าไหม"):
+                continue  # ผ้าไหม = ผ้าเนื้อไหม ไม่ใช่คำถาม
+            rest = q[: -len(s)].strip()
+            if rest:
+                return rest
     return q.strip()
 
 
@@ -1423,7 +1425,8 @@ FALSE_FRIEND_COMPOUNDS = {
 #   ต้องตอบสาย Universal ที่รองรับ iPhone ได้
 # - "น้ำ" ใน "แก้วน้ำ" — แก้วกาแฟ/แก้วเยติก็เป็นแก้วน้ำ ใช้ได้ (น้ำ = 3 ตัวอักษร น+้+ำ)
 REST_SKIP_WORDS = frozenset({"ไอโฟน", "แอนดรอยด์", "ซัมซุง", "บลูทูธ",
-                             "ไร้สาย", "รุ่น", "ใหม่", "ชุด", "น้ำ"})
+                             "ไร้สาย", "รุ่น", "ใหม่", "ชุด", "น้ำ",
+                             "ไฟฟ้า", "อัตโนมัติ", "อัจฉริยะ", "ดิจิตอล", "ดิจิทัล"})
 
 
 def _is_false_friend(name: str, phrase: str) -> bool:
@@ -1600,7 +1603,8 @@ def search_products(db: Session, query: str) -> list:
         # (ไม่บังคับคำสั้นอย่าง "น้ำ" ใน "แก้วน้ำ" — แก้วกาแฟก็ตอบได้)
         if not q_core_is_keyword:
             rest = q_core
-            for kw, _c in CATEGORY_KEYWORDS:
+            # เรียงคำยาวก่อน — กัน "หม้อ" แทนที่ก่อน "หม้อหุงข้าว" เหลือ "หุงข้าว" ค้าง
+            for kw, _c in sorted(CATEGORY_KEYWORDS, key=lambda x: -len(x[0])):
                 if len(kw) >= 2 and kw in q_core:
                     rest = rest.replace(kw, " ")
             rest_words = [w for w in re.split(r"[^\u0E00-\u0E7F]+", rest)
