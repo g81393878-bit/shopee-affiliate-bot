@@ -9,10 +9,11 @@
 | # | ส่วน | ใช้ทำอะไร | ราคา | ต้องมีก่อนเริ่ม |
 |---|------|----------|------|----------------|
 | ① | **LINE Official Account** | หน้าร้านที่ลูกค้าแอด (`line.me/R/ti/p/@...`) | ฟรี | ✓ |
-| ② | **Supabase** | ฐานข้อมูลคลาวด์ — สินค้า/ลูกค้า/คอนเทนต์/chat_logs | ฟรี (free tier) | ✓ |
-| ③ | **Render** | เซิร์ฟเวอร์รันบอท 24 ชม. + รับ webhook LINE | ฟรี (free tier) | ✓ |
-| ④ | **คีย์ AI** — Groq (หรือ Gemini/OpenAI) | สมองสร้างคอนเทนต์/ตอบคำถามซับซ้อน | ฟรี | ✓ |
-| ⑤ | (เครื่อง dev) Git + Python 3.11+ | รัน/แก้โค้ด/import สินค้าท้องถิ่น | ฟรี | เท่านั้น |
+| ② | **บัญชี Shopee Affiliate** | ทำลิงก์ค่าคอม + import สินค้า (affiliate.shopee.co.th) | ฟรี | ✓ |
+| ③ | **Supabase** | ฐานข้อมูลคลาวด์ — สินค้า/ลูกค้า/คอนเทนต์/chat_logs | ฟรี (free tier) | ✓ |
+| ④ | **Render** | เซิร์ฟเวอร์รันบอท 24 ชม. + รับ webhook LINE | ฟรี (free tier) | ✓ |
+| ⑤ | **คีย์ AI** — Groq (หรือ Gemini/OpenAI) | สมองสร้างคอนเทนต์/ตอบคำถามซับซ้อน | ฟรี | ✓ |
+| ⑥ | (เครื่อง dev) Git + Python 3.11+ | รัน/แก้โค้ด/import สินค้าท้องถิ่น | ฟรี | เท่านั้น |
 
 > 💡 **ลูกค้าไม่ต้องติดตั้งอะไรเลย** — ใช้ผ่าน LINE โดยตรง แค่แอดไลน์ร้านแล้วพิมพ์ถามได้ทันที
 
@@ -22,6 +23,7 @@
 
 ### ขั้น 1 — เตรียมบัญชี
 - สมัคร **LINE OA** → https://manager.line.biz (สร้างบัญชีร้านค้า) → จด `Channel Access Token` + `Channel Secret` (LINE Developers → Messaging API)
+- **บัญชี Shopee Affiliate** → https://affiliate.shopee.co.th (สมัครฟรี รออนุมัติ) → จด **Affiliate ID** — ใช้สร้างลิงก์ค่าคอม + export สินค้า CSV (สินค้าทุกตัวต้องมาจากลิงก์ของบัญชีนี้)
 - สมัคร **Supabase** → https://supabase.com → create project → จด `Project URL` + `Database password`
 - สมัคร **Render** → https://render.com → link GitHub repo
 - ขอคีย์ **Groq** → https://console.groq.com/keys (ฟรี 1 คีย์ = ~90 คอนเทนต์/วัน) หรือ **Gemini** → https://aistudio.google.com/apikey (ฟรี ~1,500/วัน — แนะนำ)
