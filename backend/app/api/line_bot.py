@@ -449,6 +449,23 @@ def greeting_text(user_name: str) -> str:
     )
 
 
+def _ensure_menu(reply):
+    """ควิกรีไพลเมนูหลักติดข้อความสุดท้ายของทุกคำตอบเสมอ.
+
+    LINE ลบ quick reply ทันทีที่บอท/ใครก็ตามส่งข้อความใหม่ในห้อง — ถ้าแนบกับ
+    ข้อความแรกของชุดตอบ (บั๊กเดิมใน browse_category_message) ปุ่มจะหายก่อน
+    ลูกค้าเห็น ข้อความสุดท้ายที่มี quick_reply เฉพาะอยู่แล้ว (เช่น เมนูหมวด)
+    เก็บไว้ไม่ทับ"""
+    msgs = reply if isinstance(reply, list) else [reply]
+    last = msgs[-1]
+    if getattr(last, "quick_reply", None) is None:
+        try:
+            last.quick_reply = quick_reply_items()
+        except Exception:
+            pass
+    return msgs
+
+
 def welcome_quick_reply() -> QuickReply:
     """ปุ่มตอนแอดครั้งแรก — คุณค่าก่อน (ทำไมต้องป้าเข็ม) แล้วค่อยค้นหา"""
     return QuickReply(items=[
@@ -1221,10 +1238,13 @@ def browse_category_message(db: Session, user, cat: str, is_owner: bool = False)
         return TextSendMessage(
             text=f"หมวด {cat} ยังไม่มีของขายดีในตอนนี้จ๊ะ — แตะหมวดอื่นด้านล่างได้เลย 👇",
             quick_reply=_category_menu_quick_reply(db))
+    # ปุ่มหมวดต้องติดข้อความสุดท้าย (การ์ด) — LINE ลบ quick reply ทันทีที่
+    # บอทส่งข้อความถัดไป (การ์ด) ไม่งั้นปุ่มหายก่อนลูกค้าเห็น
+    cards = product_cards_message(db, user, prods, title=f"🛍️ หมวด {cat}", is_owner=is_owner)
+    cards.quick_reply = _category_menu_quick_reply(db)
     return [
-        TextSendMessage(text=f"🛍️ ของขายดีในหมวด {cat} จ๊ะ — แตะหมวดอื่นต่อได้เลย 👇",
-                        quick_reply=_category_menu_quick_reply(db)),
-        product_cards_message(db, user, prods, title=f"🛍️ หมวด {cat}", is_owner=is_owner),
+        TextSendMessage(text=f"🛍️ ของขายดีในหมวด {cat} จ๊ะ — แตะหมวดอื่นต่อได้เลย 👇"),
+        cards,
     ]
 
 
@@ -2182,7 +2202,7 @@ def message_text(event):
     if "mock" in LINE_ACCESS_TOKEN.lower():
         logger.info(f"Mock reply sent. ReplyToken: {event.reply_token}, Message: {getattr(reply, 'text', reply)}")
     else:
-        line_bot_api.reply_message(event.reply_token, reply)
+        line_bot_api.reply_message(event.reply_token, _ensure_menu(reply))
 
 
 @handler.add(MessageEvent, message=StickerMessage)
@@ -2215,7 +2235,9 @@ def follow_event(event):
         elif not push_guard(db):
             logger.warning(f"ข้าม welcome push (quota หมด) -> {user.name}")
         else:
-            line_bot_api.push_message(line_user_id, [welcome, privacy, PRIVACY_BUTTON])
+            # welcome (มี quick reply) ต้องเป็นข้อความสุดท้ายของชุด — ไม่งั้น
+            # LINE ลบปุ่มทันทีที่ push ข้อความถัดไป (privacy/ปุ่ม PDPA) ตามมา
+            line_bot_api.push_message(line_user_id, [privacy, PRIVACY_BUTTON, welcome])
     except Exception as e:
         logger.error(f"Follow welcome error: {e}")
     finally:
