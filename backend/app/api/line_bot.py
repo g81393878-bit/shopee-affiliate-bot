@@ -2093,13 +2093,35 @@ def message_text(event):
         if pending_ts and not is_owner and normalized_text not in DELETE_PHRASES \
                 and not any(p in normalized_text for p in PENDING_CANCEL_IF):
             _pending_question.pop(line_user_id, None)
-            # push เจ้าของพร้อมคำถามเต็ม (แทน push ตอนแตะปุ่ม)
-            if notify_owner_stuck(user, user_text, db, title="📩 ลูกค้าฝากคำถาม"):
-                reply = TextSendMessage(text=CONTACT_REPLY + ESCALATE_NOTE)
+            # ป้าเข็มลองตอบเองก่อน (auto-answer): ค้นสินค้า → ค้นเน็ต →
+            # ตอบไม่ได้จริงๆ ค่อย push เจ้าของ (กันเจ้าของจม 100 คำถาม)
+            hits = search_products(db, normalized_text)
+            if hits:
+                reply = format_product_message(db, user, hits,
+                                               title=f"🔍 ป้าเข็มหาให้แล้ว — สินค้าตรงกับ \"{display_term}\" ค่ะ",
+                                               is_owner=is_owner)
+                intent = 'search'
+                interest_cat = guess_category(normalized_text)
+            elif looks_like_question(normalized_text):
+                wtext = web_search_reply(normalized_text)
+                if wtext.startswith("🔍 ป้าเข็มหาข้อมูลมาให้แล้วจ๊ะ:"):
+                    reply = TextSendMessage(text=wtext)
+                    intent = 'web'
+                else:
+                    # web search ไม่สำเร็จ → ส่งเจ้าของตอบจริง
+                    if notify_owner_stuck(user, user_text, db, title="📩 ลูกค้าฝากคำถาม"):
+                        reply = TextSendMessage(text=CONTACT_REPLY + ESCALATE_NOTE)
+                    else:
+                        reply = TextSendMessage(text=CONTACT_REPLY)
+                    intent = 'human'
             else:
-                reply = TextSendMessage(text=CONTACT_REPLY)
-            intent = 'human'
-            interest_cat = guess_category(user_text)
+                # คำถามเฉพาะร้าน/เรื่องส่วนตัว (พัสดุ/ราคา/บริการ) → เจ้าของเท่านั้น
+                if notify_owner_stuck(user, user_text, db, title="📩 ลูกค้าฝากคำถาม"):
+                    reply = TextSendMessage(text=CONTACT_REPLY + ESCALATE_NOTE)
+                else:
+                    reply = TextSendMessage(text=CONTACT_REPLY)
+                intent = 'human'
+                interest_cat = guess_category(user_text)
         elif pending_ts and normalized_text in PENDING_CANCEL_IF:
             _pending_question.pop(line_user_id, None)
             reply = TextSendMessage(text=CANCEL_CONFIRM)
