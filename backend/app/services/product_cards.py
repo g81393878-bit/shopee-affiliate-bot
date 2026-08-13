@@ -18,6 +18,7 @@ Product cards — การ์ดสินค้า LINE Flex Message (สะอ
 """
 
 import datetime
+import re
 from typing import List, Optional
 
 from linebot.models import (
@@ -25,6 +26,9 @@ from linebot.models import (
 )
 
 from app import models
+
+# อักษรจีน/ญี่ปุ่น/เกาหลี — กัน hook ภาษาปน (เช่น "吗") โชว์ให้ลูกค้า
+_CJK_RE = re.compile(r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]")
 
 BADGE_NEW = "🆕 ของใหม่"
 BADGE_HOT = "🔥 ขายดี"
@@ -78,11 +82,13 @@ def _fmt_price(price) -> str:
     return f"{p:,.0f}" if p == int(p) else f"{p:,.2f}"
 
 
-def _fmt_sales(n) -> Optional[str]:
-    n = int(n or 0)
-    if n <= 0:
+def _clean_hook(hook: str) -> Optional[str]:
+    """hook ที่ปลอดภัยพอโชว์ลูกค้า (สไตล์ Rufus/A+ "ทำไมน่าสนใจ"):
+    ไม่มีอักษร CJK (ภาษาปน), ความยาว 8-90 ตัวอักษร — ไม่ผ่าน = ไม่โชว์"""
+    h = (hook or "").strip()
+    if not h or _CJK_RE.search(h) or len(h) < 8 or len(h) > 90:
         return None
-    return f"🔥 ขายแล้ว {n:,} ชิ้น"
+    return h
 
 
 def _clamp(text: str, limit: int = 90) -> str:
@@ -92,12 +98,22 @@ def _clamp(text: str, limit: int = 90) -> str:
     return text[: limit - 1].rstrip() + "…"
 
 
-def _bubble(db, prod: models.Product, idx: int, badges_map: dict, is_owner: bool) -> dict:
+def _bubble(db, prod: models.Product, idx: int, badges_map: dict, is_owner: bool,
+            drop_pct: Optional[float] = None) -> dict:
     color = _card_color(prod.ai_score)
+    hook = (db.query(models.Content.hook)
+              .filter(models.Content.product_id == prod.id)
+              .order_by(models.Content.id.desc()).first())
 
-    # --- ข้อมูลลูกค้า (ทุกคนเห็น) ---
-    # ราคา = ราคาเริ่มต้น (ราคาจริงตามโปรฯ ในลิงก์) — ไม่การันตีราคาคงที่
-    body = [
+    body = []
+    # 💡 หนึ่งบรรทัด "ทำไมน่าสนใจ" (สไตล์ Amazon Rufus/A+) — เฉพาะ hook ที่ผ่านฟิลเตอร์
+    clean_hook = _clean_hook(getattr(hook, "hook", None) or "")
+    if not is_owner and clean_hook:
+        body.append({"type": "text", "text": f"💡 {_clamp(clean_hook, 80)}",
+                     "size": "xs", "color": "#8B4513", "wrap": True})
+
+    # --- ราคาใหญ่ + เริ่มต้น (ราคาจริงตามโปรฯ ในลิงก์ — ไม่การันตีราคาคงที่) ---
+    body += [
         {
             "type": "box",
             "layout": "baseline",
@@ -111,17 +127,26 @@ def _bubble(db, prod: models.Product, idx: int, badges_map: dict, is_owner: bool
          "color": "#AAAAAA", "wrap": True},
     ]
 
+    # --- Trust line สากล: ⭐ รีวิว · ขายแล้ว X ชิ้น (หลักฐานสังคมชิดราคา แบบ Amazon/Alibaba) ---
+    trust = []
+    if prod.rating and float(prod.rating) > 0:
+        trust.append(f"⭐ {float(prod.rating):.1f}")
+    if (prod.sales_count or 0) > 0:
+        trust.append(f"ขายแล้ว {int(prod.sales_count):,} ชิ้น")
+    if trust:
+        body.append({"type": "text", "text": " · ".join(trust), "size": "xs",
+                     "color": "#666666", "wrap": True})
+
+    # --- Badges: 🆕 / 🔥 ขายดี / 📉 ราคาลง X% (anchor ราคาแบบ Amazon Deal) ---
+    extras = []
+    if drop_pct and drop_pct >= 1:
+        extras.append(f"📉 ราคาลง {drop_pct:.0f}%")
     badge = badges_map.get(prod.id, "")
     if badge:
-        body.append({"type": "text", "text": badge, "size": "xs", "color": "#B8860B", "wrap": True})
-
-    sales_line = _fmt_sales(prod.sales_count)
-    if sales_line:
-        body.append({"type": "text", "text": sales_line, "size": "sm", "color": "#555555"})
-
-    if prod.rating and float(prod.rating) > 0:
-        body.append({"type": "text", "text": f"⭐ {float(prod.rating):.1f}",
-                     "size": "xs", "color": "#999999"})
+        extras.append(badge)
+    if extras:
+        body.append({"type": "text", "text": " · ".join(extras), "size": "xs",
+                     "color": "#B8860B", "wrap": True})
 
     # --- ข้อมูลแอดมิน (เฉพาะเจ้าของร้าน) ---
     if is_owner:
@@ -136,11 +161,8 @@ def _bubble(db, prod: models.Product, idx: int, badges_map: dict, is_owner: bool
                          "size": "sm", "color": "#27AE60", "weight": "bold"})
         body.append({"type": "text", "text": f"📈 คะแนน AI: {int(prod.ai_score or 0)}/100",
                      "size": "xs", "color": "#999999"})
-        content_hook = (db.query(models.Content)
-                          .filter(models.Content.product_id == prod.id)
-                          .order_by(models.Content.id.desc()).first())
-        if content_hook and content_hook.hook:
-            body.append({"type": "text", "text": f"💡 {_clamp(content_hook.hook)}",
+        if hook and hook.hook:
+            body.append({"type": "text", "text": f"💡 {_clamp(hook.hook)}",
                          "size": "xs", "color": "#666666", "wrap": True})
 
     return {
@@ -218,7 +240,18 @@ def product_cards_message(db, user: models.User, products: List[models.Product],
         )
 
     badges_map = _catalog_badges(db, is_owner)
-    bubbles = [_bubble(db, p, i, badges_map, is_owner) for i, p in enumerate(products[:3], 1)]
+    # ราคาลงล่าสุดต่อสินค้า (จาก price_history — แสดง 📉 เฉพาะตอนมีข้อมูลจริง)
+    ids = [p.id for p in products[:3]]
+    drops = {}
+    if ids:
+        rows = (db.query(models.PriceHistory.product_id, models.PriceHistory.drop_pct)
+                  .filter(models.PriceHistory.product_id.in_(ids))
+                  .order_by(models.PriceHistory.created_at.desc()).all())
+        for pid, drop in rows:
+            if pid not in drops:
+                drops[pid] = float(drop or 0)
+    bubbles = [_bubble(db, p, i, badges_map, is_owner, drops.get(p.id))
+               for i, p in enumerate(products[:3], 1)]
 
     names = " / ".join(p.name[:20] for p in products[:3])
     alt = f"{title or '🛒 สินค้า'} {names}".strip()
