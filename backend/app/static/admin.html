@@ -92,6 +92,10 @@ a.del { color:var(--red); cursor:pointer; text-decoration:underline; margin-left
         <div id="shopeeResults"></div>
       </section>
       <section class="panel">
+        <h3>💬 LINE Push Quota <span id="quotaBadge" class="badge none">กำลังตรวจสอบ…</span></h3>
+        <div id="quotaBody" style="font-size:13px;color:var(--gray)">…</div>
+      </section>
+      <section class="panel">
         <h3>🔥 หมวดที่มีสินค้ามากสุด</h3>
         <table><thead><tr><th>หมวด</th><th>จำนวน</th></tr></thead><tbody id="catRows"></tbody></table>
       </section>
@@ -203,7 +207,7 @@ async function init() {
     await api('/api/admin/session');
     $('login').classList.add('hidden');
     $('app').classList.remove('hidden');
-    loadStats(); loadCategories(); loadProducts(); loadShopeeStatus();
+    loadStats(); loadCategories(); loadProducts(); loadShopeeStatus(); loadQuota();
   } catch (e) {
     if (e.message === 'unauth') { $('app').classList.add('hidden'); $('login').classList.remove('hidden'); }
   }
@@ -225,7 +229,7 @@ function showTab(t) {
   $('viewProducts').classList.toggle('hidden', t !== 'products');
   $('tabStats').classList.toggle('active', t === 'stats');
   $('tabProducts').classList.toggle('active', t === 'products');
-  if (t === 'stats') { loadStats(); loadShopeeStatus(); }
+  if (t === 'stats') { loadStats(); loadShopeeStatus(); loadQuota(); }
 }
 
 // ---- stats ----
@@ -264,6 +268,31 @@ async function loadShopeeStatus() {
       badge.className = 'badge none';
       $('shopeeBody').textContent = '⏳ ' + s.message;
     }
+  } catch (e) { /* ignore */ }
+}
+async function loadQuota() {
+  try {
+    const q = await api('/api/admin/quota');
+    const badge = $('quotaBadge');
+    const body = $('quotaBody');
+    if (!q.checked) {
+      badge.textContent = 'ไม่ทราบ';
+      badge.className = 'badge none';
+      body.textContent = '⏳ ' + (q.note || 'ตรวจ quota ไม่ได้');
+      return;
+    }
+    const pct = Math.min(100, Math.round(q.used / q.limit * 100));
+    if (q.blocked) { badge.textContent = 'หมดแล้ว!'; badge.className = 'badge dead'; }
+    else if (q.warning) { badge.textContent = 'ใกล้หมด'; badge.className = 'badge none'; }
+    else { badge.textContent = 'ปกติ'; badge.className = 'badge ok'; }
+    body.innerHTML =
+      '<div style="margin:6px 0"><div style="background:var(--border);border-radius:6px;height:10px;overflow:hidden">' +
+        '<div style="width:' + pct + '%;height:100%;background:' + (q.warning ? '#B7950B' : 'var(--green)') + '"></div>' +
+      '</div></div>' +
+      'ใช้แล้ว <b>' + q.used.toLocaleString() + '</b> / ' + q.limit.toLocaleString() + ' ข้อความ (' + pct + '%)' +
+      ' — เหลือ <b>' + q.remaining.toLocaleString() + '</b>' + (q.warning ? ' (ต่ำกว่าเกณฑ์เตือน ' + q.warn_left + ')' : '') +
+      '<br><span style="font-size:12px">push (ต้อนรับ/แจ้งราคาลง/re-engage/รายงาน) นับ quota — reply ไม่นับ · ' +
+      '<a href="https://manager.line.biz" target="_blank">ตรวจที่ LINE OA Manager</a></span>';
   } catch (e) { /* ignore */ }
 }
 async function shopeeSearch() {

@@ -26,8 +26,9 @@ LINE_QUOTA_URL = "https://api.line.me/v2/bot/message/quota"
 WARN_CATEGORY = "_quota"  # เก็บใน campaign_logs (ไม่มีตารางใหม่ ไม่ต้อง migration)
 
 
-def quota_left() -> int | None:
-    """push ข้อความที่เหลือในเดือนนี้ — None ถ้าตรวจไม่ได้"""
+def quota_info() -> dict | None:
+    """ข้อมูล quota push เดือนนี้: {limit, used, remaining} — None ถ้าตรวจไม่ได้
+    (ไม่มี token / mock / error / แผนไม่จำกัด type=none)"""
     token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
     if not token or "mock" in token.lower():
         return None
@@ -40,10 +41,17 @@ def quota_left() -> int | None:
         limit, used = quota.get("value"), consumption.get("totalUsage")
         if limit is None or used is None:
             return None
-        return int(limit) - int(used)
+        limit, used = int(limit), int(used)
+        return {"limit": limit, "used": used, "remaining": limit - used}
     except Exception as e:  # LINE error / network — ปล่อยผ่าน อย่าทำให้บอทเดี้ยงเพราะเช็ค quota
         logger.warning("LINE quota check failed: %s", e)
         return None
+
+
+def quota_left() -> int | None:
+    """push ข้อความที่เหลือในเดือนนี้ — None ถ้าตรวจไม่ได้"""
+    info = quota_info()
+    return info["remaining"] if info else None
 
 
 def push_guard(db, warn_left: int = 30, warn_every_hours: int = 24) -> bool:

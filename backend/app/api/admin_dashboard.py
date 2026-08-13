@@ -174,6 +174,27 @@ def admin_stats(_: None = Depends(require_admin)):
         db.close()
 
 
+@router.get("/api/admin/quota")
+def admin_quota(_: None = Depends(require_admin)):
+    """LINE push quota เดือนนี้ — เพดาน/ใช้ไป/เหลือ/สถานะเตือน (แสดงในหน้าแอดมิน)"""
+    from app.services.line_quota import quota_info
+
+    info = quota_info()
+    if info is None:
+        return {"checked": False,
+                "note": "ตรวจ quota ไม่ได้ (โหมด mock / แผนไม่จำกัด / LINE API error) — push ไม่ถูกบล็อก"}
+    warn_left = int(os.getenv("PUSH_QUOTA_WARN_LEFT", "30") or 30)
+    return {
+        "checked": True,
+        "limit": info["limit"],
+        "used": info["used"],
+        "remaining": info["remaining"],
+        "warn_left": warn_left,
+        "warning": info["remaining"] <= warn_left,
+        "blocked": info["remaining"] <= 0,
+    }
+
+
 @router.get("/api/admin/categories")
 def admin_categories(_: None = Depends(require_admin)):
     db = _db()
