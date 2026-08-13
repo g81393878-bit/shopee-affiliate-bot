@@ -35,7 +35,7 @@ def _require_script_keys(data: dict) -> dict:
     return data
 
 
-def generate_script_for_product(product_name: str, category: str, price: float, style: str = "standard") -> dict:
+def generate_script_for_product(product_name: str, category: str, price: float, style: str = "standard", tone: str = "neutral") -> dict:
     """
     Generate a customized TikTok/Shorts video script for a product.
     Supports styles: 'standard', 'funny', 'educational', 'unboxing'.
@@ -55,7 +55,7 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
         try:
             import google.generativeai as genai
             genai.configure(api_key=settings.GEMINI_API_KEY)
-            model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=persona_system_prompt())
+            model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=persona_system_prompt(tone=tone))
             
             prompt = f"""
             Write a short video script (15-30s) in Thai for this product:
@@ -97,7 +97,7 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": persona_system_prompt("Respond only in JSON format with Thai texts.")},
+                    {"role": "system", "content": persona_system_prompt("Respond only in JSON format with Thai texts.", tone=tone)},
                     {"role": "user", "content": prompt}
                 ],
                 response_format={"type": "json_object"}
@@ -120,7 +120,7 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
                 response = client.chat.completions.create(
                     model=settings.GROQ_MODEL,
                     messages=[
-                        {"role": "system", "content": persona_system_prompt("Respond only in JSON format with Thai texts.")},
+                        {"role": "system", "content": persona_system_prompt("Respond only in JSON format with Thai texts.", tone=tone)},
                         {"role": "user", "content": prompt}
                     ],
                     response_format={"type": "json_object"}

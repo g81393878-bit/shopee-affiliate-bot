@@ -285,9 +285,11 @@ def is_greeting(text: str) -> bool:
 
 
 # --- ปรับโทนภาษาให้เหมาะทุกวัย (วัยรุ่น/ผู้สูงอายุ) จากสไตล์การพิมพ์ ---
-YOUTH_SIGNALS = ("555", "มั้ย", "คับ", "งับ", "lol", "ป้ายยา", "ไฟลุก", "จัดให้", "แฮร่")
+YOUTH_SIGNALS = ("555", "มั้ย", "คับ", "งับ", "lol", "ป้ายยา", "ไฟลุก", "จัดให้", "แฮร่",
+                 "จัดไป", "ฟิน", "เว่อร์", "เริ่ด", "อิอิ")
 ELDER_SIGNALS = ("หลาน", "ขอรบกวน", "รบกวน", "ไม่ถนัด", "ไม่เก่ง", "ขอบพระคุณ",
-                 "กราบ", "กลัวโดนหลอก", "โดนหลอก", "ครับผม", "ไม่ทราบ")
+                 "กราบ", "กลัวโดนหลอก", "โดนหลอก", "ครับผม", "ไม่ทราบ",
+                 "ขอความกรุณา", "ยาย", "ลุง", "ตา", "ผู้สูงอายุ", "สูงวัย", "แก่แล้ว", "ไม่ทันสมัย")
 
 def detect_tone(text: str) -> str:
     """เดาโทนจากสไตล์ข้อความ: youth / elder / neutral (ไม่เดาเกินเหตุ)"""
@@ -388,6 +390,19 @@ def nosearch_fallback_text(user_text: str, tone: str = "neutral") -> str:
 ลองพิมพ์ชื่อสินค้าสั้นๆ เช่น "หูฟัง" "กระติกน้ำ" หรือแตะปุ่มด้านล่างได้เลยค่ะ 👇""")
 
 
+def nosearch_alt_text(user_text: str, category: str, tone: str = "neutral") -> str:
+    """ยังไม่มีของที่ค้น + มีของใกล้เคียงในหมวด — ปรับโทนตามวัย"""
+    if tone == "youth":
+        return (f"🔍 ยังไม่มี \"{user_text}\" ในร้านตอนนี้จ้า\n\n"
+                f"ลองดูของใกล้เคียงหมวด {category} ด้านล่างเลย หรือพิมพ์ชื่ออื่นก็ได้ 😎")
+    if tone == "elder":
+        return (f"🔍 ตอนนี้ยังไม่มี \"{user_text}\" ในร้านนะคะ\n\n"
+                f"ไม่เป็นไรค่ะ ลองดูของใกล้เคียงหมวด {category} ด้านล่างก่อนได้\n"
+                f"หรืออยากได้อะไร พิมพ์บอกป้าเข็มได้เลยค่ะ")
+    return (f"🔍 ยังไม่มี \"{user_text}\" ในร้านป้าเข็มตอนนี้จ๊ะ\n\n"
+            f"ลองดูของใกล้เคียงในหมวด {category} ด้านล่าง หรือพิมพ์ชื่ออื่นได้เลยค่ะ 😊")
+
+
 def quick_reply_items() -> QuickReply:
     """ปุ่มลัดแบบสากล (Quick Reply) — ลูกค้าแตะแทนพิมพ์"""
     return QuickReply(items=[
@@ -400,8 +415,21 @@ def quick_reply_items() -> QuickReply:
     ])
 
 
-def welcome_text(user_name: str) -> str:
-    """ข้อความต้อนรับแรก (สั้น + คุณค่าชัด) — ลูกค้าใหม่เห็นทันทีว่าทำไมต้องอยู่กับป้าเข็ม"""
+def welcome_text(user_name: str, tone: str = "neutral") -> str:
+    """ข้อความต้อนรับแรก (สั้น + คุณค่าชัด) — ปรับสำเนียงตามวัยที่จำไว้ (neutral = ข้อความเดิม)"""
+    if tone == "youth":
+        return (
+            f"🤗 โย่วคุณ {user_name}! ยินดีต้อนรับเข้าร้าน{BOT_NAME} 💕\n\n"
+            "ของดีราคาเท่า Shopee เป๊ะ แต่ป้าเข็มคัดให้ + จำได้ว่าคุณชอบอะไร 😎\n\n"
+            "แตะปุ่มข้างล่างได้เลย 👇"
+        )
+    if tone == "elder":
+        return (
+            f"🤗 สวัสดีค่ะคุณ {user_name} ยินดีต้อนรับเข้าร้าน{BOT_NAME} 💕\n\n"
+            "ที่นี่ราคาเท่ากับ Shopee เป๊ะ แต่ป้าเข็มคัดของดีให้\n"
+            "และจำได้ว่าคุณชอบอะไรนะคะ 😊\n\n"
+            "แตะปุ่มด้านล่างได้เลยค่ะ 👇"
+        )
     return (
         f"🤗 สวัสดีค่ะคุณ {user_name}! ยินดีต้อนรับสู่ร้าน{BOT_NAME} 💕\n\n"
         "ที่นี่ราคาเท่ากับ Shopee เป๊ะ แต่ป้าเข็มคัดของดีให้"
@@ -906,7 +934,43 @@ def compare_flex_message(a, b, facts: list, spec_a: str = "", spec_b: str = "",
     return FlexSendMessage(alt_text="⚖️ เทียบสินค้า 2 ตัว", contents=contents)
 
 
-def why_us_text() -> str:
+WHY_US_YOUTH = (
+    "💛 ทำไมต้องซื้อกับร้านป้าเข็ม? จ้าา\n\n"
+    "1️⃣ ราคาเท่ากันเป๊ะ\n"
+    "ป้าเป็นนายหน้า ค่านายหน้าจ่ายโดย Shopee/แบรนด์ ไม่บวกในราคา — จ่ายเท่าราคาปกติ\n\n"
+    "2️⃣ คัดมาแล้วว่าดีจริง\n"
+    "เฉพาะของที่ขายดีจริง + ลิงก์ไม่ตาย ถึงเข้าร้าน ไม่มีของกากมาให้เสียเวลา\n\n"
+    "3️⃣ ข้อมูลจริง ไม่พาดหัวลวง\n"
+    "ราคาบอก \"เริ่มต้น\" ตามตรง ยอดขายตัวเลขจริง กดไปเห็นโปรจริงที่หน้าร้าน\n\n"
+    "4️⃣ จำได้ว่าคุณชอบอะไร\n"
+    "บอก \"จำไว้ ชอบหูฟัง\" → ของใหม่/ราคาลง ป้าแจ้งก่อนใคร\n\n"
+    "5️⃣ ดูแลหลังขาย 24 ชม.\n"
+    "ทวงพัสดุ/สงสัยอะไร พิมพ์ถามได้ตลอด\n\n"
+    "ลองพิมพ์ชื่อสินค้าดูเลยจ้า เช่น \"หูฟังไม่เกิน 300\" 😎"
+)
+
+WHY_US_ELDER = (
+    "💛 ทำไมต้องซื้อกับร้านป้าเข็มคะ?\n\n"
+    "1️⃣ ราคาเท่ากันเป๊ะ\n"
+    "ป้าเข็มเป็นนายหน้า ค่านายหน้าจ่ายโดย Shopee/แบรนด์ ไม่ได้บวกในราคา — จ่ายเท่าราคาปกติบน Shopee\n\n"
+    "2️⃣ คัดมาแล้วว่าดีจริง\n"
+    "เฉพาะของที่ขายดีจริง + ลิงก์ตรวจแล้วไม่ตาย ถึงจะเข้าร้าน\n\n"
+    "3️⃣ ข้อมูลจริง ไม่พาดหัวลวง\n"
+    "ราคาบอก \"เริ่มต้น\" ตามตรง ยอดขายเป็นตัวเลขจริง กดลิงก์ไปเห็นราคาจริงที่หน้าร้าน\n\n"
+    "4️⃣ ป้าเข็มจำได้ว่าคุณชอบอะไร\n"
+    "บอก \"จำไว้ ชอบหูฟัง\" → มีของใหม่/ราคาลง ป้าเข็มจะแจ้งก่อนใคร\n\n"
+    "5️⃣ ดูแลหลังขาย 24 ชม.\n"
+    "ทวงถามพัสดุ/สงสัยอะไร พิมพ์ถามได้ตลอดค่ะ\n\n"
+    "ลองพิมพ์ชื่อสินค้าดูได้นะคะ เช่น \"หูฟังไม่เกิน 300\" ค่ะ 😊"
+)
+
+
+def why_us_text(tone: str = "neutral") -> str:
+    """ทำไมต้องซื้อกับป้าเข็ม — ปรับโทนตามวัย (neutral = ข้อความเดิม)"""
+    if tone == "youth":
+        return WHY_US_YOUTH
+    if tone == "elder":
+        return WHY_US_ELDER
     return (
         "💛 ทำไมต้องซื้อกับร้านป้าเข็ม?\n\n"
         "1️⃣ ราคาเท่ากันเป๊ะ\n"
@@ -1970,7 +2034,7 @@ def message_text(event):
             intent = 'greeting'
         elif normalized_text in WHY_US_PHRASES:
             # ทำไมต้องซื้อกับป้าเข็ม — คุณค่าที่ประชาชนได้ (ราคาเท่ากัน/ของจริง/ดูแล)
-            reply = TextSendMessage(text=why_us_text())
+            reply = TextSendMessage(text=why_us_text(tone))
             intent = 'why_us'
         elif normalized_text == "ค้นสินค้า":
             reply = TextSendMessage(text=search_guide(tone),)
@@ -2051,8 +2115,7 @@ def message_text(event):
                              .order_by(models.Product.ai_score.desc()).limit(5).all())
                 if alt:
                     reply = [
-                        TextSendMessage(text=f"🔍 ยังไม่มี \"{display_term}\" ในร้านป้าเข็มตอนนี้จ๊ะ\n\n"
-                                             f"ลองดูของใกล้เคียงในหมวด {cat} ด้านล่าง หรือพิมพ์ชื่ออื่นได้เลยค่ะ 😊"),
+                        TextSendMessage(text=nosearch_alt_text(display_term, cat, tone)),
                         product_cards_message(db, user, alt, title=f"🛍️ ของในหมวด {cat}",
                                               is_owner=is_owner),
                     ]
@@ -2105,7 +2168,10 @@ def follow_event(event):
     db = SessionLocal()
     try:
         user = get_or_create_line_user(db, line_user_id)
-        welcome = TextSendMessage(text=welcome_text(user.name),
+        pref = (db.query(models.UserPreference)
+                  .filter(models.UserPreference.line_user_id == line_user_id).first())
+        tone = pref.tone if pref and pref.tone in ("youth", "elder") else "neutral"
+        welcome = TextSendMessage(text=welcome_text(user.name, tone),
                                   quick_reply=welcome_quick_reply())
         privacy = TextSendMessage(text=PRIVACY_NOTICE)
         if "mock" in LINE_ACCESS_TOKEN.lower():

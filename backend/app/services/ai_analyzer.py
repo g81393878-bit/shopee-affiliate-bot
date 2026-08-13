@@ -108,7 +108,7 @@ def _normalize_analysis(data: dict, score: int) -> dict:
     }
 
 
-def analyze_product_with_ai(name: str, category: str, price: float, rating: float, sales_count: int, commission: float) -> dict:
+def analyze_product_with_ai(name: str, category: str, price: float, rating: float, sales_count: int, commission: float, tone: str = "neutral") -> dict:
     score = calculate_heuristic_score(sales_count, rating, commission, price)
     provider = settings.LLM_PROVIDER
     
@@ -117,7 +117,7 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
         try:
             import google.generativeai as genai
             genai.configure(api_key=settings.GEMINI_API_KEY)
-            model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=persona_system_prompt())
+            model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=persona_system_prompt(tone=tone))
             
             prompt = f"""
             Analyze this Shopee product for affiliate marketing:
@@ -179,7 +179,7 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": persona_system_prompt("You are a Shopee affiliate marketing analyst. Respond only with JSON conforming to the requested schema. Use Thai language for content fields.")},
+                    {"role": "system", "content": persona_system_prompt("You are a Shopee affiliate marketing analyst. Respond only with JSON conforming to the requested schema. Use Thai language for content fields.", tone=tone)},
                     {"role": "user", "content": prompt}
                 ],
                 response_format={"type": "json_object"}
@@ -211,7 +211,7 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
                 response = client.chat.completions.create(
                     model=settings.GROQ_MODEL,
                     messages=[
-                        {"role": "system", "content": persona_system_prompt("You are a Shopee affiliate marketing analyst. Respond only with JSON conforming to the requested schema. Use Thai language for content fields.")},
+                        {"role": "system", "content": persona_system_prompt("You are a Shopee affiliate marketing analyst. Respond only with JSON conforming to the requested schema. Use Thai language for content fields.", tone=tone)},
                         {"role": "user", "content": prompt}
                     ],
                     response_format={"type": "json_object"}
