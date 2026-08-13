@@ -820,12 +820,14 @@ INTENT_LABELS = {
 
 
 def _push_to_sheet(row: dict) -> None:
-    """push 1 แถวไป Google ชีท — fire-and-forget (background) กันไม่หน่วงการตอบ LINE"""
+    """push 1 แถวไป Google ชีท — fire-and-forget (background) กันไม่หน่วงการตอบ LINE
+    Apps Script web app ตอบ 302 (redirect ไป script.googleusercontent.com/macros/echo)
+    — ต้อง follow_redirects=True (httpx ปิดไว้โดยค่าเริ่มต้น ไม่งั้นแถวไม่ถึงชีท)"""
     if not SHEET_WEBHOOK_URL:
         return
     try:
         import httpx
-        httpx.post(SHEET_WEBHOOK_URL, json=row, timeout=5)
+        httpx.post(SHEET_WEBHOOK_URL, json=row, timeout=5, follow_redirects=True)
     except Exception as e:
         logger.debug(f"sheet push failed: {e}")
 

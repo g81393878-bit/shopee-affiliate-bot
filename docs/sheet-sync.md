@@ -17,17 +17,15 @@
 
 ### 1) สร้าง Apps Script (ทำใน Google ของคุณเอง)
 
-1. เปิด **https://script.google.com** (ล็อกอินอีเมล Google — ใช้ `regency2919@gmail.com` ได้)
-2. กด **+ โปรเจกต์ใหม่** (New project)
+1. เปิด **https://sheets.google.com** → **สร้างชีทใหม่** (หรือเปิดชีทเดิมที่จะใช้เก็บข้อมูล) → ก๊อป **ID ชีท** จาก URL: `https://docs.google.com/spreadsheets/d/<ID ตรงนี้>/edit`
+2. เปิด **https://script.google.com** → กด **+ โปรเจกต์ใหม่** (New project)
 3. **ลบโค้ดตัวอย่างทิ้ง** แล้ววางโค้ดจากไฟล์ **`tools/sheet_apps_script.gs`** ลงไปทั้งไฟล์
-4. กด **💾 บันทึก** (ตั้งชื่ออะไรก็ได้ เช่น "ป้าเข็ม sync ชีท")
-5. กด **Deploy → New deployment**:
-   - ประเภท (Type): **Web app**
-   - Execute as: **Me**
-   - Who has access: **Anyone**
-6. กด **Deploy** → ยอมรับสิทธิ์ → ก๊อป **Web app URL** ที่ได้
-   (หน้าตา: `https://script.google.com/macros/s/AKfycb....../exec`)
+4. **ใส่ ID ชีท** ในบรรทัด `var SPREADSHEET_ID = '...'` (ตรงนี้สำคัญ — สคริปต์ standalone ใช้ `getActiveSpreadsheet()` ไม่ได้ จะพัง 500)
+5. กด **💾 บันทึก** (ตั้งชื่ออะไรก็ได้ เช่น "ป้าเข็ม sync ชีท")
+6. กด **Deploy → New deployment**: ประเภท (Type) **Web app** · Execute as: **Me** · Who has access: **Anyone** → กด **Deploy** → ยอมรับสิทธิ์ → ก๊อป **Web app URL** (`https://script.google.com/macros/s/....../exec`)
 7. ส่ง URL นี้ให้ทีมตั้งค่า → ใส่เป็น env **`SHEET_WEBHOOK_URL`** บน Render → deploy ใหม่
+
+> แก้ครั้งหลัง (เปลี่ยนโค้ด/ID ชีท): กด 💾 บันทึก → **Deploy → Manage deployments → ✏️ (ดินสอ)** → **Version: New version** → Deploy — **URL เดิมใช้ได้เลย** ไม่ต้องก๊อปใหม่
 
 ### 2) เตรียม Google ชีท
 
@@ -59,6 +57,7 @@
 
 | อาการ | สาเหตุ/แก้ |
 |-------|-----------|
+| POST ได้ **500** | `SPREADSHEET_ID` ว่าง/ผิด — สคริปต์ standalone ต้อง `openById` ใส่ ID ชีทแล้ว deploy เวอร์ชันใหม่ |
 | ไม่มีแถวใหม่ในชีท | ยังไม่ตั้ง `SHEET_WEBHOOK_URL` บน Render / URL ผิด (ต้องเป็น `/exec`) / deploy ยังไม่ทัน |
 | แถวมีแต่ "ประเภท" เป็นอังกฤษ | ใช้โค้ดบอทเวอร์ชันเก่า — deploy โค้ดล่าสุด |
 | Apps Script error | เปิด **View → Logs / Executions** ใน script.google.com ดูข้อผิดพลาด (สิทธิ์/ชื่อชีท) |
