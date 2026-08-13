@@ -88,6 +88,19 @@ https://<ชื่อ-service>.onrender.com/api/webhooks/line
 
 ---
 
+## 3.5️⃣ ❓ คำถามยอดนิยมของเจ้าของร้าน (จากคำถาม LINE OA ที่พบบ่อย)
+
+| ถาม | ตอบ (เช็คอะไรก่อน) |
+|-----|--------------------|
+| **บอทไม่ตอบลูกค้า** | 1) Webhook URL ถูกไหม → ต้องเป็น `/api/webhooks/line` (พหูพจน์!) 2) env keys ครบไหม (LINE token/secret) 3) ดู Render log มี error ไหม |
+| **ข้อความต้อนรับ/ปุ่มไม่เปลี่ยน** | ข้อความต้อนรับอยู่ในโค้ด (แก้แล้ว deploy) · ปุ่มเมนู = Rich Menu → `tools/line_rich_menu.py` |
+| **อยากส่งโปรให้ลูกค้า** | LINE OA Console → Broadcast หรือตั้ง cron `re-engage` (docs/cron-setup.md) |
+| **เพิ่มสินค้าใหม่** | `python tools/product_pipeline.py import-csv <ไฟล์.csv> --analyze` |
+| **ราคา/ลิงก์ตาย** | cron `refresh-prices` + `check-links` หรือจัดการผ่าน `/admin` dashboard |
+| **เปลี่ยน AI / คีย์หมดโควต้า** | เปลี่ยน `LLM_PROVIDER` / เพิ่มคีย์ใน `GROQ_API_KEY` (คั่นคอมม่า) แล้ว deploy |
+
+---
+
 ## 4️⃣ ใช้บอทนี้บนเครื่องอื่น / ขายบอท?
 
 - โค้ดพกพาได้: clone → `.env` ใหม่ (ของแต่ละร้าน) → import สินค้าของร้านนั้น → deploy — ไม่ผูกกับบัญชีใคร
