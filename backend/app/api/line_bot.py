@@ -1465,7 +1465,8 @@ SPEC_UNITS_PAT = (r"(?:นิ้ว|เซนติเมตร|เซน|ซม
 def strip_spec_phrase(q: str) -> str:
     """ตัดสเปคขนาด/ปริมาตร/จำนวนออกจากคำค้น:
     'พัดลมขนาด 16 นิ้ว' → 'พัดลม', 'กระติก 2 ลิตร' → 'กระติก'
-    สเปคไม่ควรบังคับให้ชื่อสินค้าต้องมีคำว่า 'ขนาด 16 นิ้ว' (แล้วพลาดทั้งหมวด)"""
+    สเปคไม่ควรบังคับให้ชื่อสินค้าต้องมีคำว่า 'ขนาด 16 นิ้ว' (แล้วพลาดทั้งหมวด)
+    (ตัวเลขขนาดถูกแยกไปกรองใน parse_size_spec แยกต่างหาก — ไม่หายไปไหน)"""
     num = r"\d+(?:\.\d+)?"
     t = q
     # "ขนาด <เลข> [หน่วย]?" — ขนาด 16 / ขนาด 16 นิ้ว / ขนาด 2 ลิตร
@@ -1475,6 +1476,40 @@ def strip_spec_phrase(q: str) -> str:
     # "ขนาดใหญ่/เล็ก/กลาง" — คำคุณศัพท์ขนาด
     t = re.sub(r"ขนาด\s*(?:ใหญ่|เล็ก|กลาง|เล็กน้อย|ย่อม)", " ", t)
     return re.sub(r"\s+", " ", t).strip(" -–,")
+
+
+# หน่วยขนาด → regex ที่พบในชื่อสินค้า (ทั้งแบบไทย/อังกฤษ/ย่อ)
+SIZE_UNIT_PATTERNS = {
+    "ลิตร": r"(?:ลิตร|ล\.|litre|liter|[lL](?![a-zA-Z]))",
+    "นิ้ว": r'(?:นิ้ว|นิ้|inch|in(?![a-zA-Z])|")',
+    "ฟุต": r"(?:ฟุต|ft(?![a-zA-Z])|feet)",
+    "กิโลกรัม": r"(?:กิโลกรัม|กิโล|กก\.?|kg|kilo)",
+    "กรัม": r"(?:กรัม|g(?![a-zA-Z])|gram)",
+    "คู่": r"คู่",
+}
+
+
+def parse_size_spec(query: str) -> Optional[Tuple[str, str]]:
+    """ดึงขนาดที่ถาม: 'หม้อหุงข้าว ขนาด 1 ลิตร' → ('1','ลิตร'), 'พัดลม 16 นิ้ว' → ('16','นิ้ว')
+    คืน None ถ้าไม่มีตัวเลข+หน่วย (ราคา/เงื่อนไขอื่นไม่นับ)"""
+    t = (query or "").lower()
+    num = r"(\d+(?:\.\d+)?)"
+    for unit, pat in SIZE_UNIT_PATTERNS.items():
+        m = re.search(num + r"\s*" + pat, t)
+        if m:
+            return m.group(1), unit
+    return None
+
+
+def _name_matches_size(name: str, value: str, unit: str) -> bool:
+    """ชื่อสินค้าตรงขนาดที่ถามไหม: ('1','ลิตร') ตรง '1ลิตร'/'1 ล.'/'1L'/'1.0L'
+    แต่ไม่ตรง '1.4L' (ขนาดต่างกัน)"""
+    pat = SIZE_UNIT_PATTERNS.get(unit)
+    if not pat:
+        return False
+    n = (name or "").lower()
+    v = re.escape(value) + r"(?:\.0)?"
+    return bool(re.search(v + r"\s*" + pat, n))
 
 
 MIN_SALES_FLOOR = int(os.getenv("MIN_SALES_FLOOR", "500") or 500)
@@ -1510,6 +1545,8 @@ def search_products(db: Session, query: str) -> list:
     # คำพ้อง/การันต์ไทย (ชาร์ท=ชาร์จ, บลูธูธ=บลูทูธ, iphone=ไอโฟน, type-c=type c)
     q = strip_question_suffix(_nfc(normalize_query(q)))
     min_price, max_price = parse_price_conditions(query)
+    # ขนาดที่ลูกค้าถาม ("1 ลิตร"/"16 นิ้ว") — แยกไปกรองท้ายสุด ไม่ใช่ตัดทิ้ง
+    size_spec = parse_size_spec(query)
     # คำหลักจริงๆ: ตัดคำนำหน้าเล่นๆ + เงื่อนไขราคา + สเปคขนาด → "อยากได้หูฟังไม่เกิน 300" = "หูฟัง"
     q_core = strip_spec_phrase(strip_price_phrase(strip_filler_prefix(q)))
     if not q_core:  # ทั้งคำค้นเป็นสเปคล้วน ("16 นิ้ว") — กันค่าว่างไปแมตช์ทุกตัว ("" in cat = True เสมอ)
@@ -1652,6 +1689,13 @@ def search_products(db: Session, query: str) -> list:
             if not budget_hits:
                 return []  # มีชื่อตรงแต่ไม่มีตัวในงบ → ไม่เอาของมั่วมาแทน (สุจริต)
             hits = budget_hits
+        if size_spec:
+            # กรองขนาด: "หม้อหุงข้าว 1 ลิตร" ต้องโชว์เฉพาะ 1 ลิตร ไม่ใช่ 1.4/1.8/2.2 ปน
+            size_hits = [h for h in hits if _name_matches_size(h[0].name or "", size_spec[0], size_spec[1])]
+            if size_hits:
+                hits = size_hits
+            else:
+                return []  # มีสินค้าตรงชื่อแต่ไม่มีขนาดที่ถาม → สุจริต ไม่เอาขนาดอื่นมั่วมาแทน
         hits.sort(key=lambda pw: (pw[2], pw[1], pw[0].ai_score or 0), reverse=True)
         return [p for p, _, _ in hits[:5]]
 
