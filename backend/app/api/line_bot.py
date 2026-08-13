@@ -19,6 +19,7 @@ from app.db import SessionLocal, get_db
 from app import models
 from app.services.product_cards import product_cards_message, link_button_message
 from app.services.category import guess_category, CATEGORY_KEYWORDS, normalize_query
+from app.services.web_search import web_search_reply
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -863,7 +864,7 @@ INTENT_LABELS = {
     "wismo": "ทวงพัสดุ", "remember": "จำความชอบ", "delete": "ลบข้อมูล",
     "new": "มีอะไรใหม่", "link": "ส่งลิงก์", "guide": "คู่มือค้น",
     "campaign": "แคมเปญ", "admin": "แอดมิน", "error": "ผิดพลาด",
-    "emotion": "ระบายอารมณ์",
+    "emotion": "ระบายอารมณ์", "web": "ค้นเน็ต",
 }
 
 
@@ -1540,6 +1541,33 @@ def detect_emotion(text: str):
     return None
 
 
+# --- ค้นข้อมูลเน็ต/ความรู้ทั่วไป (Tavily) ---
+WEB_SEARCH_PREFIXES = ("ค้นเน็ต", "ถามเน็ต", "หาข้อมูล", "ค้นเว็บ", "หาในเน็ต", "เสิร์ช", "search")
+QUESTION_FALLBACK_MARKERS = ("วิธี", "ยังไง", "ยังงัย", "คืออะไร", "ทำไม", "เมื่อไหร่", "เมื่อไร", "แปลว่า", "รู้ไหม")
+
+
+def is_web_search_request(text: str) -> bool:
+    """ลูกค้าสั่งค้นเน็ตตรงๆ ('ค้นเน็ต ...' / 'ถามเน็ต ...') → ค้นข้อมูลทั่วไป"""
+    t = (text or "").strip().lower()
+    return any(t.startswith(p) for p in WEB_SEARCH_PREFIXES)
+
+
+def looks_like_question(text: str) -> bool:
+    """ค้นสินค้าไม่เจอ + หน้าตาเป็นคำถามความรู้ (วิธี/ยังไง/ทำไม...) → น่าจะอยากรู้ข้อมูลทั่วไป"""
+    t = (text or "").strip().lower().replace(" ", "")
+    return any(m in t for m in QUESTION_FALLBACK_MARKERS)
+
+
+def _web_search_text(raw: str) -> str:
+    """ตัดคำนำหน้า 'ค้นเน็ต' ออก เหลือคำถามจริง"""
+    t = (raw or "").strip()
+    for p in WEB_SEARCH_PREFIXES:
+        if t.lower().startswith(p):
+            t = t[len(p):].lstrip(" :：")
+            break
+    return t.strip()
+
+
 def notify_owner_stuck(user, text: str) -> bool:
     """บอทช่วยลูกค้าไม่ได้ → Push แจ้งเตือนเจ้าของร้าน (ADMIN_LINE_USER_ID)
     กันสแปม: 1 ครั้ง/cooldown ต่อลูกค้า (cooldown เก็บในหน่วยความจำ —
@@ -1656,6 +1684,10 @@ def message_text(event):
             _etype, emo_reply = detect_emotion(normalized_text)
             reply = TextSendMessage(text=emo_reply, quick_reply=quick_reply_items())
             intent = 'emotion'
+        elif is_web_search_request(normalized_text):
+            # ค้นข้อมูลเน็ต/ความรู้ทั่วไป (Tavily) — ลูกค้าพิมพ์ "ค้นเน็ต ..."
+            reply = TextSendMessage(text=web_search_reply(_web_search_text(normalized_text)))
+            intent = 'web'
         else:
             # พิมพ์อย่างอื่น (เช่น "หูฟัง" "อยากได้กระติกน้ำ" "หูฟังไม่เกิน 300") —
             # ค้นสินค้าที่ตรง (รองรับเงื่อนไขราคา); ไม่ตรง → บอกตรงๆ ไม่มโน
@@ -1671,6 +1703,10 @@ def message_text(event):
                     reply = [reply, invite]
                 intent = 'search'
                 interest_cat = guess_category(normalized_text)
+            elif looks_like_question(normalized_text):
+                # ค้นสินค้าไม่เจอ + หน้าตาเป็นคำถามความรู้ (วิธี/ยังไง/ทำไม...) → ค้นเน็ต
+                reply = TextSendMessage(text=web_search_reply(normalized_text))
+                intent = 'web'
             else:
                 cat = guess_category(normalized_text)
                 alt = []

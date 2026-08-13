@@ -26,5 +26,7 @@ services:
         sync: false  # Shopee Affiliate Open API (รออนุมัติ → ได้ทางอีเมล)
       - key: SHOPEE_AFFILIATE_SECRET
         sync: false
+      - key: TAVILY_API_KEY
+        sync: false  # Tavily web search (ค้นข้อมูลเน็ต) — ฟรี 1,000 ครั้ง/เดือน ที่ tavily.com
       - key: LLM_PROVIDER
         value: groq
