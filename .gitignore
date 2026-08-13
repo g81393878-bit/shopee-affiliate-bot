@@ -30,6 +30,10 @@ docs/cron-setup.md
 *.db-shm
 *.db-wal
 
+# Generated exports / imports (CSV/XLSX from tools/ — run locally, never commit)
+*.csv
+*.xlsx
+
 # IDE
 .vscode/
 .idea/
