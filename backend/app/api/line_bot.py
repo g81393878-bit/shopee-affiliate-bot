@@ -405,15 +405,14 @@ def nosearch_alt_text(user_text: str, category: str, tone: str = "neutral") -> s
 
 
 def quick_reply_items() -> QuickReply:
-    """ปุ่มลัดแบบสากล (Quick Reply) — ลูกค้าแตะแทนพิมพ์"""
+    """ปุ่มลัดแบบสากล (Quick Reply) — ลูกค้าแตะแทนพิมพ์
+    3 ปุ่มพอ: 🔍 ค้นหาสินค้า · 🤖 คุยกับป้าเข็ม · 💬 ฝากคำถาม (ส่วนที่เหลือลูกค้า
+    พิมพ์เองได้ หรือกดจาก Rich Menu แถบติดหน้าจอ) — ปุ่มทุกตัวส่งข้อความที่
+    dispatch route ตรง intent ไม่หลุด "ค้นไม่เจอ"""
     return QuickReply(items=[
-        QuickReplyButton(action=MessageAction(label="🔍 ค้นสินค้า", text="ค้นสินค้า")),
-        QuickReplyButton(action=MessageAction(label="🛍️ หมวดสินค้า", text="หมวดสินค้า")),
-        QuickReplyButton(action=MessageAction(label="⭐ ขายดีวันนี้", text="วันนี้ขายอะไรดี")),
-        QuickReplyButton(action=MessageAction(label="🆕 ของใหม่", text="มีอะไรใหม่")),
-        QuickReplyButton(action=MessageAction(label="🔥 อันดับขายดี", text="อันดับขายดี")),
-        QuickReplyButton(action=MessageAction(label="💛 ทำไมต้องป้าเข็ม", text="ทำไมต้องซื้อกับป้าเข็ม")),
+        QuickReplyButton(action=MessageAction(label="🔍 ค้นหาสินค้า", text="ค้นสินค้า")),
         QuickReplyButton(action=MessageAction(label="🤖 คุยกับป้าเข็ม", text="คุยกับป้าเข็ม")),
+        QuickReplyButton(action=MessageAction(label="💬 ฝากคำถาม", text="ฝากคำถาม")),
     ])
 
 
@@ -468,15 +467,8 @@ def _ensure_menu(reply):
 
 
 def welcome_quick_reply() -> QuickReply:
-    """ปุ่มตอนแอดครั้งแรก — คุณค่าก่อน (ทำไมต้องป้าเข็ม) แล้วค่อยค้นหา"""
-    return QuickReply(items=[
-        QuickReplyButton(action=MessageAction(label="💛 ทำไมต้องป้าเข็ม", text="ทำไมต้องซื้อกับป้าเข็ม")),
-        QuickReplyButton(action=MessageAction(label="🔍 ค้นสินค้า", text="ค้นสินค้า")),
-        QuickReplyButton(action=MessageAction(label="🛍️ หมวดสินค้า", text="หมวดสินค้า")),
-        QuickReplyButton(action=MessageAction(label="⭐ ขายดีวันนี้", text="วันนี้ขายอะไรดี")),
-        QuickReplyButton(action=MessageAction(label="🔥 อันดับขายดี", text="อันดับขายดี")),
-        QuickReplyButton(action=MessageAction(label="🤖 คุยกับป้าเข็ม", text="คุยกับป้าเข็ม")),
-    ])
+    """ปุ่มตอนแอดครั้งแรก — ใช้ชุดเดียวกับเมนูหลัก (3 ปุ่ม สากล ไม่ซ้ำ Rich Menu)"""
+    return quick_reply_items()
 
 
 SEARCH_GUIDE = (
@@ -542,6 +534,7 @@ CONTACT_PHRASES = (
     "ติดต่อเจ้าของร้าน", "ติดต่อร้าน", "ติดต่อแม่เข็ม", "ติดต่อป้าเข็ม",
     "แอดไลน์", "ขอไลน์", "ไลน์แม่เข็ม", "ไลน์ป้าเข็ม", "ขอไลน์แม่เข็ม", "ขอไลน์ป้าเข็ม",
     "เบอร์โทรแม่เข็ม", "เบอร์โทรป้าเข็ม", "เบอร์โทร",
+    "ฝากคำถาม", "ฝากข้อความ", "อยากถาม", "มีคำถามจะถาม", "ติดต่อแม่ค้า", "ติดต่อแม่เข็ม",
     "แม่เข็มอยู่ไหม", "แม่เข็มอยู่มั้ย", "ป้าเข็มอยู่ไหม", "ป้าเข็มอยู่มั้ย",
     "แม่เข็มอยู่หรือเปล่า", "แม่เข็มอยู่เปล่า", "ป้าเข็มอยู่หรือเปล่า", "ป้าเข็มอยู่เปล่า",
 )
@@ -1979,7 +1972,13 @@ def emotion_reply(etype: str, tone: str = "neutral") -> str:
 
 # --- ค้นข้อมูลเน็ต/ความรู้ทั่วไป (Tavily) ---
 WEB_SEARCH_PREFIXES = ("ค้นเน็ต", "ถามเน็ต", "หาข้อมูล", "ค้นเว็บ", "หาในเน็ต", "เสิร์ช", "search")
-QUESTION_FALLBACK_MARKERS = ("วิธี", "ยังไง", "ยังงัย", "คืออะไร", "ทำไม", "เมื่อไหร่", "เมื่อไร", "แปลว่า", "รู้ไหม")
+QUESTION_FALLBACK_MARKERS = (
+    # เดิม: คำถามความรู้
+    "วิธี", "ยังไง", "ยังงัย", "คืออะไร", "ทำไม", "เมื่อไหร่", "เมื่อไร", "แปลว่า", "รู้ไหม",
+    # ขยาย (สากล/ยอดนิยม — บอทค้นเน็ตให้อัตโนมัติ ไม่ต้องพิมพ์ "ค้นเน็ต" นำหน้า)
+    "อะไร", "เท่าไหร่", "กี่บาท", "ที่ไหน", "ใคร", "อย่างไร", "หมายความ",
+    "ความหมาย", "ขั้นตอน", "ยอดนิยม", "วันนี้",
+)
 
 
 def is_web_search_request(text: str) -> bool:
@@ -2158,8 +2157,10 @@ def message_text(event):
                     reply = [reply, invite]
                 intent = 'search'
                 interest_cat = guess_category(normalized_text)
-            elif looks_like_question(normalized_text):
-                # ค้นสินค้าไม่เจอ + หน้าตาเป็นคำถามความรู้ (วิธี/ยังไง/ทำไม...) → ค้นเน็ต
+            elif looks_like_question(normalized_text) and guess_category(normalized_text) == "อื่นๆ":
+                # คำถามความรู้สากล/ยอดนิยม (วิธี/คืออะไร/ทำไม/เท่าไหร่/วันนี้...) →
+                # ค้นเน็ตให้อัตโนมัติ ไม่ต้องพิมพ์ "ค้นเน็ต" นำหน้า
+                # กันพลาด: ถ้าคำถามมีคำหมวดสินค้าแฝง ("หูฟังอะไรดี") → เสนอของในร้านแทน
                 reply = TextSendMessage(text=web_search_reply(normalized_text))
                 intent = 'web'
             else:
