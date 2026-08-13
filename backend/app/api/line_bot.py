@@ -267,6 +267,104 @@ def is_greeting(text: str) -> bool:
     return t.startswith("สวัสดี") and len(t) <= 12
 
 
+# --- ปรับโทนภาษาให้เหมาะทุกวัย (วัยรุ่น/ผู้สูงอายุ) จากสไตล์การพิมพ์ ---
+YOUTH_SIGNALS = ("555", "มั้ย", "คับ", "งับ", "lol", "ป้ายยา", "ไฟลุก", "จัดให้", "แฮร่")
+ELDER_SIGNALS = ("หลาน", "ขอรบกวน", "รบกวน", "ไม่ถนัด", "ไม่เก่ง", "ขอบพระคุณ",
+                 "กราบ", "กลัวโดนหลอก", "โดนหลอก", "ครับผม", "ไม่ทราบ")
+
+_tone_memory: dict = {}
+
+
+def detect_tone(text: str) -> str:
+    """เดาโทนจากสไตล์ข้อความ: youth / elder / neutral (ไม่เดาเกินเหตุ)"""
+    t = (text or "").lower()
+    y = sum(1 for s in YOUTH_SIGNALS if s in t)
+    e = sum(1 for s in ELDER_SIGNALS if s in t)
+    if e > y:
+        return "elder"
+    if y > e:
+        return "youth"
+    return "neutral"
+
+
+def get_tone(line_user_id: str, text: str) -> str:
+    """โทนต่อผู้ใช้ (จำไว้ในหน่วยความจำ) — เดาแล้วจำไว้ใช้ข้อความถัดไป ไม่ต้องพิมพ์ซ้ำ"""
+    detected = detect_tone(text)
+    if detected != "neutral":
+        _tone_memory[line_user_id] = detected
+        return detected
+    return _tone_memory.get(line_user_id, "neutral")
+
+
+SEARCH_GUIDE_YOUTH = (
+    """🔍 ว่าเลย หาอะไร? พิมพ์แบบนี้:
+
+• "หูฟัง" — ตามชื่อ
+• "หูฟังไม่เกิน 300" — ตามงบ
+• "กระติก 200-400" — ช่วงราคา
+
+ส่งมา เดี๋ยวหาให้ไวๆ จ้า 😎"""
+)
+SEARCH_GUIDE_ELDER = (
+    """🔍 ค้นของค่ะ ไม่ยากเลย
+
+พิมพ์ชื่อของที่อยากได้ เช่น "หูฟัง"
+ถ้าอยากได้ไม่แพง พิมพ์ว่า "หูฟังไม่เกิน 300"
+
+ป้าเข็มจะหาให้ค่ะ"""
+)
+
+
+def search_guide(tone: str = "neutral") -> str:
+    """คู่มือค้นสินค้า ปรับโทนตามวัย (neutral = ข้อความเดิม)"""
+    if tone == "youth":
+        return SEARCH_GUIDE_YOUTH
+    if tone == "elder":
+        return SEARCH_GUIDE_ELDER
+    return SEARCH_GUIDE
+
+
+def greeting_text_for(user_name: str, tone: str = "neutral") -> str:
+    """ทักทาย + ทางเลือก ปรับโทนตามวัย (neutral = ข้อความเดิม)"""
+    if tone == "youth":
+        return (
+            f"""โย่ว {user_name} 👋 อยากได้อะไร?
+
+พิมพ์ชื่อของมาดิ เช่น "หูฟัง" "กระติกน้ำ"
+หรือใส่เงื่อนไข "หูฟังไม่เกิน 300"
+
+ป้าเข็มจัดให้ไวๆ จ้า 😎"""
+        )
+    if tone == "elder":
+        return (
+            f"""🤗 สวัสดีค่ะคุณ {user_name} ยินดีต้อนรับนะคะ
+
+อยากได้อะไร บอกป้าเข็มเป็นคำสั้นๆ ได้เลยค่ะ
+เช่น "หูฟัง" หรือ "กระติกน้ำ"
+
+หรือกดปุ่มข้างล่างก็ได้นะคะ ไม่ต้องรีบค่ะ"""
+        )
+    return greeting_text(user_name)
+
+
+def nosearch_fallback_text(user_text: str, tone: str = "neutral") -> str:
+    """ยังไม่มีในร้าน — ปรับโทนตามวัย"""
+    if tone == "youth":
+        return (f"""🔍 ยังไม่มี "{user_text}" ในร้านตอนนี้จ้า
+
+ลองพิมพ์สั้นๆ เช่น "หูฟัง" "กระติกน้ำ"
+หรือแตะปุ่มข้างล่างเลย 👇""")
+    if tone == "elder":
+        return (f"""🔍 ตอนนี้ยังไม่มี "{user_text}" ในร้านนะคะ
+
+ไม่ต้องกังวลค่ะ
+ลองพิมพ์ชื่อของสั้นๆ เช่น "หูฟัง" หรือ "กระติกน้ำ"
+หรือกดปุ่มข้างล่างก็ได้ค่ะ""")
+    return (f"""🔍 ยังไม่มี "{user_text}" ในร้านป้าเข็มตอนนี้จ๊ะ
+
+ลองพิมพ์ชื่อสินค้าสั้นๆ เช่น "หูฟัง" "กระติกน้ำ" หรือแตะปุ่มด้านล่างได้เลยค่ะ 👇""")
+
+
 def quick_reply_items() -> QuickReply:
     """ปุ่มลัดแบบสากล (Quick Reply) — ลูกค้าแตะแทนพิมพ์"""
     return QuickReply(items=[
@@ -1678,6 +1776,7 @@ def message_text(event):
     is_owner = line_user_id == ADMIN_LINE_USER_ID
     intent = 'unknown'
     interest_cat = None
+    tone = get_tone(line_user_id, normalized_text)
     
     db = SessionLocal()
     try:
@@ -1716,7 +1815,7 @@ def message_text(event):
             intent = 'campaign'
         elif is_greeting(normalized_text):
             # แนวสากล: ทักทาย + ปุ่มทางเลือก — ไม่ยิงสินค้าจนกว่าลูกค้าจะบอกความต้องการ
-            reply = TextSendMessage(text=greeting_text(user.name),
+            reply = TextSendMessage(text=greeting_text_for(user.name, tone),
                                     quick_reply=quick_reply_items())
             intent = 'greeting'
         elif normalized_text in WHY_US_PHRASES:
@@ -1724,7 +1823,7 @@ def message_text(event):
             reply = TextSendMessage(text=why_us_text())
             intent = 'why_us'
         elif normalized_text == "ค้นสินค้า":
-            reply = TextSendMessage(text=SEARCH_GUIDE,)
+            reply = TextSendMessage(text=search_guide(tone),)
             intent = 'guide'
         elif normalized_text in CATEGORY_MENU_PHRASES:
             # เดินดูร้านเอง — เมนูหมวดสินค้า (แตะหมวด → ของขายดีหมวดนั้น) แบบเข้าร้านจริง
@@ -1805,9 +1904,7 @@ def message_text(event):
                     intent = 'nosearch'
                     interest_cat = cat if cat != "อื่นๆ" else None
                 else:
-                    text = (f"🔍 ยังไม่มี \"{user_text}\" ในร้านป้าเข็มตอนนี้จ๊ะ\n\n"
-                            "ลองพิมพ์ชื่อสินค้าสั้นๆ เช่น \"หูฟัง\" \"กระติกน้ำ\" "
-                            "หรือแตะปุ่มด้านล่างได้เลยค่ะ 👇")
+                    text = nosearch_fallback_text(user_text, tone)
                     # บอทช่วยไม่ได้ → แจ้งเจ้าของ (กันสแปม: 1 ครั้ง/cooldown ต่อลูกค้า)
                     # ถ้าคนถามคือเจ้าของเอง ไม่ต้อง push แจ้งตัวเอง
                     if not is_owner and notify_owner_stuck(user, user_text):
