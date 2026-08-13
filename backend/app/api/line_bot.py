@@ -93,8 +93,9 @@ async def callback(request: Request, x_line_signature: str = Header(None)):
         logger.error(f"Invalid UTF-8 webhook body: {e}")
         raise HTTPException(status_code=400, detail="chatbot handle body error: invalid UTF-8")
     
-    # Bypass verification for testing/mock setup if signature is missing or secret is mock
-    if not x_line_signature or LINE_SECRET == "mock_line_channel_secret" or x_line_signature == "mock":
+    # Production: ต้องมีลายเซ็น LINE จริง (ปิดช่องรับ request ไม่มีลายเซ็น)
+    # Dev/test: secret ยังเป็น mock → เปิด bypass ไว้ให้ลองเครื่อง
+    if LINE_SECRET == "mock_line_channel_secret":
         try:
             body_json = json.loads(body_str)
             events = []
@@ -110,6 +111,9 @@ async def callback(request: Request, x_line_signature: str = Header(None)):
             logger.error(f"Error parsing mock event: {e}")
             raise HTTPException(status_code=400, detail=f"chatbot handle body error: {e}")
             
+    if not x_line_signature:
+        logger.warning("Webhook request rejected: missing x-line-signature")
+        raise HTTPException(status_code=400, detail="chatbot handle body error: missing signature")
     try:
         handler.handle(body_str, x_line_signature)
     except InvalidSignatureError:
@@ -320,7 +324,7 @@ BOT_MANUAL_PHRASES = (
     "คุยกับป้าเข็ม", "คุยกับแม่เข็ม",
     "คู่มือ", "บอททำอะไร", "บอทช่วย", "ทำอะไรได้บ้าง", "ช่วยอะไรได้",
     "วิธีใช้", "ใช้ยังไง", "ใช้ยังงัย", "ใช้งานยังไง", "สั่งยังไง",
-    "ฟีเจอร์", "มีอะไรบ้าง", "ค้นยังไง", "เทียบยังไง", "ขายดีคืออะไร",
+    "ฟีเจอร์", "ฟิวเจอร์", "ฟีเจอ", "มีอะไรบ้าง", "ค้นยังไง", "เทียบยังไง", "ขายดีคืออะไร",
     "จำไว้คืออะไร", "พัสดุยังไง", "ติดตามยังไง", "สั่งซื้อยังไง",
     "ซื้อยังไง", "ราคายังไง", "โปรยังไง", "ลดยังไง",
     # ระบบ/ความเป็นส่วนตัว/ราคา — ประชาชนถามเรื่องความปลอดภัยของข้อมูล
