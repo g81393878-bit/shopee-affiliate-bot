@@ -1485,7 +1485,8 @@ PRICE_PHRASE_RES = (
 
 # ท้ายคำถามแบบคนพิมพ์ (มีมั้ย/ได้ไหม/หน่อย...) — กันไปบังคับให้ชื่อสินค้าต้องมีคำถาม
 # ระวัง "ผ้าไหม" (ไหม = ผ้าเนื้อไหม ไม่ใช่คำถาม) — เฉพาะกรณีนี้เท่านั้นที่ยกเว้น
-QUESTION_SUFFIXES = ("มีมั้ย", "มีไหม", "ได้ไหม", "ได้มั้ย", "หน่อย", "เหรอ", "หรอ")
+QUESTION_SUFFIXES = ("หรือเปล่า", "หรือไม่", "หรือยัง", "มีมั้ย", "มีไหม", "ได้ไหม",
+                    "ได้มั้ย", "เปล่า", "หน่อย", "เหรอ", "หรอ", "หรือ")
 QUESTION_SUFFIXES_SHORT = ("ไหม", "มั้ย", "บ้าง")
 
 
@@ -1640,7 +1641,7 @@ def search_products(db: Session, query: str) -> list:
     if not q:
         return []
     # คำพ้อง/การันต์ไทย (ชาร์ท=ชาร์จ, บลูธูธ=บลูทูธ, iphone=ไอโฟน, type-c=type c)
-    q = strip_question_suffix(_nfc(normalize_query(q)))
+    q = strip_question_suffix(_strip_polite_suffix(_nfc(normalize_query(q))))
     min_price, max_price = parse_price_conditions(query)
     # ขนาดที่ลูกค้าถาม ("1 ลิตร"/"16 นิ้ว") — แยกไปกรองท้ายสุด ไม่ใช่ตัดทิ้ง
     size_spec = parse_size_spec(query)
