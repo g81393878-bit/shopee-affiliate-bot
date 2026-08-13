@@ -410,6 +410,7 @@ def quick_reply_items() -> QuickReply:
         QuickReplyButton(action=MessageAction(label="🔍 ค้นสินค้า", text="ค้นสินค้า")),
         QuickReplyButton(action=MessageAction(label="🛍️ หมวดสินค้า", text="หมวดสินค้า")),
         QuickReplyButton(action=MessageAction(label="⭐ ขายดีวันนี้", text="วันนี้ขายอะไรดี")),
+        QuickReplyButton(action=MessageAction(label="🆕 ของใหม่", text="มีอะไรใหม่")),
         QuickReplyButton(action=MessageAction(label="🔥 อันดับขายดี", text="อันดับขายดี")),
         QuickReplyButton(action=MessageAction(label="💛 ทำไมต้องป้าเข็ม", text="ทำไมต้องซื้อกับป้าเข็ม")),
         QuickReplyButton(action=MessageAction(label="🤖 คุยกับป้าเข็ม", text="คุยกับป้าเข็ม")),
@@ -1347,11 +1348,12 @@ def _customer_categories(db, line_user_id: str) -> list:
 
 
 def handle_new_arrivals(db, user, line_user_id: str, is_owner: bool = False):
-    """มีอะไรใหม่ — ดันสินค้าใหม่ในหมวดที่ลูกค้าเคยสนใจก่อน (แล้วค่อยของใหม่ทั่วไป)"""
+    """มีอะไรใหม่ — ดันสินค้าใหม่ในหมวดที่ลูกค้าเคยสนใจก่อน (แล้วค่อยของใหม่ทั่วไป)
+    ไม่บังคับยอดขาย (ของใหม่ = เน้นความใหม่ของสินค้าในคลัง ไม่ใช่ขายดี) —
+    ยังกรอง link_status == ok ตามนโยบายเด็ดขาด (เฉพาะของที่ตรวจลิงก์ผ่าน)"""
     cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
     recent = (db.query(models.Product)
                 .filter(models.Product.link_status == "ok",
-                        models.Product.sales_count >= MIN_SALES,
                         models.Product.created_at >= cutoff)
                 .order_by(models.Product.created_at.desc()).limit(50).all())
     cats = _customer_categories(db, line_user_id)
