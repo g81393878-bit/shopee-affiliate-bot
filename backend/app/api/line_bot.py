@@ -516,14 +516,29 @@ INSTALL_REPLY_OWNER = (
 )
 
 
+# หัวข้อที่ตอบละเอียดเฉพาะเจ้าของร้าน/คนอยากเปิดร้านเอง — ลูกค้าทั่วไปถาม → ตอบสั้นชี้ทางแทน
+# (กันข้อมูลตั้งระบบ/รายได้ของร้านหลุดไปหาลูกค้าทั่วไป)
+OWNER_ONLY_KWS = (
+    "สมัครไลน์oa", "สมัครlineoa", "สมัครไลน์", "สมัครบัญชีไลน์", "เปิดไลน์oa", "lineoaสมัคร",
+    "สมัครshopee", "สมัครaffiliate", "สมัครแอฟฟิลิเอต", "สมัครนายหน้า", "affiliateสมัคร",
+    "ได้เงินจริง", "ได้เงินยังไง", "ถอนเงิน", "ถอนค่าคอม", "เบิกเงิน",
+)
+OWNER_ONLY_CUSTOMER_REPLY = (
+    "💁‍♀️ เรื่องนี้เป็นข้อมูลของคนอยากเปิดร้านเองจ๊ะ — สำหรับคุณ ลองพิมพ์ชื่อสินค้า "
+    "หรือแตะ 'วันนี้ขายอะไรดี' ให้ป้าเข็มหาให้เลยค่ะ 😊"
+)
+
+
 def bot_manual_reply(text: str, is_owner: bool = False) -> str:
     """ตอบคำถามเรื่องบอทจากคู่มือ — เจอหัวข้อตามคำสำคัญตอบเฉพาะส่วน, ไม่ตรง → คู่มือเต็ม
-    หัวข้อติดตั้ง: ลูกค้า = ไม่ต้องติดตั้งอะไร / เจ้าของร้าน = ส่วนประกอบระบบ"""
+    หัวข้อติดตั้ง/สมัคร/รายได้ = เฉพาะเจ้าของร้าน; ลูกค้าทั่วไปได้คำตอบสั้นชี้ทาง"""
     t = (text or "").strip().lower().replace(" ", "")
     if any(k in t for k in INSTALL_KWS):
         return INSTALL_REPLY_OWNER if is_owner else INSTALL_REPLY_CUSTOMER
     for kws, section in BOT_MANUAL_SECTIONS:
         if any(k in t for k in kws):
+            if not is_owner and any(k in t for k in OWNER_ONLY_KWS):
+                return OWNER_ONLY_CUSTOMER_REPLY
             return section
     return BOT_MANUAL
 
