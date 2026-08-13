@@ -259,10 +259,27 @@ GREETING_WORDS = ("hello", "hi", "hey", "หวัดดี", "ทักทา�
                   "สวัสดีครับ", "สวัสดีค่ะ", "ฮัลโหล", "ไหว้")
 
 
+POLITE_SUFFIXES = ("ครับผม", "ครับ", "ค่ะ", "คะ", "จ๊ะ", "จ้า", "นะคะ", "นะ")
+
+
+def _strip_polite_suffix(text: str) -> str:
+    """ตัดคำลงท้ายสุภาพ (ค่ะ/ครับ/คะ/จ๊ะ/นะ...) ที่ลูกค้าพิมพ์ต่อท้าย — กัน phrase หลุดจาก intent"""
+    t = (text or "").strip()
+    for s in POLITE_SUFFIXES:
+        if t.endswith(s):
+            t = t[:-len(s)].strip()
+            break
+    return t
+
+
 def is_greeting(text: str) -> bool:
     """แยกคำทักทายล้วนๆ ออกจากคำค้น — 'สวัสดี อยากได้หูฟัง' ต้องไปค้น ไม่ใช่ทักทาย"""
     t = text.rstrip("?？!. ").strip().lower()
     if t in GREETING_WORDS:
+        return True
+    # "สวัสดีค่ะ ป้าเข็ม" / "สวัสดีนะคะ" → ยังเป็นทักทาย (ตัดชื่อบอท + คำสุภาพแล้วเทียบ)
+    t2 = _strip_polite_suffix(t).replace("ป้าเข็ม", "").replace("แม่เข็ม", "").replace(" ", "")
+    if t2 in GREETING_WORDS:
         return True
     return t.startswith("สวัสดี") and len(t) <= 12
 
@@ -1886,13 +1903,14 @@ def message_text(event):
         elif normalized_text == "ค้นสินค้า":
             reply = TextSendMessage(text=search_guide(tone),)
             intent = 'guide'
-        elif normalized_text in CATEGORY_MENU_PHRASES:
+        elif (normalized_text in CATEGORY_MENU_PHRASES
+              or _strip_polite_suffix(normalized_text) in CATEGORY_MENU_PHRASES):
             # เดินดูร้านเอง — เมนูหมวดสินค้า (แตะหมวด → ของขายดีหมวดนั้น) แบบเข้าร้านจริง
             reply = category_menu_message(db)
             intent = 'browse'
         elif normalized_text.startswith(CATEGORY_PICK_PREFIX):
             # แตะปุ่มหมวด (เช่น "ดูหมวดหูฟัง") → ของขายดีในหมวดนั้น
-            reply = browse_category_message(db, user, normalized_text[len(CATEGORY_PICK_PREFIX):], is_owner)
+            reply = browse_category_message(db, user, _strip_polite_suffix(normalized_text[len(CATEGORY_PICK_PREFIX):]), is_owner)
             intent = 'browse'
         elif is_bot_manual_request(normalized_text):
             # คุยกับป้าเข็ม = ตอบเรื่องบอทจากคู่มือเท่านั้น (ค้น/เทียบ/จำ/พัสดุ...) — ไม่ AI เดา
