@@ -161,6 +161,21 @@ def cmd_import_csv(args):
         for name, why in skipped_link:
             print(f"   ✗ {name[:50]} — {why}")
 
+    # self-heal: จัดหมวดซ้ำด้วย keywords ล่าสุด (กันของใหม่ตกหมวดผิดเพราะ
+    # keyword เพิ่งถูกเพิ่ม/แก้ทีหลัง) — ทำงานอัตโนมัติทุก import ไม่ต้องรัน recategorize แยก
+    if inserted:
+        changed, total = _recategorize(db)
+        if changed:
+            print(f"\n--- จัดหมวดใหม่ {len(changed)} ตัว (self-heal ด้วย keywords ล่าสุด) ---")
+            for name, old, new in changed[:30]:
+                print(f"   {(old or 'อื่นๆ')!r:14s} -> {new!r:14s}  {name[:45]}")
+        new_other = [p for p in inserted if (p.category or "อื่นๆ") == "อื่นๆ"]
+        if new_other:
+            print(f"\n⚠️ ของใหม่ {len(new_other)} ตัวยังตก 'อื่นๆ' (ชื่อไม่มีคำหมวดที่รู้จัก):")
+            print("   ต้องการให้ขึ้นเมนูหมวด → เพิ่ม keyword ใน backend/app/services/category.py แล้วรัน recategorize")
+            for p in new_other[:20]:
+                print(f"   • {p.name[:55]}")
+
     if inserted and args.analyze:
         top = sorted(inserted, key=lambda p: p.ai_score or 0, reverse=True)[: args.top]
         print(f"\n--- AI สร้างคอนเทนต์ {len(top)} ตัว (style={args.style}) ---")
@@ -185,24 +200,37 @@ def cmd_analyze(args):
     db.close()
 
 
-def cmd_recategorize(args):
-    """จัดหมวดสินค้าใหม่ทั้งหมดอัตโนมัติ (ใช้ CATEGORY_KEYWORDS ล่าสุด)
-    แก้ของที่เคยตก 'อื่นๆ' เพราะ keywords ยังไม่มีตอน import และของที่จัดผิด
-    (เช่น หม้อสแตนเลส → แก้วน้ำ เพราะคำว่า 'สแตนเลส' แย่งหมวด)"""
-    db = sessionmaker(bind=get_engine(args.sqlite))()
+def _recategorize(db, dry_run: bool = False):
+    """จัดหมวดสินค้าทั้งหมดด้วย CATEGORY_KEYWORDS ล่าสุด (self-heal) —
+    dry_run=True ไม่เขียน DB (ใช้ตรวจว่าจะย้ายอะไรก่อนรันจริง).
+    คืน (changed, total): changed = [(ชื่อ, หมวดเดิม, หมวดใหม่), ...]"""
     prods = db.query(models.Product).all()
     changed = []
     for p in prods:
         new_cat = guess_category(p.name or "")
         if new_cat != (p.category or "อื่นๆ"):
-            changed.append((p.name, p.category, new_cat))
-            p.category = new_cat
-    db.commit()
-    print(f"จัดหมวดใหม่: {len(changed)} ตัว (จากทั้งหมด {len(prods)} ตัว)")
+            changed.append((p.name, p.category or "อื่นๆ", new_cat))
+            if not dry_run:
+                p.category = new_cat
+    if changed and not dry_run:
+        db.commit()
+    return changed, len(prods)
+
+
+def cmd_recategorize(args):
+    """จัดหมวดสินค้าใหม่ทั้งหมดอัตโนมัติ (ใช้ CATEGORY_KEYWORDS ล่าสุด)
+    แก้ของที่เคยตก 'อื่นๆ' เพราะ keywords ยังไม่มีตอน import และของที่จัดผิด
+    (เช่น หม้อสแตนเลส → แก้วน้ำ เพราะคำว่า 'สแตนเลส' แย่งหมวด)"""
+    db = sessionmaker(bind=get_engine(args.sqlite))()
+    changed, total = _recategorize(db, dry_run=args.dry_run)
+    verb = "จะย้าย" if args.dry_run else "จัดหมวดใหม่"
+    print(f"{verb}: {len(changed)} ตัว (จากทั้งหมด {total} ตัว)")
     for name, old, new in changed[:60]:
         print(f"  {(old or 'อื่นๆ')!r:16s} -> {new!r:16s}  {name[:40]}")
     if len(changed) > 60:
         print(f"  ... อีก {len(changed) - 60} ตัว")
+    if args.dry_run:
+        print("(dry-run — ยังไม่เขียน DB)")
     db.close()
 
 
@@ -378,7 +406,8 @@ def main():
     p_links = sub.add_parser("check-links", help="ตรวจลิงก์ affiliate ว่าตาย/redirect ผิดหรือยัง")
     p_links.add_argument("--delete", action="store_true", help="ลบสินค้าที่ตรวจว่า DEAD ออกจากตาราง")
     sub.add_parser("fix-scores", help="คำนวณคะแนนใหม่ทุกตัว")
-    sub.add_parser("recategorize", help="จัดหมวดสินค้าใหม่ทั้งหมดอัตโนมัติ (ใช้ keywords ล่าสุด)")
+    p_recat = sub.add_parser("recategorize", help="จัดหมวดสินค้าใหม่ทั้งหมดอัตโนมัติ (ใช้ keywords ล่าสุด)")
+    p_recat.add_argument("--dry-run", action="store_true", help="โชว์ว่าจะย้ายอะไร โดยยังไม่เขียน DB")
     p_cust = sub.add_parser("customers", help="สรุปความสนใจลูกค้าจาก chat_logs (ต่อยอดการตลาด)")
     p_cust.add_argument("--export", help="ส่งออก chat_logs ทั้งหมดเป็น CSV")
 
