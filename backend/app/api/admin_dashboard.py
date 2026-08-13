@@ -297,6 +297,65 @@ def admin_create_product(_: None = Depends(require_admin),
         db.close()
 
 
+# ---------------------------------------------------------------------------
+# Shopee Affiliate Open API — สถานะ + ค้นจากคลัง (credentials ยังรออนุมัติ)
+# ---------------------------------------------------------------------------
+
+def _shopee_api_ready() -> bool:
+    return bool((os.getenv("SHOPEE_AFFILIATE_PARTNER_ID") or "").strip()) and \
+           bool((os.getenv("SHOPEE_AFFILIATE_SECRET") or "").strip())
+
+
+@router.get("/api/admin/shopee-api/status")
+def admin_shopee_api_status(_: None = Depends(require_admin)):
+    partner_set = bool((os.getenv("SHOPEE_AFFILIATE_PARTNER_ID") or "").strip())
+    secret_set = bool((os.getenv("SHOPEE_AFFILIATE_SECRET") or "").strip())
+    return {
+        "configured": partner_set and secret_set,
+        "partner_id_set": partner_set,
+        "secret_set": secret_set,
+        "message": ("✅ พร้อมใช้งาน" if (partner_set and secret_set)
+                    else "ยังไม่ได้ตั้งค่า SHOPEE_AFFILIATE_PARTNER_ID / SECRET — "
+                         "รอ Shopee อนุมัติ Open API (เกณฑ์ >1,000 ออเดอร์/เดือน) แล้วใส่ค่าลง Render"),
+    }
+
+
+@router.post("/api/admin/shopee-api/search")
+def admin_shopee_api_search(_: None = Depends(require_admin),
+                            keyword: str = Form(""),
+                            limit: int = Form(10)):
+    """ค้นสินค้าทั้งคลังจาก Shopee Affiliate Open API (อ่านอย่างเดียว ไม่เขียน DB)."""
+    if not _shopee_api_ready():
+        raise HTTPException(status_code=503,
+                            detail="ยังไม่ได้ตั้งค่า SHOPEE_AFFILIATE_PARTNER_ID / SECRET — รออนุมัติ Open API ก่อน")
+    keyword = (keyword or "").strip()
+    limit = max(1, min(50, int(limit)))
+    try:
+        from app.services.shopee_api import ShopeeAffiliateClient
+        client = ShopeeAffiliateClient()
+        data = client.search_products(keyword=keyword or None, limit=limit)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)[:200])
+    except Exception as e:
+        logger.error(f"Shopee API search failed: {e}")
+        raise HTTPException(status_code=502, detail=f"Shopee API error: {str(e)[:200]}")
+    nodes = data.get("nodes", []) if isinstance(data, dict) else []
+    items = [{
+        "item_id": n.get("itemId"),
+        "name": n.get("productName"),
+        "offer_link": n.get("offerLink"),
+        "product_link": n.get("productLink"),
+        "image_url": n.get("imageUrl"),
+        "price_min": n.get("priceMin"),
+        "price_max": n.get("priceMax"),
+        "commission_rate": n.get("commissionRate"),
+        "sales": n.get("sales"),
+        "rating": n.get("ratingStar"),
+        "shop_name": n.get("shopName"),
+    } for n in nodes]
+    return {"total": len(items), "items": items}
+
+
 @router.post("/api/admin/products/{pid}")
 def admin_update_product(pid: int, _: None = Depends(require_admin),
                          name: str = Form(None), category: str = Form(None),

@@ -83,6 +83,15 @@ a.del { color:var(--red); cursor:pointer; text-decoration:underline; margin-left
     <div id="viewStats">
       <div class="cards" id="statCards"></div>
       <section class="panel">
+        <h3>🔌 Shopee API <span id="shopeeStatus" class="badge none">กำลังตรวจสอบ…</span></h3>
+        <div id="shopeeBody" style="font-size:13px;color:var(--gray)">…</div>
+        <div class="filters" style="margin-top:10px">
+          <input id="shopeeQ" placeholder="🔍 ค้นสินค้าจากคลัง Shopee API (ต้องตั้งค่า API ก่อน)" onkeydown="if(event.key==='Enter')shopeeSearch()">
+          <button onclick="shopeeSearch()">ค้น</button>
+        </div>
+        <div id="shopeeResults"></div>
+      </section>
+      <section class="panel">
         <h3>🔥 หมวดที่มีสินค้ามากสุด</h3>
         <table><thead><tr><th>หมวด</th><th>จำนวน</th></tr></thead><tbody id="catRows"></tbody></table>
       </section>
@@ -194,7 +203,7 @@ async function init() {
     await api('/api/admin/session');
     $('login').classList.add('hidden');
     $('app').classList.remove('hidden');
-    loadStats(); loadCategories(); loadProducts();
+    loadStats(); loadCategories(); loadProducts(); loadShopeeStatus();
   } catch (e) {
     if (e.message === 'unauth') { $('app').classList.add('hidden'); $('login').classList.remove('hidden'); }
   }
@@ -216,7 +225,7 @@ function showTab(t) {
   $('viewProducts').classList.toggle('hidden', t !== 'products');
   $('tabStats').classList.toggle('active', t === 'stats');
   $('tabProducts').classList.toggle('active', t === 'products');
-  if (t === 'stats') loadStats();
+  if (t === 'stats') { loadStats(); loadShopeeStatus(); }
 }
 
 // ---- stats ----
@@ -239,6 +248,39 @@ async function loadStats() {
     $('topRows').innerHTML = s.top_sellers.map((p, i) => `<tr><td>${i+1}</td><td>${esc(p.name)}</td><td>฿${p.price.toLocaleString()}</td><td>${p.sales.toLocaleString()}</td><td>฿${p.commission.toLocaleString()}</td></tr>`).join('');
     $('newRows').innerHTML = s.newest.map((p, i) => `<tr><td>${i+1}</td><td>${esc(p.name)}</td><td>${esc(p.category || '')}</td><td>฿${p.price.toLocaleString()}</td></tr>`).join('');
   } catch (e) { alert(e.message); }
+}
+
+// ---- shopee api ----
+async function loadShopeeStatus() {
+  try {
+    const s = await api('/api/admin/shopee-api/status');
+    const badge = $('shopeeStatus');
+    if (s.configured) {
+      badge.textContent = 'พร้อม';
+      badge.className = 'badge ok';
+      $('shopeeBody').innerHTML = '✅ ตั้งค่าแล้ว — ค้นสินค้าจากคลัง Shopee ได้เลย (พิมพ์คำค้นแล้วกด ค้น)';
+    } else {
+      badge.textContent = 'รออนุมัติ';
+      badge.className = 'badge none';
+      $('shopeeBody').textContent = '⏳ ' + s.message;
+    }
+  } catch (e) { /* ignore */ }
+}
+async function shopeeSearch() {
+  const q = $('shopeeQ').value.trim();
+  if (!q) { $('shopeeResults').textContent = ''; return; }
+  $('shopeeResults').innerHTML = 'กำลังค้น…';
+  try {
+    const fd = new FormData();
+    fd.append('keyword', q);
+    fd.append('limit', '10');
+    const d = await api('/api/admin/shopee-api/search', { method: 'POST', body: fd });
+    $('shopeeResults').innerHTML = d.items.map(n => `
+      <div style="padding:8px 0;border-bottom:1px solid var(--light);font-size:13px">
+        <div><b>${esc(n.name)}</b> · ฿${(n.price_min||0).toLocaleString()}–${(n.price_max||0).toLocaleString()}</div>
+        <div style="color:var(--gray)">คอม ${esc(n.commission_rate||'-')} · ขาย ${(n.sales||0).toLocaleString()} · ${esc(n.shop_name||'')}</div>
+      </div>`).join('') || '<div style="color:var(--gray)">ไม่พบรายการ</div>';
+  } catch (e) { $('shopeeResults').innerHTML = `<div style="color:var(--red)">${esc(e.message)}</div>`; }
 }
 
 // ---- products ----
