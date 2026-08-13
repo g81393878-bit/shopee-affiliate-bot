@@ -2,9 +2,10 @@
 """สร้าง + ตรวจสอบ cron jobs ของป้าเข็มบน cron-job.org ผ่าน API (idempotent)
 
 วิธีใช้:
-    CJKEY=<API key จาก cron-job.org Settings> python tools/cron_jobs.py
+    python tools/cron_jobs.py                  # อ่าน CJKEY + CRON_TOKEN จาก backend/.env
+    CJKEY=<API key> python tools/cron_jobs.py  # หรือส่ง CJKEY ผ่าน env แทน
 
-- อ่าน CRON_TOKEN จาก backend/.env (ต้องมีบรรทัด CRON_TOKEN=...)
+- อ่าน CJKEY + CRON_TOKEN จาก backend/.env (fallback เมื่อไม่มีใน os.environ)
 - LIST jobs เดิมก่อน → สร้างเฉพาะตัวที่ยังไม่มี (เทียบด้วย title) → LIST อีกครั้งยืนยัน
 - รันซ้ำได้ปลอดภัย (ไม่สร้างซ้ำ)
 - API key เป็นความลับ — ไม่ถูกเขียนลงไฟล์/ไม่ขึ้น commit (อ่านจาก env เท่านั้น)
@@ -30,14 +31,18 @@ API = "https://api.cron-job.org"
 GET, POST = 0, 1  # requestMethod ตาม docs ของ cron-job.org
 
 
-def load_cron_token():
+def _env_value(key):
+    """อ่านค่า key จาก backend/.env (gitignored) — คืน None ถ้าไม่พบ"""
     env_path = os.path.join(os.path.dirname(__file__), "..", "backend", ".env")
-    with open(env_path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line.startswith("CRON_TOKEN="):
-                return line.split("=", 1)[1].strip().strip('"').strip("'")
-    raise SystemExit("CRON_TOKEN ไม่พบใน backend/.env")
+    try:
+        with open(env_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith(key + "="):
+                    return line.split("=", 1)[1].strip().strip('"').strip("'")
+    except FileNotFoundError:
+        pass
+    return None
 
 
 def api_call(method, path, key, payload=None):
@@ -85,13 +90,16 @@ def make_job(title, url, method, schedule):
 
 
 def main():
-    key = os.environ.get("CJKEY")
+    key = os.environ.get("CJKEY") or _env_value("CJKEY")
     if not key:
         raise SystemExit(
             "ยังไม่มี API key — เอามาจาก cron-job.org Console → Settings → API Key\n"
-            "แล้วรัน:  CJKEY=<key> python tools/cron_jobs.py"
+            "แล้วรัน:  CJKEY=<key> python tools/cron_jobs.py\n"
+            "(หรือเพิ่มบรรทัด CJKEY=... ใน backend/.env)"
         )
-    token = load_cron_token()
+    token = _env_value("CRON_TOKEN")
+    if not token:
+        raise SystemExit("CRON_TOKEN ไม่พบใน backend/.env")
 
     every_10_min = {"hours": [-1], "minutes": [0, 10, 20, 30, 40, 50]}
     every_2_hours = {"hours": list(range(0, 24, 2)), "minutes": [0]}
