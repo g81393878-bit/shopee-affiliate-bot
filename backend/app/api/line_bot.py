@@ -19,6 +19,7 @@ from app.db import SessionLocal, get_db
 from app import models
 from app.services.product_cards import product_cards_message, link_button_message
 from app.services.category import guess_category, CATEGORY_KEYWORDS
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -266,6 +267,7 @@ def quick_reply_items() -> QuickReply:
         QuickReplyButton(action=MessageAction(label="⭐ ขายดีวันนี้", text="วันนี้ขายอะไรดี")),
         QuickReplyButton(action=MessageAction(label="🔥 อันดับขายดี", text="อันดับขายดี")),
         QuickReplyButton(action=MessageAction(label="💛 ทำไมต้องป้าเข็ม", text="ทำไมต้องซื้อกับป้าเข็ม")),
+        QuickReplyButton(action=MessageAction(label="📞 คุยกับแม่เข็ม", text="คุยกับแม่เข็ม")),
     ])
 
 
@@ -296,6 +298,7 @@ def welcome_quick_reply() -> QuickReply:
         QuickReplyButton(action=MessageAction(label="🔍 ค้นสินค้า", text="ค้นสินค้า")),
         QuickReplyButton(action=MessageAction(label="⭐ ขายดีวันนี้", text="วันนี้ขายอะไรดี")),
         QuickReplyButton(action=MessageAction(label="🔥 อันดับขายดี", text="อันดับขายดี")),
+        QuickReplyButton(action=MessageAction(label="📞 คุยกับแม่เข็ม", text="คุยกับแม่เข็ม")),
     ])
 
 
@@ -309,6 +312,24 @@ SEARCH_GUIDE = (
 
 # --- ทำไมต้องซื้อกับป้าเข็ม (คุณค่าที่ประชาชนได้ — ข้อมูลจริง ไม่โฆษณาเกินจริง) ---
 WHY_US_PHRASES = ("ทำไมต้องซื้อกับป้าเข็ม", "ทำไมต้องป้าเข็ม", "ทำไมต้องซื้อ", "เหตุผล", "ข้อดีของร้าน", "ป้าเข็มดียังไง")
+
+# --- คุยกับแม่เข็ม — ตอบด้วย Groq (AI สวมบทแม่เข็ม) / บอทช่วยไม่ได้ → แจ้งเตือนเจ้าของร้าน ---
+HUMAN_PHRASES = (
+    "คุยกับแม่เข็ม", "คุยกับป้าเข็ม",
+    "คุยคนจริง", "คุยกับคนจริง", "คุยกับคน",
+    "ติดต่อแม่เข็ม", "ติดต่อป้าเข็ม", "ติดต่อเจ้าของร้าน", "ติดต่อร้าน",
+    "แอดไลน์", "ขอไลน์", "ไลน์แม่เข็ม", "ไลน์ป้าเข็ม", "ขอไลน์แม่เข็ม", "ขอไลน์ป้าเข็ม",
+    "เบอร์โทรแม่เข็ม", "เบอร์โทรป้าเข็ม",
+    "แม่เข็มอยู่ไหม", "แม่เข็มอยู่มั้ย", "ป้าเข็มอยู่ไหม", "ป้าเข็มอยู่มั้ย",
+    "แม่เข็มอยู่หรือเปล่า", "แม่เข็มอยู่เปล่า", "ป้าเข็มอยู่หรือเปล่า", "ป้าเข็มอยู่เปล่า",
+)
+HUMAN_CHAT_FALLBACK = (
+    "ขอโทษนะคะ ป้าเข็มยังสะดวกตอบไม่ทันตอนนี้ 😊 "
+    "ลองพิมพ์ชื่อสินค้า (เช่น \"หูฟังไม่เกิน 300\") ให้ป้าเข็มหาของให้ก่อนได้เลยจ๊ะ"
+)
+ESCALATE_NOTE = (
+    "\n\n📢 แจ้งแม่เข็มให้แล้วจ๊ะ ถ้าอยากคุยกับแม่เข็มโดยตรง พิมพ์ \"คุยกับแม่เข็ม\" ได้เลยค่ะ 😊"
+)
 
 # --- เทียบสินค้า A กับ B (แบบ Amazon "Compare with": ข้อมูลจริงในคลัง ไม่ AI เดา) ---
 COMPARE_PREFIXES = ("เปรียบเทียบราคา", "เปรียบเทียบ", "เทียบราคา", "เทียบ")
@@ -1175,6 +1196,94 @@ def get_or_create_line_user(db: Session, line_user_id: str) -> models.User:
     return user
 
 
+# --- คุยกับแม่เข็ม — ตอบด้วย Groq (AI สวมบทแม่เข็ม) / บอทช่วยไม่ได้ → แจ้งเตือนเจ้าของร้าน ---
+_last_escalate: dict = {}
+
+
+def is_human_request(text: str) -> bool:
+    """ลูกค้าขอคุยกับแม่เข็ม/คนจริง? (จับแบบยืดหยุ่น — พิมพ์ "อยากคุยกับแม่เข็มหน่อย" ก็โดน)"""
+    t = (text or "").strip().replace(" ", "")
+    return any(p in t for p in HUMAN_PHRASES)
+
+
+def chat_with_mom_khem(user_text: str, user_name: str) -> Optional[str]:
+    """คุยกับแม่เข็มผ่าน Groq — ตอบเป็นกันเองเหมือนเจ้าของร้านจริง (ปิดจบด้วย AI)
+    ล้มเหลวทุก key → คืน None (ให้ข้อความสำรองแทน) ไม่รบกวนเจ้าของทุกครั้ง"""
+    try:
+        from app.services.llm_clients import groq_clients
+        clients = groq_clients()
+        if not clients:
+            logger.warning("chat_with_mom_khem: ไม่มี GROQ_API_KEY")
+            return None
+        system = (
+            "คุณคือ 'แม่เข็ม' เจ้าของร้านค้าออนไลน์ \"ป้าเข็ม ขายของ\" บน LINE "
+            "เป็นนายหน้า affiliate ของ Shopee (ลูกค้าจ่ายราคาเท่า Shopee เป๊ะ "
+            "ค่านายหน้าจ่ายโดย Shopee/แบรนด์ ไม่ได้บวกขึ้นในราคา)\n\n"
+            "บทบาท: ตอบลูกค้าที่มาคุยกับแม่เข็มเป็นการส่วนตัว อย่างเป็นกันเอง ใช้ภาษาไทย "
+            "เหมือนคุณป้าขายของใจดี พูดสั้น กระชับ (ไม่เกิน ~6 บรรทัด) ไม่โฆษณาเกินจริง\n\n"
+            "สิ่งที่ร้านทำได้ (แนะนำลูกค้าเมื่อเหมาะสม):\n"
+            "- ค้นสินค้าตามชื่อ/งบ เช่น \"หูฟังไม่เกิน 300\" \"กระติกน้ำ\"\n"
+            "- เทียบสินค้า 2 ตัว เช่น \"เทียบ A กับ B\"\n"
+            "- \"วันนี้ขายอะไรดี\" = สินค้าแนะนำ / \"อันดับขายดี\" = อันดับยอดขาย\n"
+            "- \"จำไว้ ชอบหูฟัง\" = จำความชอบลูกค้า (จะแจ้งของใหม่/ราคาลง)\n"
+            "- ทวงถามพัสดุ: เราเป็นนายหน้า พัสดุตรวจได้ที่แอป Shopee\n\n"
+            "กฎ: ตอบตามจริง ไม่มโนราคา/ยอดขาย/โปรโมชัน ถ้าไม่แน่ใจให้บอกลูกค้า "
+            "พิมพ์ชื่อสินค้าให้บอทค้นให้ ถ้าลูกค้ายืนยันอยากคุยกับคนจริง ให้ตอบสุภาพ "
+            "ว่าแม่เข็มจะมาตอบกลับที่แชทนี้โดยเร็ว"
+        )
+        last_err = None
+        for client in clients:
+            try:
+                resp = client.chat.completions.create(
+                    model=settings.GROQ_MODEL,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": f"ลูกค้า: {user_name or 'ลูกค้า'}\n{user_text}"},
+                    ],
+                    temperature=0.7,
+                    max_tokens=400,
+                )
+                text = (resp.choices[0].message.content or "").strip()
+                return text[:1200] if text else None
+            except Exception as e:
+                last_err = e
+                logger.warning(f"Groq chat key {client.api_key[:8]}... failed: {e} — ลอง key ถัดไป")
+        logger.error(f"Groq chat failed with all keys: {last_err}")
+        return None
+    except Exception as e:
+        logger.error(f"chat_with_mom_khem error: {e}")
+        return None
+
+
+def notify_owner_stuck(user, text: str) -> bool:
+    """บอทช่วยลูกค้าไม่ได้ → Push แจ้งเตือนเจ้าของร้าน (ADMIN_LINE_USER_ID)
+    กันสแปม: 1 ครั้ง/cooldown ต่อลูกค้า (cooldown เก็บในหน่วยความจำ —
+    uvicorn 1 process พอเพียง; หลัง restart แจ้งได้อีกครั้ง ไม่เสียหาย)
+    คืน True ถ้าส่งจริง"""
+    uid = getattr(user, "line_user_id", None)
+    cooldown_min = int(os.getenv("ESCALATE_COOLDOWN_MINUTES", "360"))
+    last = _last_escalate.get(uid)
+    now = datetime.datetime.utcnow()
+    if last and (now - last).total_seconds() < cooldown_min * 60:
+        return False
+    _last_escalate[uid] = now
+    name = (getattr(user, "name", None) or "ลูกค้า").strip() or "ลูกค้า"
+    body = (f"🤔 ลูกค้าสงสัย — บอทช่วยไม่ได้\n"
+            f"👤 {name}\n"
+            f"💬 \"{(text or '')[:200]}\"\n"
+            f"🆔 {uid or 'ไม่ทราบ'}\n"
+            "📌 ตอบกลับได้ที่ LINE OA console — ลูกค้าแชทมาที่บอทอยู่แล้ว")
+    if "mock" in LINE_ACCESS_TOKEN.lower():
+        logger.info(f"[notify_owner] <- {name}: {text[:80]}")
+        return True
+    try:
+        line_bot_api.push_message(ADMIN_LINE_USER_ID, TextSendMessage(text=body))
+        return True
+    except Exception as e:
+        logger.warning(f"notify_owner_stuck push failed: {e}")
+        return False
+
+
 @handler.add(MessageEvent, message=TextMessage)
 def message_text(event):
     user_text = event.message.text.strip()
@@ -1228,6 +1337,11 @@ def message_text(event):
             # ทำไมต้องซื้อกับป้าเข็ม — คุณค่าที่ประชาชนได้ (ราคาเท่ากัน/ของจริง/ดูแล)
             reply = TextSendMessage(text=why_us_text())
             intent = 'why_us'
+        elif is_human_request(normalized_text):
+            # "คุยกับแม่เข็ม" — ตอบด้วย Groq (AI สวมบทแม่เข็ม) ปิดจบได้เอง ไม่รบกวนเจ้าของ
+            ai_text = chat_with_mom_khem(user_text, user.name)
+            reply = TextSendMessage(text=(ai_text or HUMAN_CHAT_FALLBACK))
+            intent = 'human'
         elif normalized_text == "ค้นสินค้า":
             reply = TextSendMessage(text=SEARCH_GUIDE,)
             intent = 'guide'
@@ -1277,10 +1391,13 @@ def message_text(event):
                                               is_owner=is_owner),
                     ]
                 else:
-                    reply = TextSendMessage(text=f"🔍 ยังไม่มี \"{user_text}\" ในร้านป้าเข็มตอนนี้จ๊ะ\n\n"
-                                                 "ลองพิมพ์ชื่อสินค้าสั้นๆ เช่น \"หูฟัง\" \"กระติกน้ำ\" "
-                                                 "หรือแตะปุ่มด้านล่างได้เลยค่ะ 👇",
-                                            quick_reply=quick_reply_items())
+                    text = (f"🔍 ยังไม่มี \"{user_text}\" ในร้านป้าเข็มตอนนี้จ๊ะ\n\n"
+                            "ลองพิมพ์ชื่อสินค้าสั้นๆ เช่น \"หูฟัง\" \"กระติกน้ำ\" "
+                            "หรือแตะปุ่มด้านล่างได้เลยค่ะ 👇")
+                    # บอทช่วยไม่ได้ → แจ้งเจ้าของ (กันสแปม: 1 ครั้ง/cooldown ต่อลูกค้า)
+                    if notify_owner_stuck(user, user_text):
+                        text += ESCALATE_NOTE
+                    reply = TextSendMessage(text=text, quick_reply=quick_reply_items())
                 intent = 'nosearch'  # รู้ว่าลูกค้าค้นอะไรไม่เจอ → เอาไปหาสินค้ามาเติม
                 interest_cat = cat if cat != "อื่นๆ" else None
     except Exception as e:
