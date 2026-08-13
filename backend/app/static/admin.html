@@ -115,6 +115,7 @@ a.del { color:var(--red); cursor:pointer; text-decoration:underline; margin-left
           <option value="price">ราคา</option>
           <option value="score">คะแนน AI</option>
         </select>
+        <button id="addBtn" onclick="openAdd()">➕ เพิ่มสินค้า</button>
       </div>
       <section class="panel">
         <table>
@@ -154,6 +155,24 @@ a.del { color:var(--red); cursor:pointer; text-decoration:underline; margin-left
     <div class="actions">
       <button id="saveBtn" onclick="saveProduct()">💾 บันทึก</button>
       <button id="cancelBtn" onclick="closeModal()">ยกเลิก</button>
+    </div>
+  </div>
+</div>
+
+<!-- modal เพิ่มสินค้า -->
+<div class="modal-bg hidden" id="addBg">
+  <div class="modal">
+    <h3>➕ เพิ่มสินค้า</h3>
+    <label>ชื่อสินค้า *</label><input id="aName" placeholder="เช่น กระติกน้ำ ESKIMO 2 ลิตร">
+    <label>ลิงก์ affiliate (s.shopee.co.th) *</label><input id="aUrl" placeholder="https://s.shopee.co.th/...">
+    <label>หมวด</label><input id="aCat" list="catList" placeholder="เช่น แก้วน้ำ / หูฟัง">
+    <label>ราคา (฿)</label><input id="aPrice" type="number" step="0.01" min="0" value="0">
+    <label>ค่านายหน้า (฿)</label><input id="aComm" type="number" step="0.01" min="0" value="0">
+    <label>ยอดขาย</label><input id="aSales" type="number" min="0" value="0">
+    <label>เรตติ้ง (0-5)</label><input id="aRating" type="number" step="0.1" min="0" max="5" value="0">
+    <div class="actions">
+      <button id="addSaveBtn" onclick="addProduct()">💾 บันทึก (ตรวจลิงก์อัตโนมัติ)</button>
+      <button id="addCancelBtn" onclick="closeAdd()">ยกเลิก</button>
     </div>
   </div>
 </div>
@@ -299,6 +318,29 @@ async function delProduct(id) {
 }
 function closeModal() { $('modalBg').classList.add('hidden'); }
 $('modalBg').onclick = e => { if (e.target === $('modalBg')) closeModal(); };
+
+// ---- add product ----
+function openAdd() { $('addBg').classList.remove('hidden'); }
+function closeAdd() { $('addBg').classList.add('hidden'); }
+$('addBg').onclick = e => { if (e.target === $('addBg')) closeAdd(); };
+async function addProduct() {
+  const fd = new FormData();
+  fd.append('name', $('aName').value);
+  fd.append('affiliate_url', $('aUrl').value);
+  fd.append('category', $('aCat').value);
+  fd.append('price', $('aPrice').value);
+  fd.append('commission', $('aComm').value);
+  fd.append('sales_count', $('aSales').value);
+  fd.append('rating', $('aRating').value);
+  try {
+    await api('/api/admin/products', { method: 'POST', body: fd });
+    closeAdd();
+    ['aName','aUrl','aCat'].forEach(id => $(id).value = '');
+    ['aPrice','aComm','aSales','aRating'].forEach(id => $(id).value = '0');
+    loadProducts(); loadStats(); loadCategories();
+    alert('✅ เพิ่มสินค้าแล้ว');
+  } catch (e) { alert(e.message); }
+}
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 init();

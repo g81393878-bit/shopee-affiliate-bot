@@ -26,6 +26,8 @@ from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
 from app import models
+from app.services.link_checker import check_affiliate_link
+from app.services.ai_analyzer import calculate_heuristic_score
 
 logger = logging.getLogger(__name__)
 
@@ -240,6 +242,60 @@ def admin_products(
 # ---------------------------------------------------------------------------
 # สินค้า: แก้ / ลบ
 # ---------------------------------------------------------------------------
+
+@router.post("/api/admin/products")
+def admin_create_product(_: None = Depends(require_admin),
+                         name: str = Form(...),
+                         affiliate_url: str = Form(...),
+                         category: str = Form(None),
+                         price: float = Form(0.0),
+                         commission: float = Form(0.0),
+                         sales_count: int = Form(0),
+                         rating: float = Form(0.0)):
+    """เพิ่มสินค้าทีละตัว — ตรวจลิงก์ affiliate ก่อนบันทึก (นโยบายเด็ดขาด)"""
+    db = _db()
+    try:
+        name = (name or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="ต้องระบุชื่อสินค้า")
+        url = (affiliate_url or "").strip()
+        if not url:
+            raise HTTPException(status_code=400, detail="ต้องระบุ affiliate_url (ลิงก์สั้น s.shopee.co.th)")
+        status, detail = check_affiliate_link(url)
+        if status != "OK":
+            raise HTTPException(status_code=400, detail=f"ลิงก์ตรวจไม่ผ่าน ({status}: {detail})")
+        ai_score = calculate_heuristic_score(
+            sales_count=sales_count or 0,
+            rating=float(rating or 0.0),
+            commission=float(commission or 0.0),
+            price=float(price or 0.0),
+        )
+        p = models.Product(
+            name=name,
+            category=(category or "").strip() or None,
+            price=price or 0.0,
+            commission=commission or 0.0,
+            sales_count=sales_count or 0,
+            rating=rating or 0.0,
+            affiliate_url=url,
+            link_status="ok",
+            ai_score=ai_score,
+        )
+        db.add(p)
+        db.commit()
+        db.refresh(p)
+        logger.info(f"Admin created product {p.id} ({name[:40]})")
+        return {"ok": True, "id": p.id}
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Admin create product failed: {e}")
+        raise HTTPException(status_code=400, detail=str(e)[:200])
+    finally:
+        db.close()
+
 
 @router.post("/api/admin/products/{pid}")
 def admin_update_product(pid: int, _: None = Depends(require_admin),
