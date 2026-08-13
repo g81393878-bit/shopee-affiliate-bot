@@ -1,26 +1,27 @@
-// ═══════════════════════════════════════════════════════════════
-// ป้าเข็ม ขายของ — เขียนคำถามลูกค้าลง Google ชีทอัตโนมัติ
-// ═══════════════════════════════════════════════════════════════
-// วิธีติดตั้ง (3 นาที ไม่ต้องเขียนโค้ด):
-//  1. เปิด https://sheets.google.com → สร้างชีทใหม่ (หรือเปิดชีทเดิม)
-//     ก๊อป **ID ชีท** จาก URL: https://docs.google.com/spreadsheets/d/<ID ตรงนี้>/edit
-//  2. เปิด https://script.google.com → "+ โปรเจกต์ใหม่"
-//  3. ลบโค้ดเดิมทิ้ง วางโค้ดนี้ทั้งไฟล์ แล้ว **ใส่ ID ชีท** ในบรรทัด SPREADSHEET_ID
-//  4. กด 💾 บันทึก → Deploy → New deployment → ประเภท "Web app"
-//     → Execute as: Me → เข้าถึง: Anyone → Deploy → ยอมรับสิทธิ์
-//  5. ก๊อป URL (https://script.google.com/macros/s/....../exec)
-//     ส่งให้ทีมตั้งค่า → ใส่เป็น SHEET_WEBHOOK_URL บน Render
-// ═══════════════════════════════════════════════════════════════
+// ============================================================
+// Pakhem bot - write customer messages to Google Sheet
+// ============================================================
+// Setup (3 min, no coding):
+//  1. Open https://sheets.google.com -> create a new sheet (or open existing)
+//     Copy the SHEET ID from the URL:
+//     https://docs.google.com/spreadsheets/d/<SHEET_ID_HERE>/edit
+//  2. Open https://script.google.com -> "+ New project"
+//  3. Delete ALL default code, paste THIS WHOLE FILE, then fill SPREADSHEET_ID below
+//  4. Click Save -> Deploy -> New deployment -> type "Web app"
+//     -> Execute as: Me -> Who has access: Anyone -> Deploy -> allow permissions
+//  5. Copy the URL (https://script.google.com/macros/s/....../exec)
+//     and send it to the team -> set as SHEET_WEBHOOK_URL on Render
+// ============================================================
 
-// ★ ต้องใส่! ID ของ Google ชีทที่ต้องการ (จาก URL ชีท — ดูวิธีติดตั้งข้อ 1)
-var SPREADSHEET_ID = '';   // เช่น '1AbCdEfGhIjKlMnOpQrStUvWxYz1234567890'
+// REQUIRED: ID of the target Google Sheet (see setup step 1)
+var SPREADSHEET_ID = '';   // e.g. '1AbCdEfGhIjKlMnOpQrStUvWxYz1234567890'
 
-var SHEET_NAME = 'คำถามลูกค้า';   // ชื่อชีทในไฟล์ (เปลี่ยนได้)
-var MAX_AGE_DAYS = 90;            // เก็บ 90 วันตาม PDPA — ลบของเก่าอัตโนมัติ
+var SHEET_NAME = 'คำถามลูกค้า';   // sheet tab name (changeable)
+var MAX_AGE_DAYS = 90;            // keep 90 days per PDPA - auto delete old rows
 
 function getSheet_() {
-  // สคริปต์ standalone (สร้างจาก script.google.com) ใช้ getActiveSpreadsheet()
-  // ไม่ได้ (คืน null → พัง 500) — ต้อง openById ด้วย ID ที่กรอกไว้ข้างบน
+  // A standalone script (created from script.google.com) CANNOT use
+  // getActiveSpreadsheet() (returns null -> 500 error). Use openById instead.
   var ss = SPREADSHEET_ID
     ? SpreadsheetApp.openById(SPREADSHEET_ID)
     : SpreadsheetApp.getActiveSpreadsheet();
@@ -29,7 +30,7 @@ function getSheet_() {
   if (!sh) {
     sh = ss.insertSheet(SHEET_NAME);
   }
-  // ตรวจ/สร้างหัวตารางให้ตรงเสมอ (รองรับชีทที่สร้างด้วยโค้ดเวอร์ชันเก่า 6 คอลัมน์)
+  // Always ensure the header row matches (also upgrades old 6-column sheets)
   var lastCol = sh.getLastColumn();
   if (lastCol < 1 || sh.getRange(1, 1, 1, 7).getValues()[0].join('') !== HEADER.join('')) {
     sh.getRange(1, 1, 1, 7).setValues([HEADER]);
@@ -43,7 +44,7 @@ function doPost(e) {
     var data = JSON.parse(e.postData.contents);
     var sh = getSheet_();
 
-    // คำสั่ง "ลบข้อมูลฉัน" (PDPA) — ลบทุกแถวของผู้ใช้นี้ออกจากชีท
+    // "ลบข้อมูลฉัน" (PDPA) - delete every row of this user from the sheet
     if (data.action === 'delete_user') {
       var uid = String(data.line_user_id || '');
       var last = sh.getLastRow();
@@ -55,7 +56,7 @@ function doPost(e) {
       return json_({ ok: true, deleted_rows: last - sh.getLastRow() });
     }
 
-    // เขียนข้อความใหม่
+    // Append new row
     sh.appendRow([
       data.created_at || new Date().toISOString(),
       data.line_user_id || '',
@@ -66,7 +67,7 @@ function doPost(e) {
       data.reply_text || ''
     ]);
 
-    // ลบแถวเก่ากว่า 90 วัน (PDPA — กันชีทโตไม่มีที่สิ้นสุด)
+    // Delete rows older than 90 days (PDPA - keep the sheet from growing forever)
     var cutoff = new Date(Date.now() - MAX_AGE_DAYS * 24 * 60 * 60 * 1000);
     var last2 = sh.getLastRow();
     for (var r2 = last2; r2 >= 2; r2--) {
