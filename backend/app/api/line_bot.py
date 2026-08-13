@@ -2212,6 +2212,8 @@ def follow_event(event):
         privacy = TextSendMessage(text=PRIVACY_NOTICE)
         if "mock" in LINE_ACCESS_TOKEN.lower():
             logger.info(f"Mock follow welcome -> {user.name}")
+        elif not push_guard(db):
+            logger.warning(f"ข้าม welcome push (quota หมด) -> {user.name}")
         else:
             line_bot_api.push_message(line_user_id, [welcome, privacy, PRIVACY_BUTTON])
     except Exception as e:
