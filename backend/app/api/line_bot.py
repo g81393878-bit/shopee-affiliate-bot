@@ -1454,6 +1454,26 @@ def strip_price_phrase(q: str) -> str:
     return t.strip(" -–,")
 
 
+SPEC_UNITS_PAT = (r"(?:นิ้ว|เซนติเมตร|เซน|ซม\.?|มิลลิเมตร|มิล|มม\.?|เมตร|ฟุต|ลิตร|ล\."
+                  r"|มิลลิลิตร|มล\.?|กิโลกรัม|กิโล|กรัม|ชิ้น|ใบ|คู่|แพ็ค|ขวด|แผ่น|ม้วน"
+                  r"|[lL]|ml|cm|mm|kg|g)")
+
+
+def strip_spec_phrase(q: str) -> str:
+    """ตัดสเปคขนาด/ปริมาตร/จำนวนออกจากคำค้น:
+    'พัดลมขนาด 16 นิ้ว' → 'พัดลม', 'กระติก 2 ลิตร' → 'กระติก'
+    สเปคไม่ควรบังคับให้ชื่อสินค้าต้องมีคำว่า 'ขนาด 16 นิ้ว' (แล้วพลาดทั้งหมวด)"""
+    num = r"\d+(?:\.\d+)?"
+    t = q
+    # "ขนาด <เลข> [หน่วย]?" — ขนาด 16 / ขนาด 16 นิ้ว / ขนาด 2 ลิตร
+    t = re.sub(r"ขนาด\s*" + num + r"\s*" + SPEC_UNITS_PAT + r"?", " ", t)
+    # "<เลข> <หน่วย>" — 16 นิ้ว / 2 ลิตร / 500 กรัม / 3 คู่
+    t = re.sub(num + r"\s*" + SPEC_UNITS_PAT, " ", t)
+    # "ขนาดใหญ่/เล็ก/กลาง" — คำคุณศัพท์ขนาด
+    t = re.sub(r"ขนาด\s*(?:ใหญ่|เล็ก|กลาง|เล็กน้อย|ย่อม)", " ", t)
+    return re.sub(r"\s+", " ", t).strip(" -–,")
+
+
 MIN_SALES_FLOOR = int(os.getenv("MIN_SALES_FLOOR", "500") or 500)
 
 
@@ -1487,8 +1507,10 @@ def search_products(db: Session, query: str) -> list:
     # คำพ้อง/การันต์ไทย (ชาร์ท=ชาร์จ, บลูธูธ=บลูทูธ, iphone=ไอโฟน, type-c=type c)
     q = strip_question_suffix(_nfc(normalize_query(q)))
     min_price, max_price = parse_price_conditions(query)
-    # คำหลักจริงๆ: ตัดคำนำหน้าเล่นๆ + เงื่อนไขราคา → "อยากได้หูฟังไม่เกิน 300" = "หูฟัง"
-    q_core = strip_price_phrase(strip_filler_prefix(q))
+    # คำหลักจริงๆ: ตัดคำนำหน้าเล่นๆ + เงื่อนไขราคา + สเปคขนาด → "อยากได้หูฟังไม่เกิน 300" = "หูฟัง"
+    q_core = strip_spec_phrase(strip_price_phrase(strip_filler_prefix(q)))
+    if not q_core:  # ทั้งคำค้นเป็นสเปคล้วน ("16 นิ้ว") — กันค่าว่างไปแมตช์ทุกตัว ("" in cat = True เสมอ)
+        q_core = q
 
     def strong_tier(name: str, phrase: str) -> int:
         """ชั้นความน่าเชื่อถือของแมตช์:
@@ -1850,6 +1872,8 @@ def message_text(event):
     # Accept both "วันนี้ขายอะไรดี" and "วันนี้ขายอะไรดี?" — the Thai keyboard doesn't add
     # the ?, and a bare trailing "?" from autocorrect shouldn't break the match either.
     normalized_text = user_text.rstrip("?？ ").strip()
+    # ข้อความที่โชว์คืนลูกค้า — ตัดคำถามต่อท้าย ("มีไหม"/"ได้ไหม") ออก จะได้ไม่ quote คำถามเต็มๆ
+    display_term = strip_question_suffix(normalized_text)
     line_user_id = event.source.user_id
     is_owner = line_user_id == ADMIN_LINE_USER_ID
     intent = 'unknown'
@@ -1956,7 +1980,7 @@ def message_text(event):
             hits = search_products(db, normalized_text)
             if hits:
                 reply = format_product_message(db, user, hits,
-                                               title=f"🔍 สินค้าตรงกับ \"{user_text}\" ค่ะ",
+                                               title=f"🔍 สินค้าตรงกับ \"{display_term}\" ค่ะ",
                                                is_owner=is_owner)
                 # ค้นเจอ 2-3 ตัวคล้ายกัน → ชวนเทียบต่อท้าย (แบบ Rufus)
                 invite = compare_invite_message(hits)
@@ -1979,7 +2003,7 @@ def message_text(event):
                              .order_by(models.Product.ai_score.desc()).limit(5).all())
                 if alt:
                     reply = [
-                        TextSendMessage(text=f"🔍 ยังไม่มี \"{user_text}\" ในร้านป้าเข็มตอนนี้จ๊ะ\n\n"
+                        TextSendMessage(text=f"🔍 ยังไม่มี \"{display_term}\" ในร้านป้าเข็มตอนนี้จ๊ะ\n\n"
                                              f"ลองดูของใกล้เคียงในหมวด {cat} ด้านล่าง หรือพิมพ์ชื่ออื่นได้เลยค่ะ 😊"),
                         product_cards_message(db, user, alt, title=f"🛍️ ของในหมวด {cat}",
                                               is_owner=is_owner),
