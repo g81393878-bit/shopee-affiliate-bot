@@ -185,6 +185,27 @@ def cmd_analyze(args):
     db.close()
 
 
+def cmd_recategorize(args):
+    """จัดหมวดสินค้าใหม่ทั้งหมดอัตโนมัติ (ใช้ CATEGORY_KEYWORDS ล่าสุด)
+    แก้ของที่เคยตก 'อื่นๆ' เพราะ keywords ยังไม่มีตอน import และของที่จัดผิด
+    (เช่น หม้อสแตนเลส → แก้วน้ำ เพราะคำว่า 'สแตนเลส' แย่งหมวด)"""
+    db = sessionmaker(bind=get_engine(args.sqlite))()
+    prods = db.query(models.Product).all()
+    changed = []
+    for p in prods:
+        new_cat = guess_category(p.name or "")
+        if new_cat != (p.category or "อื่นๆ"):
+            changed.append((p.name, p.category, new_cat))
+            p.category = new_cat
+    db.commit()
+    print(f"จัดหมวดใหม่: {len(changed)} ตัว (จากทั้งหมด {len(prods)} ตัว)")
+    for name, old, new in changed[:60]:
+        print(f"  {(old or 'อื่นๆ')!r:16s} -> {new!r:16s}  {name[:40]}")
+    if len(changed) > 60:
+        print(f"  ... อีก {len(changed) - 60} ตัว")
+    db.close()
+
+
 def cmd_report(args):
     db = sessionmaker(bind=get_engine(args.sqlite))()
     prods = db.query(models.Product).all()
@@ -357,13 +378,15 @@ def main():
     p_links = sub.add_parser("check-links", help="ตรวจลิงก์ affiliate ว่าตาย/redirect ผิดหรือยัง")
     p_links.add_argument("--delete", action="store_true", help="ลบสินค้าที่ตรวจว่า DEAD ออกจากตาราง")
     sub.add_parser("fix-scores", help="คำนวณคะแนนใหม่ทุกตัว")
+    sub.add_parser("recategorize", help="จัดหมวดสินค้าใหม่ทั้งหมดอัตโนมัติ (ใช้ keywords ล่าสุด)")
     p_cust = sub.add_parser("customers", help="สรุปความสนใจลูกค้าจาก chat_logs (ต่อยอดการตลาด)")
     p_cust.add_argument("--export", help="ส่งออก chat_logs ทั้งหมดเป็น CSV")
 
     args = ap.parse_args()
     {"import-csv": cmd_import_csv, "analyze": cmd_analyze,
      "report": cmd_report, "check-links": cmd_check_links,
-     "fix-scores": cmd_fix_scores, "customers": cmd_customers}[args.cmd](args)
+     "fix-scores": cmd_fix_scores, "customers": cmd_customers,
+     "recategorize": cmd_recategorize}[args.cmd](args)
 
 
 if __name__ == "__main__":
