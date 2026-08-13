@@ -1490,7 +1490,8 @@ FALSE_FRIEND_COMPOUNDS = {
 # - "น้ำ" ใน "แก้วน้ำ" — แก้วกาแฟ/แก้วเยติก็เป็นแก้วน้ำ ใช้ได้ (น้ำ = 3 ตัวอักษร น+้+ำ)
 REST_SKIP_WORDS = frozenset({"ไอโฟน", "แอนดรอยด์", "ซัมซุง", "บลูทูธ",
                              "ไร้สาย", "รุ่น", "ใหม่", "ชุด", "น้ำ",
-                             "ไฟฟ้า", "อัตโนมัติ", "อัจฉริยะ", "ดิจิตอล", "ดิจิทัล"})
+                             "ไฟฟ้า", "อัตโนมัติ", "อัจฉริยะ", "ดิจิตอล", "ดิจิทัล",
+                             "โทรศัพท์", "มือถือ"})
 
 
 def _is_false_friend(name: str, phrase: str) -> bool:
@@ -1630,6 +1631,18 @@ def search_products(db: Session, query: str) -> list:
             return 1
         return 0
 
+    def short_kw_tier(name: str, kw: str) -> int:
+        """tier สำหรับคำไทยสั้น (เคส/หมา/จาน...): ต้องเจอที่ขอบคำ (ต้นชื่อ/หลังเว้นวรรค/
+        หลังอักษรไม่ไทย) — กัน "พัดลมเคสพีซี" (เคสกลางคำ แต่ count≥2 ทำ substring_ok
+        ผ่าน) หลุดเป็นเคสโทรศัพท์; 2 = ต้นชื่อหรือซ้ำ, 1 = ขอบคำอื่น"""
+        m = re.search(r"(^|[^\u0E00-\u0E7F])" + re.escape(kw), name)
+        if not m:
+            return 0
+        pos = m.end() - len(kw)
+        if name.count(kw) >= 2 or pos <= len(name) * 0.25:
+            return 2
+        return 1
+
     def substring_ok(name: str, phrase: str) -> bool:
         """กันคำสั้นแมตช์ซับสตริงกลางคำยาว:
         - "หมา" ต้องไม่โดน "เหมาะ" (ตัวหน้าก่อนเป็นตัวไทย = กลางคำไทย)
@@ -1675,15 +1688,24 @@ def search_products(db: Session, query: str) -> list:
         # แมตช์เต็มคำ (full-phrase ข้างบน) ห้ามใช้คำย่อยมาแทน (หม้อ/โต๊ะ/ที่นอน)
         q_core_is_keyword = any(kw == q_core for kw, _c in CATEGORY_KEYWORDS)
         if not q_core_is_keyword:
+            # เกณฑ์ 3 ตัวขึ้นไป (เดิม 4) — เปิดคำสั้นอย่าง "เคส" (3 ตัว) เป็นคำค้นหลัก
+            # ได้: "เคส android" ต้องค้นเจอ ใช้ substring_ok กันขอบคำ (กลางคำไทย/อังกฤษ)
             q_kws = [kw for kw, _c in CATEGORY_KEYWORDS
-                     if len(kw) >= 4 and kw in q_core and kw != q_core]
+                     if len(kw) >= 3 and kw in q_core and kw != q_core]
             q_kws = [kw for kw in q_kws
                      if not any(kw in other for other in q_kws if other != kw)]
             # ต้องมีทุกคำย่อยในชื่อ (AND) — กัน "กระติกน้ำแข็ง" ไปโดนกางเกง
             # "ผ้าไหมน้ำแข็ง" (มีแค่คำว่า น้ำแข็ง คำเดียว)
-            if q_kws and all(kw in name for kw in q_kws):
-                w += len(q_kws)
-                tier = max(tier, max(strong_tier(name, kw) for kw in q_kws))
+            if q_kws and all(substring_ok(name, kw) for kw in q_kws):
+                kt = []
+                for kw in q_kws:
+                    if len(kw) < 4 and any('\u0E00' <= c <= '\u0E7F' for c in kw):
+                        kt.append(short_kw_tier(name, kw))  # คำไทยสั้น: ขอบคำเท่านั้น
+                    else:
+                        kt.append(strong_tier(name, kw))
+                if all(t > 0 for t in kt):
+                    w += len(q_kws)
+                    tier = max(tier, max(kt))
         # คำผสม: ถ้าคำค้นแยกเป็นหลายคำย่อยที่รู้จัก (≥2) → ต้องมีครบทุกคำในชื่อ
         # (บังคับ ไม่ใช่โบนัส) — กัน "ของเล่นแมว" ไปโดนของเล่นคลายเครียดที่ไม่มีแมว /
         # "กระติกน้ำแข็ง" ไปโดนกางเกงผ้าไหมน้ำแข็ง / "แก้วสแตนเลส" ต้องเป็นแก้วสแตนเลสจริง
@@ -1740,10 +1762,17 @@ def search_products(db: Session, query: str) -> list:
         if not hits:
             return []
         if req_android and not req_apple:
+            # ไล่ชื่อที่ระบุแค่ Apple ล้วน (ไม่มีเครื่องหมาย Android เลย) — ส่วนของที่
+            # ระบุทั้ง iPhone+Samsung (multi-compat) ยังตอบได้ (เคสส่วนใหญ่รองรับทั้ง 2)
+            def _apple_only(name: str) -> bool:
+                has_apple = any(m in name for m in APPLE_ONLY)
+                if not has_apple:
+                    return False
+                return not any(m in name for m in ANDROID_MARKERS)
             hits = [h for h in hits
-                    if not any(m in _nfc((h[0].name or "").lower()) for m in APPLE_ONLY)]
+                    if not _apple_only(_nfc((h[0].name or "").lower()))]
             if not hits:
-                return []  # ไม่มีที่เข้ากับ android จริง → สุจริต ไม่เอาสาย Apple มาแทน
+                return []  # ไม่มีที่เข้ากับ android จริง → สุจริต ไม่เอาของมั่วมาแทน
         strong_hits = [h for h in hits if h[2] >= 1]
         if not strong_hits:
             return []  # แมตช์ท้ายชื่อ (ยัด SEO) เท่านั้น → ไม่เอาขึ้นหน้า (สุจริต)
