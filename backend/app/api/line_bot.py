@@ -1663,7 +1663,7 @@ def search_products(db: Session, query: str) -> list:
         if pos > 0 and 0x0E00 <= ord(name[pos - 1]) <= 0x0E7F:
             return False  # ติดกับตัวอักษรไทย = กลางคำไทย
         after = name[pos + len(phrase):pos + len(phrase) + 1]
-        if after and after.isalnum() and not (0x0E00 <= ord(after) <= 0x0E7F):
+        if after and ('a' <= after <= 'z' or 'A' <= after <= 'Z'):
             return False  # ติดกับตัวอักษรละติน = กลางคำอังกฤษ (cap ≠ cappuvini)
         return True
 
