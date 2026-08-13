@@ -1886,6 +1886,23 @@ def get_or_create_line_user(db: Session, line_user_id: str) -> models.User:
 # --- คุยกับป้าเข็ม — ตอบเรื่องบอทจากคู่มือเท่านั้น (ไม่ใช้ AI เดา — กันมโน) ---
 _last_escalate: dict = {}
 
+# --- ฝากคำถาม 2 ขั้น: แตะปุ่ม → บอทถามคำถามจริง → ลูกค้าพิมพ์ → push เจ้าของ ---
+# เก็บ state ในหน่วยความจำ (uvicorn 1 process พอเพียง): uid → เวลาที่แตะปุ่ม
+_pending_question: dict = {}
+PENDING_QUESTION_TTL_MIN = 30          # รอคำถามได้ 30 นาที แล้วคืนโหมดปกติ
+ASK_QUESTION_PROMPT = (
+    "🖊️ ป้าเข็มรับฟังจ๊ะ — พิมพ์คำถามของคุณได้เลยค่ะ\n"
+    "เช่น \"หม้อหุงข้าวส่งถึงกรุงเทพไหม\" หรือ \"ของจะส่งเมื่อไหร่\"\n\n"
+    "ถ้าเปลี่ยนใจ พิมพ์ \"ยกเลิก\" หรือแตะปุ่มเมนูด้านล่างได้เลย 😊"
+)
+CANCEL_CONFIRM = "รับทราบจ๊ะ กลับมาเมนูปกติได้เลยค่ะ 😊"
+# ถ้ากำลังรอคำถามอยู่แล้วลูกค้าแตะปุ่มเมนูอื่น/พิมพ์ยกเลิก → ถือว่าเปลี่ยนใจ ไม่ push
+PENDING_CANCEL_IF = (
+    "ค้นสินค้า", "หมวดสินค้า", "คุยกับป้าเข็ม", "วันนี้ขายอะไรดี", "อันดับขายดี",
+    "ทำไมต้องซื้อกับป้าเข็ม", "มีอะไรใหม่", "ยกเลิก", "ไม่เป็นไร", "ไม่แล้ว",
+    "ช่างเถอะ", "ลืมไปเถอะ",
+)
+
 
 def is_bot_manual_request(text: str) -> bool:
     """ลูกค้าถามเรื่องบอท/อยากรู้วิธีใช้? (คุยกับป้าเข็ม / คู่มือ / ใช้ยังไง...) — ตอบจากคู่มือเท่านั้น"""
@@ -2016,8 +2033,9 @@ def _web_search_text(raw: str) -> str:
     return t.strip()
 
 
-def notify_owner_stuck(user, text: str, db=None) -> bool:
-    """บอทช่วยลูกค้าไม่ได้ → Push แจ้งเตือนเจ้าของร้าน (ADMIN_LINE_USER_ID)
+def notify_owner_stuck(user, text: str, db=None, title: str = "🤔 ลูกค้าสงสัย — บอทช่วยไม่ได้") -> bool:
+    """Push แจ้งเตือนเจ้าของร้าน (ADMIN_LINE_USER_ID) — ใช้ทั้งตอนบอทช่วยไม่ได้
+    และตอนลูกค้าฝากคำถาม (ส่ง title ต่างกัน)
     กันสแปม: 1 ครั้ง/cooldown ต่อลูกค้า (cooldown เก็บในหน่วยความจำ —
     uvicorn 1 process พอเพียง; หลัง restart แจ้งได้อีกครั้ง ไม่เสียหาย)
     คืน True ถ้าส่งจริง"""
@@ -2029,7 +2047,7 @@ def notify_owner_stuck(user, text: str, db=None) -> bool:
         return False
     _last_escalate[uid] = now
     name = (getattr(user, "name", None) or "ลูกค้า").strip() or "ลูกค้า"
-    body = (f"🤔 ลูกค้าสงสัย — บอทช่วยไม่ได้\n"
+    body = (f"{title}\n"
             f"👤 {name}\n"
             f"💬 \"{(text or '')[:200]}\"\n"
             f"🆔 {uid or 'ไม่ทราบ'}\n"
@@ -2065,7 +2083,28 @@ def message_text(event):
     try:
         user = get_or_create_line_user(db, line_user_id)
         tone = get_tone(db, line_user_id, normalized_text)
-        if normalized_text in DELETE_PHRASES:
+        # --- ฝากคำถาม 2 ขั้น: ลูกค้าเพิ่งแตะ "ฝากคำถาม" → ข้อความถัดไป = คำถามจริง ---
+        # (วางก่อน branch อื่น — ให้ทุกข้อความถัดไปถูกจับเป็นคำถาม ยกเว้นลบข้อมูล/ยกเลิก)
+        pending_ts = _pending_question.get(line_user_id)
+        if pending_ts:
+            if (datetime.datetime.utcnow() - pending_ts).total_seconds() > PENDING_QUESTION_TTL_MIN * 60:
+                _pending_question.pop(line_user_id, None)  # หมดเวลา → คืนโหมดปกติ
+                pending_ts = None
+        if pending_ts and not is_owner and normalized_text not in DELETE_PHRASES \
+                and not any(p in normalized_text for p in PENDING_CANCEL_IF):
+            _pending_question.pop(line_user_id, None)
+            # push เจ้าของพร้อมคำถามเต็ม (แทน push ตอนแตะปุ่ม)
+            if notify_owner_stuck(user, user_text, db, title="📩 ลูกค้าฝากคำถาม"):
+                reply = TextSendMessage(text=CONTACT_REPLY + ESCALATE_NOTE)
+            else:
+                reply = TextSendMessage(text=CONTACT_REPLY)
+            intent = 'human'
+            interest_cat = guess_category(user_text)
+        elif pending_ts and normalized_text in PENDING_CANCEL_IF:
+            _pending_question.pop(line_user_id, None)
+            reply = TextSendMessage(text=CANCEL_CONFIRM)
+            intent = 'human'
+        elif normalized_text in DELETE_PHRASES:
             # PDPA: สิทธิ์ลบข้อมูล (erasure) — ลบชื่อ + ประวัติการสนทนา + สิ่งที่ให้จำไว้ทันที
             # (ชีท Google ด้วย — Apps Script ลบทุกแถวของผู้ใช้นี้ออก)
             db.query(models.ChatLog).filter(models.ChatLog.line_user_id == line_user_id).delete(synchronize_session=False)
@@ -2123,10 +2162,14 @@ def message_text(event):
             reply = TextSendMessage(text=bot_manual_reply(normalized_text, is_owner))
             intent = 'manual'
         elif is_contact_request(normalized_text):
-            # ลูกค้าขอคุยกับคนจริง → แจ้งเจ้าของร้าน + ตอบสุภาพ (ไม่ต้องรอ Groq)
-            note = ("" if is_owner else
-                    (ESCALATE_NOTE if notify_owner_stuck(user, user_text, db) else ""))
-            reply = TextSendMessage(text=CONTACT_REPLY + note)
+            # ฝากคำถาม 2 ขั้น: ตั้ง state รอคำถามจริง → ลูกค้าพิมพ์ถัดไป = คำถาม
+            # (ไม่ push ตอนแตะปุ่ม — กันเจ้าของเห็นแค่ "ฝากคำถาม" ต้องถามกลับ)
+            if is_owner:
+                reply = TextSendMessage(text=CONTACT_REPLY)
+            else:
+                _pending_question[line_user_id] = datetime.datetime.utcnow()
+                reply = TextSendMessage(text=ASK_QUESTION_PROMPT,
+                                        quick_reply=quick_reply_items())
             intent = 'human'
         elif is_owner and normalized_text in ADMIN_STATS_CMDS:
             reply = TextSendMessage(text=admin_customer_stats(db))
