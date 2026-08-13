@@ -26,6 +26,7 @@ from app import models
 from app.services.link_checker import check_affiliate_link
 from app.services.ai_generator import format_hashtags_text, generate_script_for_product
 from app.services.price_refresh import refresh_price
+from app.services.line_quota import push_guard
 from app.services.product_cards import product_cards_message
 from linebot import LineBotApi
 from linebot.models import TextSendMessage
@@ -155,7 +156,10 @@ def cron_refresh_prices(token: str = "", limit: int = 300):
 
         # แจ้งเตือนราคาตก — เฉพาะข้อมูลจริง: ลูกค้าที่เคยค้นหมวดนี้ (90 วัน, ไม่ใช่เจ้าของ)
         alerted, alerted_detail = 0, []
-        for prod, old, new, dp in drops[:5]:
+        quota_ok = push_guard(db)
+        if not quota_ok:
+            alerted_detail = ["ข้ามแจ้งราคาลง: LINE push quota หมด"]
+        for prod, old, new, dp in (drops[:5] if quota_ok else []):
             interested = (db.query(models.ChatLog.line_user_id)
                             .filter(models.ChatLog.intent == "search",
                                     models.ChatLog.category == (prod.category or ""),
@@ -218,8 +222,11 @@ def cron_reengage(token: str = "", days_silent: int = 7, limit: int = 10):
                       .group_by(models.ChatLog.line_user_id).all())
         quiet = [uid for uid, last in last_act
                  if last is not None and last <= silent_cutoff and uid != admin_uid]
+        quota_ok = push_guard(db)
         pushed, skipped = [], []
-        for uid in quiet[:limit]:
+        if not quota_ok:
+            logger.warning("ข้าม re-engage push (quota หมด)")
+        for uid in (quiet[:limit] if quota_ok else []):
             top_cat = (db.query(models.ChatLog.category, _func.count(models.ChatLog.id))
                          .filter(models.ChatLog.line_user_id == uid,
                                  models.ChatLog.intent == "search",
@@ -316,6 +323,9 @@ def cron_daily_report(token: str = "", hours: int = 24):
         if "mock" in (os.getenv("LINE_CHANNEL_ACCESS_TOKEN") or "").lower():
             logger.info(f"Mock daily report (ไม่ push จริง):\n{text}")
             return {"pushed": False, "report": text}
+        if not push_guard(db):
+            logger.warning("ข้าม daily report push (quota หมด)")
+            return {"pushed": False, "report": text, "note": "ข้าม: push quota หมด"}
         line_bot_api.push_message(admin_uid, TextSendMessage(text=text))
         return {"pushed": True, "recipient": admin_uid, "report": text}
     finally:

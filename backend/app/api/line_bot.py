@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from app.db import SessionLocal, get_db
 from app import models
 from app.services.product_cards import product_cards_message, link_button_message
+from app.services.line_quota import push_guard
 from app.services.category import guess_category, CATEGORY_KEYWORDS, normalize_query
 from app.services.web_search import web_search_reply
 from app.config import settings
@@ -1412,6 +1413,9 @@ def handle_campaign(db, raw_text: str, is_owner: bool):
                                      f"กลุ่ม: {sample}{more}\n\n"
                                      f"สั่งส่งจริง: แคมเปญ {category} ส่งเลย")
     sent, failed = 0, 0
+    if "mock" not in LINE_ACCESS_TOKEN.lower() and not push_guard(db):
+        logger.warning("ข้าม campaign push (quota หมด)")
+        return TextSendMessage(text="❌ ยังไม่ส่งแคมเปญ: LINE push quota หมดเดือนนี้แล้ว (ดู campaign_logs / อัปเกรดแผน)")
     for uid in targets:
         u = db.query(models.User).filter(models.User.line_user_id == uid).first()
         name = u.name if u else "LINE User"
@@ -1978,7 +1982,7 @@ def _web_search_text(raw: str) -> str:
     return t.strip()
 
 
-def notify_owner_stuck(user, text: str) -> bool:
+def notify_owner_stuck(user, text: str, db=None) -> bool:
     """บอทช่วยลูกค้าไม่ได้ → Push แจ้งเตือนเจ้าของร้าน (ADMIN_LINE_USER_ID)
     กันสแปม: 1 ครั้ง/cooldown ต่อลูกค้า (cooldown เก็บในหน่วยความจำ —
     uvicorn 1 process พอเพียง; หลัง restart แจ้งได้อีกครั้ง ไม่เสียหาย)
@@ -2000,6 +2004,9 @@ def notify_owner_stuck(user, text: str) -> bool:
         logger.info(f"[notify_owner] <- {name}: {text[:80]}")
         return True
     try:
+        if db is not None and not push_guard(db):
+            logger.warning("ข้าม notify_owner push (quota หมด)")
+            return False
         line_bot_api.push_message(ADMIN_LINE_USER_ID, TextSendMessage(text=body))
         return True
     except Exception as e:
@@ -2084,7 +2091,7 @@ def message_text(event):
         elif is_contact_request(normalized_text):
             # ลูกค้าขอคุยกับคนจริง → แจ้งเจ้าของร้าน + ตอบสุภาพ (ไม่ต้องรอ Groq)
             note = ("" if is_owner else
-                    (ESCALATE_NOTE if notify_owner_stuck(user, user_text) else ""))
+                    (ESCALATE_NOTE if notify_owner_stuck(user, user_text, db) else ""))
             reply = TextSendMessage(text=CONTACT_REPLY + note)
             intent = 'human'
         elif is_owner and normalized_text in ADMIN_STATS_CMDS:
@@ -2154,7 +2161,7 @@ def message_text(event):
                     text = nosearch_fallback_text(user_text, tone)
                     # บอทช่วยไม่ได้ → แจ้งเจ้าของ (กันสแปม: 1 ครั้ง/cooldown ต่อลูกค้า)
                     # ถ้าคนถามคือเจ้าของเอง ไม่ต้อง push แจ้งตัวเอง
-                    if not is_owner and notify_owner_stuck(user, user_text):
+                    if not is_owner and notify_owner_stuck(user, user_text, db):
                         text += ESCALATE_NOTE
                     reply = TextSendMessage(text=text, quick_reply=quick_reply_items())
                     intent = 'nosearch'  # รู้ว่าลูกค้าค้นอะไรไม่เจอ → เอาไปหาสินค้ามาเติม
