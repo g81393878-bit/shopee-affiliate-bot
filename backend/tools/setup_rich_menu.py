@@ -30,24 +30,29 @@ from linebot.models import (RichMenu, RichMenuSize, RichMenuArea, RichMenuBounds
 MENU_NAME = "ป้าเข็มเมนู"
 CHAT_BAR_TEXT = "🛍️ เมนูป้าเข็ม"
 
-# (ข้อความที่แสดงบนปุ่ม, ข้อความที่ส่งเมื่อแตะ — ต่างกันได้: แสดงสั้น ส่งเต็ม
+# (อีโมจิไอคอน, ข้อความที่แสดงบนปุ่ม, ข้อความที่ส่งเมื่อแตะ — แสดงสั้น ส่งเต็ม
 #  ต้องมีคำสั่งเต็มที่ bot route ได้ เช่น "ทำไมต้องซื้อกับป้าเข็ม"; สีพื้นหลัง, สีตัวหนังสือ)
 MENU = [
-    ("ค้นสินค้า",      "ค้นสินค้า",              "#FFE3EC", "#B3204E"),
-    ("หมวดสินค้า",    "หมวดสินค้า",            "#E3F0FF", "#1F5FA8"),
-    ("ขายดีวันนี้",    "วันนี้ขายอะไรดี",        "#FFF3D6", "#B07A00"),
-    ("อันดับขายดี",    "อันดับขายดี",            "#E4F7E4", "#1E7B3C"),
-    ("ทำไมต้องป้าเข็ม", "ทำไมต้องซื้อกับป้าเข็ม", "#F0E8FF", "#5B3FA8"),
-    ("คุยกับป้าเข็ม",   "คุยกับป้าเข็ม",           "#E0F5F5", "#0E7C7C"),
+    ("🔍", "ค้นสินค้า",      "ค้นสินค้า",              "#FFE3EC", "#B3204E"),
+    ("🛍️", "หมวดสินค้า",    "หมวดสินค้า",            "#E3F0FF", "#1F5FA8"),
+    ("⭐", "ขายดีวันนี้",    "วันนี้ขายอะไรดี",        "#FFF3D6", "#B07A00"),
+    ("🔥", "อันดับขายดี",    "อันดับขายดี",            "#E4F7E4", "#1E7B3C"),
+    ("💛", "ทำไมต้องป้าเข็ม", "ทำไมต้องซื้อกับป้าเข็ม", "#F0E8FF", "#5B3FA8"),
+    ("🤖", "คุยกับป้าเข็ม",   "คุยกับป้าเข็ม",           "#E0F5F5", "#0E7C7C"),
 ]
 
 W, H = 2500, 1686          # ขนาด rich menu มาตรฐาน
 COLS, ROWS = 3, 2
 FONT_PATH = "C:/Windows/Fonts/Tahoma.ttf"
+EMOJI_FONT_PATH = "C:/Windows/Fonts/seguiemj.ttf"  # อีโมจิสี (มีใน Windows)
 
 
 def _font(size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(FONT_PATH, size)
+
+
+def _emoji_font(size: int) -> ImageFont.FreeTypeFont:
+    return ImageFont.truetype(EMOJI_FONT_PATH, size)
 
 
 def _wrap_lines(text: str, font: ImageFont.FreeTypeFont, d: ImageDraw.ImageDraw,
@@ -81,26 +86,33 @@ def _wrap_lines(text: str, font: ImageFont.FreeTypeFont, d: ImageDraw.ImageDraw,
 
 
 def draw_rich_menu_image(path: str):
-    """วาดรูปเมนู 3x2 — พื้นขาว + 6 ช่องสีพาสเทล + ข้อความไทยกลางช่อง (ยาวเกิน → ตัด 2 บรรทัด ไม่ล้นขอบ)"""
+    """วาดรูปเมนู 3x2 — 6 ช่องสีพาสเทล + อีโมจิไอคอนบน + ข้อความไทยล่าง (ยาวเกิน → ตัด 2 บรรทัด ไม่ล้นขอบ)"""
     img = Image.new("RGB", (W, H), "#FFFFFF")
     d = ImageDraw.Draw(img)
     cw, ch = W // COLS, H // ROWS
-    f = _font(105)
-    line_gap = 16
-    for i, (show, _send, bg, fg) in enumerate(MENU):
+    f = _font(92)
+    ef = _emoji_font(185)
+    for i, (emoji, show, _send, bg, fg) in enumerate(MENU):
         r, c = divmod(i, COLS)
         x0, y0 = c * cw, r * ch
         x1, y1 = (W if c == COLS - 1 else x0 + cw), (H if r == ROWS - 1 else y0 + ch)
         d.rounded_rectangle([x0 + 18, y0 + 18, x1 - 18, y1 - 18], radius=36, fill=bg)
-        # ข้อความกลางช่อง (วัดความกว้างจริงเพื่อจัดกลางเป๊ะ) — ยาวเกิน → ตัดบรรทัด
+        cx = (x0 + x1) / 2
+        # อีโมจิไอคอน (บน) — จัดกลางแนวนอน, ใช้ความสูง bbox จัดกลางช่วงบน
+        eb = d.textbbox((0, 0), emoji, font=ef)
+        ew, eh = eb[2] - eb[0], eb[3] - eb[1]
+        ey = y0 + (ch - eh) * 0.27
+        d.text((cx - ew / 2 - eb[0], ey - eb[1]), emoji, font=ef,
+               embedded_color=True)
+        # ข้อความ (ล่าง) — กลางแนวนอน; ยาวเกิน → ตัดบรรทัด
         lines = _wrap_lines(show, f, d, (x1 - x0) - 36)
         ths = [d.textbbox((0, 0), ln, font=f)[3] for ln in lines]
-        block_h = sum(ths) + line_gap * (len(lines) - 1)
-        y = (y0 + y1 - block_h) / 2
+        block_h = sum(ths) + 10 * (len(lines) - 1)
+        y = y0 + (ch - eh) * 0.72
         for ln, lh in zip(lines, ths):
             tw = d.textlength(ln, font=f)
-            d.text((x0 + (x1 - x0 - tw) / 2, y), ln, font=f, fill=fg)
-            y += lh + line_gap
+            d.text((cx - tw / 2, y), ln, font=f, fill=fg)
+            y += lh + 10
         # เส้นขอบบางๆ
         d.rounded_rectangle([x0 + 18, y0 + 18, x1 - 18, y1 - 18], radius=36,
                             outline="#D8D8D8", width=4)
@@ -133,7 +145,7 @@ def main():
     # 2) สร้าง rich menu (3x2)
     cw, ch = W // COLS, H // ROWS
     areas = []
-    for i, (show, send, _bg, _fg) in enumerate(MENU):
+    for i, (_emoji, show, send, _bg, _fg) in enumerate(MENU):
         r, c = divmod(i, COLS)
         areas.append(RichMenuArea(
             bounds=RichMenuBounds(x=c * cw, y=r * ch,
