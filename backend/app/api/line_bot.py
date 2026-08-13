@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from app.db import SessionLocal, get_db
 from app import models
 from app.services.product_cards import product_cards_message, link_button_message
-from app.services.category import guess_category, CATEGORY_KEYWORDS
+from app.services.category import guess_category, CATEGORY_KEYWORDS, normalize_query
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -1206,21 +1206,7 @@ def strip_filler_prefix(q: str) -> str:
     return q
 
 
-# การันต์/คำพ้องที่คนไทยพิมพ์หลากหลาย → แบบมาตรฐาน (กันพิมพ์เพี้ยนแล้วหาไม่เจอ)
-# ใช้เฉพาะฝั่งคำค้น — ชื่อสินค้าในคลังเขียนแบบมาตรฐานอยู่แล้ว
-THAI_VARIANT_MAP = {
-    "บลูธูธ": "บลูทูธ", "บลูทูท": "บลูทูธ", "บลูธูท": "บลูทูธ", "บลูทูต": "บลูทูธ",
-    "ชาร์ท": "ชาร์จ", "ชารท": "ชาร์จ",
-    "ไอแพท": "ไอแพด", "ไอแพ็ด": "ไอแพด",
-    "iphone": "ไอโฟน", "ipad": "ไอแพด",
-    "type-c": "type c", "typec": "type c",
-}
-
-
-def normalize_query(q: str) -> str:
-    for a, b in THAI_VARIANT_MAP.items():
-        q = q.replace(a, b)
-    return q
+# (THAI_VARIANT_MAP + normalize_query ย้ายไปที่ app/services/category.py — ใช้ร่วมกันทั้งคำค้นและจัดหมวด)
 
 
 def strip_price_phrase(q: str) -> str:
