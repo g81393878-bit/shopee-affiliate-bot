@@ -68,13 +68,15 @@ cron_job() {  # $1=title $2=url $3=hour $4=minute
     -H "Authorization: Bearer $CJKEY" \
     -d "{\"job\":{\"enabled\":true,\"title\":\"$1\",\"saveResponses\":false,\"url\":\"$2\",\"requestMethod\":1,\"requestTimeout\":300,\"schedule\":{\"timezone\":\"Asia/Bangkok\",\"expiresAt\":0,\"hours\":[$3],\"mdays\":[-1],\"minutes\":[$4],\"months\":[-1],\"wdays\":[-1]}}}" \
     https://api.cron-job.org/jobs
+  echo
+  sleep 2   # API จำกัด PUT 1 req/s — เว้นจังหวะกัน 429
 }
 
 cron_job "ป้าเข็ม-ตรวจลิงก์"       "$BASE/api/cron/check-links?token=$TOKEN"           7 0
 cron_job "ป้าเข็ม-ราคา"            "$BASE/api/cron/refresh-prices?token=$TOKEN"        5 0
 cron_job "ป้าเข็ม-รายงานเช้า"       "$BASE/api/cron/daily-report?token=$TOKEN"          8 0
 cron_job "ป้าเข็ม-ดึงลูกค้ากลับ"     "$BASE/api/cron/re-engage?token=$TOKEN"            9 0
-cron_job "ป้าเข็ม-คอนเทนต์"        "$BASE/api/cron/analyze?token=$TOKEN&limit=30"    11 0  # ทุก 2 ชม. → แก้ schedule เองได้
+cron_job "ป้าเข็ม-คอนเทนต์"        "$BASE/api/cron/analyze?token=$TOKEN&limit=30"    11 0
 ```
 
 **ตรวจว่า job ครบ/รันได้:** `curl -s -H "Authorization: Bearer $CJKEY" https://api.cron-job.org/jobs` → ดู `jobId` + `enabled:true` แล้วกด Run ในเว็บ (หรือดู history ผ่าน API) — response ควรเป็น `200`
