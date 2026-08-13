@@ -3,6 +3,10 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
+# default root level = WARNING ทำให้ INFO log ของ app (เช่น keep-alive ping) ถูกกลืนไม่ขึ้น Render log
+logging.basicConfig(level=logging.INFO)
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)  # กัน BEGIN/COMMIT รกทุก query
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
