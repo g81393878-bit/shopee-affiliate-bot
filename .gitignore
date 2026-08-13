@@ -53,6 +53,7 @@ logs/
 chromedriver.exe
 chromedriver*/
 geckodriver*/
+geckodriver.exe
 video_preview/
 *.zip
 
