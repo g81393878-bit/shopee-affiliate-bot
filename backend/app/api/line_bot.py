@@ -1280,7 +1280,7 @@ def _nfc(s: str) -> str:
 
 def search_products(db: Session, query: str) -> list:
     """ค้นสินค้า: ตรงชื่อ/หมวด + เข้าใจเงื่อนไขราคา ('หูฟังไม่เกิน 300', 'งบ 500',
-    'กระติก 200-400') — จัดอันดับความตรง แล้วตอบสูงสุด 3 ตัว
+    'กระติก 200-400') — จัดอันดับความตรง แล้วตอบสูงสุด 5 ตัว
     นโยบายเด็ดขาด: ตอบเฉพาะสินค้าที่ตรวจลิงก์แล้วว่า OK เท่านั้น"""
     def fetch(floor: int) -> list:
         return (db.query(models.Product)
@@ -1434,7 +1434,7 @@ def search_products(db: Session, query: str) -> list:
                 return []  # มีชื่อตรงแต่ไม่มีตัวในงบ → ไม่เอาของมั่วมาแทน (สุจริต)
             hits = budget_hits
         hits.sort(key=lambda pw: (pw[2], pw[1], pw[0].ai_score or 0), reverse=True)
-        return [p for p, _, _ in hits[:3]]
+        return [p for p, _, _ in hits[:5]]
 
     hits = []
     for p in fetch(MIN_SALES):
@@ -1679,7 +1679,7 @@ def message_text(event):
                              .filter(models.Product.link_status == "ok",
                                      models.Product.sales_count >= MIN_SALES,
                                      models.Product.category == cat)
-                             .order_by(models.Product.ai_score.desc()).limit(3).all())
+                             .order_by(models.Product.ai_score.desc()).limit(5).all())
                 if alt:
                     reply = [
                         TextSendMessage(text=f"🔍 ยังไม่มี \"{user_text}\" ในร้านป้าเข็มตอนนี้จ๊ะ\n\n"

@@ -241,7 +241,7 @@ def product_cards_message(db, user: models.User, products: List[models.Product],
 
     badges_map = _catalog_badges(db, is_owner)
     # ราคาลงล่าสุดต่อสินค้า (จาก price_history — แสดง 📉 เฉพาะตอนมีข้อมูลจริง)
-    ids = [p.id for p in products[:3]]
+    ids = [p.id for p in products[:5]]
     drops = {}
     if ids:
         rows = (db.query(models.PriceHistory.product_id, models.PriceHistory.drop_pct)
@@ -251,9 +251,9 @@ def product_cards_message(db, user: models.User, products: List[models.Product],
             if pid not in drops:
                 drops[pid] = float(drop or 0)
     bubbles = [_bubble(db, p, i, badges_map, is_owner, drops.get(p.id))
-               for i, p in enumerate(products[:3], 1)]
+               for i, p in enumerate(products[:5], 1)]
 
-    names = " / ".join(p.name[:20] for p in products[:3])
+    names = " / ".join(p.name[:20] for p in products[:5])
     alt = f"{title or '🛒 สินค้า'} {names}".strip()
 
     return FlexSendMessage(
