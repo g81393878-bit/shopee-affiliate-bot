@@ -804,9 +804,46 @@ PRIVACY_BUTTON = link_button_message('🔒 นโยบายความเป�
 
 
 
+# เขียนลง Google ชีทอัตโนมัติ (ผ่าน Apps Script Web App — ฟรี ไม่ต้อง API key)
+# ตั้ง env SHEET_WEBHOOK_URL = URL web app ที่ deploy ใน sheet_apps_script.gs
+SHEET_WEBHOOK_URL = os.getenv("SHEET_WEBHOOK_URL", "")
+
+# intent → ภาษาไทย (ชีทให้เจ้าของอ่านง่าย — ไม่ใช่โค้ด)
+INTENT_LABELS = {
+    "search": "ค้นสินค้า", "greeting": "ทักทาย", "nosearch": "ค้นไม่เจอ",
+    "manual": "ถามคู่มือ", "human": "ขอคุยคนจริง", "compare": "เทียบสินค้า",
+    "deals": "ขายดี", "top": "อันดับขายดี", "why_us": "ทำไมต้องป้าเข็ม",
+    "wismo": "ทวงพัสดุ", "remember": "จำความชอบ", "delete": "ลบข้อมูล",
+    "new": "มีอะไรใหม่", "link": "ส่งลิงก์", "guide": "คู่มือค้น",
+    "campaign": "แคมเปญ", "admin": "แอดมิน", "error": "ผิดพลาด",
+}
+
+
+def _push_to_sheet(row: dict) -> None:
+    """push 1 แถวไป Google ชีท — fire-and-forget (background) กันไม่หน่วงการตอบ LINE"""
+    if not SHEET_WEBHOOK_URL:
+        return
+    try:
+        import httpx
+        httpx.post(SHEET_WEBHOOK_URL, json=row, timeout=5)
+    except Exception as e:
+        logger.debug(f"sheet push failed: {e}")
+
+
+def _push_sheet_async(row: dict) -> None:
+    """รัน push ชีทใน thread แยก — ตอบ LINE ทันที ไม่รอ Google"""
+    try:
+        import threading
+        threading.Thread(target=_push_to_sheet, args=(row,), daemon=True).start()
+    except Exception:
+        pass
+
+
 def log_chat(db, line_user_id: str, text: str, intent: str, reply, category: Optional[str] = None):
     """บันทึกประวัติสนทนา + หมวดที่ลูกค้าสนใจ (PDPA: เก็บแค่ 90 วัน — ลบของเก่าทุกครั้งที่เขียน)
-    category ต่อยอด: รู้ว่าลูกค้าสนใจหมวดอะไร → วิเคราะห์/แนะนำสินค้า/ทำการตลาด"""
+    category ต่อยอด: รู้ว่าลูกค้าสนใจหมวดอะไร → วิเคราะห์/แนะนำสินค้า/ทำการตลาด
+    พร้อมกันนั้น เขียนแถวลง Google ชีทอัตโนมัติ (ถ้าตั้ง SHEET_WEBHOOK_URL) —
+    ชีทสำรองใช้วิเคราะห์ระยะยาว (Apps Script ลบของเก่า 90 วันให้เอง)"""
     kind = 'flex' if (isinstance(reply, FlexSendMessage) or
                        (isinstance(reply, list) and any(isinstance(m, FlexSendMessage) for m in reply))) else 'text'
     db.add(models.ChatLog(line_user_id=line_user_id, message_text=text[:500],
@@ -814,6 +851,15 @@ def log_chat(db, line_user_id: str, text: str, intent: str, reply, category: Opt
     cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=90)
     db.query(models.ChatLog).filter(models.ChatLog.created_at < cutoff).delete(synchronize_session=False)
     db.commit()
+    _push_sheet_async({
+        "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "line_user_id": line_user_id,
+        "message_text": text[:500],
+        "intent": intent,
+        "intent_label": INTENT_LABELS.get(intent, intent),
+        "category": category,
+        "reply_kind": kind,
+    })
 
 
 ADMIN_STATS_CMDS = ("แอดมิน สถิติ", "สถิติลูกค้า", "รายงานลูกค้า", "แอดมินรายงาน")
@@ -1458,10 +1504,12 @@ def message_text(event):
         user = get_or_create_line_user(db, line_user_id)
         if normalized_text in DELETE_PHRASES:
             # PDPA: สิทธิ์ลบข้อมูล (erasure) — ลบชื่อ + ประวัติการสนทนา + สิ่งที่ให้จำไว้ทันที
+            # (ชีท Google ด้วย — Apps Script ลบทุกแถวของผู้ใช้นี้ออก)
             db.query(models.ChatLog).filter(models.ChatLog.line_user_id == line_user_id).delete(synchronize_session=False)
             db.query(models.UserPreference).filter(models.UserPreference.line_user_id == line_user_id).delete(synchronize_session=False)
             db.query(models.User).filter(models.User.line_user_id == line_user_id).delete(synchronize_session=False)
             db.commit()
+            _push_sheet_async({"action": "delete_user", "line_user_id": line_user_id})
             reply = TextSendMessage(text=DELETE_REPLY)
             intent = 'delete'
         elif is_wismo(normalized_text):
