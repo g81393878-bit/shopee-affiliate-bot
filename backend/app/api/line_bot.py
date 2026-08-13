@@ -272,9 +272,6 @@ YOUTH_SIGNALS = ("555", "มั้ย", "คับ", "งับ", "lol", "ป้
 ELDER_SIGNALS = ("หลาน", "ขอรบกวน", "รบกวน", "ไม่ถนัด", "ไม่เก่ง", "ขอบพระคุณ",
                  "กราบ", "กลัวโดนหลอก", "โดนหลอก", "ครับผม", "ไม่ทราบ")
 
-_tone_memory: dict = {}
-
-
 def detect_tone(text: str) -> str:
     """เดาโทนจากสไตล์ข้อความ: youth / elder / neutral (ไม่เดาเกินเหตุ)"""
     t = (text or "").lower()
@@ -287,13 +284,22 @@ def detect_tone(text: str) -> str:
     return "neutral"
 
 
-def get_tone(line_user_id: str, text: str) -> str:
-    """โทนต่อผู้ใช้ (จำไว้ในหน่วยความจำ) — เดาแล้วจำไว้ใช้ข้อความถัดไป ไม่ต้องพิมพ์ซ้ำ"""
+def get_tone(db: Session, line_user_id: str, text: str) -> str:
+    """โทนต่อผู้ใช้ (เก็บถาวรใน user_preferences) — เดาแล้วจำไว้ใช้ข้อความถัดไป ไม่ต้องพิมพ์ซ้ำ"""
     detected = detect_tone(text)
-    if detected != "neutral":
-        _tone_memory[line_user_id] = detected
+    pref = (db.query(models.UserPreference)
+              .filter(models.UserPreference.line_user_id == line_user_id).first())
+    saved = pref.tone if pref and pref.tone in ("youth", "elder") else None
+    if detected in ("youth", "elder") and detected != saved:
+        if pref is None:
+            pref = models.UserPreference(line_user_id=line_user_id,
+                                         categories=[], notes=[], tone=detected)
+            db.add(pref)
+        else:
+            pref.tone = detected
+        db.commit()
         return detected
-    return _tone_memory.get(line_user_id, "neutral")
+    return saved or "neutral"
 
 
 SEARCH_GUIDE_YOUTH = (
@@ -1831,11 +1837,11 @@ def message_text(event):
     is_owner = line_user_id == ADMIN_LINE_USER_ID
     intent = 'unknown'
     interest_cat = None
-    tone = get_tone(line_user_id, normalized_text)
     
     db = SessionLocal()
     try:
         user = get_or_create_line_user(db, line_user_id)
+        tone = get_tone(db, line_user_id, normalized_text)
         if normalized_text in DELETE_PHRASES:
             # PDPA: สิทธิ์ลบข้อมูล (erasure) — ลบชื่อ + ประวัติการสนทนา + สิ่งที่ให้จำไว้ทันที
             # (ชีท Google ด้วย — Apps Script ลบทุกแถวของผู้ใช้นี้ออก)

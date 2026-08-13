@@ -34,6 +34,7 @@ class UserPreference(Base):
     line_user_id = Column(String(100), unique=True, index=True, nullable=False)
     categories = Column(JSON, nullable=True)
     notes = Column(JSON, nullable=True)
+    tone = Column(String(10), nullable=True)  # youth | elder | neutral — โทนภาษาที่จำไว้ถาวร
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 
 
