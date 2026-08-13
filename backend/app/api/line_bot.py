@@ -404,6 +404,19 @@ def nosearch_alt_text(user_text: str, category: str, tone: str = "neutral") -> s
             f"ลองดูของใกล้เคียงในหมวด {category} ด้านล่าง หรือพิมพ์ชื่ออื่นได้เลยค่ะ 😊")
 
 
+def nosearch_new_text(user_text: str, category: str, tone: str = "neutral") -> str:
+    """ค้นไม่เจอของขายดี แต่หมวดมีของใหม่เพิ่งเข้าคลัง (ยังไม่ถึงเกณฑ์ขาย) — ปรับโทนตามวัย"""
+    if tone == "youth":
+        return (f"🔍 ยังไม่มี \"{user_text}\" ที่ขายดีถึงเกณฑ์ตอนนี้จ้า\n\n"
+                f"แต่มีของใหม่หมวด {category} เพิ่งเข้าคลัง ลองดูด้านล่างก่อนได้เลย 😎")
+    if tone == "elder":
+        return (f"🔍 ตอนนี้ยังไม่มี \"{user_text}\" ที่ขายดีถึงเกณฑ์นะคะ\n\n"
+                f"แต่มีของใหม่หมวด {category} เพิ่งเข้ามา ลองดูด้านล่างก่อนได้ค่ะ\n"
+                f"หรืออยากได้อะไรเพิ่ม พิมพ์บอกป้าเข็มได้เลยค่ะ")
+    return (f"🔍 ยังไม่มี \"{user_text}\" ที่ขายดีถึงเกณฑ์ในตอนนี้จ๊ะ\n\n"
+            f"แต่มีของใหม่หมวด {category} เพิ่งเข้าคลัง ลองดูด้านล่างก่อนได้เลยค่ะ 😊")
+
+
 def quick_reply_items() -> QuickReply:
     """ปุ่มลัดแบบสากล (Quick Reply) — ลูกค้าแตะแทนพิมพ์
     3 ปุ่มพอ: 🔍 ค้นหาสินค้า · 🤖 คุยกับป้าเข็ม · 💬 ฝากคำถาม (ส่วนที่เหลือลูกค้า
@@ -2181,14 +2194,33 @@ def message_text(event):
                     intent = 'nosearch'
                     interest_cat = cat if cat != "อื่นๆ" else None
                 else:
-                    text = nosearch_fallback_text(user_text, tone)
-                    # บอทช่วยไม่ได้ → แจ้งเจ้าของ (กันสแปม: 1 ครั้ง/cooldown ต่อลูกค้า)
-                    # ถ้าคนถามคือเจ้าของเอง ไม่ต้อง push แจ้งตัวเอง
-                    if not is_owner and notify_owner_stuck(user, user_text, db):
-                        text += ESCALATE_NOTE
-                    reply = TextSendMessage(text=text, quick_reply=quick_reply_items())
-                    intent = 'nosearch'  # รู้ว่าลูกค้าค้นอะไรไม่เจอ → เอาไปหาสินค้ามาเติม
-                    interest_cat = cat if cat != "อื่นๆ" else None
+                    # ของใหม่ในหมวด (30 วัน, ยังไม่ถึงเกณฑ์ขาย) — เสนอแทนทางตัน
+                    # เช่น "กล่องสุ่ม" ที่เพิ่ง import ยอดขายยังต่ำ แต่มีของจริงในคลัง
+                    fresh = []
+                    if cat and cat != "อื่นๆ":
+                        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
+                        fresh = (db.query(models.Product)
+                                   .filter(models.Product.link_status == "ok",
+                                           models.Product.created_at >= cutoff,
+                                           models.Product.category == cat)
+                                   .order_by(models.Product.created_at.desc()).limit(3).all())
+                    if fresh:
+                        reply = [
+                            TextSendMessage(text=nosearch_new_text(display_term, cat, tone)),
+                            product_cards_message(db, user, fresh, title=f"🆕 ของใหม่หมวด {cat}",
+                                                  is_owner=is_owner),
+                        ]
+                        intent = 'nosearch'
+                        interest_cat = cat if cat != "อื่นๆ" else None
+                    else:
+                        text = nosearch_fallback_text(user_text, tone)
+                        # บอทช่วยไม่ได้ → แจ้งเจ้าของ (กันสแปม: 1 ครั้ง/cooldown ต่อลูกค้า)
+                        # ถ้าคนถามคือเจ้าของเอง ไม่ต้อง push แจ้งตัวเอง
+                        if not is_owner and notify_owner_stuck(user, user_text, db):
+                            text += ESCALATE_NOTE
+                        reply = TextSendMessage(text=text, quick_reply=quick_reply_items())
+                        intent = 'nosearch'  # รู้ว่าลูกค้าค้นอะไรไม่เจอ → เอาไปหาสินค้ามาเติม
+                        interest_cat = cat if cat != "อื่นๆ" else None
     except Exception as e:
         logger.error(f"Error processing LINE message: {e}")
         reply = TextSendMessage(text="ขออภัยด้วยค่ะ ระบบขัดข้องชั่วคราว ลองส่งใหม่อีกครั้งนะคะ 🙏",)
