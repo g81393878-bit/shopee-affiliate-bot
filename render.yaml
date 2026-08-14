@@ -30,7 +30,5 @@ services:
         sync: false  # Tavily web search (ค้นข้อมูลเน็ต) — ฟรี 1,000 ครั้ง/เดือน ที่ tavily.com
       - key: FIRECRAWL_API_KEY
         sync: false  # Firecrawl web search สำรอง (ถ้า Tavily ล้ม/หมด quota) — ฟรี ที่ firecrawl.dev
-      - key: GOOGLE_PLACES_API_KEY
-        sync: false  # Google Places API (หาร้านอาหารใกล้ฉัน) — ฟรีเครดิต $200/เดือน ที่ console.cloud.google.com
       - key: LLM_PROVIDER
         value: groq
