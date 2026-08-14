@@ -80,3 +80,9 @@ supabase/.temp/
 # Shopee session data (contains session cookies + personal info)
 affiliate_open_api_application.json
 .tmp_cookies/
+
+# Temporary images at repo root (screenshots, exported backgrounds) — do not commit
+/*.png
+/*.jpg
+/*.jpeg
+/*.webp
