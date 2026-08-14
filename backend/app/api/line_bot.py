@@ -653,10 +653,45 @@ INSTALL_REPLY_OWNER = (
     "② บัญชี Shopee Affiliate — ทำลิงก์ค่าคอม + import สินค้า (สมัครฟรี)\n"
     "③ ที่เก็บข้อมูล + เซิร์ฟเวอร์ (Supabase + Render) — ฟรี\n"
     "④ คีย์ AI (Groq/Gemini) — ฟรี\n\n"
-    "💻 โค้ดอยู่บน GitHub: g81393878-bit/shopee-affiliate-bot (ก๊อป/ดาวน์โหลดฟรี)\n"
-    "จากนั้นทำตามคู่มือ ~15 นาที: วางโค้ดบนเซิร์ฟเวอร์ → ใส่สินค้าของคุณ → เปิดร้านได้เลย\n"
-    "📌 ขั้นตอนละเอียดอยู่ใน docs/setup-guide.md จ๊ะ"
+    "💻 โค้ดอยู่บน GitHub — แตะปุ่มด้านล่างเปิดได้เลยจ๊ะ\n"
+    "จากนั้นทำตามคู่มือ ~15 นาที: วางโค้ดบนเซิร์ฟเวอร์ → ใส่สินค้าของคุณ → เปิดร้านได้เลย"
 )
+
+
+GITHUB_REPO_URL = "https://github.com/g81393878-bit/shopee-affiliate-bot"
+SETUP_GUIDE_URL = GITHUB_REPO_URL + "/blob/main/docs/setup-guide.md"
+
+
+def _wants_code_buttons(text: str) -> bool:
+    """ถามเรื่องติดตั้ง/โค้ด/ดาวน์โหลด → แนบปุ่มเปิด GitHub + คู่มือให้แตะได้ทันที (อำนวยความสะดวก)"""
+    t = (text or "").strip().lower().replace(" ", "")
+    return any(k in t for k in INSTALL_KWS) or \
+        any(k in t for k in ("โค้ด", "github", "ดาวน์โหลด", "ซอร์ส", "source"))
+
+
+def _github_button_card():
+    """ปุ่ม 2 ตัว (URI action): เปิด GitHub + คู่มือติดตั้ง — แตะได้เลย ไม่ต้องก๊อปลิงก์"""
+    return FlexSendMessage(
+        alt_text="เปิดโค้ด GitHub",
+        contents={
+            "type": "bubble",
+            "body": {
+                "type": "box", "layout": "vertical", "spacing": "sm",
+                "contents": [
+                    {"type": "text", "text": "💻 โค้ดป้าเข็ม (ฟรี เปิดเผย)", "weight": "bold", "size": "sm", "wrap": True},
+                ],
+            },
+            "footer": {
+                "type": "box", "layout": "vertical", "spacing": "sm",
+                "contents": [
+                    {"type": "button", "style": "primary", "color": "#E74C3C", "height": "sm",
+                     "action": {"type": "uri", "label": "📦 เปิด GitHub", "uri": GITHUB_REPO_URL}},
+                    {"type": "button", "style": "secondary", "color": "#34495E", "height": "sm",
+                     "action": {"type": "uri", "label": "📖 คู่มือติดตั้ง (ทีละขั้น)", "uri": SETUP_GUIDE_URL}},
+                ],
+            },
+        },
+    )
 
 
 # หัวข้อที่ตอบละเอียดเฉพาะเจ้าของร้าน/คนอยากเปิดร้านเอง — ลูกค้าทั่วไปถาม → ตอบสั้นชี้ทางแทน
@@ -2159,6 +2194,9 @@ def message_text(event):
             # คุยกับป้าเข็ม = ตอบเรื่องบอทจากคู่มือเท่านั้น (ค้น/เทียบ/จำ/พัสดุ...) — ไม่ AI เดา
             reply = TextSendMessage(text=bot_manual_reply(normalized_text, is_owner))
             intent = 'manual'
+            # ถามติดตั้ง/โค้ด → แนบปุ่มเปิด GitHub + คู่มือ (แตะได้ ไม่ต้องก๊อปลิงก์)
+            if _wants_code_buttons(normalized_text):
+                reply = [reply, _github_button_card()]
         elif is_contact_request(normalized_text):
             # ฝากคำถาม 2 ขั้น: ตั้ง state รอคำถามจริง → ลูกค้าพิมพ์ถัดไป = คำถาม
             # (ไม่ push ตอนแตะปุ่ม — กันเจ้าของเห็นแค่ "ฝากคำถาม" ต้องถามกลับ)
