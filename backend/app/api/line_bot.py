@@ -12,7 +12,7 @@ from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import (TextMessage, MessageEvent, TextSendMessage, StickerMessage,
                             StickerSendMessage, QuickReply, QuickReplyButton,
-                            MessageAction, FollowEvent, FlexSendMessage)
+                            MessageAction, FollowEvent, FlexSendMessage, ImageSendMessage)
 from pydantic import BaseModel
 
 from app.db import SessionLocal, get_db
@@ -20,7 +20,7 @@ from app import models
 from app.services.product_cards import product_cards_message, link_button_message
 from app.services.line_quota import push_guard
 from app.services.category import guess_category, CATEGORY_KEYWORDS, normalize_query
-from app.services.web_search import web_search_reply
+from app.services.web_search import web_search_answer
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -476,6 +476,22 @@ def _ensure_menu(reply):
             last.quick_reply = quick_reply_items()
         except Exception:
             pass
+    return msgs
+
+
+def _web_answer_messages(query, answer=None):
+    """คำตอบค้นเน็ต + รูปประกอบ (ถ้ามี) — ส่งรูปก่อน แล้วข้อความท้าย (เมนูแนบที่ข้อความ).
+
+    answer: ผลจาก web_search_answer(query) ถ้าเรียกแล้ว จะ reuse ไม่ค้นซ้ำ"""
+    if answer is None:
+        answer = web_search_answer(query)
+    msgs = []
+    for u in (answer.get("images") or [])[:1]:
+        try:
+            msgs.append(ImageSendMessage(original_content_url=u, preview_image_url=u))
+        except Exception:
+            pass
+    msgs.append(TextSendMessage(text=answer.get("text") or ""))
     return msgs
 
 
@@ -2121,9 +2137,9 @@ def message_text(event):
                 intent = 'human'
                 interest_cat = guess_category(user_text)
             elif looks_like_question(normalized_text):
-                wtext = web_search_reply(normalized_text)
-                if wtext.startswith("🔍 ป้าเข็มหาข้อมูลมาให้แล้วจ๊ะ:"):
-                    reply = TextSendMessage(text=wtext)
+                wanswer = web_search_answer(normalized_text)
+                if wanswer["text"].startswith("🔍 ป้าเข็มหาข้อมูลมาให้แล้วจ๊ะ:"):
+                    reply = _web_answer_messages(normalized_text, answer=wanswer)
                     intent = 'web'
                 else:
                     # web search ไม่สำเร็จ → ส่งเจ้าของตอบจริง
@@ -2235,8 +2251,8 @@ def message_text(event):
             reply = TextSendMessage(text=emo_reply, quick_reply=quick_reply_items())
             intent = 'emotion'
         elif is_web_search_request(normalized_text):
-            # ค้นข้อมูลเน็ต/ความรู้ทั่วไป (Tavily) — ลูกค้าพิมพ์ "ค้นเน็ต ..."
-            reply = TextSendMessage(text=web_search_reply(_web_search_text(normalized_text)))
+            # ค้นข้อมูลเน็ต/ความรู้ทั่วไป (Tavily → Firecrawl fallback) — ลูกค้าพิมพ์ "ค้นเน็ต ..."
+            reply = _web_answer_messages(_web_search_text(normalized_text))
             intent = 'web'
         else:
             # พิมพ์อย่างอื่น (เช่น "หูฟัง" "อยากได้กระติกน้ำ" "หูฟังไม่เกิน 300") —
@@ -2257,7 +2273,7 @@ def message_text(event):
                 # คำถามความรู้สากล/ยอดนิยม (วิธี/คืออะไร/ทำไม/เท่าไหร่/วันนี้...) →
                 # ค้นเน็ตให้อัตโนมัติ ไม่ต้องพิมพ์ "ค้นเน็ต" นำหน้า
                 # กันพลาด: ถ้าคำถามมีคำหมวดสินค้าแฝง ("หูฟังอะไรดี") → เสนอของในร้านแทน
-                reply = TextSendMessage(text=web_search_reply(normalized_text))
+                reply = _web_answer_messages(normalized_text)
                 intent = 'web'
             else:
                 cat = guess_category(normalized_text)
