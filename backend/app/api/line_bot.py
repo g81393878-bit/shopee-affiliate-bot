@@ -713,11 +713,6 @@ def bot_manual_reply(text: str, is_owner: bool = False) -> str:
     return BOT_MANUAL
 
 
-CONTACT_REPLY = (
-    "🙏 ป้าเข็มรับทราบแล้วจ๊ะ เจ้าของร้านจะมาตอบกลับที่แชทนี้ให้เร็วที่สุด "
-    "ระหว่างนี้ลองพิมพ์ชื่อสินค้าให้ป้าเข็มหาของให้ก่อนก็ได้นะคะ 😊"
-)
-
 # --- เทียบสินค้า A กับ B (แบบ Amazon "Compare with": ข้อมูลจริงในคลัง ไม่ AI เดา) ---
 COMPARE_PREFIXES = ("เปรียบเทียบราคา", "เปรียบเทียบ", "เทียบราคา", "เทียบ")
 COMPARE_SEPS = (" กับ ", " และ ", "กับ", "และ")
@@ -1958,7 +1953,7 @@ def is_bot_manual_request(text: str) -> bool:
 
 
 def is_contact_request(text: str) -> bool:
-    """ลูกค้าขอคุยกับคนจริง/ติดต่อเจ้าของร้าน? → แจ้งเจ้าของร้าน"""
+    """ลูกค้าขอคุย/ฝากคำถาม? → บอทถามคำถามจริงแล้วตอบเอง (ไม่ส่งเจ้าของ)"""
     t = (text or "").strip().lower().replace(" ", "")
     return any(p in t for p in CONTACT_PHRASES)
 
@@ -2199,14 +2194,10 @@ def message_text(event):
             if _wants_code_buttons(normalized_text):
                 reply = [reply, _github_button_card()]
         elif is_contact_request(normalized_text):
-            # ฝากคำถาม 2 ขั้น: ตั้ง state รอคำถามจริง → ลูกค้าพิมพ์ถัดไป = คำถาม
-            # (ไม่ push ตอนแตะปุ่ม — กันเจ้าของเห็นแค่ "ฝากคำถาม" ต้องถามกลับ)
-            if is_owner:
-                reply = TextSendMessage(text=CONTACT_REPLY)
-            else:
-                _pending_question[line_user_id] = datetime.datetime.utcnow()
-                reply = TextSendMessage(text=ASK_QUESTION_PROMPT,
-                                        quick_reply=quick_reply_items())
+            # ฝากคำถาม 2 ขั้น: แตะปุ่ม → ถามคำถามจริง → ป้าเข็มตอบเอง (ไม่มีทางส่งเจ้าของ)
+            _pending_question[line_user_id] = datetime.datetime.utcnow()
+            reply = TextSendMessage(text=ASK_QUESTION_PROMPT,
+                                    quick_reply=quick_reply_items())
             intent = 'human'
         elif is_owner and normalized_text in ADMIN_STATS_CMDS:
             reply = TextSendMessage(text=admin_customer_stats(db))
