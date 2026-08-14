@@ -30,7 +30,7 @@
 
 ### ขั้น 2 — เตรียมโค้ด + ฐานข้อมูล
 ```bash
-git clone <repo-url> && cd <repo>
+git clone https://github.com/g81393878-bit/shopee-affiliate-bot && cd shopee-affiliate-bot
 cd backend
 pip install -r requirements.txt        # ติดตั้ง dependencies
 cp .env.example .env                    # แล้วกรอกค่าข้างล่าง
