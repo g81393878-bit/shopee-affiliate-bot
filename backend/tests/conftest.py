@@ -72,7 +72,6 @@ def _seed_products():
 @pytest.fixture(autouse=True)
 def db():
     """session สด + ล้างสถานะในหน่วยความจำ/ตารางลูกค้าระหว่างแต่ละเทสต์"""
-    lb._last_escalate.clear()
     lb._pending_question.clear()
     s = SessionLocal()
     for m in (models.ChatLog, models.UserPreference, models.User, models.CampaignLog):

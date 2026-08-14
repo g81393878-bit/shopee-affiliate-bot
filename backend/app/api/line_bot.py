@@ -717,9 +717,6 @@ CONTACT_REPLY = (
     "🙏 ป้าเข็มรับทราบแล้วจ๊ะ เจ้าของร้านจะมาตอบกลับที่แชทนี้ให้เร็วที่สุด "
     "ระหว่างนี้ลองพิมพ์ชื่อสินค้าให้ป้าเข็มหาของให้ก่อนก็ได้นะคะ 😊"
 )
-ESCALATE_NOTE = (
-    "\n\n📢 แจ้งป้าเข็มให้แล้วจ๊ะ ถ้าอยากคุยกับป้าเข็มโดยตรง พิมพ์ \"คุยกับป้าเข็ม\" ได้เลยค่ะ 😊"
-)
 
 # --- เทียบสินค้า A กับ B (แบบ Amazon "Compare with": ข้อมูลจริงในคลัง ไม่ AI เดา) ---
 COMPARE_PREFIXES = ("เปรียบเทียบราคา", "เปรียบเทียบ", "เทียบราคา", "เทียบ")
@@ -1915,21 +1912,31 @@ def get_or_create_line_user(db: Session, line_user_id: str) -> models.User:
     return user
 
 
-# --- คุยกับป้าเข็ม — ตอบเรื่องบอทจากคู่มือเท่านั้น (ไม่ใช้ AI เดา — กันมโน) ---
-_last_escalate: dict = {}
-
-# --- ฝากคำถาม 2 ขั้น: แตะปุ่ม → บอทถามคำถามจริง → ลูกค้าพิมพ์ → push เจ้าของ ---
+# --- ฝากคำถาม 2 ขั้น: แตะปุ่ม → บอทถามคำถามจริง → ลูกค้าพิมพ์ → ป้าเข็มตอบเอง ---
 # เก็บ state ในหน่วยความจำ (uvicorn 1 process พอเพียง): uid → เวลาที่แตะปุ่ม
 _pending_question: dict = {}
 PENDING_QUESTION_TTL_MIN = 30          # รอคำถามได้ 30 นาที แล้วคืนโหมดปกติ
 ASK_QUESTION_PROMPT = (
-    "🖊️ ป้าเข็มรับฟังจ๊ะ — พิมพ์คำถามของคุณได้เลยค่ะ\n"
-    "เช่น \"หม้อหุงข้าวส่งถึงกรุงเทพไหม\" หรือ \"ของจะส่งเมื่อไหร่\"\n\n"
-    "ถ้าเปลี่ยนใจ พิมพ์ \"ยกเลิก\" หรือแตะปุ่มเมนูด้านล่างได้เลย 😊"
+    "🖊️ ป้าเข็มรับฟังเองจ๊ะ — พิมพ์คำถามของคุณได้เลยค่ะ\n"
+    "ถามสินค้า / ความรู้ทั่วไป / เรื่องร้าน ป้าเข็มตอบให้เองทุกคำถาม\n\n"
+    "ถ้าเปลี่ยนใจ พิมพ์ \"ยกเลิก\" ได้เลย 😊"
 )
 CANCEL_CONFIRM = "รับทราบจ๊ะ กลับมาเมนูปกติได้เลยค่ะ 😊"
-# คำเฉพาะร้าน — ถ้าฝากคำถามมีคำพวกนี้ = ถามเรื่องร้าน/สั่งซื้อ (พัสดุ/ราคา/บริการ)
-# ต้องให้เจ้าของตอบจริง (web search เดาไม่ได้ ไม่ควรตอบแทน)
+# ป้าเข็มตอบเรื่องร้าน/สั่งซื้อเอง (นายหน้า ไม่มีข้อมูลสั่งซื้อ/พัสดุของลูกค้า)
+STORE_QUESTION_SELF_SERVICE = (
+    "🤗 เรื่องร้าน/สั่งซื้อป้าเข็มช่วยตอบได้จ๊ะ:\n\n"
+    "• ราคา = เท่ากับในแอป Shopee เป๊ะ ป้าเป็นนายหน้า ไม่บวกเพิ่ม\n"
+    "• สั่งซื้อ/จ่ายเงิน/คืนเงิน → ทำในแอป Shopee เองได้เลยค่ะ\n"
+    "• ติดตามพัสดุ/เลขสั่งซื้อ → เปิดแอป Shopee → ฉัน → การสั่งซื้อของฉัน\n\n"
+    "ถ้าอยากให้ป้าช่วยหาสินค้า พิมพ์ชื่อของมาได้เลยนะคะ 😊"
+)
+# คำถามที่ป้าตอบให้ตรง ๆ ไม่ได้ (คลุมเครือ/หาข้อมูลไม่เจอ) — ไม่ปลุกเจ้าของ
+QUESTION_ANSWER_FALLBACK = (
+    "🤗 ป้าเข็มรับคำถามไว้แล้วจ๊ะ แต่เรื่องนี้ป้าตอบให้ตรง ๆ ไม่ได้ตอนนี้ — "
+    "ลองพิมพ์ชื่อสินค้าให้ป้าหาให้ก่อน หรือถามความรู้ทั่วไปดูอีกรอบนะคะ 😊"
+)
+# คำเฉพาะร้าน — ถ้าฝากคำถามมีคำพวกนี้ = เรื่องร้าน/สั่งซื้อ (พัสดุ/ราคา/ชำระเงิน)
+# ป้าเข็มตอบวิธีจัดการเอง (นายหน้า ไม่มีข้อมูลสั่งซื้อจริง ไม่ควรตอบแทนเจ้าของ)
 STORE_QUESTION_MARKERS = (
     "พัสดุ", "ส่งของ", "จะส่ง", "จัดส่ง", "ของถึง", "ได้ของ", "สต็อก", "มีของไหม",
     "มีสินค้าไหม", "ราคาเท่าไหร่", "กี่บาท", "รับประกัน", "คืนเงิน", "ชำระเงิน",
@@ -2073,64 +2080,6 @@ def _web_search_text(raw: str) -> str:
     return t.strip()
 
 
-def _is_owner_notify_noise(text: str) -> bool:
-    """ขยะที่ไม่ควรปลุกเจ้าของร้าน: ตัวเลข/อิโมจิ/เครื่องหมายล้วน (555555, 🙂, !!!),
-    ซ้ำตัวเดิม (zzzzzz), เคาะแป้นมั่วไม่มีสระ (asdfghjkl/dfghjk)
-    มีตัวอักษรไทย = คำค้น/พิมพ์ผิดจริง → สมควรแจ้ง (พิมพ์ผิดไทยแก้ที่ THAI_VARIANT_MAP
-    ให้ค้นเจอแทน ไม่มาถึงบรรทัดนี้)"""
-    t = (text or "").strip()
-    if not t:
-        return True
-    if any('\u0e00' <= c <= '\u0e7f' for c in t):
-        return False
-    letters = [c.lower() for c in t if c.isascii() and c.isalpha()]
-    if not letters:
-        return True
-    # ซ้ำตัวเดิม (zzzzzz) / อัตราส่วนสระต่ำผิดปกติ = เคาะแป้นมั่ว (asdfghjkl)
-    if len(letters) >= 4 and len(set(letters)) <= 2:
-        return True
-    if len(letters) >= 5:
-        vowels = sum(1 for c in letters if c in "aeiou")
-        if vowels / len(letters) < 0.2:
-            return True
-    return False
-
-
-def notify_owner_stuck(user, text: str, db=None, title: str = "🤔 ลูกค้าสงสัย — บอทช่วยไม่ได้") -> bool:
-    """Push แจ้งเตือนเจ้าของร้าน (ADMIN_LINE_USER_ID) — ใช้ทั้งตอนบอทช่วยไม่ได้
-    และตอนลูกค้าฝากคำถาม (ส่ง title ต่างกัน)
-    กันสแปม: 1 ครั้ง/cooldown ต่อลูกค้า (cooldown เก็บในหน่วยความจำ —
-    uvicorn 1 process พอเพียง; หลัง restart แจ้งได้อีกครั้ง ไม่เสียหาย)
-    คืน True ถ้าส่งจริง"""
-    if _is_owner_notify_noise(text):
-        return False
-    uid = getattr(user, "line_user_id", None)
-    cooldown_min = int(os.getenv("ESCALATE_COOLDOWN_MINUTES", "360"))
-    last = _last_escalate.get(uid)
-    now = datetime.datetime.utcnow()
-    if last and (now - last).total_seconds() < cooldown_min * 60:
-        return False
-    _last_escalate[uid] = now
-    name = (getattr(user, "name", None) or "ลูกค้า").strip() or "ลูกค้า"
-    body = (f"{title}\n"
-            f"👤 {name}\n"
-            f"💬 \"{(text or '')[:200]}\"\n"
-            f"🆔 {uid or 'ไม่ทราบ'}\n"
-            "📌 ตอบกลับได้ที่ LINE OA console — ลูกค้าแชทมาที่บอทอยู่แล้ว")
-    if "mock" in LINE_ACCESS_TOKEN.lower():
-        logger.info(f"[notify_owner] <- {name}: {text[:80]}")
-        return True
-    try:
-        if db is not None and not push_guard(db):
-            logger.warning("ข้าม notify_owner push (quota หมด)")
-            return False
-        line_bot_api.push_message(ADMIN_LINE_USER_ID, TextSendMessage(text=body))
-        return True
-    except Exception as e:
-        logger.warning(f"notify_owner_stuck push failed: {e}")
-        return False
-
-
 @handler.add(MessageEvent, message=TextMessage)
 def message_text(event):
     user_text = event.message.text.strip()
@@ -2156,10 +2105,10 @@ def message_text(event):
                 _pending_question.pop(line_user_id, None)  # หมดเวลา → คืนโหมดปกติ
                 pending_ts = None
         if pending_ts and not is_owner and normalized_text not in DELETE_PHRASES \
-                and not any(p in normalized_text for p in PENDING_CANCEL_IF):
+                and not any(p in normalized_text for p in PENDING_CANCEL_IF) and not is_contact_request(normalized_text):
             _pending_question.pop(line_user_id, None)
-            # ป้าเข็มลองตอบเองก่อน (auto-answer): ค้นสินค้า → คำถามความรู้ →
-            # เหลือคำถามเฉพาะร้าน/ตอบไม่ได้ → push เจ้าของ (กันเจ้าของจม 100 คำถาม)
+            # ป้าเข็มตอบเองทั้งหมด (NUANOSE: AI = พนักงาน) — ค้นสินค้า → พัสดุ →
+            # เรื่องร้าน/สั่งซื้อ → ความรู้ทั่วไป ไม่ push เจ้าของ
             hits = search_products(db, normalized_text)
             if hits:
                 reply = format_product_message(db, user, hits,
@@ -2167,14 +2116,14 @@ def message_text(event):
                                                is_owner=is_owner)
                 intent = 'search'
                 interest_cat = guess_category(normalized_text)
+            elif is_wismo(normalized_text):
+                # พัสดุ/เลขพัสดุ/ของถึงยัง → สอนเช็คเองในแอป Shopee (ป้าเป็นนายหน้า ไม่มีเลขพัสดุ)
+                reply = [TextSendMessage(text=WISMO_REPLY), WISMO_BUTTON]
+                intent = 'wismo'
             elif any(m in normalized_text for m in STORE_QUESTION_MARKERS):
-                # ถามเรื่องร้าน/สั่งซื้อ (พัสดุ/ราคา/โปรโมชัน/ส่งของ) → เจ้าของเท่านั้น
-                # (web search ตอบแทนไม่ได้ — เดาอันตราย)
-                if notify_owner_stuck(user, user_text, db, title="📩 ลูกค้าฝากคำถาม"):
-                    reply = TextSendMessage(text=CONTACT_REPLY + ESCALATE_NOTE)
-                else:
-                    reply = TextSendMessage(text=CONTACT_REPLY)
-                intent = 'human'
+                # เรื่องร้าน/สั่งซื้อ/ราคา/ชำระเงิน → ตอบวิธีจัดการเอง (นายหน้า ไม่มีข้อมูลสั่งซื้อ)
+                reply = TextSendMessage(text=STORE_QUESTION_SELF_SERVICE)
+                intent = 'manual'
                 interest_cat = guess_category(user_text)
             elif looks_like_question(normalized_text):
                 wanswer = web_search_answer(normalized_text)
@@ -2182,18 +2131,12 @@ def message_text(event):
                     reply = _web_answer_messages(normalized_text, answer=wanswer)
                     intent = 'web'
                 else:
-                    # web search ไม่สำเร็จ → ส่งเจ้าของตอบจริง
-                    if notify_owner_stuck(user, user_text, db, title="📩 ลูกค้าฝากคำถาม"):
-                        reply = TextSendMessage(text=CONTACT_REPLY + ESCALATE_NOTE)
-                    else:
-                        reply = TextSendMessage(text=CONTACT_REPLY)
+                    # web search ไม่สำเร็จ → ถ่อมตัว + แนะนำค้นสินค้า (ไม่ปลุกเจ้าของ)
+                    reply = TextSendMessage(text=QUESTION_ANSWER_FALLBACK)
                     intent = 'human'
             else:
-                # คำถามเฉพาะร้าน/เรื่องส่วนตัว (พัสดุ/ราคา/บริการ) → เจ้าของเท่านั้น
-                if notify_owner_stuck(user, user_text, db, title="📩 ลูกค้าฝากคำถาม"):
-                    reply = TextSendMessage(text=CONTACT_REPLY + ESCALATE_NOTE)
-                else:
-                    reply = TextSendMessage(text=CONTACT_REPLY)
+                # คำถามไม่ชัด/ตอบไม่ได้ → ถ่อมตัว + แนะนำพิมพ์ชื่อสินค้า (ไม่ปลุกเจ้าของ)
+                reply = TextSendMessage(text=QUESTION_ANSWER_FALLBACK)
                 intent = 'human'
                 interest_cat = guess_category(user_text)
         elif pending_ts and normalized_text in PENDING_CANCEL_IF:
@@ -2360,10 +2303,8 @@ def message_text(event):
                         interest_cat = cat if cat != "อื่นๆ" else None
                     else:
                         text = nosearch_fallback_text(user_text, tone)
-                        # บอทช่วยไม่ได้ → แจ้งเจ้าของ (กันสแปม: 1 ครั้ง/cooldown ต่อลูกค้า)
-                        # ถ้าคนถามคือเจ้าของเอง ไม่ต้อง push แจ้งตัวเอง
-                        if not is_owner and notify_owner_stuck(user, user_text, db):
-                            text += ESCALATE_NOTE
+                        # NUANOSE: ป้าเข็มตอบเอง ไม่ push เจ้าของ — intent='nosearch' ถูก log
+                        # ไว้ใน chat_logs แล้ว เจ้าของดู gap ของคลังได้ทีหลังใน dashboard
                         reply = TextSendMessage(text=text, quick_reply=quick_reply_items())
                         intent = 'nosearch'  # รู้ว่าลูกค้าค้นอะไรไม่เจอ → เอาไปหาสินค้ามาเติม
                         interest_cat = cat if cat != "อื่นๆ" else None

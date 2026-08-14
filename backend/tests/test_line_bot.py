@@ -6,6 +6,8 @@
 2. ขยะ/อิโมจิ/พิมพ์ผิด ต้องไม่ push แจ้งเจ้าของร้าน
 3. ค้นสินค้า/เงื่อนไขราคา/สเปค/พิมพ์ผิด ต้องหาเจอ
 """
+import datetime
+
 import pytest
 
 import app.api.line_bot as lb  # noqa: E402
@@ -38,10 +40,10 @@ def test_nosearch_data_gap_no_owner_push(sim):
     assert r["owner_pushes"] == []  # มีของใกล้เคียงหมวดให้ → ไม่ต้องปลุกเจ้าของ
 
 
-def test_legit_miss_notifies_owner(sim):
+def test_legit_miss_no_owner_push(sim):
     r = sim.send("U_cust_1", "โดรนถ่ายรูป")
     assert r["intent"] == "nosearch"
-    assert len(r["owner_pushes"]) == 1  # คำค้นไทยจริง บอทช่วยไม่ได้ → แจ้งเจ้าของ
+    assert r["owner_pushes"] == []  # ป้าเข็มตอบเอง ไม่ปลุกเจ้าของ (NUANOSE) — gap อยู่ใน chat_logs
 
 
 # ---------- บั๊ก "ติดตั้ง" (regression) ----------
@@ -73,14 +75,6 @@ def test_noise_does_not_notify_owner(sim, text):
     r = sim.send("U_cust_1", text)
     assert r["intent"] == "nosearch"
     assert r["owner_pushes"] == [], f"{text!r} ปลุกเจ้าของทั้งที่เป็นขยะ"
-
-
-def test_noise_guard_unit():
-    # ตรวจตัวช่วยโดยตรง (ไม่ผ่าน message_text)
-    for junk in ["zzzzzz", "asdfghjkl", "555555", "🙂", "!!!", ""]:
-        assert lb._is_owner_notify_noise(junk), junk
-    for real in ["หูฟง", "powerbank", "refund please", "labubu", "โดรนถ่ายรูป", "งบ 500"]:
-        assert not lb._is_owner_notify_noise(real), real
 
 
 # ---------- routing ตาม intent ----------
@@ -225,14 +219,54 @@ def test_pending_question_store_marker(sim):
     r1 = sim.send("U_cust_1", "ฝากคำถาม")
     assert r1["intent"] == "human"
     r2 = sim.send("U_cust_1", "พัสดุของฉันอยู่ไหน")
-    assert r2["intent"] == "human"
-    assert len(r2["owner_pushes"]) == 1  # คำถามร้าน/พัสดุ → push เจ้าของ
+    assert r2["intent"] == "manual"
+    assert r2["owner_pushes"] == []  # ป้าเข็มตอบวิธีเช็คเอง ไม่ปลุกเจ้าของ (NUANOSE)
 
 
 def test_pending_question_web_answer(sim):
     sim.send("U_cust_1", "ฝากคำถาม")
     r2 = sim.send("U_cust_1", "วิธีชงกาแฟให้อร่อย")
     assert r2["intent"] == "web"
+
+
+def test_pending_question_retap_does_not_push_owner(sim):
+    # แตะ "ฝากคำถาม" ซ้ำ (ปุ่มติดมาใน prompt) ต้องไม่ push คำว่า "ฝากคำถาม" ไปเจ้าของ
+    sim.send("U_cust_1", "ฝากคำถาม")
+    r2 = sim.send("U_cust_1", "ฝากคำถาม")
+    assert r2["owner_pushes"] == []
+    assert "พิมพ์คำถาม" in r2["preview"]  # ถามคำถามจริงซ้ำ แทนการตอบรับทราบ
+
+
+def test_pending_question_wismo(sim):
+    sim.send("U_cust_1", "ฝากคำถาม")
+    r2 = sim.send("U_cust_1", "เลขพัสดุหาย ตามของหน่อย")
+    assert r2["intent"] == "wismo"
+    assert r2["owner_pushes"] == []
+
+
+def test_pending_question_web_fail_fallback(sim, monkeypatch):
+    monkeypatch.setattr(lb, "web_search_answer",
+                        lambda q, *a, **k: {"text": "ขออภัย หาไม่เจอ", "images": []})
+    sim.send("U_cust_1", "ฝากคำถาม")
+    r2 = sim.send("U_cust_1", "วิธีทำขนมปังโฮมเมด")
+    assert r2["intent"] == "human"
+    assert r2["owner_pushes"] == []
+    assert "ตอบให้ตรง" in r2["preview"]
+
+
+def test_pending_question_unclear_fallback(sim):
+    sim.send("U_cust_1", "ฝากคำถาม")
+    r2 = sim.send("U_cust_1", "อืม")
+    assert r2["intent"] == "human"
+    assert r2["owner_pushes"] == []
+    assert "ตอบให้ตรง" in r2["preview"]
+
+
+def test_pending_question_ttl_expiry(sim):
+    sim.send("U_cust_1", "ฝากคำถาม")
+    lb._pending_question["U_cust_1"] = datetime.datetime.utcnow() - datetime.timedelta(minutes=31)
+    r2 = sim.send("U_cust_1", "หูฟัง")
+    assert r2["intent"] == "search"  # พ้น TTL → กลับโหมดค้นสินค้าปกติ
 
 
 # ---------- โทนวัย (youth/elder) — ครอบทุกตัวแปร tone ----------
