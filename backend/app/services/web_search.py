@@ -4,8 +4,8 @@ Web search — ค้นข้อมูลทั่วไป/ความรู�
 
 ใช้ REST API ตรง (urllib) — ไม่ต้องติดตั้ง dependency เพิ่ม
 - TAVILY_API_KEY    (สมัครฟรีที่ tavily.com — ฟรี 1,000 ครั้ง/เดือน ไม่ผูกบัตร)
-- FIRECRAWL_API_KEY (สมัครฟรีที่ firecrawl.dev) — รองรับหลาย key คั่นคอมม่า
-  (fc_aaa,fc_bbb,...) หมุนเวียน + failover เหมือน GROQ_API_KEY
+- FIRECRAWL_API_KEY (สมัครฟรีที่ firecrawl.dev)
+ทั้ง 2 ตัวรองรับหลาย key คั่นคอมม่า (key_aaa,key_bbb,...) หมุนเวียน + failover เหมือน GROQ_API_KEY
 
 ทำงานร่วมกัน (collaborate) — เรียกทั้ง 2 provider ขนานกันแล้วรวมผล:
   - answer  = สรุป AI จาก Tavily (ถ้ามี) ไม่งั้น Groq สรุปจากผล Firecrawl
@@ -62,6 +62,35 @@ def _rotate_firecrawl_keys() -> list:
     return keys[rot:] + keys[:rot]
 
 
+# Tavily หลาย key หมุนเวียน + failover (pattern เดียวกับ Firecrawl/Groq)
+_tv_lock = threading.Lock()
+_tv_start_index = 0
+
+
+def tavily_keys() -> list:
+    """รายการ Tavily keys จาก TAVILY_API_KEY (รองรับหลายตัวคั่นด้วย ,) — ตัด mock/ซ้ำ"""
+    raw = (os.getenv("TAVILY_API_KEY") or "").strip()
+    seen, keys = set(), []
+    for k in raw.split(","):
+        k = k.strip()
+        if k and "mock" not in k.lower() and k not in seen:
+            seen.add(k)
+            keys.append(k)
+    return keys
+
+
+def _rotate_tavily_keys() -> list:
+    """Tavily keys เรียงแบบหมุนเวียน (call ถัดไปเริ่มที่ key ถัดไป — กระจายโหลด)"""
+    keys = tavily_keys()
+    if not keys:
+        return []
+    global _tv_start_index
+    with _tv_lock:
+        rot = _tv_start_index % len(keys)
+        _tv_start_index += 1
+    return keys[rot:] + keys[:rot]
+
+
 def _post_json(url: str, body: dict, headers: dict, timeout: int = 20) -> dict:
     req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"),
                                  method="POST", headers=headers)
@@ -89,11 +118,11 @@ def _clean_image_urls(images) -> list:
 
 
 def _tavily_search(query: str, max_results: int, search_depth: str) -> dict:
-    key = (os.getenv("TAVILY_API_KEY") or "").strip()
-    if not key:
+    """ค้น Tavily (หลาย key หมุนเวียน+failover) — คืน dict ดิบ {answer, results, images, ...}"""
+    keys = _rotate_tavily_keys()
+    if not keys:
         raise RuntimeError("ยังไม่ได้ตั้ง TAVILY_API_KEY")
     body = {
-        "api_key": key,
         # คำนำหน้าบังคับให้ Tavily สรุปตอบเป็นภาษาไทย (ไม่ตอบภาษาอังกฤษ)
         "query": "ตอบเป็นภาษาไทยสั้นๆ: " + query,
         "search_depth": search_depth,
@@ -101,11 +130,22 @@ def _tavily_search(query: str, max_results: int, search_depth: str) -> dict:
         "include_answer": True,
         "include_images": True,
     }
-    try:
-        return _post_json(TAVILY_API_URL, body, {"Content-Type": "application/json"})
-    except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Tavily HTTP {e.code}: {detail[:200]}") from e
+    data, last_err = None, None
+    for key in keys:
+        body["api_key"] = key
+        try:
+            data = _post_json(TAVILY_API_URL, body, {"Content-Type": "application/json"})
+            break
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", errors="replace")
+            last_err = RuntimeError(f"Tavily HTTP {e.code}: {detail[:200]}")
+            logger.warning(f"Tavily key {key[:10]}... failed ({last_err}) — ลอง key ถัดไป")
+        except Exception as e:
+            last_err = e
+            logger.warning(f"Tavily key {key[:10]}... failed ({e}) — ลอง key ถัดไป")
+    if data is None:
+        raise last_err if last_err else RuntimeError("Tavily: unknown error")
+    return data
 
 
 def _summarize_with_groq(query: str, results: list) -> str:
