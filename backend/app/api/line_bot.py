@@ -12,7 +12,8 @@ from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import (TextMessage, MessageEvent, TextSendMessage, StickerMessage,
                             StickerSendMessage, QuickReply, QuickReplyButton,
-                            MessageAction, FollowEvent, FlexSendMessage, ImageSendMessage)
+                            MessageAction, LocationAction, LocationMessage, FollowEvent,
+                            FlexSendMessage, ImageSendMessage)
 from pydantic import BaseModel
 
 from app.db import SessionLocal, get_db
@@ -21,6 +22,7 @@ from app.services.product_cards import product_cards_message, link_button_messag
 from app.services.line_quota import push_guard
 from app.services.category import guess_category, CATEGORY_KEYWORDS, normalize_query
 from app.services.web_search import web_search_answer
+from app.services.google_places import nearby_restaurants
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -1053,6 +1055,7 @@ INTENT_LABELS = {
     "new": "มีอะไรใหม่", "guide": "คู่มือค้น",
     "campaign": "แคมเปญ", "admin": "แอดมิน", "error": "ผิดพลาด",
     "emotion": "ระบายอารมณ์", "web": "ค้นเน็ต", "browse": "ดูหมวดสินค้า",
+    "food": "หาร้านอาหารใกล้ฉัน",
 }
 
 
@@ -1888,6 +1891,132 @@ PENDING_CANCEL_IF = (
 )
 
 
+# --- หาร้านอาหารใกล้ฉัน 2 ขั้น: บอกอยากกิน/ร้านอาหาร → ขอตำแหน่ง → ลูกค้าส่ง LocationMessage → ค้น ---
+# เก็บ state ในหน่วยความจำ (uvicorn 1 process พอเพียง): uid → {keyword, ts}
+_pending_food: dict = {}
+_last_location: dict = {}          # uid -> (lat, lng, ts) — ใช้ซ้ำได้ในเวลาสั้นๆ ไม่ต้องขอตำแหน่งใหม่ทุกครั้ง
+LOCATION_REUSE_MIN = 30            # ตำแหน่งเก่าใช้ได้ 30 นาที (ขยับนิดหน่อยยังใช้ได้)
+
+# คำที่ชัดว่าเป็น "อาหาร/ร้านกินดื่ม" — คัดเฉพาะคำเจาะจง ไม่ใส่คำอาหารเดี่ยวๆ
+# (กันชนชื่อสินค้า เช่น "หม้อชาบู", "ครกตำส้มตำ" หลุดมาเป็นร้านอาหาร)
+FOOD_KEYWORDS = (
+    "อยากกิน", "หิว", "กินอะไร", "กินข้าว", "ไปกิน", "หากิน", "หาของกิน",
+    "ร้านอาหาร", "ร้านอร่อย", "ร้านกาแฟ", "ร้านคาเฟ่", "ร้านชา", "ร้านส้มตำ",
+    "ร้านก๋วยเตี๋ยว", "ร้านชาบู", "ร้านหมูกระทะ", "ร้านปิ้งย่าง", "ร้านซูชิ",
+    "ร้านพิซซ่า", "ร้านเบเกอรี่", "ร้านบุฟเฟ่ต์", "อาหารเช้า", "อาหารเที่ยง", "อาหารเย็น",
+)
+# "ร้าน ... ใกล้ฉัน" ที่เป็นร้านที่ไม่ใช่อาหาร — กัน "ร้านหนังสือใกล้ฉัน" หลุดเป็นร้านอาหาร
+NON_FOOD_SHOP = (
+    "ร้านหนังสือ", "ร้านขายยา", "ร้านสะดวกซื้อ", "ร้านค้า", "ร้านเสื้อ", "ร้านรองเท้า",
+    "ร้านมือถือ", "ร้านคอม", "ร้านซักรีด", "ร้านตัดผม", "ร้านเสริมสวย", "ร้านขายของ",
+    "ร้านนวด", "ร้านทอง",
+)
+LOCATION_MARKERS = ("ใกล้ฉัน", "แถวนี้", "แถวนั้น", "แถวๆนี้", "แถว ๆ นี้", "ใกล้ๆ", "แถวๆ", "แถวนึง", "ละแวกนี้")
+
+
+def is_food_request(text: str) -> bool:
+    """ลูกค้าอยากหาร้านอาหาร/ของกินใกล้ตัว? (อยากกิน X / ร้านอาหารใกล้ฉัน / หิวข้าว)
+    คัดเฉพาะคำอาหารชัดๆ — กัน "หม้อชาบู" (สินค้า) หรือ "ร้านหนังสือใกล้ฉัน" หลุดมาเป็นร้านอาหาร"""
+    t = (text or "").strip().lower().replace(" ", "")
+    if any(m in t for m in FOOD_KEYWORDS):
+        return True
+    # "ร้าน ... ใกล้ฉัน" ที่ไม่มีคำอาหารตรงๆ — ยกเว้นร้านที่ไม่ใช่อาหาร (หนังสือ/ยา/เสื้อ...)
+    if any(m in t for m in LOCATION_MARKERS) and "ร้าน" in t \
+            and not any(m in t for m in NON_FOOD_SHOP):
+        return True
+    return False
+
+
+def _food_keyword(text: str):
+    """ดึงประเภทอาหารที่อยากกินจากข้อความ — 'อยากกินส้มตำ'→'ส้มตำ', 'ร้านกาแฟใกล้ฉัน'→'กาแฟ'
+    'ร้านอาหารใกล้ฉัน' (ไม่มีเจาะจง) → None = ค้นร้านอาหารทั่วไป"""
+    t = (text or "").strip()
+    for p in ("อยากกิน", "อยากได้ร้าน", "หิว", "ไปกิน", "หากิน", "หาของกิน"):
+        if p in t:
+            t = t.split(p, 1)[-1]
+            break
+    t = re.sub(r"(ใกล้ฉัน|แถวนี้|แถวนั้น|แถวๆนี้|แถว ๆ นี้|ใกล้ๆ|แถวๆ|แถวนึง|ละแวกนี้|ร้าน|อาหาร|อร่อย)", " ", t)
+    t = re.sub(r"\s+", " ", t).strip(" -—:：,，。.!！?？")
+    if not t or t in ("ทั่วไป", "แถว", "ๆ"):
+        return None
+    return t
+
+
+def _food_results_message(user, keyword: str, places, tone: str = "neutral"):
+    """format ผลร้านอาหารจาก Google Places เป็นข้อความ (โทนตามวัย + ลิงก์แผนที่คลิกได้)"""
+    if places is None:
+        return TextSendMessage(
+            text="🙏 ป้าขอโทษด้วยนะคะ ตอนนี้ระบบหาตำแหน่งร้านขัดข้องชั่วคราว ลองใหม่สักครู่ได้เลยจ๊ะ 💛",
+            quick_reply=quick_reply_items())
+    if not places:
+        kw = f" \"{keyword}\"" if keyword else ""
+        return TextSendMessage(
+            text=f"🍜 แถวนี้ป้ายังไม่เจอร้าน{kw}ที่เปิดอยู่จ๊ะ\n\n"
+                 "ลองขยับตำแหน่ง หรือบอกป้าว่าอยากกินอะไรอีกแบบก็ได้นะคะ 😊",
+            quick_reply=quick_reply_items())
+
+    intro = "🍜 ป้าเจอร้าน"
+    if keyword:
+        intro += f" \"{keyword}\""
+    intro += "แถวนี้แล้วจ๊ะ:"
+    lines = [intro, ""]
+    for i, p in enumerate(places, 1):
+        nm = p["name"] or "(ไม่มีชื่อ)"
+        stars = "⭐" * int(round(p["rating"])) if p["rating"] else ""
+        price = "฿" * int(p["price_level"]) if p["price_level"] else ""
+        if p["open_now"] is True:
+            status = "· เปิดอยู่"
+        elif p["open_now"] is False:
+            status = "· ปิดแล้ว"
+        else:
+            status = ""
+        seg = f"{i}. {nm} {stars}{price} {status}".rstrip()
+        if p["vicinity"]:
+            seg += f"\n   {p['vicinity']}"
+        if p["lat"] is not None and p["lng"] is not None:
+            seg += f"\n   📍 https://www.google.com/maps/search/?api=1&query={p['lat']},{p['lng']}"
+        lines.append(seg)
+    if tone == "youth":
+        tail = "\n\nจิ้มลิงก์เปิดแผนที่ได้เลย หรืออยากกินอย่างอื่นบอกป้าได้ 😎"
+    elif tone == "elder":
+        tail = "\n\nกดลิงก์เพื่อเปิดแผนที่ได้เลยนะคะ หรืออยากกินอย่างอื่นบอกป้าเข็มได้ค่ะ"
+    else:
+        tail = "\n\nแตะลิงก์เปิดแผนที่ได้เลยจ๊ะ หรืออยากกินอย่างอื่นบอกป้าได้เลยค่ะ 😊"
+    return TextSendMessage(text="\n".join(lines) + tail, quick_reply=quick_reply_items())
+
+
+def _food_location_prompt(keyword: str, tone: str = "neutral"):
+    """ข้อความขอตำแหน่ง + ปุ่ม LocationAction (กดแล้ว LINE ให้ส่งพิกัดมา) + ปุ่มยกเลิก"""
+    if keyword:
+        head = f"🍜 อยากกิน \"{keyword}\" ใช่ไหมคะ — ป้าหาให้จ๊ะ!"
+    else:
+        head = "🍜 ป้าหาร้านอาหารอร่อยแถวๆ นี้ให้ได้นะคะ"
+    body = "แต่ป้าต้องรู้ว่าคุณอยู่ที่ไหนก่อน — กดปุ่ม \"📍 ส่งตำแหน่งที่อยู่\" ด้านล่างได้เลยค่ะ"
+    if tone == "youth":
+        body = "แต่ต้องรู้ก่อนว่าคุณอยู่ไหน — กด \"📍 ส่งตำแหน่งที่อยู่\" ข้างล่างเลย 😎"
+    elif tone == "elder":
+        body = "แต่ป้าต้องรู้ก่อนว่าคุณอยู่แถวไหนนะคะ\nกดปุ่ม \"📍 ส่งตำแหน่งที่อยู่\" ด้านล่างได้เลยค่ะ"
+    return TextSendMessage(
+        text=f"{head}\n{body}\n\n(ถ้าไม่อยากส่ง พิมพ์ \"ยกเลิก\" ได้เลยนะคะ)",
+        quick_reply=QuickReply(items=[
+            QuickReplyButton(action=LocationAction(label="📍 ส่งตำแหน่งที่อยู่")),
+            QuickReplyButton(action=MessageAction(label="🙅 ยกเลิก", text="ยกเลิก")),
+        ]))
+
+
+def handle_food_request(db, user, line_user_id: str, text: str, tone: str = "neutral"):
+    """ลูกค้าอยากหาร้านอาหาร → ถ้ามีตำแหน่งล่าสุด (30 นาที) ค้นเลย ไม่งั้นขอตำแหน่ง"""
+    keyword = _food_keyword(text)
+    cached = _last_location.get(line_user_id)
+    now = datetime.datetime.utcnow()
+    if cached and (now - cached[2]).total_seconds() < LOCATION_REUSE_MIN * 60:
+        lat, lng, _ = cached
+        places = nearby_restaurants(lat, lng, keyword=keyword)
+        return _food_results_message(user, keyword, places, tone)
+    _pending_food[line_user_id] = {"keyword": keyword, "ts": now}
+    return _food_location_prompt(keyword, tone)
+
+
 def is_bot_manual_request(text: str) -> bool:
     """ลูกค้าถามเรื่องบอท/อยากรู้วิธีใช้? (คุยกับป้าเข็ม / คู่มือ / ใช้ยังไง...) — ตอบจากคู่มือเท่านั้น"""
     t = (text or "").strip().lower().replace(" ", "")
@@ -2151,6 +2280,11 @@ def message_text(event):
             reply = TextSendMessage(text=greeting_text_for(user.name, tone),
                                     quick_reply=quick_reply_items())
             intent = 'greeting'
+        elif is_food_request(normalized_text):
+            # บริการเสริม: "อยากกิน X" / "ร้านอาหารใกล้ฉัน" → หาร้านอาหารใกล้ตัว (Google Places)
+            # 2 ขั้น: ถ้ายังไม่มีตำแหน่ง → ขอตำแหน่ง (LocationAction) → LocationMessage → ค้น
+            reply = handle_food_request(db, user, line_user_id, normalized_text, tone)
+            intent = 'food'
         elif normalized_text in WHY_US_PHRASES:
             # ทำไมต้องซื้อกับป้าเข็ม — คุณค่าที่ประชาชนได้ (ราคาเท่ากัน/ของจริง/ดูแล)
             reply = TextSendMessage(text=why_us_text(tone))
@@ -2289,6 +2423,42 @@ def message_text(event):
         
     if "mock" in LINE_ACCESS_TOKEN.lower():
         logger.info(f"Mock reply sent. ReplyToken: {event.reply_token}, Message: {getattr(reply, 'text', reply)}")
+    else:
+        line_bot_api.reply_message(event.reply_token, _ensure_menu(reply))
+
+
+@handler.add(MessageEvent, message=LocationMessage)
+def location_text(event):
+    """ลูกค้าส่งตำแหน่งที่อยู่ (LocationMessage) → ถ้ากำลังรอหาร้านอาหารอยู่ ค้นร้านใกล้พิกัดทันที
+    จำพิกัดไว้ 30 นาที (ขยับนิดหน่อยไม่ต้องส่งซ้ำ) — ตำแหน่งไม่ได้ถูกเก็บถาวร (PDPA)"""
+    line_user_id = event.source.user_id
+    lat = event.message.latitude
+    lng = event.message.longitude
+    pending = _pending_food.pop(line_user_id, None)
+    keyword = pending.get("keyword") if pending else None
+    _last_location[line_user_id] = (lat, lng, datetime.datetime.utcnow())
+
+    db = SessionLocal()
+    intent = 'food'
+    try:
+        user = get_or_create_line_user(db, line_user_id)
+        tone = get_tone(db, line_user_id, "")
+        places = nearby_restaurants(lat, lng, keyword=keyword)
+        reply = _food_results_message(user, keyword, places, tone)
+    except Exception as e:
+        logger.error(f"Location food search error: {e}")
+        reply = TextSendMessage(text="ขออภัยด้วยค่ะ ระบบขัดข้องชั่วคราว ลองส่งตำแหน่งใหม่อีกครั้งนะคะ 🙏")
+        intent = 'error'
+    finally:
+        log_text = f"📍 ตำแหน่ง ({lat:.4f},{lng:.4f}) อยากกิน {keyword or 'ร้านอาหาร'}"
+        try:
+            log_chat(db, line_user_id, log_text, intent, reply, None)
+        except Exception as e:
+            logger.warning(f"log_chat failed: {e}")
+        db.close()
+
+    if "mock" in LINE_ACCESS_TOKEN.lower():
+        logger.info(f"Mock location reply sent. ReplyToken: {event.reply_token}")
     else:
         line_bot_api.reply_message(event.reply_token, _ensure_menu(reply))
 
