@@ -53,6 +53,10 @@ dist/
 *.log
 logs/
 
+# Test coverage (pytest-cov)
+.coverage
+htmlcov/
+
 # Browser drivers (binary tools — do not commit)
 chromedriver.exe
 chromedriver*/
