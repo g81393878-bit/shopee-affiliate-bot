@@ -3,17 +3,20 @@
 Web search — ค้นข้อมูลทั่วไป/ความรู้ในเน็ต แล้วสรุปตอบลูกค้า
 
 ใช้ REST API ตรง (urllib) — ไม่ต้องติดตั้ง dependency เพิ่ม
-- ตัวหลัก : TAVILY_API_KEY   (สมัครฟรีที่ tavily.com — ฟรี 1,000 ครั้ง/เดือน ไม่ผูกบัตร)
-- ตัวสำรอง: FIRECRAWL_API_KEY (สมัครฟรีที่ firecrawl.dev) — ถ้า Tavily ล้ม/หมด quota จะสลับมาใช้เอง
-  รองรับหลาย key คั่นด้วยคอมม่า (fc_aaa,fc_bbb,...) หมุนเวียน + failover เหมือน GROQ_API_KEY
+- TAVILY_API_KEY    (สมัครฟรีที่ tavily.com — ฟรี 1,000 ครั้ง/เดือน ไม่ผูกบัตร)
+- FIRECRAWL_API_KEY (สมัครฟรีที่ firecrawl.dev) — รองรับหลาย key คั่นคอมม่า
+  (fc_aaa,fc_bbb,...) หมุนเวียน + failover เหมือน GROQ_API_KEY
 
-ผลลัพธ์ถูก normalize เป็นโครงสร้างเดียวกันเสมอ:
+ทำงานร่วมกัน (collaborate) — เรียกทั้ง 2 provider ขนานกันแล้วรวมผล:
+  - answer  = สรุป AI จาก Tavily (ถ้ามี) ไม่งั้น Groq สรุปจากผล Firecrawl
+  - results = รวมทั้งคู่ ตัดซ้ำตาม URL (ได้แหล่งอ้างอิงหลากหลายกว่า)
+  - images  = รวมรูปทั้งคู่
+  - ตัวไหนล้มไม่พัง — อีกตัวยังให้คำตอบครบ
+
+ผลลัพธ์ normalize เป็นโครงสร้างเดียวกันเสมอ:
   {answer: str, results: [{title, url, content}, ...], images: [url, ...]}
-
-- Tavily คืน answer (สรุปไทย) มาให้เอง
-- Firecrawl ไม่มี answer → สรุปด้วย Groq แทน (LLM ที่บอทใช้อยู่แล้ว) ให้ตอบได้เทียบเท่า
-- images = รูปประกอบคำตอบ (Tavily include_images / Firecrawl data.images) — ถ้าไม่มีเป็น []
 """
+import concurrent.futures
 import json
 import logging
 import os
@@ -152,8 +155,8 @@ def _summarize_with_groq(query: str, results: list) -> str:
         return ""
 
 
-def _firecrawl_search(query: str, max_results: int) -> dict:
-    """ค้นผ่าน Firecrawl (หลาย key หมุนเวียน+failover) + สรุปด้วย Groq → normalize เหมือน Tavily."""
+def _firecrawl_fetch(query: str, max_results: int) -> dict:
+    """ค้น Firecrawl (หลาย key หมุนเวียน+failover) → {results, images} — ยังไม่สรุป Groq."""
     keys = _rotate_firecrawl_keys()
     if not keys:
         raise RuntimeError("ยังไม่ได้ตั้ง FIRECRAWL_API_KEY")
@@ -193,31 +196,89 @@ def _firecrawl_search(query: str, max_results: int) -> dict:
             content = (r.get("markdown") or "").strip().replace("\n", " ")
         results.append({"title": title, "url": url, "content": content[:300]})
     images = _clean_image_urls(d.get("images") or [])
-    answer = _summarize_with_groq(query, results)
-    return {"answer": answer, "results": results, "images": images}
+    return {"results": results, "images": images}
+
+
+def _firecrawl_search(query: str, max_results: int) -> dict:
+    """Firecrawl เต็มรูปแบบ (ใช้เดี่ยวๆ ตอน Tavily ล้ม) → {answer, results, images}."""
+    d = _firecrawl_fetch(query, max_results)
+    answer = _summarize_with_groq(query, d["results"])
+    return {"answer": answer, "results": d["results"], "images": d["images"]}
+
+
+def _merge_results(tavily_results, fc_results, max_results: int) -> list:
+    """รวมผลทั้ง 2 provider — ตัดซ้ำตาม URL (title สำรอง) จำกัดไม่เกิน 2×max_results"""
+    combined = list(tavily_results or []) + list(fc_results or [])
+    out, seen = [], set()
+    for r in combined:
+        url = (r.get("url") or "").strip()
+        key = url or (r.get("title") or "").strip()
+        if key and key in seen:
+            continue
+        if key:
+            seen.add(key)
+        out.append(r)
+        if len(out) >= max_results * 2:
+            break
+    return out
+
+
+def _merge_images(tavily_images, fc_images) -> list:
+    """รวมรูปทั้งคู่ — _clean_image_urls ตัดซ้ำ + กรองนามสกุล + จำกัด 3 รูปให้เอง"""
+    combined = list(tavily_images or []) + list(fc_images or [])
+    return _clean_image_urls(combined)
 
 
 def web_search(query: str, max_results: int = 3, search_depth: str = "basic") -> dict:
-    """ค้นเน็ต → {answer, results:[{title, url, content}, ...], images:[url, ...]}
+    """Tavily + Firecrawl ทำงานร่วมกัน → {answer, results, images}
 
-    ลำดับ: Tavily ก่อน → ถ้าล้ม (ไม่มี key / หมด quota / HTTP error) สลับ Firecrawl อัตโนมัติ
-    ถ้าทั้งคู่ล้มจะ throw ให้ผู้เรียกตัดสินใจ (web_search_reply แปลงเป็นข้อความขอโทษ)"""
-    try:
-        data = _tavily_search(query, max_results, search_depth)
-        return {
-            "answer": (data.get("answer") or "").strip(),
-            "results": data.get("results", [])[:max_results],
-            "images": _clean_image_urls(data.get("images") or []),
-        }
-    except Exception as e:
-        logger.warning(f"Tavily failed ({e}) — falling back to Firecrawl")
-        return _firecrawl_search(query, max_results)
+    เรียกทั้ง 2 provider ขนานกัน (thread) แล้วรวมผล:
+      - answer  = Tavily (สรุป AI); ถ้า Tavily ล้ม → Groq สรุปจากผล Firecrawl
+      - results = รวมทั้งคู่ ตัดซ้ำตาม URL
+      - images  = รวมทั้งคู่
+    ตัวไหนล้มไม่พัง — อีกตัวยังให้คำตอบครบ; ถ้าล้มทั้งคู่ throw ให้ผู้เรียกตัดสินใจ"""
+    tavily_data = firecrawl_data = None
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
+        f_t = ex.submit(_tavily_search, query, max_results, search_depth)
+        f_f = ex.submit(_firecrawl_fetch, query, max_results)
+        try:
+            tavily_data = f_t.result()
+        except Exception as e:
+            logger.warning(f"Tavily failed ({e})")
+        try:
+            firecrawl_data = f_f.result()
+        except Exception as e:
+            logger.warning(f"Firecrawl failed ({e})")
+    if tavily_data is None and firecrawl_data is None:
+        raise RuntimeError("ทั้ง Tavily และ Firecrawl ล้ม")
+
+    tavily_answer = ((tavily_data or {}).get("answer") or "").strip()
+    if tavily_answer:
+        answer = tavily_answer
+    elif firecrawl_data is not None:
+        answer = _summarize_with_groq(query, firecrawl_data.get("results") or [])
+    else:
+        answer = ""
+
+    return {
+        "answer": answer,
+        "results": _merge_results(
+            (tavily_data or {}).get("results"),
+            (firecrawl_data or {}).get("results"),
+            max_results,
+        ),
+        "images": _merge_images(
+            (tavily_data or {}).get("images"),
+            (firecrawl_data or {}).get("images"),
+        ),
+    }
 
 
 def _format_reply(data: dict, max_results: int) -> str:
     """แปลง {answer, results} เป็นข้อความตอบลูกค้า (เนื้อหาจริง + แหล่งอ้างอิง)"""
     answer = (data.get("answer") or "").strip()
-    results = data.get("results", [])[:max_results]
+    # ผลรวม (ทั้ง 2 provider) แสดงได้ถึง 2×max_results — ตัว answer เป็นหัวข้อหลัก
+    results = data.get("results", [])[: max_results * 2]
     lines = ["🔍 ป้าเข็มหาข้อมูลมาให้แล้วจ๊ะ:"]
     if answer:
         lines.append(answer)
