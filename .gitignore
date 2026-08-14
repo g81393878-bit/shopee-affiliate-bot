@@ -65,6 +65,9 @@ geckodriver.exe
 video_preview/
 *.zip
 
+# Fonts auto-downloaded by tools/setup_rich_menu.py (fetched from Google Fonts on demand)
+backend/tools/Prompt-*.ttf
+
 # Jupyter notebooks with sensitive data
 *.ipynb
 
