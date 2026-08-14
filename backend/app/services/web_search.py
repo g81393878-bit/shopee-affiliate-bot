@@ -16,11 +16,13 @@ Web search — ค้นข้อมูลทั่วไป/ความรู�
 ผลลัพธ์ normalize เป็นโครงสร้างเดียวกันเสมอ:
   {answer: str, results: [{title, url, content}, ...], images: [url, ...]}
 """
+from collections import OrderedDict
 import concurrent.futures
 import json
 import logging
 import os
 import threading
+import time
 import urllib.request
 import urllib.error
 
@@ -91,6 +93,95 @@ def _rotate_tavily_keys() -> list:
     return keys[rot:] + keys[:rot]
 
 
+# --- Resilience: circuit breaker + cache + metrics (ต่อ provider) ---
+# กันไม่ให้บอทเผา quota ทั้งหมดไปกับ provider ที่พัง: ล้มติดกันเกิน threshold →
+# เปิดวงจร (ข้าม provider) ช่วง cooldown แล้วค่อย half-open ลองใหม่
+CIRCUIT_FAIL_THRESHOLD = int(os.getenv("WEB_SEARCH_CB_THRESHOLD", "3"))
+CIRCUIT_COOLDOWN = float(os.getenv("WEB_SEARCH_CB_COOLDOWN", "90"))
+CACHE_TTL = float(os.getenv("WEB_SEARCH_CACHE_TTL", "600"))   # วินาที (default 10 นาที)
+CACHE_MAX = int(os.getenv("WEB_SEARCH_CACHE_MAX", "200"))      # จำนวน query ที่จำ
+
+_stats_lock = threading.Lock()
+_STATS = {
+    "tavily": {"success": 0, "failure": 0, "circuit_open": False,
+               "fail_streak": 0, "opened_at": 0.0, "last_error": ""},
+    "firecrawl": {"success": 0, "failure": 0, "circuit_open": False,
+                  "fail_streak": 0, "opened_at": 0.0, "last_error": ""},
+    "cache": {"hits": 0, "misses": 0},
+}
+
+_cache_lock = threading.Lock()
+_cache: "OrderedDict[str, tuple]" = OrderedDict()  # key -> (expiry_ts, result)
+
+
+def _provider_allowed(name: str) -> bool:
+    """Circuit breaker: วงจรเปิด (ล้มติดกันเกิน threshold) → ข้าม provider ช่วง cooldown.
+
+    หลัง cooldown หมดให้ half-open — อนุญาตลอง 1 ครั้ง ถ้าสำเร็จวงจรปิดกลับ"""
+    with _stats_lock:
+        st = _STATS[name]
+        if not st["circuit_open"]:
+            return True
+        if time.time() - st["opened_at"] >= CIRCUIT_COOLDOWN:
+            st["circuit_open"] = False
+            st["fail_streak"] = 0
+            return True
+        return False
+
+
+def _provider_success(name: str) -> None:
+    with _stats_lock:
+        st = _STATS[name]
+        st["success"] += 1
+        st["fail_streak"] = 0
+        st["circuit_open"] = False
+
+
+def _provider_failure(name: str, err: str) -> None:
+    with _stats_lock:
+        st = _STATS[name]
+        st["failure"] += 1
+        st["fail_streak"] += 1
+        st["last_error"] = (err or "")[:200]
+        if st["fail_streak"] >= CIRCUIT_FAIL_THRESHOLD and not st["circuit_open"]:
+            st["circuit_open"] = True
+            st["opened_at"] = time.time()
+            logger.warning(
+                f"⛔ circuit breaker เปิดสำหรับ {name} — ล้มติดกัน {st['fail_streak']} ครั้ง, พัก {CIRCUIT_COOLDOWN:.0f}s"
+            )
+
+
+def web_search_stats() -> dict:
+    """สถิติระบบค้นเน็ต (snapshot) — ใช้โชว์ใน /health หรือ admin dashboard"""
+    with _stats_lock:
+        return {name: dict(v) for name, v in _STATS.items()}
+
+
+def _cache_key(query: str, max_results: int, search_depth: str) -> str:
+    return f"{search_depth}|{max_results}|{(query or '').strip().lower()}"
+
+
+def _cache_get(key: str):
+    with _cache_lock:
+        item = _cache.get(key)
+        if item is None:
+            return None
+        exp, val = item
+        if time.time() >= exp:
+            _cache.pop(key, None)
+            return None
+        _cache.move_to_end(key)  # LRU: เลื่อน key ที่ใช้ล่าสุดไปท้าย
+        return val
+
+
+def _cache_put(key: str, val: dict) -> None:
+    with _cache_lock:
+        _cache[key] = (time.time() + CACHE_TTL, val)
+        _cache.move_to_end(key)
+        while len(_cache) > CACHE_MAX:
+            _cache.popitem(last=False)  # ไล่ของเก่าสุดออก (LRU)
+
+
 def _post_json(url: str, body: dict, headers: dict, timeout: int = 20) -> dict:
     req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"),
                                  method="POST", headers=headers)
@@ -119,8 +210,11 @@ def _clean_image_urls(images) -> list:
 
 def _tavily_search(query: str, max_results: int, search_depth: str) -> dict:
     """ค้น Tavily (หลาย key หมุนเวียน+failover) — คืน dict ดิบ {answer, results, images, ...}"""
+    if not _provider_allowed("tavily"):
+        raise RuntimeError("tavily circuit open (paused)")
     keys = _rotate_tavily_keys()
     if not keys:
+        _provider_failure("tavily", "ยังไม่ได้ตั้ง TAVILY_API_KEY")
         raise RuntimeError("ยังไม่ได้ตั้ง TAVILY_API_KEY")
     body = {
         # คำนำหน้าบังคับให้ Tavily สรุปตอบเป็นภาษาไทย (ไม่ตอบภาษาอังกฤษ)
@@ -144,7 +238,9 @@ def _tavily_search(query: str, max_results: int, search_depth: str) -> dict:
             last_err = e
             logger.warning(f"Tavily key {key[:10]}... failed ({e}) — ลอง key ถัดไป")
     if data is None:
+        _provider_failure("tavily", str(last_err))
         raise last_err if last_err else RuntimeError("Tavily: unknown error")
+    _provider_success("tavily")
     return data
 
 
@@ -197,8 +293,11 @@ def _summarize_with_groq(query: str, results: list) -> str:
 
 def _firecrawl_fetch(query: str, max_results: int) -> dict:
     """ค้น Firecrawl (หลาย key หมุนเวียน+failover) → {results, images} — ยังไม่สรุป Groq."""
+    if not _provider_allowed("firecrawl"):
+        raise RuntimeError("firecrawl circuit open (paused)")
     keys = _rotate_firecrawl_keys()
     if not keys:
+        _provider_failure("firecrawl", "ยังไม่ได้ตั้ง FIRECRAWL_API_KEY")
         raise RuntimeError("ยังไม่ได้ตั้ง FIRECRAWL_API_KEY")
     body = {
         "query": query,
@@ -222,8 +321,10 @@ def _firecrawl_fetch(query: str, max_results: int) -> dict:
             last_err = e
             logger.warning(f"Firecrawl key {key[:8]}... failed ({e}) — ลอง key ถัดไป")
     if data is None:
+        _provider_failure("firecrawl", str(last_err))
         raise last_err if last_err else RuntimeError("Firecrawl: unknown error")
     if not data.get("success"):
+        _provider_failure("firecrawl", f"Firecrawl: {data.get('error') or 'unknown error'}")
         raise RuntimeError(f"Firecrawl: {data.get('error') or 'unknown error'}")
     d = data.get("data") or {}
     web = (d.get("web") or [])[:max_results]
@@ -236,6 +337,7 @@ def _firecrawl_fetch(query: str, max_results: int) -> dict:
             content = (r.get("markdown") or "").strip().replace("\n", " ")
         results.append({"title": title, "url": url, "content": content[:300]})
     images = _clean_image_urls(d.get("images") or [])
+    _provider_success("firecrawl")
     return {"results": results, "images": images}
 
 
@@ -276,7 +378,17 @@ def web_search(query: str, max_results: int = 3, search_depth: str = "basic") ->
       - answer  = Tavily (สรุป AI); ถ้า Tavily ล้ม → Groq สรุปจากผล Firecrawl
       - results = รวมทั้งคู่ ตัดซ้ำตาม URL
       - images  = รวมทั้งคู่
-    ตัวไหนล้มไม่พัง — อีกตัวยังให้คำตอบครบ; ถ้าล้มทั้งคู่ throw ให้ผู้เรียกตัดสินใจ"""
+    ตัวไหนล้มไม่พัง — อีกตัวยังให้คำตอบครบ; ถ้าล้มทั้งคู่ throw ให้ผู้เรียกตัดสินใจ
+    ผลลัพธ์ถูก cache (LRU + TTL) — คำถามซ้ำในช่วง TTL ตอบทันที ไม่เรียก API ซ้ำ"""
+    ckey = _cache_key(query, max_results, search_depth)
+    cached = _cache_get(ckey)
+    if cached is not None:
+        with _stats_lock:
+            _STATS["cache"]["hits"] += 1
+        return cached
+    with _stats_lock:
+        _STATS["cache"]["misses"] += 1
+
     tavily_data = firecrawl_data = None
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
         f_t = ex.submit(_tavily_search, query, max_results, search_depth)
@@ -300,7 +412,7 @@ def web_search(query: str, max_results: int = 3, search_depth: str = "basic") ->
     else:
         answer = ""
 
-    return {
+    result = {
         "answer": answer,
         "results": _merge_results(
             (tavily_data or {}).get("results"),
@@ -312,6 +424,8 @@ def web_search(query: str, max_results: int = 3, search_depth: str = "basic") ->
             (firecrawl_data or {}).get("images"),
         ),
     }
+    _cache_put(ckey, result)
+    return result
 
 
 def _format_reply(data: dict, max_results: int) -> str:
