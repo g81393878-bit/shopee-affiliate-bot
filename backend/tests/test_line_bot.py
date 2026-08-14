@@ -395,3 +395,26 @@ def test_search_thai_word_price_filters_budget(sim, db):
     finally:
         db.query(models.Product).filter(models.Product.name.like("ถุงเท้า%")).delete()
         db.commit()
+
+
+def test_nosearch_fallback_prefers_name_similar(sim, db):
+    """ค้นไม่เจอ (งบไม่มีของ) → แนะนำของที่ชื่อใกล้ (ถุงเท้า) ไม่ใช่ของหมวด ai_score สูง (นาฬิกา)
+    — เดิม sort ด้วย ai_score ทำลูกค้าถามถุงเท้าได้นาฬิกา/รองเท้า"""
+    db.add(models.Product(
+        name="ถุงเท้ากีฬา 3 คู่", category="แฟชั่น", price=89,
+        sales_count=5000, affiliate_url="https://shope.ee/test",
+        link_status="ok", ai_score=50))
+    db.add(models.Product(
+        name="นาฬิกาอัจฉริยะ KENTO", category="แฟชั่น", price=900,
+        sales_count=5000, affiliate_url="https://shope.ee/test",
+        link_status="ok", ai_score=99))
+    db.commit()
+    try:
+        r = sim.send("U_cust_1", "ถุงเท้าไม่เกิน 40")
+        assert r["intent"] == "nosearch"
+        assert "ถุงเท้า" in r["preview"], r["preview"][:200]
+        assert "นาฬิกา" not in r["preview"], r["preview"][:200]
+    finally:
+        db.query(models.Product).filter(
+            models.Product.name.in_(["ถุงเท้ากีฬา 3 คู่", "นาฬิกาอัจฉริยะ KENTO"])).delete()
+        db.commit()

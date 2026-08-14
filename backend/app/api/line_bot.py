@@ -1622,6 +1622,42 @@ def _nfc(s: str) -> str:
              .replace("\u0e4d\u0e33", "\u0e33"))  # กันรูปแบบซ้ำ (เผื่อ)
 
 
+def _name_similarity(query: str, name: str) -> float:
+    """คะแนนความใกล้ชื่อ (0-1) — ใช้จัดอันดับ "ของใกล้เคียง" ตอนค้นไม่เจอ
+    (แทน sort ด้วย ai_score ซึ่งเคยแนะนำนาฬิกา/รองเท้าตอนลูกค้าถามถุงเท้า)
+    1.0 = substring ตรง; นอกนั้นวัดจากคำสำคัญ (CATEGORY_KEYWORDS) ที่ซ้อนกัน
+    ถ้า query ไม่มี keyword ที่รู้จัก → fallback เป็น bigram ตัวอักษรไทย"""
+    q = _nfc((query or "").strip().lower())
+    n = _nfc((name or "").strip().lower())
+    if not q or not n:
+        return 0.0
+    if q in n or n in q:
+        return 1.0
+    # คำสำคัญใน query (คำยาวสุดก่อน กัน "หม้อ" นับก่อน "หม้อหุงข้าว") —
+    # วัดว่าชื่อสินค้ามีคำสำคัญเหล่านั้นกี่ส่วน (สัดส่วนตามความยาวคำ)
+    tokens, total_len, work = [], 0, q
+    for kw, _c in sorted(CATEGORY_KEYWORDS, key=lambda x: -len(x[0])):
+        if len(kw) < 2:
+            continue
+        while kw in work:
+            work = work.replace(kw, " ", 1)
+            tokens.append(kw)
+            total_len += len(kw)
+    if tokens:
+        covered = sum(len(kw) for kw in tokens if kw in n)
+        return covered / total_len
+    # ไม่มี keyword รู้จัก — ใช้ bigram ตัวอักษร (ไทยไม่มีเว้นวรรค)
+    def _bigrams(s: str):
+        s = re.sub(r"[^\u0e00-\u0e7fa-z0-9]", "", s)
+        if len(s) < 2:
+            return {s} if s else set()
+        return {s[i:i + 2] for i in range(len(s) - 1)}
+    qb, nb = _bigrams(q), _bigrams(n)
+    if not qb or not nb:
+        return 0.0
+    return len(qb & nb) / len(qb | nb)
+
+
 def search_products(db: Session, query: str) -> list:
     """ค้นสินค้า: ตรงชื่อ/หมวด + เข้าใจเงื่อนไขราคา ('หูฟังไม่เกิน 300', 'งบ 500',
     'กระติก 200-400') — จัดอันดับความตรง แล้วตอบสูงสุด 5 ตัว
@@ -2281,11 +2317,20 @@ def message_text(event):
                 cat = guess_category(normalized_text)
                 alt = []
                 if cat and cat != "อื่นๆ":
-                    alt = (db.query(models.Product)
-                             .filter(models.Product.link_status == "ok",
-                                     models.Product.sales_count >= MIN_SALES,
-                                     models.Product.category == cat)
-                             .order_by(models.Product.ai_score.desc()).limit(5).all())
+                    pool = (db.query(models.Product)
+                              .filter(models.Product.link_status == "ok",
+                                      models.Product.sales_count >= MIN_SALES,
+                                      models.Product.category == cat)
+                              .all())
+                    # เรียงตามความใกล้ชื่อ (ไม่ใช่ ai_score มั่ว) — ถามถุงเท้าได้ถุงเท้า
+                    # ไม่ได้นาฬิกา/รองเท้า; ถ้าไม่มีตัวไหนชื่อใกล้เลย → ใช้ ai_score เดิม
+                    scored = sorted(
+                        ((p, _name_similarity(normalized_text, p.name)) for p in pool),
+                        key=lambda t: (t[1], t[0].ai_score or 0),
+                        reverse=True,
+                    )
+                    sim_hits = [p for p, s in scored if s > 0][:5]
+                    alt = sim_hits or [p for p, _ in scored[:5]]
                 if alt:
                     reply = [
                         TextSendMessage(text=nosearch_alt_text(display_term, cat, tone)),
