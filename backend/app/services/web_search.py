@@ -5,6 +5,7 @@ Web search — ค้นข้อมูลทั่วไป/ความรู�
 ใช้ REST API ตรง (urllib) — ไม่ต้องติดตั้ง dependency เพิ่ม
 - ตัวหลัก : TAVILY_API_KEY   (สมัครฟรีที่ tavily.com — ฟรี 1,000 ครั้ง/เดือน ไม่ผูกบัตร)
 - ตัวสำรอง: FIRECRAWL_API_KEY (สมัครฟรีที่ firecrawl.dev) — ถ้า Tavily ล้ม/หมด quota จะสลับมาใช้เอง
+  รองรับหลาย key คั่นด้วยคอมม่า (fc_aaa,fc_bbb,...) หมุนเวียน + failover เหมือน GROQ_API_KEY
 
 ผลลัพธ์ถูก normalize เป็นโครงสร้างเดียวกันเสมอ:
   {answer: str, results: [{title, url, content}, ...], images: [url, ...]}
@@ -16,6 +17,7 @@ Web search — ค้นข้อมูลทั่วไป/ความรู�
 import json
 import logging
 import os
+import threading
 import urllib.request
 import urllib.error
 
@@ -27,6 +29,34 @@ FIRECRAWL_API_URL = "https://api.firecrawl.dev/v2/search"
 # จำกัดเฉพาะ URL ที่มีนามสกุลรูปชัดเจน (https + .jpg/.png/...) — กันส่ง URL ที่
 # LINE ดึงไม่เป็นรูปแล้ว reply ทั้งชุดพัง (เช่น TikTok api/img?itemId=... ไม่มีนามสกุล)
 _IMAGE_EXT = (".jpg", ".jpeg", ".png", ".webp", ".gif")
+
+# Firecrawl หลาย key หมุนเวียน + failover (pattern เดียวกับ llm_clients.groq_clients)
+_fc_lock = threading.Lock()
+_fc_start_index = 0
+
+
+def firecrawl_keys() -> list:
+    """รายการ Firecrawl keys จาก FIRECRAWL_API_KEY (รองรับหลายตัวคั่นด้วย ,) — ตัด mock/ซ้ำ"""
+    raw = (os.getenv("FIRECRAWL_API_KEY") or "").strip()
+    seen, keys = set(), []
+    for k in raw.split(","):
+        k = k.strip()
+        if k and "mock" not in k.lower() and k not in seen:
+            seen.add(k)
+            keys.append(k)
+    return keys
+
+
+def _rotate_firecrawl_keys() -> list:
+    """Firecrawl keys เรียงแบบหมุนเวียน (call ถัดไปเริ่มที่ key ถัดไป — กระจายโหลด)"""
+    keys = firecrawl_keys()
+    if not keys:
+        return []
+    global _fc_start_index
+    with _fc_lock:
+        rot = _fc_start_index % len(keys)
+        _fc_start_index += 1
+    return keys[rot:] + keys[:rot]
 
 
 def _post_json(url: str, body: dict, headers: dict, timeout: int = 20) -> dict:
@@ -123,24 +153,33 @@ def _summarize_with_groq(query: str, results: list) -> str:
 
 
 def _firecrawl_search(query: str, max_results: int) -> dict:
-    """ค้นผ่าน Firecrawl + สรุปด้วย Groq → normalize เป็นโครงสร้างเดียวกับ Tavily."""
-    key = (os.getenv("FIRECRAWL_API_KEY") or "").strip()
-    if not key:
+    """ค้นผ่าน Firecrawl (หลาย key หมุนเวียน+failover) + สรุปด้วย Groq → normalize เหมือน Tavily."""
+    keys = _rotate_firecrawl_keys()
+    if not keys:
         raise RuntimeError("ยังไม่ได้ตั้ง FIRECRAWL_API_KEY")
     body = {
         "query": query,
         "limit": max_results,
         "sources": ["web"],
     }
-    headers = {
-        "Authorization": "Bearer " + key,
-        "Content-Type": "application/json",
-    }
-    try:
-        data = _post_json(FIRECRAWL_API_URL, body, headers)
-    except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Firecrawl HTTP {e.code}: {detail[:200]}") from e
+    data, last_err = None, None
+    for key in keys:
+        headers = {
+            "Authorization": "Bearer " + key,
+            "Content-Type": "application/json",
+        }
+        try:
+            data = _post_json(FIRECRAWL_API_URL, body, headers)
+            break
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", errors="replace")
+            last_err = RuntimeError(f"Firecrawl HTTP {e.code}: {detail[:200]}")
+            logger.warning(f"Firecrawl key {key[:8]}... failed ({last_err}) — ลอง key ถัดไป")
+        except Exception as e:
+            last_err = e
+            logger.warning(f"Firecrawl key {key[:8]}... failed ({e}) — ลอง key ถัดไป")
+    if data is None:
+        raise last_err if last_err else RuntimeError("Firecrawl: unknown error")
     if not data.get("success"):
         raise RuntimeError(f"Firecrawl: {data.get('error') or 'unknown error'}")
     d = data.get("data") or {}
