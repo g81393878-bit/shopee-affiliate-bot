@@ -28,5 +28,7 @@ services:
         sync: false
       - key: TAVILY_API_KEY
         sync: false  # Tavily web search (ค้นข้อมูลเน็ต) — ฟรี 1,000 ครั้ง/เดือน ที่ tavily.com
+      - key: FIRECRAWL_API_KEY
+        sync: false  # Firecrawl web search สำรอง (ถ้า Tavily ล้ม/หมด quota) — ฟรี ที่ firecrawl.dev
       - key: LLM_PROVIDER
         value: groq
