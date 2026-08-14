@@ -4,6 +4,7 @@
 วิธีใช้:
     python tools/cron_jobs.py                  # อ่าน CJKEY + CRON_TOKEN จาก backend/.env
     CJKEY=<API key> python tools/cron_jobs.py  # หรือส่ง CJKEY ผ่าน env แทน
+    python tools/cron_jobs.py --dry-run        # ตรวจสอบอย่างเดียว (ไม่สร้าง/แก้ job)
 
 - อ่าน CJKEY + CRON_TOKEN จาก backend/.env (fallback เมื่อไม่มีใน os.environ)
 - LIST jobs เดิมก่อน → สร้างเฉพาะตัวที่ยังไม่มี (เทียบด้วย title) → LIST อีกครั้งยืนยัน
@@ -115,16 +116,24 @@ def main():
         ("ป้าเข็ม-ดึงลูกค้ากลับ", f"{BASE}/api/cron/re-engage?token={token}", POST, daily(9)),
     ]
 
+    dry_run = "--dry-run" in sys.argv
+    if dry_run:
+        print("🔍 dry-run: จะตรวจสอบอย่างเดียว ไม่สร้าง/แก้ job ใด ๆ")
+
     existing = jobs(key)
     existing_titles = {j.get("title") for j in existing}
     print(f"มี job อยู่แล้ว {len(existing)} ตัวในบัญชี")
 
-    created, skipped = 0, 0
+    created, skipped, would_create = 0, 0, 0
     put_times = []  # เวลาที่เรียก PUT ไปแล้ว — กันเกิน 5 req/min
     for title, url, method, schedule in wanted:
         if title in existing_titles:
             skipped += 1
             print(f"  ⏭  ข้าม (มีแล้ว): {title}")
+            continue
+        if dry_run:
+            would_create += 1
+            print(f"  🔍 (dry-run) จะสร้าง: {title}")
             continue
         # PUT /jobs จำกัด 1 req/s และ 5 req/min — พักเมื่อกำลังจะทำ request ที่ 6 ใน 60 วิ
         if len(put_times) >= 5:
@@ -141,7 +150,10 @@ def main():
             print(f"  ❌ สร้างไม่สำเร็จ: {title} → HTTP {code}: {out}")
         time.sleep(1.2)  # PUT /jobs จำกัด 1 req/s
 
-    print(f"\nสร้างใหม่ {created} ตัว, มีอยู่แล้ว {skipped} ตัว")
+    if dry_run:
+        print(f"\n(dry-run) จะสร้าง {would_create} ตัว, มีอยู่แล้ว {skipped} ตัว — ไม่ได้สร้างจริง")
+    else:
+        print(f"\nสร้างใหม่ {created} ตัว, มีอยู่แล้ว {skipped} ตัว")
 
     # --- สรุปสถานะทั้งหมด ---
     print("\n== สรุป job ทั้งหมดในบัญชี ==")
