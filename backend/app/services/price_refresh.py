@@ -20,6 +20,7 @@ from typing import Optional, Tuple
 import requests
 
 from app import models
+from app.services.web_search import firecrawl_scrape
 
 logger = logging.getLogger(__name__)
 
@@ -47,10 +48,9 @@ def extract_price_from_html(html: str) -> Optional[float]:
     return None
 
 
-def fetch_product_price(url: str) -> Tuple[Optional[float], str]:
-    """เปิดหน้าเว็บ (ตาม redirect ลิงก์สั้น) → (ราคาบาท, detail)"""
-    if not url:
-        return None, "NO_URL"
+def _fetch_via_requests(url: str) -> Tuple[Optional[float], str]:
+    """requests ธรรมดา (ฟรี ไม่กิน Firecrawl credit) → (ราคา, detail)
+    detail: ok / anti-bot / no price found / HTTP ... / ชื่อ exception"""
     try:
         r = requests.get(url, timeout=25, allow_redirects=True,
                          headers={"User-Agent": BROWSER_UA, "Accept-Language": "th-TH,th;q=0.9"},
@@ -68,6 +68,34 @@ def fetch_product_price(url: str) -> Tuple[Optional[float], str]:
             return price, "ok"
     except requests.exceptions.RequestException as e:
         return None, type(e).__name__
+
+
+def fetch_product_price(url: str) -> Tuple[Optional[float], str]:
+    """เปิดหน้าเว็บ (ตาม redirect ลิงก์สั้น) → (ราคาบาท, detail)
+
+    requests ก่อน (ฟรี) → ได้ราคา ไม่ต้องจ่าย Firecrawl credit
+    เฉพาะหน้าโดน anti-bot / ราคาโหลดด้วย JS (requests หาไม่เจอ) → Firecrawl scrape
+    (render JS ผ่านด่าน) เป็นสำรอง — best-effort ไม่พัง
+    detail: "ok" = ได้ราคา (cron นับ unchanged ด้วยค่านี้) — source อื่น = ข้าม"""
+    if not url:
+        return None, "NO_URL"
+    price, detail = _fetch_via_requests(url)
+    if price is not None:
+        return price, detail
+    # requests ได้หน้าแต่ไม่มีราคา (โดน anti-bot / ราคาเป็น JS) → ลอง Firecrawl
+    if detail in ("anti-bot", "no price found"):
+        try:
+            html = firecrawl_scrape(url)
+            if html:
+                p = extract_price_from_html(html)
+                if p is not None:
+                    logger.info(f"[firecrawl] ราคา {p:,.2f} จาก {url[:45]} (requests: {detail})")
+                    return p, "ok"
+                return None, "no price found"
+            logger.warning(f"[firecrawl] ไม่ได้หน้า ({url[:45]})")
+        except Exception as e:
+            logger.warning(f"firecrawl scrape ล้ม ({e})")
+    return None, detail
 
 
 def refresh_price(prod: models.Product) -> Tuple[bool, float, float, str]:

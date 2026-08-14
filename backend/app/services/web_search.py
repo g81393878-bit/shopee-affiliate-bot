@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 TAVILY_API_URL = "https://api.tavily.com/search"
 FIRECRAWL_API_URL = "https://api.firecrawl.dev/v2/search"
+FIRECRAWL_SCRAPE_URL = "https://api.firecrawl.dev/v2/scrape"
 
 # จำกัดเฉพาะ URL ที่มีนามสกุลรูปชัดเจน (https + .jpg/.png/...) — กันส่ง URL ที่
 # LINE ดึงไม่เป็นรูปแล้ว reply ทั้งชุดพัง (เช่น TikTok api/img?itemId=... ไม่มีนามสกุล)
@@ -346,6 +347,45 @@ def _firecrawl_search(query: str, max_results: int) -> dict:
     d = _firecrawl_fetch(query, max_results)
     answer = _summarize_with_groq(query, d["results"])
     return {"answer": answer, "results": d["results"], "images": d["images"]}
+
+
+def firecrawl_scrape(url: str, timeout: int = 30) -> str:
+    """เปิดหน้าเว็บ 1 URL ผ่าน Firecrawl (render JS กัน anti-bot) → คืน HTML ทั้งหน้า
+
+    - ใช้กับหน้า Shopee product เพื่ออ่านราคา (ราคาฝังใน <script>) — ต้องไม่ตัด script
+    - หลาย key หมุนเวียน + failover เหมือน firecrawl_keys(); ล้มทุก key/ไม่มี key →
+      คืน "" ให้ผู้เรียก fallback เอง (best-effort ไม่ throw)"""
+    if not _provider_allowed("firecrawl"):
+        return ""
+    keys = _rotate_firecrawl_keys()
+    if not keys:
+        _provider_failure("firecrawl", "ยังไม่ได้ตั้ง FIRECRAWL_API_KEY")
+        return ""
+    body = {
+        "url": url,
+        "formats": ["rawHtml"],      # HTML ดิบไม่ตัด <script> (ราคา Shopee ฝังใน script)
+        "onlyMainContent": False,
+        "waitFor": 0,
+    }
+    for key in keys:
+        try:
+            data = _post_json(FIRECRAWL_SCRAPE_URL, body,
+                              {"Authorization": "Bearer " + key,
+                               "Content-Type": "application/json"},
+                              timeout=timeout)
+        except Exception as e:
+            logger.warning(f"Firecrawl scrape key {key[:8]}... failed ({e}) — ลอง key ถัดไป")
+            continue
+        if not data.get("success"):
+            logger.warning(f"Firecrawl scrape: {data.get('error') or 'unknown error'}")
+            continue
+        d = data.get("data") or {}
+        html = d.get("rawHtml") or d.get("html") or d.get("markdown") or ""
+        if html:
+            _provider_success("firecrawl")
+            return html
+    _provider_failure("firecrawl", "firecrawl scrape ล้มทุก key")
+    return ""
 
 
 def _merge_results(tavily_results, fc_results, max_results: int) -> list:
