@@ -123,13 +123,27 @@ async def callback(request: Request, x_line_signature: str = Header(None)):
     return 'OK'
 
 
-BADGE_NEW = "🆕 ของใหม่"
-BADGE_HOT = "🔥 ขายดี"
-BADGE_COMMISSION = "💎 คอมสูง"
+# ตัวเลขไทยคำ → ค่าตัวเลข ("ร้อย"=100, "สองพัน"=2000, "ยี่สิบ"=20) — คนไทย
+# พิมพ์ "ไม่เกินร้อย"/"งบสองพัน" แทนตัวเลขอารบิกบ่อย (เจอจริงจากลูกค้า: "ถุงเท้าไม่เกินร้อย")
+_THAI_DIGIT_WORDS = {"หนึ่ง": 1, "ยี่": 2, "สอง": 2, "สาม": 3, "สี่": 4,
+                     "ห้า": 5, "หก": 6, "เจ็ด": 7, "แปด": 8, "เก้า": 9}
+_THAI_UNIT_WORDS = {"สิบ": 10, "ร้อย": 100, "พัน": 1000, "หมื่น": 10000,
+                    "แสน": 100000, "ล้าน": 1000000}
+
+
+def _thai_word_number(text: str) -> Optional[float]:
+    """แปลงตัวเลขไทยคำ → ค่า ('ร้อย'→100, 'สองพัน'→2000, 'ยี่สิบ'→20) — ไม่ใช่เลขไทยคำ → None"""
+    m = re.fullmatch(r"(หนึ่ง|ยี่|สอง|สาม|สี่|ห้า|หก|เจ็ด|แปด|เก้า)?(สิบ|ร้อย|พัน|หมื่น|แสน|ล้าน)",
+                     (text or "").strip())
+    if not m:
+        return None
+    digit = _THAI_DIGIT_WORDS.get(m.group(1) or "", 1)
+    return float(digit * _THAI_UNIT_WORDS[m.group(2)])
 
 
 def parse_price_conditions(text: str) -> Tuple[Optional[float], Optional[float]]:
-    """เข้าใจเงื่อนไขราคาแบบไทย: 'ไม่เกิน 300', '300 บาท', 'งบ 500', '300-500', 'ไม่แพงกว่า 150'"""
+    """เข้าใจเงื่อนไขราคาแบบไทย: 'ไม่เกิน 300', '300 บาท', 'งบ 500', '300-500', 'ไม่แพงกว่า 150',
+    'ไม่เกินร้อย' (100), 'งบสองพัน' (2000), 'สองร้อยบาท'"""
     t = text.replace(",", "").replace(" ", "").lower()
     # ช่วงราคา เช่น 300-500 / 300ถึง500 / 300–500
     m = re.search(r"(\d{2,})\s*(?:-|–|ถึง)\s*(\d{2,})", t)
@@ -139,44 +153,23 @@ def parse_price_conditions(text: str) -> Tuple[Optional[float], Optional[float]]
     m = re.search(r"(?:ไม่เกิน|ไม่แพงกว่า|ไม่แพง|ต่ำกว่า|ถูกกว่า|งบ|ในงบ|ราคา|ประมาณ|ภายใน|ซื้อได้ใน)\s*(\d+(?:\.\d+)?)", t)
     if m:
         return None, float(m.group(1))
+    # ตัวเลขไทยคำตามหลังคำบอกงบ — "ไม่เกินร้อย" / "งบสองพัน"
+    m = re.search(r"(?:ไม่เกิน|ไม่แพงกว่า|ไม่แพง|ต่ำกว่า|ถูกกว่า|งบ|ในงบ|ราคา|ประมาณ|ภายใน|ซื้อได้ใน)\s*((?:หนึ่ง|ยี่|สอง|สาม|สี่|ห้า|หก|เจ็ด|แปด|เก้า)?(?:สิบ|ร้อย|พัน|หมื่น|แสน|ล้าน))", t)
+    if m:
+        val = _thai_word_number(m.group(1))
+        if val is not None:
+            return None, val
     # "300 บาท"
     m = re.search(r"(\d+(?:\.\d+)?)\s*บาท", t)
     if m:
         return None, float(m.group(1))
+    # "สองร้อยบาท" / "ร้อยบาท"
+    m = re.search(r"((?:หนึ่ง|ยี่|สอง|สาม|สี่|ห้า|หก|เจ็ด|แปด|เก้า)?(?:สิบ|ร้อย|พัน|หมื่น|แสน|ล้าน))\s*บาท", t)
+    if m:
+        val = _thai_word_number(m.group(1))
+        if val is not None:
+            return None, val
     return None, None
-
-
-def get_catalog_badges(db: Session) -> dict:
-    """id -> badge text, คำนวณเทียบกับทั้งคลัง (NEW 14 วัน / ขายดี คอมสูง อันดับ 1 ใน 5)"""
-    rows = db.query(
-        models.Product.id,
-        models.Product.sales_count,
-        models.Product.commission,
-        models.Product.created_at,
-    ).all()
-    if not rows:
-        return {}
-    sales = sorted([(r.sales_count or 0) for r in rows], reverse=True)
-    comms = sorted([float(r.commission or 0) for r in rows], reverse=True)
-    top_n = max(1, len(rows) // 5)
-    sales_threshold = sales[top_n - 1] if sales else 0
-    comm_threshold = comms[top_n - 1] if comms else 0
-    # Postgres (Supabase) คืน created_at แบบ timezone-aware, SQLite คืน naive
-    # → normalize เป็น UTC ทั้งคู่ก่อนลบกัน (กัน TypeError ที่ทำให้บอทตอบ error)
-    now = datetime.datetime.now(datetime.timezone.utc)
-    badges = {}
-    for rid, sales_count, commission, created_at in rows:
-        b = []
-        if created_at:
-            created = created_at if created_at.tzinfo else created_at.replace(tzinfo=datetime.timezone.utc)
-            if (now - created).days <= 14:
-                b.append(BADGE_NEW)
-        if (sales_count or 0) > 0 and (sales_count or 0) >= sales_threshold:
-            b.append(BADGE_HOT)
-        if float(commission or 0) > 0 and float(commission or 0) >= comm_threshold:
-            b.append(BADGE_COMMISSION)
-        badges[rid] = " ".join(b)
-    return badges
 
 
 def format_product_message(db: Session, user: models.User, products: list,
@@ -653,8 +646,7 @@ INSTALL_REPLY_OWNER = (
     "② บัญชี Shopee Affiliate — ทำลิงก์ค่าคอม + import สินค้า (สมัครฟรี)\n"
     "③ ที่เก็บข้อมูล + เซิร์ฟเวอร์ (Supabase + Render) — ฟรี\n"
     "④ คีย์ AI (Groq/Gemini) — ฟรี\n\n"
-    "💻 โค้ดอยู่บน GitHub — แตะปุ่มด้านล่างเปิดได้เลยจ๊ะ\n"
-    "จากนั้นทำตามคู่มือ ~15 นาที: วางโค้ดบนเซิร์ฟเวอร์ → ใส่สินค้าของคุณ → เปิดร้านได้เลย"
+    "💻 โค้ดอยู่บน GitHub — แตะปุ่มด้านล่างเปิดได้เลยจ๊ะ"
 )
 
 
@@ -684,9 +676,9 @@ def _github_button_card():
             "footer": {
                 "type": "box", "layout": "vertical", "spacing": "sm",
                 "contents": [
-                    {"type": "button", "style": "primary", "color": "#E74C3C", "height": "sm",
+                    {"type": "button", "style": "primary", "color": "#EE4D2D", "height": "sm",
                      "action": {"type": "uri", "label": "📦 เปิด GitHub", "uri": GITHUB_REPO_URL}},
-                    {"type": "button", "style": "secondary", "color": "#34495E", "height": "sm",
+                    {"type": "button", "style": "secondary", "color": "#334155", "height": "sm",
                      "action": {"type": "uri", "label": "📖 คู่มือติดตั้ง (ทีละขั้น)", "uri": SETUP_GUIDE_URL}},
                 ],
             },
@@ -711,7 +703,7 @@ def bot_manual_reply(text: str, is_owner: bool = False) -> str:
     """ตอบคำถามเรื่องบอทจากคู่มือ — เจอหัวข้อตามคำสำคัญตอบเฉพาะส่วน, ไม่ตรง → คู่มือเต็ม
     หัวข้อติดตั้ง/สมัคร/รายได้ = เฉพาะเจ้าของร้าน; ลูกค้าทั่วไปได้คำตอบสั้นชี้ทาง"""
     t = (text or "").strip().lower().replace(" ", "")
-    if any(k in t for k in INSTALL_KWS):
+    if any(k in t for k in INSTALL_KWS) or _wants_code_buttons(t):
         return INSTALL_REPLY_OWNER if is_owner else INSTALL_REPLY_CUSTOMER
     for kws, section in BOT_MANUAL_SECTIONS:
         if any(k in t for k in kws):
@@ -1472,10 +1464,15 @@ PRICE_PHRASE_RES = (
     r"\d+\s*(?:-|–|ถึง)\s*\d+",
     # 2) "300 บาท"
     r"\d+(?:\.\d+)?\s*บาท",
+    # 2b) ตัวเลขไทยคำ + บาท — "สองร้อยบาท" / "ร้อยบาท"
+    r"(?:หนึ่ง|ยี่|สอง|สาม|สี่|ห้า|หก|เจ็ด|แปด|เก้า)?(?:สิบ|ร้อย|พัน|หมื่น|แสน|ล้าน)\s*บาท",
     # 3) เงื่อนไขต้องมีตัวเลขจริงตามหลัง — ห้าม \d* ว่าง เด็ดขาด กัน "งบ" กลางคำ:
     #    "หูฟังบลูทูธ" มี "ง"+"บ" ติดกัน (ขอบคำ) → ถ้ายอมไม่มีเลขจะตัด "งบ" ทิ้ง
     #    เหลือขยะ "หูฟัลูทูธ" หาไม่เจอ
     r"(?:ไม่เกิน|ไม่แพงกว่า|ไม่แพง|ต่ำกว่า|ถูกกว่า|งบ|ในงบ|ราคา|ประมาณ|ภายใน|ซื้อได้ใน)\s*\d+(?:\.\d+)?",
+    # 3b) ตัวเลขไทยคำตามหลังคำบอกงบ — "ไม่เกินร้อย"/"งบสองพัน" (ลูกค้าพิมพ์จริง:
+    #     "ถุงเท้าไม่เกินร้อย" — ก่อนแก้ regex รับแต่ตัวเลขอารบิก เลยหาไม่เจอ)
+    r"(?:ไม่เกิน|ไม่แพงกว่า|ไม่แพง|ต่ำกว่า|ถูกกว่า|งบ|ในงบ|ราคา|ประมาณ|ภายใน|ซื้อได้ใน)\s*(?:หนึ่ง|ยี่|สอง|สาม|สี่|ห้า|หก|เจ็ด|แปด|เก้า)?(?:สิบ|ร้อย|พัน|หมื่น|แสน|ล้าน)",
     # 4) "ราคาไม่แพง/งบ 500" แบบไม่มีเลขเหลือ (ตัวเลขถูกตัดไปแล้ว) — ต้องมีเว้น
     #    วรรค/ต้นประโยคก่อนหน้า (ไม่ใช่กลางคำ)
     r"(?:\s|^)(?:งบ|ในงบ|ราคา|ประมาณ|ภายใน)\s*(?:ไม่แพง|ถูก|แพง)?",
@@ -2040,12 +2037,37 @@ def _web_search_text(raw: str) -> str:
     return t.strip()
 
 
+def _is_owner_notify_noise(text: str) -> bool:
+    """ขยะที่ไม่ควรปลุกเจ้าของร้าน: ตัวเลข/อิโมจิ/เครื่องหมายล้วน (555555, 🙂, !!!),
+    ซ้ำตัวเดิม (zzzzzz), เคาะแป้นมั่วไม่มีสระ (asdfghjkl/dfghjk)
+    มีตัวอักษรไทย = คำค้น/พิมพ์ผิดจริง → สมควรแจ้ง (พิมพ์ผิดไทยแก้ที่ THAI_VARIANT_MAP
+    ให้ค้นเจอแทน ไม่มาถึงบรรทัดนี้)"""
+    t = (text or "").strip()
+    if not t:
+        return True
+    if any('\u0e00' <= c <= '\u0e7f' for c in t):
+        return False
+    letters = [c.lower() for c in t if c.isascii() and c.isalpha()]
+    if not letters:
+        return True
+    # ซ้ำตัวเดิม (zzzzzz) / อัตราส่วนสระต่ำผิดปกติ = เคาะแป้นมั่ว (asdfghjkl)
+    if len(letters) >= 4 and len(set(letters)) <= 2:
+        return True
+    if len(letters) >= 5:
+        vowels = sum(1 for c in letters if c in "aeiou")
+        if vowels / len(letters) < 0.2:
+            return True
+    return False
+
+
 def notify_owner_stuck(user, text: str, db=None, title: str = "🤔 ลูกค้าสงสัย — บอทช่วยไม่ได้") -> bool:
     """Push แจ้งเตือนเจ้าของร้าน (ADMIN_LINE_USER_ID) — ใช้ทั้งตอนบอทช่วยไม่ได้
     และตอนลูกค้าฝากคำถาม (ส่ง title ต่างกัน)
     กันสแปม: 1 ครั้ง/cooldown ต่อลูกค้า (cooldown เก็บในหน่วยความจำ —
     uvicorn 1 process พอเพียง; หลัง restart แจ้งได้อีกครั้ง ไม่เสียหาย)
     คืน True ถ้าส่งจริง"""
+    if _is_owner_notify_noise(text):
+        return False
     uid = getattr(user, "line_user_id", None)
     cooldown_min = int(os.getenv("ESCALATE_COOLDOWN_MINUTES", "360"))
     last = _last_escalate.get(uid)
