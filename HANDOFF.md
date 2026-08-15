@@ -14,6 +14,7 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- ✅ feat(facebook): **โพสต์พื้นสี (text background)** — `post_feed` เพิ่ม param `background_preset_id` (พารามิเตอร์ไม่เป็นทางการ `text_format_preset_id` ของ Graph API) → โพสต์ข้อความล้วนบนพื้นสีผ่าน `/feed` ไม่แนบ media/link (มีแล้ว FB จะ ignore preset); **ข้อจำกัด: ข้อความ ≤ 130 ตัวอักษร**; +2 เทสต์ (รวม 409 passed) — deploy `dep-da03k1lbedkc739qri0g` → live, commit `ba5d8c4`; **เทสต์จริง 1 ตัวบนเพจแล้ว** (`...617153443245`, 10:07 UTC, preset แดง `1903718606535395`, ข้อความ "ขายของ ราคาเท่าช้อปปี้ 🛍️ ถ้าไม่คุ้ม ป้าบอกให้ 💕")
 - ✅ feat(facebook): **โฮสต์มาสคอต + แนบรูป + ป้ายข้อความ** — mount `/static` ใน `main.py` (StaticFiles) → serve `backend/app/static/pa-khem-avatar.png` ที่ `https://…/static/pa-khem-avatar.png`; `facebook_intro.py` เพิ่ม `badge` (ป้ายข้อความ 🏷️ นำหน้า caption) + `image_url` (ตั้ง `INTRO_IMAGE_URL` override, default = RENDER_EXTERNAL_URL/static/…) ต่อทุกโพสต์; `cron.py` ส่ง `image_url` ไป `post_feed` (โพสต์ผ่าน `/photos`) — 407 passed — **deploy แล้ว** (`dep-da01t6gjo6nc73dhsi00` → live, commit `8c1672f`); ตรวจ URL รูปจริงแล้ว `/static/pa-khem-avatar.png` → 200 image/png
 - ✅ feat(facebook): **ขยาย `facebook_intro.py` เป็นคลังแคปชั่น 12 แบบ หมุนเวียนไม่ซ้ำ** — จาก 3 โพสต์ตายตัว → 12 โพสต์ (เปิดตัว / วิธีเลือกของ / เตือนภัย / ของถูกvsของคุ้ม / อ่านรีวิว 1 ดาว / โปรโมชันจริงหรือหลอก / เรื่องขำ / ของใช้จริง / งบน้อยก็ช้อปได้ / ส่งฟรี / ของขวัญ / PDPA) — dedup เดิมใช้ index ต่อได้เลย (3 ตัวแรกโพสต์แล้วจะถูกข้าม → ตัวที่ 4-12 โพสต์ตามลำดับ) — **deploy แล้ว** (`dep-da01p5gjo6nc73dhjq60` → live, commit `f88f2b8`)
 - ✅ feat(facebook): `post_feed` รองรับ `image_url` — โพสต์รูปผ่าน `POST /{page-id}/photos` (ใช้ post_id กลับ, message เป็น caption, image_url กับ link ใช้ร่วมกันได้น้อย → มี image_url จะไม่ส่ง link) + 3 เทสต์ (รวม 406 passed) — **deploy แล้ว** (`dep-da01fkjl550s73cchujg` → live 07:40 UTC)
@@ -81,7 +82,7 @@
 ## 5. หมายเหตุ
 
 - CI: `.github/workflows/test.yml` รัน `pytest` + coverage gate 85% ทุก push/PR
-- เทสต์ทั้งชุด: 407 passed
+- เทสต์ทั้งชุด: 409 passed
 - บอทจริง healthy: `/health` → 200, `llm_provider=groq`, `database_url_configured=true` (URL: `https://shopee-affiliate-bot-9e9n.onrender.com`)
 - Render env vars ตอนนี้มี 19 ตัว: DATABASE_URL, CRON_TOKEN, GROQ_API_KEY, LINE_CHANNEL_ACCESS_TOKEN/SECRET, LLM_PROVIDER, TAVILY_API_KEY, FIRECRAWL_API_KEY, SHEET_WEBHOOK_URL, FACEBOOK_APP_ID/SECRET/VERIFY_TOKEN/PAGE_ACCESS_TOKEN, LINE_OA_URL, FB_AUTO_POST_INTERVAL, FB_POST_PRODUCTS, POSTS_SHEET_WEBHOOK_URL, ANTHROPIC_API_KEY, ANTHROPIC_MODEL
 - ฟีเจอร์ orchestrator ยังเป็นโมดูลเดี่ยว — ยังไม่ถูกเรียกจาก `line_bot.py` (ยังไม่มีผลกับลูกค้าจริง); บอสใหญ่ใช้ Claude จริง (ANTHROPIC_API_KEY ตั้งบน Render) + `BOSS_SYSTEM` บริบทเต็ม; Claude สงวนเป็นบอส plan/review เท่านั้น งานกลาง/เฉพาะกิจให้ groq + firecrawl (ไม่เผาโควตา Claude)
@@ -91,4 +92,5 @@
 - ⚠️ **หมายเหตุ ownership:** `assets/` มีงานของคุณเจ้าของเอง (ลบ SVG มาสคอตเดิม + เพิ่ม PNG ใหม่ 2 ไฟล์ `1e8c7fdf-*.png` / `pa-khem-avatar.png`) — **ยังไม่ commit** ปล่อยไว้ให้เจ้าของ/ไม่ทับงานนี้
 - Google ชีท: SHEET_WEBHOOK_URL (แชท) และ POSTS_SHEET_WEBHOOK_URL (โพสต์) ชี้ URL เดียวกัน = สคริปต์รวม 1 ตัว
   จัดการ 2 แท็บ (คำถามลูกค้า / FB Posts) — ตั้งใจให้เป็นแบบนี้ ไม่ใช่ bug; เทสต์ทั้ง 2 ทางผ่านแล้ว
-- repo สะอาด ไม่มี untracked junk; commit ล่าสุด `437f8f3` (test facebook webhook) push แล้ว — deploy โค้ดจริงตัวล่าสุดคือ `3f88206` (test-only ไม่ต้อง deploy ใหม่)
+- repo สะอาด ไม่มี untracked junk (ยกเว้นงานของคุณเจ้าของใน `assets/` — ดูหมายเหตุ ownership); commit ล่าสุด `ba5d8c4` (โพสต์พื้นสี) push แล้ว — deploy โค้ดจริงตัวล่าสุดคือ `dep-da03k1lbedkc739qri0g` (live)
+- ⚠️ **token Facebook:** `backend/.env` (local) หมดอายุแล้ว (Session expired 14 ส.ค.) แต่ **Render ยังใช้ token valid ตัวอื่น** (`EAAR9k...PCbT`) — production โพสต์ได้ปกติ; ถ้าจะตรวจเพจ/เทสต์จาก local ต้องดึง token จาก Render (Management API GET env-vars) มาใส่ชั่วคราว (ยังไม่ได้ sync ลง `.env` — รอเจ้าของยืนยัน)
