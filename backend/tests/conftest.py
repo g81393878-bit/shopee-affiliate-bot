@@ -27,6 +27,7 @@ os.environ["ADMIN_LINE_USER_ID"] = "U_test_owner"
 import pytest  # noqa: E402
 
 from app.db import Base, engine, SessionLocal  # noqa: E402
+from app.config import settings  # noqa: E402
 from app import models  # noqa: E402
 import app.api.line_bot as lb  # noqa: E402
 
@@ -67,6 +68,18 @@ def _seed_products():
     finally:
         db.close()
     yield
+
+
+@pytest.fixture(autouse=True)
+def _blank_llm_keys(monkeypatch):
+    """ปิดทุก LLM key เป็นค่าว่างในเทสต์ — กันเทสต์หลุดไปยิง Groq/Gemini/Anthropic จริง
+    (ช้า + HTTP 429 บน free tier). เทสต์ที่ต้องการ LLM ต้อง mock client เอง (เช่น _FakeClient)
+    และ set key คืนในเทสต์นั้น ๆ เอง.
+    """
+    monkeypatch.setattr(settings, "GROQ_API_KEY", "")
+    monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "")
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "")
+    monkeypatch.setattr(settings, "OPENAI_API_KEY", "")
 
 
 @pytest.fixture(autouse=True)

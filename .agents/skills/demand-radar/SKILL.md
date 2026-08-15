@@ -32,6 +32,7 @@ Relevance 40% + Rating 20% + Sales 20% + Commission 10% + Budget Fit 10% (0-100)
 ## Demand AI (demand_radar_ai.py)
 - Multi-provider LLM (groq→anthropic→gemini→openai) + heuristic fallback
   (`_heuristic_demand_analysis`: rule-based, SCAM_WARNING_PATTERNS → score 15, intent spam)
+- กัน 429: ทุก LLM call ผ่าน `call_with_backoff` (retry + throttle RPM process-wide) — ดู skill llm-providers
 - `parse_post_budget()` รองรับ "ไม่เกิน 500" / "300-500" / "งบสองพัน" (เลขไทย)
 - `_nfc()` (สระอำ) + `normalize_query()` (คำพ้อง) ก่อน match
 

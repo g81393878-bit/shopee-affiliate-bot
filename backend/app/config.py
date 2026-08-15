@@ -23,6 +23,14 @@ class Settings:
     
     # Choose: 'gemini', 'openai', 'groq', or 'anthropic'
     LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "gemini").lower()
+
+    # LLM rate limiting + retry (กัน HTTP 429 เมื่อยิงวิเคราะห์หลายโพสต์พร้อมกัน):
+    #   LLM_RATE_LIMIT_RPM  = จำกัดจำนวน call/นาที (0 = ปิด throttle)
+    #   LLM_RETRY_*        = retry แบบ exponential backoff เมื่อโดน 429/5xx/เน็ตล่ม
+    LLM_RATE_LIMIT_RPM: int = int(os.getenv("LLM_RATE_LIMIT_RPM", "20"))
+    LLM_RETRY_MAX_ATTEMPTS: int = int(os.getenv("LLM_RETRY_MAX_ATTEMPTS", "3"))
+    LLM_RETRY_BASE_DELAY: float = float(os.getenv("LLM_RETRY_BASE_DELAY", "1.0"))
+    LLM_RETRY_MAX_DELAY: float = float(os.getenv("LLM_RETRY_MAX_DELAY", "30.0"))
     
     # LINE Messaging API Keys
     LINE_CHANNEL_ACCESS_TOKEN: str = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")

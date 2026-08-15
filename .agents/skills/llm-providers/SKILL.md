@@ -14,6 +14,10 @@ description: >-
   ที่มีคำว่า "mock" ออก — key หลายตัวคั่นคอมม่าใน `GROQ_API_KEY` / `ANTHROPIC_API_KEY`
 - ผู้เรียกวนทุก client: ตัวไหนล้ม (401/429/error) → ข้ามไปตัวถัดไป; ล้มทุกตัว → fallback
 - `LLM_PROVIDER` = `gemini` | `openai` | `groq` | `anthropic`; `GROQ_MODEL` / `ANTHROPIC_MODEL` override ได้
+- **กัน 429**: `call_with_backoff(fn)` retry แบบ exponential backoff (เคารพ Retry-After แต่ cap
+  ด้วย max_delay) + `throttle_llm_request()` จำกัด RPM process-wide — env `LLM_RATE_LIMIT_RPM`
+  (default 20, 0=ปิด), `LLM_RETRY_MAX_ATTEMPTS` (3), `LLM_RETRY_BASE_DELAY` (1s), `LLM_RETRY_MAX_DELAY` (30s)
+  → ใช้แล้วใน `demand_radar_ai.py` ทุก provider branch (เรดาร์วิเคราะห์โพสต์เยอะ ๆ ไม่พังด้วย 429)
 
 ## กับดัก (เจอจริง)
 1. **Groq ห้ามยิงด้วย raw urllib** — Cloudflare 1010 บล็อก; ใช้ `openai` library เสมอ
@@ -26,9 +30,12 @@ description: >-
 5. Gemini package โดน deprecate (FutureWarning ในเทสต์) — ยังใช้ได้ แต่ห้ามพึ่งเป็น provider หลัก
 
 ## ไฟล์
-`backend/app/services/llm_clients.py`; ผู้ใช้: `ai_generator.py`, `ai_analyzer.py`,
-`demand_radar_ai.py`, `facebook_curated.py`, `facebook_local.py`, `web_search.py`, `hermes_brain.py`
+`backend/app/services/llm_clients.py` (helpers `call_with_backoff` / `throttle_llm_request`);
+ผู้ใช้: `demand_radar_ai.py` (rate-limit path), `ai_generator.py`, `ai_analyzer.py`,
+`facebook_curated.py`, `facebook_local.py`, `web_search.py`, `hermes_brain.py`
 
 ## เทสต์
 `backend/tests/test_llm_providers.py` (mock `_FakeClient` คืน JSON ตายตัว — เดิน anthropic branch
-โดยไม่แตะเน็ต); เติมเทสต์ทุกครั้งที่เพิ่ม provider ใหม่ (กัน "บอสใหญ่" พัง)
+โดยไม่แตะเน็ต + เทสต์ retry/backoff/throttle); เติมเทสต์ทุกครั้งที่เพิ่ม provider ใหม่ (กัน "บอสใหญ่" พัง)
+`conftest.py` blank ทุก LLM key (`_blank_llm_keys`) — เทสต์ที่ไม่ mock client จะเดิน heuristic fallback
+(เร็ว/เด็ดขาด) ไม่หลุดไปยิง API จริง

@@ -7,8 +7,17 @@
 """
 import json
 
+import pytest
+
 from app.config import settings
-from app.services.llm_clients import ANTHROPIC_BASE_URL, anthropic_clients, anthropic_keys
+from app.services.llm_clients import (
+    ANTHROPIC_BASE_URL,
+    _min_interval_seconds,
+    anthropic_clients,
+    anthropic_keys,
+    call_with_backoff,
+    throttle_llm_request,
+)
 from app.services.ai_generator import generate_script_for_product
 from app.services.ai_analyzer import analyze_product_with_ai
 
@@ -96,3 +105,107 @@ def test_analyze_product_mock_fallback_caption_has_no_inline_hashtags(monkeypatc
     script = result.get("script", {})
     assert "#" not in script.get("caption", "")
     assert script.get("hashtags")  # แท็กต้องไปอยู่ที่ช่อง hashtags ไม่ใช่ใน caption
+
+
+# ---------------------------------------------------------------------------
+# Rate limiting + retry (กัน HTTP 429 เมื่อเรดาร์ยิงวิเคราะห์หลายโพสต์ติดกัน)
+# ---------------------------------------------------------------------------
+
+class _FakeApiError(Exception):
+    """Exception ปลอมเลียนแบบ openai/httpx error — มี status_code + response.headers"""
+
+    def __init__(self, status_code=429, retry_after=None):
+        super().__init__(f"api error {status_code}")
+        self.status_code = status_code
+        self.response = None
+        if retry_after is not None:
+            self.response = type(
+                "R", (), {"headers": {"retry-after": str(retry_after)}}
+            )()
+
+
+def test_call_with_backoff_retries_on_429_then_succeeds(monkeypatch):
+    monkeypatch.setattr(settings, "LLM_RATE_LIMIT_RPM", 0)
+    monkeypatch.setattr(settings, "LLM_RETRY_MAX_ATTEMPTS", 3)
+    monkeypatch.setattr(settings, "LLM_RETRY_BASE_DELAY", 1.0)
+    monkeypatch.setattr(settings, "LLM_RETRY_MAX_DELAY", 30.0)
+    monkeypatch.setattr("app.services.llm_clients.time.sleep", lambda s: None)
+
+    calls = {"n": 0}
+
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise _FakeApiError(429)
+        return "ok"
+
+    assert call_with_backoff(flaky) == "ok"
+    assert calls["n"] == 3
+
+
+def test_call_with_backoff_gives_up_after_max_attempts(monkeypatch):
+    monkeypatch.setattr(settings, "LLM_RATE_LIMIT_RPM", 0)
+    monkeypatch.setattr(settings, "LLM_RETRY_MAX_ATTEMPTS", 2)
+    monkeypatch.setattr("app.services.llm_clients.time.sleep", lambda s: None)
+
+    calls = {"n": 0}
+
+    def always_429():
+        calls["n"] += 1
+        raise _FakeApiError(429)
+
+    with pytest.raises(_FakeApiError):
+        call_with_backoff(always_429)
+    assert calls["n"] == 2
+
+
+def test_call_with_backoff_no_retry_on_auth_error(monkeypatch):
+    """401/parse error ไม่ใช่ transient → ต้อง raise ทันที ไม่เสียเวลารอ"""
+    monkeypatch.setattr(settings, "LLM_RATE_LIMIT_RPM", 0)
+    monkeypatch.setattr(settings, "LLM_RETRY_MAX_ATTEMPTS", 3)
+    monkeypatch.setattr("app.services.llm_clients.time.sleep", lambda s: None)
+
+    calls = {"n": 0}
+
+    def auth_fail():
+        calls["n"] += 1
+        raise _FakeApiError(401)
+
+    with pytest.raises(_FakeApiError):
+        call_with_backoff(auth_fail)
+    assert calls["n"] == 1
+
+
+def test_call_with_backoff_honors_retry_after_header(monkeypatch):
+    """ถ้า server ส่ง Retry-After ต้องรอตามค่านั้น ไม่ใช่ base*2^n"""
+    monkeypatch.setattr(settings, "LLM_RATE_LIMIT_RPM", 0)
+    monkeypatch.setattr(settings, "LLM_RETRY_MAX_ATTEMPTS", 2)
+    monkeypatch.setattr(settings, "LLM_RETRY_BASE_DELAY", 1.0)
+    slept = []
+    monkeypatch.setattr("app.services.llm_clients.time.sleep", slept.append)
+
+    calls = {"n": 0}
+
+    def with_retry_after():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise _FakeApiError(429, retry_after=7)
+        return "ok"
+
+    assert call_with_backoff(with_retry_after) == "ok"
+    assert slept == [7.0]
+
+
+def test_throttle_disabled_when_rpm_zero(monkeypatch):
+    monkeypatch.setattr(settings, "LLM_RATE_LIMIT_RPM", 0)
+    slept = []
+    monkeypatch.setattr("app.services.llm_clients.time.sleep", slept.append)
+    throttle_llm_request()
+    assert slept == []
+
+
+def test_min_interval_seconds_from_rpm(monkeypatch):
+    monkeypatch.setattr(settings, "LLM_RATE_LIMIT_RPM", 30)
+    assert _min_interval_seconds() == 2.0
+    monkeypatch.setattr(settings, "LLM_RATE_LIMIT_RPM", 0)
+    assert _min_interval_seconds() == 0.0
