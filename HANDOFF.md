@@ -8,21 +8,23 @@
 > - **เมื่องานเสร็จและ commit ครบ:** ให้ล้างเนื้อหาในส่วน 1–5 กลับเป็นสถานะว่าง แล้ว commit
 >   ไฟล์นี้ — เพื่อไม่ให้ AI ตัวถัดไปเข้าใจผิดว่างานยังค้าง
 
-## สถานะ: 🟢 ว่าง — ไม่มีงานค้าง (Push และ Deploy เรียบร้อยแล้ว)
+## สถานะ: 🟡 มีงานค้างเฉพาะส่วน 3 (push + deploy) — งานโค้ด commit ครบแล้ว
 
 ---
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
-<!-- ว่าง -->
+- `65a8476` feat(orchestrator): เพิ่ม Claude "บอสใหญ่" คุมวง plan/dispatch/review + worker groq/firecrawl/claude + fallback Groq
+  (ฟีเจอร์ใหม่ `app/services/orchestrator.py` + 8 เทสต์ mock ใน `tests/test_orchestrator.py`)
 
 ## 2. งานค้าง
 
-<!-- ว่าง -->
+<!-- ว่าง — ไม่มีงานโค้ดค้าง ทำงานทุกชิ้น commit ครบแล้ว -->
 
 ## 3. ขั้นตอนต่อไป
 
-<!-- ว่าง -->
+- ⚠️ **push 1 commit ขึ้น GitHub** (`git push origin main`) — local นำ origin/main อยู่ 1 commit (orchestrator)
+- **trigger deploy บน Render** → production ยังไม่มีฟีเจอร์ orchestrator
 
 ## 4. ไฟล์ที่ถืออยู่ / โดนแก้
 
@@ -31,7 +33,8 @@
 ## 5. หมายเหตุ
 
 - CI: `.github/workflows/test.yml` รัน `pytest` + coverage gate 85% ทุก push/PR
-- เทสต์ล่าสุด: `cd backend && .venv/Scripts/python.exe -m pytest tests/ -q` → 375 passed
-- เซิร์ฟเวอร์และบอทจริงได้รับการอัปเดตและรัน Deploy ล่าสุดเรียบร้อยแล้ว ที่ Render (`srv-d9tknl2d0e5s739ebo40`)
+- เทสต์: `tests/test_orchestrator.py` → 8 passed (mock worker ทั้ง 3 ตัว ไม่แตะ API จริง)
+- ฟีเจอร์ orchestrator ยังเป็นโมดูลเดี่ยว — ยังไม่ถูกเรียกจาก `line_bot.py` (ยังไม่มีผลกับลูกค้าจริง)
+- Push + Deploy รอบก่อนหน้า (`49fb55e`) เรียบร้อยแล้ว — บอทจริงได้โค้ดล่าสุดของงานก่อนหน้า
 - repo สะอาด ไม่มี untracked junk สำหรับงานใหม่
 
