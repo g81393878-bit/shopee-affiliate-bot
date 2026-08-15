@@ -15,6 +15,14 @@
   <text x="256" y="464" text-anchor="middle" font-family="Leelawadee UI, Tahoma, sans-serif" font-size="19" font-weight="bold" fill="#F6C445">ป้าเข็ม ขายของ</text>
   <text x="256" y="490" text-anchor="middle" font-family="Leelawadee UI, Tahoma, sans-serif" font-size="23" font-weight="bold" fill="#FBF3E6">ถ้าไม่คุ้ม ป้าบอกให้</text>
 
+  <!-- เข็มกลัด (signature: ป้าเข็ม) -->
+  <g transform="translate(178 388) rotate(-25)">
+    <line x1="0" y1="0" x2="0" y2="26" stroke="#C2CAD4" stroke-width="7" stroke-linecap="round"/>
+    <polygon points="-4,26 4,26 0,35" fill="#C2CAD4"/>
+    <ellipse cx="0" cy="0" rx="5" ry="7.5" fill="none" stroke="#8A939E" stroke-width="3.5"/>
+    <path d="M-2,-4 C-12,-12 -22,-10 -27,-1" fill="none" stroke="#F2692B" stroke-width="4.5" stroke-linecap="round"/>
+  </g>
+
   <!-- ใบหน้า -->
   <circle cx="256" cy="200" r="86" fill="#F6CBA0"/>
 
