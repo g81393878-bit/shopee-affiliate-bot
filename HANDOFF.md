@@ -64,7 +64,7 @@
 
 - ✅ **push + deploy เรียบร้อย** — deploy `dep-da00oalg1s2s73c2npe0` → `live` (commit `3f88206`); โพสต์แนะนำใหม่ Character-first 3 ตัวขึ้นเพจแล้ว (ลบโพสต์เก่า + reset dedup แล้ว)
 - ✅ ตั้ง env บน Render: `POSTS_SHEET_WEBHOOK_URL` = URL Apps Script (ทดสอบ webhook แล้ว `{"ok":true}`)
-- ✅ ตั้ง env บน Render: `FB_AUTO_POST_INTERVAL=240` + `FB_POST_PRODUCTS=1` → โพสต์แนะนำครบ 3 ตัวแล้ว บอทจะเริ่มโพสต์สินค้าเองทุก 4 ชม. (tick ถัดไป ~10:51)
+- ✅ ตั้ง env บน Render: `FB_AUTO_POST_INTERVAL=240` + `FB_POST_PRODUCTS=1` → โพสต์แนะนำครบ 3 ตัวแล้ว บอทจะเริ่มโพสต์สินค้าเองทุก 4 ชม. (⚠️ deploy แต่ละครั้งรีเซ็ต timer 240 นาที — ตรวจ 07:22 UTC ยังไม่มีโพสต์สินค้า; tick ถัดไป ~11:21 UTC = 18:21 ไทย หลัง deploy ล่าสุด 07:21)
 - ✅ ตั้ง env บน Render ครบ: FACEBOOK_APP_ID / APP_SECRET / VERIFY_TOKEN / PAGE_ACCESS_TOKEN + LINE_OA_URL (รวม 17 ตัวแล้ว)
 - ⏳ **ตั้ง Webhook บน Facebook** (เจ้าของทำเอง — ตาม `docs/facebook-webhook-live-setup.md`): Callback URL `https://shopee-affiliate-bot-9e9n.onrender.com/api/webhooks/facebook` + Verify Token (ค่าใน `tools/render_env.local.json`) → Verify and Save → Add Subscriptions ติ๊ก `messages`
 - ⏳ **เปิดแอปเป็น Live** (เจ้าของทำเอง — ตาม `docs/facebook-webhook-live-setup.md`): Basic Settings → App Domains + Privacy Policy URL → สลับ Development → Live (ตอนนี้ยัง Development → ลูกค้าทั่วไปทักเพจไม่ได้)
