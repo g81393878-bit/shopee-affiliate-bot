@@ -1,108 +1,118 @@
-# Facebook Content — แนะนำบอท "ป้าเข็ม ขายของ"
+# Facebook Content — แนะนำตัว "ป้าเข็ม ขายของ" (Phase 0: Character ก่อน Product)
 
-ชุดโพสต์สำหรับเพจ Facebook แนะนำบอทป้าเข็ม (LINE bot) — ใช้โพสต์เรียงตามลำดับ 1→2→3
-แต่ละโพสต์มี **caption** (ใช้แปะลง Facebook), **เนื้อเต็ม** และ **image prompt** (เอาไปเจนรูปใน
-Midjourney / DALL·E / Canva AI ได้เลย หรือใช้รูปจริงถ่ายเองแทนก็ได้)
+ชุดโพสต์สำหรับเพจ Facebook ตาม **ป้าเข็ม Brand Bible** (`docs/pa-khem-brand-bible.md`):
+เปิดด้วย**เรื่องของป้า** ไม่ใช่ฟีเจอร์บอท · ไม่ชวนซื้อ · ไม่แปะลิงก์สินค้า
+(ขายสินค้า = Phase 2 ทีหลังสุด)
+
+โพสต์เรียงตามลำดับ 1→2→3 แต่ละโพสต์มี **caption** (แปะลง Facebook ได้เลย)
+และ **image prompt** (เจนรูปใน Canva AI / DALL·E / Midjourney หรือใช้รูปมาสคอตจริงแทน)
 
 > 🔗 **ก่อนโพสต์:** แทนที่ `https://line.me/R/ti/p/@xxxxx` ด้วยลิงก์ LINE OA จริงทุกจุด
-> (หรือวาง QR Code แทนบรรทัดลิงก์ก็ได้)
+> (โค้ด `app/services/facebook_intro.py` จะแทนให้อัตโนมัติด้วย env `LINE_OA_URL` — ไม่ต้องแก้มือ)
 
 ---
 
-## โพสต์ 1 — แนะนำตัว (Intro)
-
-**Caption (แปะลง Facebook):**
-```
-🤗 แนะนำตัวหน่อยค่าา — "ป้าเข็ม ขายของ" ผู้ช่วยช้อปของดีจาก Shopee ค่ะ!
-
-ป้าเข็มเป็นบอทแชทที่คุยกับคุณได้ตลอด 24 ชม. 🕐
-🔍 ค้นหาสินค้า — พิมพ์ชื่อ เช่น "หูฟัง" หรือ "หูฟังไม่เกิน 300"
-🧠 จำความชอบ — บอก "จำไว้ ชอบหูฟัง" ป้าเข็มจำให้
-📉 แจ้งราคาลง — ของที่คุณสนใจลดราคา รีบบอกทันที
-📦 เช็คพัสดุ — ถาม "สั่งแล้ว" ได้เลย
-
-💰 ราคาเท่ากับ Shopee เป๊ะ ไม่บวกเพิ่ม
-🔒 ปลอดภัย เก็บข้อมูลน้อยที่สุด ตามกฎ PDPA
-
-👉 แอดไลน์ได้เลย: https://line.me/R/ti/p/@xxxxx 💕
-
-#ป้าเข็มขายของ #Shopee #ของดีราคาเท่าShopee #บอทช่วยช้อป #ช้อปออนไลน์
-```
-
-**Image prompt (เจนรูป):**
-```
-Cute flat-style cartoon illustration of a friendly Thai auntie online shopkeeper
-as a shop mascot (store name "ป้าเข็ม ขายของ"), smiling, holding a smartphone and a
-shopping bag, surrounded by small chat bubbles, a magnifying glass, and a price-drop
-arrow icon. Warm cream background, soft orange and red accents, big Thai text
-"ป้าเข็ม ขายของ". Square 1:1, high detail, clean vector look.
-```
-
----
-
-## โพสต์ 2 — ฟีเจอร์เด่น (จำความชอบ + แจ้งราคาลง)
+## โพสต์ 1 — เปิดตัวป้าเข็ม (Character / จุดยืน)
 
 **Caption:**
 ```
-🧠 ป้าเข็มไม่ได้แค่หาของให้ — ป้าเข็ม "จำ" คุณด้วยนะคะ!
+ป้าเข็มไม่ใช่คนขายของนะลูก 💕
 
-💬 ลองพิมพ์ว่า "จำไว้ ชอบหูฟัง"
-ป้าเข็มจะจำหมวดที่คุณชอบไว้ แล้วเวลา:
-✨ มีของใหม่เข้าคลัง — บอกคุณก่อน
-📉 ของที่คุณสนใจลดราคา — รีบแจ้งทันที
+ป้าแค่ไม่อยากเห็นลูกหลานเสียเงินกับของที่ไม่คุ้ม
+ป้าเป็นป้าที่ชอบเทียบราคา ดูรีวิวเป็นชั่วโมง ๆ
+จนหลาน ๆ ติดปากกันว่า "จะซื้ออะไร ไลน์ถามป้าก่อน"
 
-เหมือนมีผู้ช่วยช้อปส่วนตัว ที่ไม่เคยลืมว่าคุณชอบอะไร 😊
-(ลบได้ทุกเมื่อ พิมพ์ "ลบข้อมูลฉัน" ตามกฎ PDPA)
+ตั้งแต่วันนี้ ป้าจะอยู่ตรงนี้ ดูของให้ลูกหลานแบบไม่ยัดเยียด
+เพราะป้ามีหลักอยู่ข้อเดียว...
 
-👉 แอดไลน์ได้เลย: https://line.me/R/ti/p/@xxxxx
+ถ้าไม่คุ้ม ป้าบอกให้ 😊
 
-#ป้าเข็มขายของ #ผู้ช่วยช้อปส่วนตัว #แจ้งราคาลง #ของใหม่มาแล้ว
+มีป้าไว้ ช่วยเลือกของง่ายขึ้น
+#ป้าเข็ม #ถ้าไม่คุ้มป้าบอกให้ #ของดีไม่ต้องแพง
 ```
 
 **Image prompt:**
 ```
-Cute flat-style cartoon illustration: the same friendly Thai auntie shop mascot
-holding a big heart-shaped notepad with a checkmark and a bell icon, floating
-product cards (headphones, water bottle, fan) around her, a small downward price
-arrow with a tag "ลดราคา". Warm cream background, soft orange/red palette,
-square 1:1, clean vector style.
+Cute flat-style cartoon illustration of a friendly Thai auntie shop mascot
+(store name "ป้าเข็ม ขายของ"), wearing an apron and glasses, smiling warmly,
+holding a shopping basket and a magnifying glass, a speech bubble reading
+"ถ้าไม่คุ้ม ป้าบอกให้". Warm cream background, soft orange and red accents,
+square 1:1, clean vector look.
 ```
 
 ---
 
-## โพสต์ 3 — วิธีใช้ + ปิดการขาย (CTA แอดไลน์)
+## โพสต์ 2 — วิธีเลือกของ (Value)
 
 **Caption:**
 ```
-ใช้แค่ 3 วิ ก็ได้ผู้ช่วยช้อปติดกระเป๋า 🎒💕
+วันนี้ป้ามาสอนเลือกของ (อะไรก็ได้) 3 ข้อง่าย ๆ จ๊ะ 🛒
 
-1️⃣ แอดไลน์ร้าน "ป้าเข็ม ขายของ"
-2️⃣ พิมพ์สิ่งที่อยากได้ เช่น "หูฟังไม่เกิน 300"
-3️⃣ ป้าเข็มหาให้จากของจริงบน Shopee ราคาเท่าเดิม ไม่บวกเพิ่ม
+1️⃣ อย่าดูแค่ราคาถูก — ดูว่าคนใช้จริงเขาว่าไง
+2️⃣ เปิดอ่านรีวิว 1 ดาวก่อนเสมอ — ข้อเสียคือเรื่องจริง
+3️⃣ ถามตัวเองว่า "ซื้อมาแล้วจะใช้บ่อยไหม"
 
-💰 ราคาเท่า Shopee เป๊ะ
-✅ ตรวจลิงก์สินค้าจริงทุกตัว ของตาย/ของปลอมไม่ขึ้น
-🕐 คุยได้ 24 ชม. ไม่ต้องรอแม่ค้าออนไลน์
+ถ้าข้อ 3 ตอบว่า "ไม่ค่อยได้ใช้" ก็ไม่ต้องซื้อลูก
+ของดีไม่ต้องแพง แต่ต้องใช้จริง
 
-👉 กดแอดไลน์ แล้วทัก "สวัสดี" มาเลยค่าา
-🔗 https://line.me/R/ti/p/@xxxxx
+มีคำถามเรื่องของ ทักป้ามาได้จ๊ะ 👉 https://line.me/R/ti/p/@xxxxx
 
-#ป้าเข็มขายของ #แอดไลน์ฟรี #ช้อปง่ายไม่ต้องรอ #Shopee
+#ป้าเข็ม #วิธีเลือกของ #ของดีไม่ต้องแพง
 ```
 
 **Image prompt:**
 ```
-Cute flat-style cartoon illustration: smartphone screen showing a LINE chat
-conversation with the auntie shop mascot replying product cards, a big "แอดไลน์"
-button glowing, a QR code in the corner, floating shopping icons (cart, gift box,
-price tag). Warm cream background, orange/red accents, square 1:1, clean vector.
+Cute flat-style cartoon illustration: the friendly Thai auntie shop mascot
+comparing two products side by side, holding a magnifying glass and a checklist,
+floating review stars (including a one-star icon), a speech bubble "ของดีไม่ต้องแพง".
+Warm cream background, orange/red palette, square 1:1, clean vector style.
+```
+
+---
+
+## โพสต์ 3 — เตือนภัยช้อปออนไลน์ (Trust)
+
+**Caption:**
+```
+เห็นโปร "ลด 90% เหลือ 9 บาท" อย่าเพิ่งกดนะลูก 🚨
+
+ป้าเห็นกับดักแบบนี้ทุกวัน:
+❌ ราคาหน้าเว็บถูก แต่ค่าส่งแพงกว่า
+❌ ของไม่ตรงปก ได้ของคนละตัว
+❌ ร้านปิดหนี ตามคืนของไม่ได้
+
+วิธีเช็กง่าย ๆ: เปิดรีวิว 1 ดาว + ดูว่าร้านเปิดมากี่ปี
+สองอย่างนี้ช่วยลูกได้มากกว่าคำว่า "ของถูก" อีก
+
+ไม่แน่ใจว่าตัวไหนคุ้มไหม ถามป้าก่อนซื้อก็ได้ลูก
+👉 https://line.me/R/ti/p/@xxxxx
+
+ป้าดูให้แล้ว ค่อยตัดสินใจ 💕
+
+#ป้าเข็ม #เตือนภัยช้อปปิ้ง #ไม่โดนหลอก
+```
+
+**Image prompt:**
+```
+Cute flat-style cartoon illustration: the friendly Thai auntie shop mascot holding a
+small warning shield and pointing at a big red "ลด 90%" sale tag with a caution sign,
+a speech bubble "อย่าเพิ่งกดนะลูก". Warm cream background, orange/red palette with
+a soft yellow warning accent, square 1:1, clean vector style.
 ```
 
 ---
 
 ## หมายเหตุการใช้
-- **ลิงก์แอดไลน์/QR:** แทนที่ `https://line.me/R/ti/p/@xxxxx` ด้วยลิงก์ LINE OA จริง หรือเอา QR Code
-  ของ LINE OA "ป้าเข็ม ขายของ" มาแปะแทนบรรทัดลิงก์ได้เลย (กดได้สะดวกกว่า)
-- **รูปจริงทางเลือก:** ถ่ายภาพหน้าจอแชทบอท + สินค้าจริง ใช้แทนภาพเจนได้ ดูเป็นธรรมชาติกว่า
-- **จังหวะโพสต์:** โพสต์ 1 (แนะนำ) → 2–3 วัน → โพสต์ 2 (ฟีเจอร์) → 2–3 วัน → โพสต์ 3 (CTA)
-  แล้วปักหมุดโพสต์ 1 ไว้บนเพจ
+
+- **จังหวะโพสต์:** โพสต์ 1 (เปิดตัว) → 2–3 วัน → โพสต์ 2 (วิธีเลือก) → 2–3 วัน → โพสต์ 3 (เตือนภัย)
+  แล้วปักหมุดโพสต์ 1 ไว้บนเพจ (ช่วง Phase 0 ยังไม่โพสต์สินค้า)
+- **ลิงก์แอดไลน์/QR:** แทนที่ `https://line.me/R/ti/p/@xxxxx` ด้วยลิงก์ LINE OA จริง หรือวาง QR Code
+  ของ LINE OA แทนบรรทัดลิงก์ (กดสะดวกกว่า) — CTA อ่อน ๆ แค่ชวน "ถามป้าก่อนซื้อ" ไม่ยัดเยียดขาย
+- **รูปจริงทางเลือก:** ถ่ายภาพ/ใช้มาสคอตป้าเข็มตัวเดียวกันทุกโพสต์ ให้คนจำ "ป้าเข็ม" ได้
+- **ห้าม:** พูดฟีเจอร์บอท (ค้นสินค้า/จำความชอบ/แจ้งราคา...) · แปะลิงก์สินค้า · ศัพท์ AI — อ่านกติกาใน Brand Bible ข้อ 8
+
+## ต่อยอด (Content Pillars Phase 0)
+
+หลังจาก 3 โพสต์เปิดตัวนี้ ให้ป้อนคอนเทนต์ตาม 5 เสาหลักใน Brand Bible ข้อ 7:
+1. เรื่องเล่าป้าเข็ม · 2. วิธีเลือกของ · 3. เตือนภัย/กันโดนหลอก · 4. เรื่องขำ/มุมชีวิต
+แล้วค่อยเปิดเสา 5 (แนะนำสินค้า) ทีหลังสุด
