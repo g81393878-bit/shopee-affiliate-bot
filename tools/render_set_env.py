@@ -33,7 +33,7 @@ API_BASE = "https://api.render.com/v1"
 
 # ⬇️⬇️⬇️ เติมค่าจริงตรงนี้ (ช่องว่าง '' = ข้ามตัวนั้น) ⬇️⬇️⬇️
 VARS = {
-    "FACEBOOK_APP_ID": "",              # developers.facebook.com → App Settings → Basic → App ID
+    "FACEBOOK_APP_ID": "1263958805236203",  # มีแล้วใน repo (SKILL.md) — ไม่ต้องแก้
     "FACEBOOK_APP_SECRET": "",          # App Secret (กด Show → ใส่รหัส Facebook เพื่อเปิดเผย)
     "FACEBOOK_VERIFY_TOKEN": "",        # รหัสลับตั้งเอง — ต้องตรงกับช่อง Verify Token ใน Facebook Webhook
     "FACEBOOK_PAGE_ACCESS_TOKEN": "",   # ได้จากขั้น Connect Page (Messenger → Settings)
