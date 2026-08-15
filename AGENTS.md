@@ -1,5 +1,19 @@
 # AGENTS.md
 
+## Skills Index (บังคับอ่านก่อนทำงาน — ใช้สกิลนำทางทุกฟีเจอร์)
+
+สกิลอยู่ใน `.agents/skills/<name>/SKILL.md` — ก่อนแตะฟีเจอร์ใด อ่านสกิลของฟีเจอร์นั้นก่อน (มีกับดักที่เจอจริง + ไฟล์ + เทสต์):
+
+**บอท LINE:** `line-bot-core` (routing/ค้นหา/ราคา/วัย/คู่มือ/wismo/PDPA) · `line-product-cards` (การ์ด Flex) · `line-user-memory` (จำไว้/prefs/tone) · `line-campaigns-quota` (แจ้งราคาลง/re-engage/daily-report/quota)
+
+**AI:** `llm-providers` (multi-key failover) · `ai-content-generation` (สคริปต์/วิเคราะห์/template + สัญญา hashtags) · `demand-radar` (radar V1 + matcher + guards) · `facebook-page-automation` (post_feed/Messenger/RSS/local caption) · `web-search` (Tavily+Firecrawl circuit breaker)
+
+**API/Admin:** `products-and-links` (สินค้า API + link policy) · `admin-dashboard` (/admin + cookie) · `cron-jobs` (ทุก cron + CRON_TOKEN)
+
+**Dev tools:** `product-pipeline` (import-csv/analyze) · `fb-monitor-local` (สแกนกลุ่ม --once) · `mcp-servers` (pkh_mcp + shopee MCP) · `hermes-ai` (สมองกลเรียนรู้ตลาด) · `content-backfill` (เติมคอนเทนต์ template) · `generate-ai-content` (เติมคอนเทนต์ Groq)
+
+**Deploy/Shopee:** `render-supabase-deploy` (ขึ้น production) · `shopee-affiliate` (ลิงก์ผ่านโทรศัพท์) · `facebook-app-config` (ตั้งค่า Meta App)
+
 ## Deployment (Render + Supabase)
 
 - `backend/app/db.py` auto-converts `postgres://` → `postgresql://` (SQLAlchemy v2 rejects the former); Supabase and many cloud providers return `postgres://` URLs. Postgres pools use `pool_pre_ping=True` and `pool_recycle=300` — keep these when touching engine setup.
