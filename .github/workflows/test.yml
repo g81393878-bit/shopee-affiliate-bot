@@ -1,9 +1,11 @@
 name: Test
 
-on:
-  push:
-    branches: [main]
-  pull_request:
+on: [push, pull_request]
+
+# ยกเลิกรันเก่าของ branch เดียวกัน เมื่อมี push ใหม่เข้ามา (กันรันซ้ำเปลือง quota)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
