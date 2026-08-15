@@ -86,6 +86,22 @@ def seed_test_radar_products(db_session):
         db_session.commit()
 
 
+@pytest.fixture(autouse=True)
+def mock_radar_ai():
+    """Mock AI Lead intent analysis globally for all endpoint tests to prevent Groq API 429 errors."""
+    with patch("app.api.facebook_radar.analyze_lead_intent_and_demand") as mock:
+        mock.return_value = {
+            "intent": "buy",
+            "demand_score": 85,
+            "urgency": "medium",
+            "budget": 400,
+            "product_keyword": "ชุดคลุมท้อง",
+            "product_category": "เสื้อผ้าคุณแม่",
+            "reasoning": "mocked reasoning",
+        }
+        yield mock
+
+
 # ---------------------------------------------------------------------------
 # 1. Test High-Demand Lead Ingestion
 # ---------------------------------------------------------------------------
@@ -111,16 +127,7 @@ def test_high_demand_lead_ingestion_creates_event_and_alert(client, db_session):
 
     with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "test_fb_page_post_123", "error": None}) as mock_post, \
          patch("app.api.facebook_radar.log_post_async") as mock_sheets, \
-         patch("app.api.facebook_radar.dispatch_radar_line_alert") as mock_line_alert, \
-         patch("app.api.facebook_radar.analyze_lead_intent_and_demand", return_value={
-             "intent": "buy",
-             "demand_score": 85,
-             "urgency": "medium",
-             "budget": 400,
-             "product_keyword": "ชุดคลุมท้อง",
-             "product_category": "เสื้อผ้าคุณแม่",
-             "reasoning": "ลูกค้าระบุงบชัดเจน 400 บาท และหาของซื้อจริง",
-         }):
+         patch("app.api.facebook_radar.dispatch_radar_line_alert") as mock_line_alert:
         resp = client.post("/api/admin/facebook-radar/leads", json=payload)
         assert resp.status_code == 200
         data = resp.json()
@@ -169,12 +176,21 @@ def test_high_demand_lead_ingestion_creates_event_and_alert(client, db_session):
 # 2. Test Low-Demand Lead Ingestion (Scam Warning / General Discussion)
 # ---------------------------------------------------------------------------
 
-def test_low_demand_lead_ingestion_stores_lead_without_event_or_alert(client, db_session):
+def test_low_demand_lead_ingestion_stores_lead_without_event_or_alert(client, db_session, mock_radar_ai):
     """เมื่อส่งโพสต์ที่ไม่มีความสนใจซื้อ (เช่น โพสต์เตือนภัยมิจฉาชีพ):
     - บันทึก facebook_detected_leads
     - ไม่มีการสร้าง facebook_demand_events
     - ไม่มีการโพสต์ Facebook Page และไม่ส่งแจ้งเตือน LINE Alert (alerts_sent == 0)
     """
+    mock_radar_ai.return_value = {
+        "intent": "inquire",
+        "demand_score": 40,
+        "urgency": "low",
+        "budget": None,
+        "product_keyword": None,
+        "product_category": None,
+        "reasoning": "low demand mocked",
+    }
     post_id = f"test_fb_low_{int(time.time() * 1000)}"
     payload = {
         "fb_post_id": post_id,
