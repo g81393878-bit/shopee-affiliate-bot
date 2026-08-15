@@ -6,8 +6,8 @@
   2. GET ตอบ hub.challenge กลับเมื่อ hub.verify_token ตรง (Facebook ยิงมาทดสอบ)
   POST ตรวจ X-Hub-Signature-256 (HMAC-SHA256 ด้วย App Secret) กันปลอมแปลง
 
-หมายเหตุ: ยังไม่ต่อไอเดีย A (บอทตอบแชทอัตโนมัติ) — ตอนนี้รับข้อความแล้ว log +
-ตอบ ack ผ่าน Send API (ถ้าตั้ง FACEBOOK_PAGE_ACCESS_TOKEN แล้ว) ไว้เป็นจุดต่อยอด
+หน้าทีของเพจ Facebook: แนะนำบอทป้าเข็ม (LINE bot) — ใครทักแชทมา ตอบแนะนำ
+บอท + วิธีคุย (แอดไลน์) ไม่ค้นสินค้า ไม่โพสต์สินค้า (ตามที่เจ้าของร้านสั่ง)
 """
 import hashlib
 import hmac
@@ -26,6 +26,20 @@ FACEBOOK_VERIFY_TOKEN = os.getenv("FACEBOOK_VERIFY_TOKEN") or "mock_facebook_ver
 FACEBOOK_PAGE_ACCESS_TOKEN = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or ""
 
 router = APIRouter(prefix="/webhooks", tags=["facebook"])
+
+# ชื่อร้าน/บอทป้าเข็ม — ข้อความแนะนำให้ลูกค้าเพจไปคุยต่อที่ LINE
+BOT_NAME = "ป้าเข็ม ขายของ"
+
+BOT_INTRO = (
+    f"🤗 สวัสดีค่ะ! ยินดีต้อนรับสู่ร้าน {BOT_NAME} 💕\n\n"
+    "ป้าเข็มคือผู้ช่วยช้อปของดีจาก Shopee ให้คุณจ๊ะ:\n"
+    "🔍 ค้นหาสินค้า — พิมพ์ชื่อ เช่น \"หูฟัง\" หรือ \"หูฟังไม่เกิน 300\"\n"
+    "🧠 จำความชอบ — บอก \"จำไว้ ชอบหูฟัง\" ป้าเข็มจะแนะนำของตรงใจ\n"
+    "📉 แจ้งราคาลง — ของที่สนใจลดราคา ป้าเข็มรีบบอก\n"
+    "📦 เช็คพัสดุ — ถาม \"สั่งแล้ว\" ได้เลย\n\n"
+    "💰 ราคาเท่ากับ Shopee เป๊ะ ไม่บวกเพิ่ม ตรวจลิงก์สินค้าจริงทุกตัว\n\n"
+    "👉 คุยกับป้าเข็ม 24 ชม. ได้ที่ LINE แอดไลน์ร้าน \"ป้าเข็ม ขายของ\" ได้เลยนะคะ"
+)
 
 
 def _verify_signature(body: bytes, signature: str) -> bool:
@@ -61,7 +75,7 @@ def _reply_to_facebook(recipient_id: str, text: str) -> bool:
 
 
 def _handle_event(event: dict) -> None:
-    """จัดการ 1 messaging event — ตอนนี้ log + ตอบ ack (จุดต่อยอดไอเดีย A: ต่อค้นสินค้า)"""
+    """จัดการ 1 messaging event — ตอบแนะนำบอทป้าเข็ม (ไม่ค้น/ไม่โพสต์สินค้า)"""
     sender = (event.get("sender") or {}).get("id")
     message = event.get("message") or {}
     if not sender:
@@ -70,7 +84,7 @@ def _handle_event(event: dict) -> None:
     if not text:
         return
     logger.info(f"[facebook] message from {sender}: {text[:200]}")
-    _reply_to_facebook(sender, f"ป้าเข็มรับข้อความแล้วค่ะ: \"{text[:100]}\"")
+    _reply_to_facebook(sender, BOT_INTRO)
 
 
 @router.get("/facebook")

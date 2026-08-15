@@ -87,7 +87,7 @@ def test_post_bypass_when_mock_secret(monkeypatch):
     assert resp.status_code == 200
 
 
-def test_post_message_triggers_ack(monkeypatch):
+def test_post_message_replies_bot_intro(monkeypatch):
     from fastapi.testclient import TestClient
     from app.main import app
 
@@ -103,7 +103,9 @@ def test_post_message_triggers_ack(monkeypatch):
     resp = client.post("/api/webhooks/facebook", json=payload)
     assert resp.status_code == 200
     assert len(sent) == 1 and sent[0][0] == "1001"
-    assert "หูฟัง" in sent[0][1]
+    # ตอบแนะนำบอทป้าเข็ม ไม่ค้นสินค้า/ไม่โพสต์สินค้า
+    assert sent[0][1] == fb.BOT_INTRO
+    assert "ป้าเข็ม" in sent[0][1] and "LINE" in sent[0][1]
 
 
 def test_verify_signature_sha1_supported(monkeypatch):
