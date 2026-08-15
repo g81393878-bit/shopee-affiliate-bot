@@ -8,14 +8,15 @@
     [Claude = บอสใหญ่]  PLAN   แตกโจทย์เป็นขั้นตอน (JSON)
             │
             ├── worker "firecrawl" → web_search() ค้นข้อมูลเน็ต (เทรนด์/คู่แข่ง/ข้อเท็จจริง)
-            ├── worker "groq"      → Groq เจนข้อความ (ถูก+เร็ว เหมาะงานร่าง)
-            └── worker "claude"    → Claude คิดเหตุผลลึก/ตัดสินใจ
+            └── worker "groq"      → Groq เจนข้อความ (ถูก+เร็ว เหมาะงานร่าง)
             │
     [Claude = บอสใหญ่]  REVIEW  รวมผลทุกขั้น → ตรวจทาน → คำตอบสุดท้าย
 
 หลักการ:
   - บอส (Claude) = วางแผน + ตัดสินใจ + คุมคุณภาพ (งานแพงใช้ตรงนี้)
   - ลูกน้อง (Groq/Firecrawl) = งานถูก/ซ้ำ/หาข้อมูล (งานถูกใช้ตรงนี้)
+  - Claude ไม่เป็น worker — โควตา Claude สงวนไว้เฉพาะ plan/review ของบอส
+    งานกลาง/เฉพาะกิจทั้งหมดส่ง groq + firecrawl (ประหยัดโควตา + เร็ว)
   - Fallback: ถ้า Claude ไม่มี key/ล้ม → ลดขั้นเหลือ Groq ตอบตรง (บอทไม่พัง)
 
 ผลลัพธ์ boss_orchestrate() คืน:
@@ -42,10 +43,9 @@ BOSS_SYSTEM = """\
 - PDPA: เก็บข้อมูลลูกค้าน้อยที่สุด ห้ามสร้าง/เปิดเผยข้อมูลส่วนตัวที่ไม่มีจริง
 - กลุ่มเป้าหมาย: ลูกค้าทั่วไปที่ช้อปออนไลน์ เน้นของใช้/ของดีราคาคุ้ม
 
-# TEAM (ทีมงานที่สั่งได้)
+# TEAM (ทีมงานที่สั่งได้ — Claude ไม่ลงทำงานย่อย เผื่อโควตาไว้ให้บอสเท่านั้น)
 - "firecrawl" = ค้นข้อมูลจากเน็ต (เทรนด์/คู่แข่ง/ราคา/ข้อเท็จจริง)
 - "groq" = เขียน/เจนข้อความ (ถูก+เร็ว เหมาะงานร่าง/แคปชัน/บทพูด)
-- "claude" = คิดเหตุผลลึก/ตัดสินใจ (ใช้อย่างมาก 1 ขั้นต่อแผน — งานร่าง/ค้นข้อมูลให้ส่ง groq/firecrawl)
 
 # WORKFLOW (กระบวนการ)
 1. PLAN — แตกโจทย์เป็นขั้นตอน 2-4 ขั้น สั้นๆ เลือก worker ที่เหมาะกับงานแต่ละขั้น (ขั้นนี้ตอบ JSON list เท่านั้น)
@@ -59,12 +59,12 @@ BOSS_SYSTEM = """\
 - ห้ามส่งลิงก์เสีย/ลิงก์ที่ไม่ใช่ affiliate ของร้าน
 """
 
-# worker ที่รู้จัก — ตัวอื่นที่บอสส่งมาก็ยังรันได้ (default เป็น groq)
-KNOWN_WORKERS = {"firecrawl", "groq", "claude"}
+# worker ที่รู้จัก — Claude ไม่ใช่ worker (สงวนไว้เป็นบอส plan/review เท่านั้น)
+# งานกลาง/เฉพาะกิจทั้งหมดให้ groq + firecrawl — worker อื่นที่บอสส่งมา default เป็น groq
+KNOWN_WORKERS = {"firecrawl", "groq"}
 
-# โควตาควบคุมแผน — กันบอสวางแผนยาวเกิน/ใช้ตัวเอง(แพง+ช้า)มากไป
+# โควตาควบคุมแผน — กันบอสวางแผนยาวเกินไป (Claude ใช้แค่ plan/review ไม่เผาโควตาในงานย่อย)
 MAX_STEPS = 4
-MAX_CLAUDE_STEPS = 1
 # กัน worker ตัวไหน hang เกินงบ — Claude Opus รอบนึง ~40s, Groq/Firecrawl เร็ว
 CLAUDE_TIMEOUT = 90
 WORKER_TIMEOUT = 60
@@ -175,8 +175,8 @@ def _extract_json(text: str):
 def _parse_plan(text: str) -> list:
     """แปลงแผนบอส (JSON list) → list[dict{worker,task}] — ผิดรูปแบบ/ว่าง คืน []
 
-    คุมโควตา: ตัดเกิน MAX_STEPS ขั้น; worker=claude เกิน MAX_CLAUDE_STEPS → โยนให้ groq
-    (บอสใช้ตัวเองแค่ plan/review — งานกลางควรส่งลูกน้องถูก+เร็ว)"""
+    คุมโควตา: ตัดเกิน MAX_STEPS ขั้น; worker="claude" → โยนให้ groq เสมอ
+    (Claude สงวนเป็นบอส plan/review เท่านั้น — งานกลาง/เฉพาะกิจให้ลูกน้อง groq+firecrawl)"""
     data = _extract_json(text)
     raw = []
     if isinstance(data, dict):
@@ -192,16 +192,11 @@ def _parse_plan(text: str) -> list:
             continue
         raw.append({"worker": worker if worker in KNOWN_WORKERS else "groq", "task": task})
 
-    steps, claude_used = [], 0
+    steps = []
     for item in raw:
         if len(steps) >= MAX_STEPS:
             break
-        worker = item["worker"]
-        if worker == "claude":
-            claude_used += 1
-            if claude_used > MAX_CLAUDE_STEPS:
-                worker = "groq"
-        steps.append({"worker": worker, "task": item["task"]})
+        steps.append({"worker": item["worker"], "task": item["task"]})
     return steps
 
 
@@ -223,10 +218,10 @@ def boss_orchestrate(instruction: str) -> dict:
         f"โจทย์จากเจ้าของร้าน: {instruction}\n\n"
         "จงวางแผนการทำงานเป็นขั้นตอน 2-4 ขั้น สั้นๆ โดยแต่ละขั้นเลือก worker ที่เหมาะสมที่สุด:\n"
         "- worker \"firecrawl\" = ค้นข้อมูลจากเน็ต (เทรนด์/คู่แข่ง/ราคา/ข้อเท็จจริง)\n"
-        "- worker \"groq\" = เขียน/เจนข้อความ (ถูก+เร็ว เหมาะงานร่าง)\n"
-        "- worker \"claude\" = คิดเหตุผลลึก (ใช้อย่างมาก 1 ขั้น — งานร่าง/ค้นข้อมูลให้ส่ง groq/firecrawl)\n\n"
+        "- worker \"groq\" = เขียน/เจนข้อความ (ถูก+เร็ว เหมาะงานร่าง)\n\n"
+        "(ห้ามใช้ worker \"claude\" — Claude สงวนไว้เป็นบอส plan/review เท่านั้น)\n\n"
         "ตอบเป็น JSON list เท่านั้น (ห้ามใส่ markdown fence อย่าใส่ฟิลด์อื่น):\n"
-        '[{"worker": "firecrawl|groq|claude", "task": "คำสั่งงานภาษาไทยสั้นๆ"}, ...]'
+        '[{"worker": "firecrawl|groq", "task": "คำสั่งงานภาษาไทยสั้นๆ"}, ...]'
     )
     plan_text = _claude_generate(plan_prompt)
     plan = _parse_plan(plan_text)
@@ -242,9 +237,7 @@ def boss_orchestrate(instruction: str) -> dict:
         worker, task = step["worker"], step["task"]
         if worker == "firecrawl":
             out = _firecrawl_research(task)
-        elif worker == "claude":
-            out = _claude_generate(task)
-        else:  # groq
+        else:  # groq (Claude ไม่เป็น worker — สงวนไว้เป็นบอส plan/review)
             out = _groq_generate(task)
         steps.append({"worker": worker, "task": task, "output": out})
 

@@ -46,7 +46,7 @@ def test_parse_plan_accepts_dict_wrapper():
     assert orch._parse_plan(raw) == [{"worker": "groq", "task": "x"}]
 
 
-def test_parse_plan_caps_steps_and_claude_quota():
+def test_parse_plan_maps_claude_worker_to_groq_and_caps():
     raw = json.dumps([
         {"worker": "claude", "task": "คิดลึก 1"},
         {"worker": "claude", "task": "คิดลึก 2"},
@@ -56,9 +56,10 @@ def test_parse_plan_caps_steps_and_claude_quota():
         {"worker": "firecrawl", "task": "ขั้น 6"},
     ])
     plan = orch._parse_plan(raw)
-    # cap 4 ขั้น + claude เหลือแค่ 1 (ที่เหลือโยนให้ groq)
+    # cap 4 ขั้น + worker "claude" ทุกตัวถูกโยนให้ groq (Claude สงวนเป็นบอสเท่านั้น)
     assert len(plan) == 4
-    assert sum(1 for s in plan if s["worker"] == "claude") == 1
+    assert all(s["worker"] in ("firecrawl", "groq") for s in plan)
+    assert sum(1 for s in plan if s["worker"] == "claude") == 0
 
 
 def _fake_claude(prompt, system=orch.BOSS_SYSTEM):
@@ -85,8 +86,9 @@ def test_boss_orchestrate_full_flow(monkeypatch):
     result = orch.boss_orchestrate("สร้างคอนเทนต์หูฟัง")
     assert result["boss"] is True
     assert result["answer"] == "คำตอบสุดท้ายจากบอส"
-    assert [s["worker"] for s in result["steps"]] == ["firecrawl", "groq", "claude"]
-    assert calls["firecrawl"] == 1 and calls["groq"] == 1
+    # worker "claude" ในแผนถูก normalize เป็น groq (Claude ไม่เป็น worker)
+    assert [s["worker"] for s in result["steps"]] == ["firecrawl", "groq", "groq"]
+    assert calls["firecrawl"] == 1 and calls["groq"] == 2
 
 
 def test_boss_orchestrate_fallback_when_no_plan(monkeypatch):

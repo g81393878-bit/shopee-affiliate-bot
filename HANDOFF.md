@@ -14,6 +14,7 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- ✅ feat(orchestrator): Claude สงวนเป็น**บอส plan/review เท่านั้น** ไม่เป็น worker — งานกลาง/เฉพาะกิจทั้งหมดให้ groq + firecrawl (ลบ worker "claude" + MAX_CLAUDE_STEPS; worker=claude ในแผน → normalize เป็น groq)
 - ✅ feat(orchestrator): เขียน `BOSS_SYSTEM` บริบทเต็มรูปแบบ (ROLE/CONTEXT/TEAM/WORKFLOW/VOICE) ให้ Claude บอสใหญ่รู้บริบทธุรกิจ + น้ำเสียงป้าเข็ม (เทสต์จริง: ตอบตาม persona + สโลแกน "ถ้าไม่คุ้ม ป้าบอกให้")
 - ✅ feat(render): ตั้ง `ANTHROPIC_API_KEY` + `ANTHROPIC_MODEL=claude-opus-5` บน Render → orchestrator บอสใหญ่ใช้ Claude จริง (ทดสอบ key ใช้ได้แล้ว "สวัสดี"); deploy `dep-da00v6bl550s73cb86l0` → `live` (19 env vars)
 - ✅ test(facebook): เพิ่มเทสต์ webhook verify + X-Hub-Signature **ครบกรณี** (`backend/tests/test_facebook_webhook.py` +8 เทสต์ → รวม 402 passed)
@@ -77,7 +78,7 @@
 - เทสต์ทั้งชุด: 402 passed
 - บอทจริง healthy: `/health` → 200, `llm_provider=groq`, `database_url_configured=true` (URL: `https://shopee-affiliate-bot-9e9n.onrender.com`)
 - Render env vars ตอนนี้มี 19 ตัว: DATABASE_URL, CRON_TOKEN, GROQ_API_KEY, LINE_CHANNEL_ACCESS_TOKEN/SECRET, LLM_PROVIDER, TAVILY_API_KEY, FIRECRAWL_API_KEY, SHEET_WEBHOOK_URL, FACEBOOK_APP_ID/SECRET/VERIFY_TOKEN/PAGE_ACCESS_TOKEN, LINE_OA_URL, FB_AUTO_POST_INTERVAL, FB_POST_PRODUCTS, POSTS_SHEET_WEBHOOK_URL, ANTHROPIC_API_KEY, ANTHROPIC_MODEL
-- ฟีเจอร์ orchestrator ยังเป็นโมดูลเดี่ยว — ยังไม่ถูกเรียกจาก `line_bot.py` (ยังไม่มีผลกับลูกค้าจริง); บอสใหญ่ใช้ Claude จริงแล้ว (ANTHROPIC_API_KEY ตั้งบน Render) + `BOSS_SYSTEM` บริบทเต็มแล้ว ไม่ fallback Groq
+- ฟีเจอร์ orchestrator ยังเป็นโมดูลเดี่ยว — ยังไม่ถูกเรียกจาก `line_bot.py` (ยังไม่มีผลกับลูกค้าจริง); บอสใหญ่ใช้ Claude จริง (ANTHROPIC_API_KEY ตั้งบน Render) + `BOSS_SYSTEM` บริบทเต็ม; Claude สงวนเป็นบอส plan/review เท่านั้น งานกลาง/เฉพาะกิจให้ groq + firecrawl (ไม่เผาโควตา Claude)
 - facebook webhook: หน้าที่ตอนนี้ = แนะนำบอทป้าเข็ม (แชท) — ไอเดีย A (ค้นสินค้าในแชท) ถูกพักไว้
 - facebook auto-post: scheduler ในตัว (ไม่พึ่ง cron-job.org) — Phase 1 โพสต์แนะนำตัวป้าเข็ม (status=fbintro) ครบ 3 ตัวแล้ว
   → Phase 2 โพสต์สินค้า (status=fbpost) เปิดแล้วด้วย FB_POST_PRODUCTS=1 (เริ่ม tick ถัดไป); โพสต์สำเร็จทุกตัว → Google ชีท (POSTS_SHEET_WEBHOOK_URL)
