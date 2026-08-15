@@ -14,6 +14,7 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- ✅ feat(facebook): **ดึงรูปสินค้าจากหน้า product ปกติ (ไม่ต้องพึ่ง FB scrape)** — ลิงก์ affiliate redirect ไปหน้า SPA `opaanlp` ไม่มีรูป แต่ derive `/product/{shopid}/{itemid}` แล้วมี og:image (requests ตรง เร็ว/ฟรี/เสถียร) + เพิ่ม JSON-LD extractor (image/contentUrl/thumbnailUrl) เป็นชั้นก่อน Firecrawl — เทสต์จริง 2 ลิงก์ (937/939) ได้รูปโดยไม่ใช้ FB token — 501 passed (commit `b7df74a`)
 - ✅ fix(facebook): **ลบโพสต์สินค้าการ์ดลิงก์เก่า 2 ตัว + โพสต์ใหม่แบบแนบรูป** — โพสต์ "Za Facial Mask" (id 937, 939) ที่ขึ้นก่อน og-scrape fix (โค้ดเดิมโพสต์การ์ดลิงก์ → รูปดำ) → ลบโพสต์เก่า 2 ตัว + backfill `products.image_url` + โพสต์ใหม่เป็น `type=photo` (รูปขึ้น scontent CDN) + reset dedup `fbpost` — ตรวจ Graph API แล้วทั้ง 2 ตัว full_picture = scontent-*.fbcdn.net
 - ✅ fix(facebook): **retry Facebook og scrape** — Shopee เสิร์ฟ og:image ให้ crawler FB ไม่สม่ำเสมอ (scrape บางรอบคืน `image` ว่าง → โพสต์ตก fallback การ์ดลิงก์) → `_facebook_og_image` retry 3 รอบ (delay 1s) ก่อนยอมแพ้ + เทสต์ใหม่ — 458 passed (commit `11b7cbb`)
 
@@ -94,7 +95,7 @@
 ## 5. หมายเหตุ
 
 - CI: `.github/workflows/test.yml` รัน `pytest` + coverage gate 85% ทุก push/PR
-- เทสต์ทั้งชุด: 458 passed
+- เทสต์ทั้งชุด: 501 passed
 - บอทจริง healthy: `/health` → 200, `llm_provider=groq`, `database_url_configured=true` (URL: `https://shopee-affiliate-bot-9e9n.onrender.com`)
 - Render env vars ตอนนี้มี 20 ตัว: DATABASE_URL, CRON_TOKEN, GROQ_API_KEY, LINE_CHANNEL_ACCESS_TOKEN/SECRET, LLM_PROVIDER, TAVILY_API_KEY, FIRECRAWL_API_KEY, SHEET_WEBHOOK_URL, FACEBOOK_APP_ID/SECRET/VERIFY_TOKEN/PAGE_ACCESS_TOKEN, LINE_OA_URL, FB_AUTO_POST_INTERVAL, FB_POST_PRODUCTS, POSTS_SHEET_WEBHOOK_URL, ANTHROPIC_API_KEY, ANTHROPIC_MODEL, ADMIN_LINE_USER_ID (ตั้งเป็น `Uc88eb...` = default เดิม — ทำให้ explicit + เพิ่มใน render.yaml sync:false)
 - ฟีเจอร์ orchestrator ยังเป็นโมดูลเดี่ยว — ยังไม่ถูกเรียกจาก `line_bot.py` (ยังไม่มีผลกับลูกค้าจริง); บอสใหญ่ใช้ Claude จริง (ANTHROPIC_API_KEY ตั้งบน Render) + `BOSS_SYSTEM` บริบทเต็ม; Claude สงวนเป็นบอส plan/review เท่านั้น งานกลาง/เฉพาะกิจให้ groq + firecrawl (ไม่เผาโควตา Claude)
