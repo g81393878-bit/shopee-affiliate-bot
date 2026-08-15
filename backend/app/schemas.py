@@ -289,7 +289,7 @@ class LeadIngestPayload(BaseModel):
 
 class IngestedLeadResult(BaseModel):
     fb_post_id: str
-    lead_id: int
+    lead_id: Optional[int] = None
     status: str
     demand_score: Optional[int] = None
     intent: Optional[str] = None

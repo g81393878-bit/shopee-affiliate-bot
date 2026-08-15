@@ -26,7 +26,7 @@ from app.db import SessionLocal
 from app.main import app
 from app import models
 from app.services.product_cards import format_radar_deal_flex_message
-from app.api.facebook_radar import _safe_daily_post_limit
+from app.api.facebook_radar import _safe_daily_post_limit, _looks_like_test_lead
 
 TEST_ADMIN_TOKEN = os.getenv("CRON_TOKEN") or os.getenv("ADMIN_DASHBOARD_PASSWORD") or "test_radar_admin_secret"
 
@@ -47,6 +47,42 @@ def test_safe_daily_post_limit_clamps_and_ignores_bad_values(monkeypatch):
     # ติดลบ/ศูนย์ → clamp เป็น 1
     monkeypatch.setenv("RADAR_MAX_DAILY_POSTS", "0")
     assert _safe_daily_post_limit() == 1
+
+
+def test_looks_like_test_lead_detects_mock_prefixes():
+    assert _looks_like_test_lead("fb_mock_bulk_75576777") is True
+    assert _looks_like_test_lead("fb_sample_001_maternity") is True
+    assert _looks_like_test_lead("demo_post_1") is True
+    # โพสต์จริง (id ตัวเลขแบบ FB) และ test_* ของ pytest ไม่โดนบล็อก
+    assert _looks_like_test_lead("123456789_987654321") is False
+    assert _looks_like_test_lead("test_fb_high_123") is False
+
+
+def test_ingest_skips_test_leads_in_production(client, db_session, monkeypatch):
+    """fb_mock_* / fb_sample_* ต้องถูกข้ามใน production (Postgres) — ไม่สร้าง lead/event
+    กันแถว demand event 'posted' หลอกไปอุดตัน daily-limit (เจอจริง 15/08)."""
+    from app.api import facebook_radar
+    monkeypatch.setattr(facebook_radar, "_is_production", lambda: True)
+    payload = {
+        "fb_post_id": "fb_mock_bulk_deadbeef",
+        "group_id": "grp_test",
+        "group_name": "Test Group",
+        "author_name": "User_99",
+        "post_text": "สนใจ หูฟังบลูทูธ งบ 400",
+        "post_url": "https://facebook.com/groups/test/posts/1",
+        "post_time": datetime.now(timezone.utc).isoformat(),
+    }
+    with patch("app.api.facebook_radar.post_feed") as mock_post:
+        resp = client.post("/api/admin/facebook-radar/leads", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["processed"] == 0
+    assert data["results"][0]["status"] == "test_lead_skipped"
+    mock_post.assert_not_called()
+    # ไม่มี lead ถูกบันทึก
+    lead = (db_session.query(models.FacebookDetectedLead)
+            .filter(models.FacebookDetectedLead.fb_post_id == "fb_mock_bulk_deadbeef").first())
+    assert lead is None
 
 
 @pytest.fixture

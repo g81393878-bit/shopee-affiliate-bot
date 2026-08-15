@@ -47,6 +47,27 @@ COOKIE_NAME = "pkh_admin"
 # ห้ามให้ daily post limit เกินค่านี้ — กัน misconfig/Hermes ทำให้เพจล้นโพสต์
 MAX_DAILY_POSTS_CAP = 25
 
+# fb_post_id ที่ขึ้นต้นด้วยคำพวกนี้ = lead ทดสอบ/หลอก (fb_group_monitor_local --sample
+# หรือสคริปต์เทสต์) — ห้ามหลุดเข้า production เพราะจะสร้างแถว demand event 'posted' หลอก
+# แล้วไปอุดตัน daily-limit counter (เจอจริง 15/08: fb_mock_bulk_* 100 แถวใน 7 วิ)
+# หมายเหตุ: ไม่รวม "test_" เพราะ pytest ใช้ post_id แบบ test_* กับ SQLite test DB เอง
+TEST_LEAD_PREFIXES = ("fb_sample_", "fb_mock_", "demo_")
+
+
+def _looks_like_test_lead(fb_post_id: str) -> bool:
+    """True เมื่อ fb_post_id เป็น lead ทดสอบ/หลอก (ไม่ใช่โพสต์จริงจากกลุ่ม FB)."""
+    return (fb_post_id or "").strip().lower().startswith(TEST_LEAD_PREFIXES)
+
+
+def _is_production() -> bool:
+    """Production = ต่อ Postgres จริง (Supabase/Render) — sqlite = dev/test.
+
+    ใช้ DATABASE_URL เป็นสัญญาณ (ไม่ใช่ secret เพราะ conftest/เครื่อง dev อาจมี
+    CRON_TOKEN ใน .env แล้วทำให้เข้าใจผิดว่าเป็น production).
+    """
+    db_url = (os.getenv("DATABASE_URL") or "").strip().lower()
+    return db_url.startswith("postgres") or db_url.startswith("postgresql")
+
 
 def _safe_daily_post_limit() -> int:
     """อ่าน RADAR_MAX_DAILY_POSTS (env เท่านั้น) พร้อม clamp [1, MAX_DAILY_POSTS_CAP].
@@ -303,6 +324,22 @@ def ingest_facebook_leads(
     for item in items:
         fb_post_id = item["fb_post_id"]
         if not fb_post_id:
+            continue
+
+        # 0. กัน lead ทดสอบ/หลอก (fb_sample_/fb_mock_/test_...) หลุดเข้า production —
+        #    เคยสร้างแถว demand event 'posted' หลอก 102 แถวแล้วอุดตัน daily-limit counter
+        if _is_production() and _looks_like_test_lead(fb_post_id):
+            results.append(
+                schemas.IngestedLeadResult(
+                    fb_post_id=fb_post_id,
+                    lead_id=None,
+                    status="test_lead_skipped",
+                    demand_score=None,
+                    intent=None,
+                    alert_sent=False,
+                    matched_product_id=None,
+                )
+            )
             continue
 
         # 1. ตรวจสอบ Deduplication
