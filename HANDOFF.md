@@ -8,12 +8,15 @@
 > - **เมื่องานเสร็จและ commit ครบ:** ให้ล้างเนื้อหาในส่วน 1–5 กลับเป็นสถานะว่าง แล้ว commit
 >   ไฟล์นี้ — เพื่อไม่ให้ AI ตัวถัดไปเข้าใจผิดว่างานยังค้าง
 
-## สถานะ: 🟡 โค้ด push + deploy ครบแล้ว — เหลืองาน manual ฝั่งเจ้าของ (cron-job.org + Facebook Live)
+## สถานะ: 🟢 auto-post แนะนำตัวป้าเข็ม ทำงานอัตโนมัติในตัวแล้ว (ไม่พึ่ง cron-job.org) — เหลืองาน manual ฝั่งเจ้าของแค่ Facebook Live
 
 ---
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- `3c4d311` feat(facebook): ปรับ auto-post เป็น **Phase 1 แนะนำตัวป้าเข็มก่อน → Phase 2 ขายสินค้าทีหลัง**
+  (ไฟล์ใหม่ `app/services/facebook_intro.py` 3 โพสต์; cron โพสต์แนะนำก่อน → ขายเฉพาะเมื่อตั้ง FB_POST_PRODUCTS=1;
+  scheduler ในตัวใน `main.py` โพสต์ทุก FB_AUTO_POST_INTERVAL นาที — ไม่พึ่ง cron-job.org)
 - `38e9cde` feat(facebook): post_feed รองรับ `link` param — Facebook ดึง preview รูปสินค้าจากลิงก์อัตโนมัติ
   (แยก affiliate URL ออกจากข้อความมาเป็น link param → โพสต์เป็นการ์ดมีรูป; เทสต์จริงยืนยันแล้ว)
 - `a5c0c7f` feat(facebook): เพิ่ม auto-post ลงเพจ Facebook — cron `/api/cron/facebook-post`
@@ -40,9 +43,10 @@
 
 ## 3. ขั้นตอนต่อไป
 
-- ✅ **push + deploy เรียบร้อย** — deploy `dep-d9vv5fjf2k7s73c4a5og` → `live` (commit `38e9cde`); endpoint cron ขึ้น production แล้ว (401 ถ้าไม่มี/ผิด token)
-- ⏳ ตั้ง cron-job.org ยิง `POST https://shopee-affiliate-bot-9e9n.onrender.com/api/cron/facebook-post?token=<CRON_TOKEN>` — ช่วงทดสอบทุก 10 นาที, หลัง test ผ่านลดเป็นทุก 4 ชม.
-- ✅ ตั้ง env บน Render ครบ 5 ตัว: FACEBOOK_APP_ID / APP_SECRET / VERIFY_TOKEN / PAGE_ACCESS_TOKEN + LINE_OA_URL (รวม 14 ตัว)
+- ✅ **push + deploy เรียบร้อย** — deploy `dep-d9vvduc9v7es7387u9pg` → `live` (commit `3c4d311`); scheduler auto-post ทำงานในตัวแล้ว
+- ✅ ตั้ง env บน Render: `FB_AUTO_POST_INTERVAL=240` (โพสต์แนะนำทุก 4 ชม. — 3 โพสต์ = 12 ชม.) · `FB_POST_PRODUCTS` ยังไม่ตั้ง (= ปิดขายสินค้า ให้คนรู้จักก่อน)
+- ⏳ **เปิดขายสินค้าทีหลัง:** ตั้ง `FB_POST_PRODUCTS=1` บน Render → บอทเริ่มโพสต์สินค้า (หลังโพสต์แนะนำครบ 3 ตัว)
+- ✅ ตั้ง env บน Render ครบ 5 ตัว: FACEBOOK_APP_ID / APP_SECRET / VERIFY_TOKEN / PAGE_ACCESS_TOKEN + LINE_OA_URL (รวม 15 ตัวแล้ว)
 - ⏳ **ตั้ง Webhook บน Facebook**: Messenger → Settings → Callback URL `https://shopee-affiliate-bot-9e9n.onrender.com/api/webhooks/facebook` + Verify Token (ค่าใน `tools/render_env.local.json`) → Verify and Save → Subscribe page events
 - ⏳ **เปิดแอปเป็น Live**: App Settings → Basic → ใส่ Privacy Policy URL `https://shopee-affiliate-bot-9e9n.onrender.com/privacy` → สลับโหมดเป็น Live (ตอนนี้ยัง Development → ลูกค้าทั่วไปทักเพจไม่ได้)
 - ⏳ (ไม่บังคับ) ตั้ง `ANTHROPIC_API_KEY` บน Render — ตอนนี้ orchestrator บอสใหญ่ fallback เป็น Groq
@@ -54,11 +58,12 @@
 ## 5. หมายเหตุ
 
 - CI: `.github/workflows/test.yml` รัน `pytest` + coverage gate 85% ทุก push/PR
-- เทสต์ทั้งชุด: 388 passed (วิธี A link preview มี 5 เทสต์ใหม่ รวมอยู่ในนี้)
+- เทสต์ทั้งชุด: 392 passed
 - บอทจริง healthy: `/health` → 200, `llm_provider=groq`, `database_url_configured=true` (URL: `https://shopee-affiliate-bot-9e9n.onrender.com`)
-- Render env vars ตอนนี้มี 14 ตัว (ครบ Facebook + LINE_OA_URL แล้ว): DATABASE_URL, CRON_TOKEN, GROQ_API_KEY, LINE_CHANNEL_ACCESS_TOKEN/SECRET, LLM_PROVIDER, TAVILY_API_KEY, FIRECRAWL_API_KEY, SHEET_WEBHOOK_URL, FACEBOOK_APP_ID/SECRET/VERIFY_TOKEN/PAGE_ACCESS_TOKEN, LINE_OA_URL
+- Render env vars ตอนนี้มี 15 ตัว: DATABASE_URL, CRON_TOKEN, GROQ_API_KEY, LINE_CHANNEL_ACCESS_TOKEN/SECRET, LLM_PROVIDER, TAVILY_API_KEY, FIRECRAWL_API_KEY, SHEET_WEBHOOK_URL, FACEBOOK_APP_ID/SECRET/VERIFY_TOKEN/PAGE_ACCESS_TOKEN, LINE_OA_URL, FB_AUTO_POST_INTERVAL
   (ยังไม่มีแค่ ANTHROPIC_API_KEY)
 - ฟีเจอร์ orchestrator ยังเป็นโมดูลเดี่ยว — ยังไม่ถูกเรียกจาก `line_bot.py` (ยังไม่มีผลกับลูกค้าจริง)
 - facebook webhook: หน้าที่ตอนนี้ = แนะนำบอทป้าเข็ม (แชท) — ไอเดีย A (ค้นสินค้าในแชท) ถูกพักไว้
-- facebook auto-post: ไอเดีย B เริ่มแล้ว — cron `/api/cron/facebook-post` โพสต์สินค้าค่าคอมสูงลง feed (กันซ้ำด้วย CampaignLog status=fbpost)
+- facebook auto-post: scheduler ในตัว (ไม่พึ่ง cron-job.org) — Phase 1 โพสต์แนะนำตัวป้าเข็มก่อน (กันซ้ำ status=fbintro)
+  → Phase 2 โพสต์สินค้า (status=fbpost) เปิดเมื่อ FB_POST_PRODUCTS=1
 - repo สะอาด ไม่มี untracked junk สำหรับงานใหม่
