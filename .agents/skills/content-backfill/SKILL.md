@@ -69,4 +69,4 @@ SELECT count(*) FROM products p WHERE NOT EXISTS (SELECT 1 FROM contents c WHERE
 ## กับดักที่เจอจริง
 
 - อย่าเติมซ้ำ: `contents` อนุญาตหลายแถวต่อ product (style ต่างกัน) — เช็ค `NOT EXISTS` ก่อน insert เสมอ
-- caption ของ template มีแฮชแท็ก inline อยู่แล้ว — ไม่ต้อง append `hashtags` ซ้ำ (cron `analyze` ทำซ้ำเพราะ caption จาก Groq ไม่มี inline tag; template มีอยู่แล้ว)
+- caption (ทั้งจาก Groq และ template) เป็นข้อความล้วน **ไม่มี inline hashtag** — consumer (`cron analyze`, `_build_fb_caption`, `batch_generate_content`) ต่อ `format_hashtags_text(hashtags)` เอง; ถ้าเพิ่ม caption สำเร็จรูปใหม่ห้ามฝัง `#` ลงใน caption (จะซ้ำกับแท็กที่ต่อท้าย)

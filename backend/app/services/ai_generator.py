@@ -47,7 +47,10 @@ def build_template_script(product_name: str, category: str = "", price: float = 
         "problem": "หลายคนบ่นว่าของแบบนี้ซื้อมาแล้วพังง่าย หรือแพงเกินราคา จนบางทีก็ไม่รู้จะเชื่อใคร",
         "solution": f"ตัวนี้ป้าลองใช้เองแล้วจ๊ะ สไตล์ {style} คุณภาพดีสมราคา ใช้ประจำได้เรื่อย ๆ คุ้มมาก",
         "cta": "ใครสนใจกดลิงก์ในตะกร้า Shopee ได้เลยจ๊ะ ป้าจัดให้ ของแท้ราคาดี",
-        "caption": f"ป้าใช้เองมาสักพักแล้วจ๊ะ {product_name} ดีจริง คุ้มมาก ลองดูจ๊ะ ไม่ลองไม่รู้! #ของดีบอกต่อ #ป้าป้ายยา #คุ้มมาก",
+        # caption ต้องเป็นข้อความล้วน (ไม่มี inline hashtag) — consumer ทุกตัว
+        # (cron analyze / _build_fb_caption / batch_generate_content) ต่อ hashtags
+        # เองด้วย format_hashtags_text(hashtags) ถ้า caption มี tag อยู่แล้วจะซ้ำ
+        "caption": f"ป้าใช้เองมาสักพักแล้วจ๊ะ {product_name} ดีจริง คุ้มมาก ลองดูจ๊ะ ไม่ลองไม่รู้!",
         "hashtags": ["ของดีบอกต่อ", "ป้าป้ายยา", "คุ้มมาก", style],
         "title": f"ป้าป้ายยา {product_name} สไตล์ {style}",
         "thumbnail_prompt": f"Warm friendly photo of {product_name} on a wooden shop counter with soft daylight, cozy local shop vibe",
