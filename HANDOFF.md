@@ -14,6 +14,11 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- `52aede7` docs(skills): เพิ่ม local skill facebook-app-config (คู่มือแนะนำตั้งค่า Facebook App)
+- `7a60ee5` feat(llm): เพิ่ม Anthropic (Claude) provider "บอสใหญ่" — OpenAI-compat endpoint + หมุนเวียนหลาย key
+- `8d8ebbf` docs: playbook ทีมงาน AI แบบ NUANOSE ทีละเครื่องมือ — เทียบ stack ป้าเข็ม (บอทในตัว+Groq+Firecrawl)
+- `f236a57` docs: AGENTS.md — เพิ่มส่วนบทบาท/ความรับผิดชอบของ AI กันสับสนบทบาท
+- `b52ffb5` docs: อัปเดต HANDOFF.md — บันทึก 4 commits ล่าสุด + ขั้นตอน push/deploy ค้าง
 - `5b7fbf9` ci: ขยาย test workflow ให้รันทุก push/PR + ยกเลิกรันซ้ำซ้อน
   (เดิมรันเฉพาะ push เข้า main; ยืนยัน CI ผ่าน 363 passed, coverage 87.52%)
 - `26b538e` test(line-bot): battery routing 200 case (100 direct + 100 ผ่านเมนูฝากคำถาม)
@@ -29,8 +34,7 @@
 
 ## 3. ขั้นตอนต่อไป
 
-- ⚠️ **push 4 commits ขึ้น GitHub** (`git push origin main`) — local นำ origin/main อยู่ 4 commits:
-  `d07b0d6` · `c847eae` · `26b538e` · `5b7fbf9`
+- ⚠️ **push 9 commits ขึ้น GitHub** (`git push origin main`) — local นำ origin/main อยู่ 9 commits
 - **trigger deploy บน Render** → บอทไลฟ์ (`shopee-affiliate-bot-9e9n.onrender.com`) จะได้โค้ดใหม่
   (ตอนนี้ production ยังรันโค้ดเก่า — ลูกค้าจริงเจอ "จะซื้อสินค้าอย่างไร" ตอบ web search ขยะ)
 - เปลี่ยนรหัสผ่าน cron-job.org (manual บนเว็บ ไม่ใช่โค้ด — ผู้ใช้ให้พักไว้ก่อน)
@@ -42,7 +46,7 @@
 ## 5. หมายเหตุ
 
 - CI: `.github/workflows/test.yml` รัน `pytest` + coverage gate 85% ทุก push/PR (มีผลหลัง push)
-- เทสต์: `cd backend && .venv/Scripts/python.exe -m pytest tests/ -q` → 363 passed
+- เทสต์: `cd backend && .venv/Scripts/python.exe -m pytest tests/ -q` → 375 passed (มี 12 เทสต์ใหม่จาก llm providers)
 - `/health` มี 3 แหล่งยิง: cron-job.org (`23.88.105.37` ทุก 10 นาที), self keep-alive loop
   (`74.220.52.251` = Render egress ทุก 10 นาที), Render health checker (`10.209.x.x` ทุก ~5 วิ)
 - Render logs API: `GET /v1/logs?ownerId=tea-d2iu2afdiees738r2o00&resource=srv-d9tknl2d0e5s739ebo40`
