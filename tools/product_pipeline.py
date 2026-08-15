@@ -44,6 +44,7 @@ from app.services.ai_analyzer import calculate_heuristic_score
 from app.services.ai_generator import generate_script_for_product
 from app.services.link_checker import check_affiliate_link
 from app.services.category import guess_category
+from app.services.product_image import fetch_product_image_direct
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -117,6 +118,32 @@ def save_script(db, product: models.Product, style: str = "standard") -> Optiona
     return content
 
 
+def _backfill_images(db, new_prods, workers: int = 8) -> Tuple[int, int]:
+    """Eager backfill image_url ของสินค้าใหม่ด้วย fetch แบบใหม่ (ฟรี/เร็ว ไม่พึ่ง FB token).
+
+    new_prods = [(product_id, affiliate_url), ...] — fetch ใน thread pool (network ล้วน ๆ)
+    ส่วน DB update ทำใน main thread กัน session ข้าม thread คืน (ได้รูป, ไม่ได้รูป)
+    """
+    if not new_prods:
+        return 0, 0
+
+    def _one(item):
+        pid, url = item
+        return pid, fetch_product_image_direct(url)
+
+    got = 0
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futures = [ex.submit(_one, t) for t in new_prods]
+        for fut in as_completed(futures):
+            pid, img = fut.result()
+            if img:
+                db.query(models.Product).filter(models.Product.id == pid) \
+                  .update({"image_url": img}, synchronize_session=False)
+                got += 1
+    db.commit()
+    return got, len(new_prods) - got
+
+
 def cmd_import_csv(args):
     rows = read_csv(args.file)
     db = sessionmaker(bind=get_engine(args.sqlite))()
@@ -124,6 +151,7 @@ def cmd_import_csv(args):
     existing_urls = {p.affiliate_url for p in db.query(models.Product).all() if p.affiliate_url}
 
     inserted, skipped_dupe, skipped_link = [], [], []
+    new_prods = []  # (product_id, affiliate_url) — ใช้ eager backfill รูป
     fresh = []
     for r in rows:
         if r["name"] in existing_names or r["affiliate_url"] in existing_urls:
@@ -152,10 +180,17 @@ def cmd_import_csv(args):
             db.add(p)
             db.flush()
             inserted.append(p)
+            new_prods.append((p.id, r["affiliate_url"]))
             existing_names.add(r["name"])
             existing_urls.add(r["affiliate_url"])
     db.commit()
     print(f"imported {len(inserted)} / dupe {len(skipped_dupe)} / ลิงก์ไม่ผ่าน {len(skipped_link)} / จากไฟล์ {len(rows)}")
+
+    # Eager backfill รูปสินค้า — สินค้าใหม่ได้รูปทันทีตอน import ไม่ต้องรอโพสต์ Facebook
+    # (fetch แบบใหม่ ฟรี/เร็ว ไม่พึ่ง FB token / Firecrawl)
+    if new_prods:
+        got, miss = _backfill_images(db, new_prods)
+        print(f"รูปสินค้าใหม่: ได้ {got} / ไม่ได้ {miss} (จาก {len(new_prods)} ตัว)")
     if skipped_link:
         print("\n--- ข้าม (ลิงก์ไม่ผ่านการตรวจ) ---")
         for name, why in skipped_link:

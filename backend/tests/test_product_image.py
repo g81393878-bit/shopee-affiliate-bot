@@ -169,3 +169,64 @@ def test_fetch_product_image_uses_facebook_scrape_before_firecrawl(monkeypatch):
     monkeypatch.setattr(pi, "firecrawl_scrape", lambda url: called.append(url) or "")
     assert pi.fetch_product_image("https://s.shopee.co.th/x") == "https://img.example.com/fb-og.jpg"
     assert called == []  # firecrawl ไม่ถูกเรียก (facebook ได้รูปก่อน)
+
+
+def test_fetch_product_image_direct_requests_first(monkeypatch):
+    """fetch แบบใหม่: og:image จากหน้าแรก → คืนเลย (ไม่แตะ FB/Firecrawl)"""
+    class Resp:
+        status_code = 200
+        content = b'<meta property="og:image" content="https://img.example.com/direct.jpg">'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+    monkeypatch.setattr(pi.requests, "get", lambda *a, **k: Resp())
+    assert pi.fetch_product_image_direct("https://s.shopee.co.th/x") == \
+        "https://img.example.com/direct.jpg"
+
+
+def test_fetch_product_image_direct_derives_product_page(monkeypatch):
+    """fetch แบบใหม่: redirect ไปหน้า SPA (opaanlp) → derive /product/ แล้วได้รูป"""
+    class Resp:
+        status_code = 200
+
+        def __init__(self, html, url):
+            self.content = html.encode()
+            self.url = url
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+    def fake_get(url, *a, **k):
+        if url.startswith("https://s.shopee.co.th"):
+            return Resp("<html>SPA shell — no og:image</html>",
+                        "https://shopee.co.th/opaanlp/801315692/53006361579")
+        return Resp('<meta property="og:image" content="https://img.example.com/direct-prod.jpg">', url)
+
+    monkeypatch.setattr(pi.requests, "get", fake_get)
+    assert pi.fetch_product_image_direct("https://s.shopee.co.th/xyz") == \
+        "https://img.example.com/direct-prod.jpg"
+
+
+def test_fetch_product_image_direct_skips_fb_and_firecrawl(monkeypatch):
+    """fetch แบบใหม่หาไม่เจอ → คืน "" โดยไม่แตะ Facebook scrape / Firecrawl เด็ดขาด"""
+    def boom(*a, **k):
+        raise requests.exceptions.RequestException("down")
+
+    monkeypatch.setattr(pi.requests, "get", boom)
+    called = []
+    monkeypatch.setattr(pi, "_facebook_og_image", lambda url: called.append("fb") or "")
+    monkeypatch.setattr(pi, "firecrawl_scrape", lambda url: called.append("firecrawl") or "")
+    assert pi.fetch_product_image_direct("https://s.shopee.co.th/x") == ""
+    assert called == []
+
+
+def test_fetch_product_image_direct_empty_url():
+    assert pi.fetch_product_image_direct("") == ""
+    assert pi.fetch_product_image_direct(None) == ""

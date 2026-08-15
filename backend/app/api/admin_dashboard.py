@@ -28,6 +28,7 @@ from app.db import SessionLocal
 from app import models
 from app.services.link_checker import check_affiliate_link
 from app.services.ai_analyzer import calculate_heuristic_score
+from app.services.product_image import fetch_product_image_direct
 
 logger = logging.getLogger(__name__)
 
@@ -303,6 +304,11 @@ def admin_create_product(_: None = Depends(require_admin),
             ai_score=ai_score,
         )
         db.add(p)
+        db.flush()
+        # Eager backfill รูป — ได้รูปทันที ไม่รอโพสต์ Facebook (fetch ตรง ฟรี/เร็ว ไม่พึ่ง FB token)
+        img = fetch_product_image_direct(url)
+        if img:
+            p.image_url = img
         db.commit()
         db.refresh(p)
         logger.info(f"Admin created product {p.id} ({name[:40]})")

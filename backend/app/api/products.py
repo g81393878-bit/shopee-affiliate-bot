@@ -7,6 +7,7 @@ from app import models, schemas
 from app.services.ai_analyzer import analyze_product_with_ai, calculate_heuristic_score
 from app.services.ai_generator import generate_script_for_product
 from app.services.link_checker import check_affiliate_link
+from app.services.product_image import fetch_product_image_direct
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -60,6 +61,7 @@ def create_product(product_in: schemas.ProductCreate, db: Session = Depends(get_
         price=float(product_in.price or 0.0)
     )
     
+    affiliate_url = verify_affiliate_link(product_in.affiliate_url)
     db_product = models.Product(
         name=product_in.name,
         category=product_in.category,
@@ -67,11 +69,16 @@ def create_product(product_in: schemas.ProductCreate, db: Session = Depends(get_
         rating=product_in.rating,
         sales_count=product_in.sales_count,
         commission=product_in.commission,
-        affiliate_url=verify_affiliate_link(product_in.affiliate_url),
+        affiliate_url=affiliate_url,
         link_status="ok",
         ai_score=ai_score
     )
     db.add(db_product)
+    db.flush()
+    # Eager backfill รูป — ได้รูปทันที ไม่รอโพสต์ Facebook (fetch ตรง ฟรี/เร็ว ไม่พึ่ง FB token)
+    img = fetch_product_image_direct(affiliate_url)
+    if img:
+        db_product.image_url = img
     db.commit()
     db.refresh(db_product)
     return db_product

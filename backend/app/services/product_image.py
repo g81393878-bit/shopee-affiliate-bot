@@ -154,12 +154,14 @@ def _facebook_og_image(url: str, timeout: int = 20, attempts: int = 3,
     return ""
 
 
-def fetch_product_image(url: str, timeout: int = 25) -> str:
-    """หาลิงก์รูปสินค้า → คืน URL หรือ "" (best-effort ไม่ throw).
+def fetch_product_image_direct(url: str, timeout: int = 20) -> str:
+    """fetch แบบใหม่ (ฟรี/เร็ว ไม่พึ่ง FB token / Firecrawl) → URL รูป หรือ "".
 
     ลำดับ: หน้าเว็บตรง (og:image) → derive หน้า product ปกติจาก redirect ของลิงก์
-    affiliate (opaanlp→product; มี og:image/JSON-LD) → Facebook og scrape → Firecrawl
-    — เจอตัวไหนคืนตัวนั้น
+    affiliate (opaanlp→product; มี og:image/JSON-LD)
+
+    ใช้ eager backfill image_url ตอน import — ฟรี/เร็ว เหมาะรันครั้งละเยอะ ๆ
+    (ไม่แตะ Facebook og scrape ที่ต้อง token และไม่เผาเครดิต Firecrawl)
     """
     if not url:
         return ""
@@ -176,6 +178,18 @@ def fetch_product_image(url: str, timeout: int = 25) -> str:
                 img = extract_og_image(html2) or extract_ld_json_images(html2)
                 if img:
                     return img
+    return ""
+
+
+def fetch_product_image(url: str, timeout: int = 25) -> str:
+    """หาลิงก์รูปสินค้า → คืน URL หรือ "" (best-effort ไม่ throw).
+
+    ลำดับ: fetch แบบใหม่ (ตรง, ฟรี) → Facebook og scrape → Firecrawl
+    — เจอตัวไหนคืนตัวนั้น
+    """
+    img = fetch_product_image_direct(url, timeout)
+    if img:
+        return img
     img = _facebook_og_image(url)
     if img:
         return img
