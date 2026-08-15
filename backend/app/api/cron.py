@@ -29,6 +29,7 @@ from app.services.price_refresh import refresh_price
 from app.services.line_quota import push_guard
 from app.services.product_cards import product_cards_message
 from app.services.facebook_poster import post_feed
+from app.services.facebook_intro import intro_posts
 from linebot import LineBotApi
 from linebot.models import TextSendMessage
 
@@ -294,18 +295,46 @@ def _build_fb_caption(p) -> str:
     return "\n\n".join(lines)
 
 
-@router.post("/facebook-post")
-def cron_facebook_post(token: str = "", limit: int = 1):
-    """โพสต์คอนเทนต์สินค้าลงเพจ Facebook อัตโนมัติ (ไอเดีย B — auto-post)
+def _post_next_intro(db) -> Optional[dict]:
+    """โพสต์แนะนำตัวป้าเข็มถัดไป (Phase 1 — ให้คนรู้จักก่อน)
 
-    - เลือกสินค้า link ok + ขายถึงเกณฑ์ + ยังไม่เคยโพสต์ (กันซ้ำด้วย CampaignLog status='fbpost')
-      เรียงตามค่าคอม/คะแนน AI สูงสุด → caption ผ่าน Groq (fallback ข้อความตรง) → feed
-    - เรียกจาก cron-job.org ตามรอบที่ต้องการ (เช่น ทุก 4 ชม.) — มี CRON_TOKEN lock เหมือน cron อื่น
+    กันซ้ำด้วย CampaignLog status='fbintro' (category = index โพสต์) — โพสต์ทีละตัว
+    คืน dict result หรือ None ถ้าโพสต์แนะนำครบทุกตัวแล้ว
     """
-    if not _authorized(token):
-        raise HTTPException(status_code=401, detail="invalid token")
+    posts = intro_posts()
+    posted_idx = {int(c.category) for c in db.query(models.CampaignLog)
+                  .filter(models.CampaignLog.status == "fbintro").all()
+                  if str(c.category).isdigit()}
+    for i, p in enumerate(posts):
+        if i in posted_idx:
+            continue
+        res = post_feed(p["caption"])  # ข้อความล้วน — ลิงก์ LINE OA อยู่ในข้อความแล้ว
+        if res["ok"]:
+            db.add(models.CampaignLog(category=str(i), recipients=1, status="fbintro"))
+            db.commit()
+            return {"posted": [{"kind": "intro", "index": i, "title": p["title"],
+                                "posted": True, "post_id": res["post_id"]}]}
+        return {"posted": [{"kind": "intro", "index": i, "title": p["title"],
+                            "posted": False, "error": res["error"]}]}
+    return None
+
+
+def run_facebook_auto_post(limit: int = 1) -> dict:
+    """โพสต์ลงเพจ Facebook อัตโนมัติ — Phase 1 แนะนำตัวก่อน → Phase 2 ขายสินค้าทีหลัง
+
+    Phase 1: โพสต์คอนเทนต์แนะนำตัวป้าเข็ม (ให้คนรู้จักก่อน) ทีละตัวจนครบ
+    Phase 2: โพสต์สินค้า — เปิดเมื่อตั้ง FB_POST_PRODUCTS=1 เท่านั้น (ยังไม่ตั้ง = โพสต์แนะนำ
+             ครบแล้วก็หยุด ไม่ขายสินค้าจนกว่าเจ้าของจะพร้อม)
+    (เรียกได้ทั้งจาก HTTP endpoint และ scheduler ในตัว — กันโพสต์ซ้ำด้วย CampaignLog)
+    """
     db = SessionLocal()
     try:
+        intro = _post_next_intro(db)
+        if intro is not None:
+            return intro
+        if os.getenv("FB_POST_PRODUCTS", "").lower() not in ("1", "true", "yes"):
+            return {"posted": [], "note": "โพสต์แนะนำตัวครบแล้ว — ตั้ง FB_POST_PRODUCTS=1 เพื่อเริ่มโพสต์สินค้า"}
+
         min_sales = int(os.getenv("MIN_SALES", "2000") or 2000)
         posted_ids = {int(c.category) for c in db.query(models.CampaignLog)
                       .filter(models.CampaignLog.status == "fbpost").all()
@@ -336,6 +365,17 @@ def cron_facebook_post(token: str = "", limit: int = 1):
         return {"posted": results}
     finally:
         db.close()
+
+
+@router.post("/facebook-post")
+def cron_facebook_post(token: str = "", limit: int = 1):
+    """HTTP endpoint — โพสต์คอนเทนต์สินค้าลงเพจ Facebook (CRON_TOKEN lock เหมือน cron อื่น)
+
+    (งานเดียวกันกับ scheduler ในตัว — เก็บ endpoint ไว้เผื่อ cron-job.org / ทดสอบ manual)
+    """
+    if not _authorized(token):
+        raise HTTPException(status_code=401, detail="invalid token")
+    return run_facebook_auto_post(limit)
 
 
 @router.post("/daily-report")

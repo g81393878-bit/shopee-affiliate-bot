@@ -63,6 +63,8 @@ def test_cron_facebook_post_dedup(monkeypatch):
 
     monkeypatch.setattr(cron, "_authorized", lambda t: True)
     monkeypatch.setattr(cron, "generate_script_for_product", _fake_script)
+    monkeypatch.setenv("FB_POST_PRODUCTS", "1")  # ข้าม Phase แนะนำตัว → ตรงไปขายสินค้า
+    monkeypatch.setattr(cron, "intro_posts", lambda: [])  # ไม่มีโพสต์แนะนำในเทสต์นี้
     posted = []
     monkeypatch.setattr(cron, "post_feed",
                         lambda msg, link="": posted.append((msg, link)) or
@@ -91,3 +93,74 @@ def test_cron_facebook_post_requires_token(monkeypatch):
     client = TestClient(app)
     r = client.post("/api/cron/facebook-post", params={"token": "wrong"})
     assert r.status_code == 401
+
+
+def test_facebook_auto_post_loop_disabled_by_default(monkeypatch):
+    import asyncio
+    from app import main as main_mod
+    monkeypatch.setattr(main_mod, "FB_AUTO_POST_INTERVAL", 0)
+    # ถ้า interval = 0 ต้อง return ทันที ไม่วนลูป (กันโพสต์แบบไม่ได้ตั้งค่า)
+    asyncio.run(main_mod.facebook_auto_post_loop())
+
+
+def test_facebook_auto_post_loop_calls_runner(monkeypatch):
+    import asyncio
+    import pytest
+    from app import main as main_mod
+
+    monkeypatch.setattr(main_mod, "FB_AUTO_POST_INTERVAL", 1)  # นาที
+    calls = []
+
+    class _Stop(Exception):
+        pass
+
+    async def fake_sleep(s):
+        if calls:  # รอบที่สองขึ้นไป → หยุด loop (กันวนไม่จบ)
+            raise _Stop()
+
+    async def fake_to_thread(fn, *a, **k):
+        return await fn(*a, **k)
+
+    async def fake_runner(limit):
+        calls.append(limit)
+        return {"posted": [], "note": "mock"}
+
+    monkeypatch.setattr(main_mod.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(main_mod.asyncio, "to_thread", fake_to_thread)
+    monkeypatch.setattr(main_mod, "run_facebook_auto_post", fake_runner)
+
+    with pytest.raises(_Stop):
+        asyncio.run(main_mod.facebook_auto_post_loop())
+    assert calls == [1]
+
+
+def test_cron_facebook_post_intro_first(monkeypatch):
+    """Phase 1 — โพสต์แนะนำตัวก่อน พอครบ + ยังไม่เปิด FB_POST_PRODUCTS → หยุด ไม่ขายสินค้า"""
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.setattr(cron, "_authorized", lambda t: True)
+    monkeypatch.delenv("FB_POST_PRODUCTS", raising=False)  # ยังไม่เปิดขายสินค้า
+    monkeypatch.setattr(cron, "intro_posts", lambda: [
+        {"title": "แนะนำตัว", "caption": "โพสต์แนะนำ 1"},
+        {"title": "ฟีเจอร์เด่น", "caption": "โพสต์แนะนำ 2"},
+    ])
+    posted = []
+    monkeypatch.setattr(cron, "post_feed",
+                        lambda msg, link="": posted.append(msg) or
+                        {"ok": True, "post_id": f"post_{len(posted)}", "error": None})
+    client = TestClient(app)
+
+    r1 = client.post("/api/cron/facebook-post")
+    b1 = r1.json()["posted"]
+    assert len(b1) == 1 and b1[0]["kind"] == "intro" and b1[0]["index"] == 0
+
+    r2 = client.post("/api/cron/facebook-post")
+    b2 = r2.json()["posted"]
+    assert b2[0]["kind"] == "intro" and b2[0]["index"] == 1
+
+    # intro ครบแล้ว + FB_POST_PRODUCTS ไม่ตั้ง → หยุด (ไม่โพสต์สินค้า)
+    r3 = client.post("/api/cron/facebook-post")
+    assert r3.json()["posted"] == []
+    assert "FB_POST_PRODUCTS" in r3.json()["note"]
+    assert len(posted) == 2  # โพสต์แค่ intro 2 ตัว ไม่มีสินค้า

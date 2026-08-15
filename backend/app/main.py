@@ -14,6 +14,7 @@ import httpx
 
 from app.db import engine, Base
 from app.api import users, products, performance, line_bot, cron, admin_dashboard, facebook_bot
+from app.api.cron import run_facebook_auto_post
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,30 @@ Base.metadata.create_all(bind=engine)
 
 KEEP_ALIVE_URL = (os.getenv("RENDER_EXTERNAL_URL") or "").rstrip("/")
 KEEP_ALIVE_INTERVAL = int(os.getenv("KEEP_ALIVE_INTERVAL", "600"))
+# นาทีระหว่างโพสต์ Facebook อัตโนมัติ (0/ไม่ตั้ง = ปิด) — บอทโพสต์เองในตัว ไม่พึ่ง cron-job.org
+FB_AUTO_POST_INTERVAL = int(os.getenv("FB_AUTO_POST_INTERVAL", "0") or 0)
+
+
+async def facebook_auto_post_loop():
+    """โพสต์ลงเพจ Facebook อัตโนมัติทุก FB_AUTO_POST_INTERVAL นาที
+    (แนะนำตัวป้าเข็มก่อน → ขายสินค้าทีหลัง; กันโพสต์ซ้ำด้วย CampaignLog อยู่แล้ว)"""
+    if FB_AUTO_POST_INTERVAL <= 0:
+        logger.info("FB_AUTO_POST_INTERVAL not set — facebook auto-post disabled")
+        return
+    logger.info(f"facebook auto-post enabled — ทุก {FB_AUTO_POST_INTERVAL} นาที")
+    while True:
+        await asyncio.sleep(FB_AUTO_POST_INTERVAL * 60)
+        try:
+            # run_facebook_auto_post เป็น sync + แตะ DB/เน็ต → ไป thread กันบล็อก event loop
+            result = await asyncio.to_thread(run_facebook_auto_post, 1)
+            posted = [r for r in result.get("posted", []) if r.get("posted")]
+            if posted:
+                names = [p.get("name") or p.get("title") or p.get("id") for p in posted]
+                logger.info(f"facebook auto-post โพสต์แล้ว: {names}")
+            else:
+                logger.info(f"facebook auto-post: {result.get('note') or result}")
+        except Exception as e:
+            logger.warning(f"facebook auto-post failed: {e}")
 
 
 async def keep_alive_loop():
@@ -44,9 +69,11 @@ async def keep_alive_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = asyncio.create_task(keep_alive_loop())
+    keep_alive = asyncio.create_task(keep_alive_loop())
+    auto_post = asyncio.create_task(facebook_auto_post_loop())
     yield
-    task.cancel()
+    keep_alive.cancel()
+    auto_post.cancel()
 
 
 app = FastAPI(

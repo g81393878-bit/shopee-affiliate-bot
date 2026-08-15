@@ -46,3 +46,7 @@ services:
         sync: false  # Firecrawl web search สำรอง (ถ้า Tavily ล้ม/หมด quota) — ฟรี ที่ firecrawl.dev
       - key: LLM_PROVIDER
         value: groq
+      - key: FB_AUTO_POST_INTERVAL
+        value: 240  # นาทีระหว่างโพสต์ Facebook อัตโนมัติ (0 = ปิด) — Phase แนะนำตัวตั้ง 240 (ทุก 4 ชม.)
+      - key: FB_POST_PRODUCTS
+        value: ""  # ตั้งเป็น 1 เพื่อเปิด Phase 2 โพสต์ขายสินค้า (หลังโพสต์แนะนำตัวครบ) — ตอนนี้ปิดไว้
