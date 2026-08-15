@@ -337,14 +337,16 @@ def test_intro_posts_have_badge_and_image_url(monkeypatch):
 
 
 def test_short_bg_posts_short_text_and_rotating_presets(monkeypatch):
-    """คลังข้อความสั้นพื้นสี — ทุกตัว ≤ 130 ตัวอักษร + มี preset_id + สีหมุนเวียนไม่ซ้ำติดกัน"""
+    """คลังข้อความสั้นพื้นสี — ทุกตัว ≤ 130 ตัวอักษร + มี preset_id + สีไม่ซ้ำ + มีลิงก์ LINE OA"""
     from app.services import facebook_intro
+    monkeypatch.setenv("LINE_OA_URL", "https://lin.ee/o9Kjp1N")
     posts = facebook_intro.short_bg_posts()
     assert len(posts) == 8
     preset_ids = []
     for p in posts:
         assert p["title"] and p["caption"] and p["preset_id"]
         assert len(p["caption"]) <= 130  # Facebook จำกัดข้อความพื้นสี ≤ 130 ตัวอักษร
+        assert "https://lin.ee/o9Kjp1N" in p["caption"]  # ทุกโพสต์ต้องชวนเพิ่มเพื่อน LINE
         preset_ids.append(p["preset_id"])
     # 8 สีต่างกันหมด (หมุนเวียนไม่ซ้ำ) — ไม่งั้นจะโพสต์พื้นสีเดิมซ้ำกัน
     assert len(set(preset_ids)) == 8
