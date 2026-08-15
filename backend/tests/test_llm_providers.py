@@ -85,3 +85,14 @@ def test_analyze_product_uses_anthropic_branch(monkeypatch):
     result = analyze_product_with_ai("หูฟังไร้สาย", "หูฟัง", 250, 4.5, 5000, 10)
     assert result["recommendation"] == "ควรทำ Content ทันที"
     assert result["reasons"] == ["ขายดี", "รีวิวดี"]
+
+
+def test_analyze_product_mock_fallback_caption_has_no_inline_hashtags(monkeypatch):
+    """Fallback mock (ทุก provider ไม่มี key) ต้องคืน caption ข้อความล้วน ไม่ฝัง '#' —
+    กันแท็กซ้ำเหมือน build_template_script (แท็กไปอยู่ที่ช่อง script.hashtags เท่านั้น)"""
+    monkeypatch.setattr(settings, "LLM_PROVIDER", "groq")
+    monkeypatch.setattr(settings, "GROQ_API_KEY", "mock-key")
+    result = analyze_product_with_ai("หูฟังไร้สาย", "หูฟัง", 250, 4.5, 5000, 10)
+    script = result.get("script", {})
+    assert "#" not in script.get("caption", "")
+    assert script.get("hashtags")  # แท็กต้องไปอยู่ที่ช่อง hashtags ไม่ใช่ใน caption

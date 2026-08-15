@@ -75,7 +75,9 @@ def get_mock_analysis(name: str, price: float, rating: float, sales_count: int, 
         "problem": f"หลายคนบ่นว่าของแบบนี้ซื้อมาแล้วพังง่าย หรือแพงเกินราคา จนบางทีก็ไม่รู้จะเชื่อใคร",
         "solution": f"ตัวนี้ป้าลองใช้เองแล้วจ๊ะ ดีไซน์ตอบโจทย์ใช้จริง สะดวกขึ้นเยอะ คุ้มมาก",
         "cta": f"ใครสนใจกดลิงก์ในตะกร้า Shopee ได้เลยจ๊ะ ป้าจัดให้ ของแท้ราคาดี",
-        "caption": f"ป้าใช้เองมาสักพักแล้วจ๊ะ {name} ดีจริง คุ้มมาก ลองดูจ๊ะ ไม่ลองไม่รู้! #ของดีบอกต่อ #ป้าป้ายยา #คุ้มมาก",
+        # caption เป็นข้อความล้วน (ไม่มี inline hashtag) — consumer ต่อ
+        # format_hashtags_text(hashtags) เอง ถ้าฝังแท็กจะซ้ำกับช่อง hashtags
+        "caption": f"ป้าใช้เองมาสักพักแล้วจ๊ะ {name} ดีจริง คุ้มมาก ลองดูจ๊ะ ไม่ลองไม่รู้!",
         "hashtags": ["ของดีบอกต่อ", "ป้าป้ายยา", "คุ้มมาก", "ShopeeAffiliate"],
         "title": f"ป้าป้ายยา {name}",
         "thumbnail_prompt": f"Warm friendly photo of {name} on a wooden shop counter with soft daylight, cozy local shop vibe"
