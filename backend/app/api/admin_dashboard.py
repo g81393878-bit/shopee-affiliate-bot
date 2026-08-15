@@ -90,7 +90,9 @@ def _fmt(n) -> str:
 
 @router.get("/admin", response_class=HTMLResponse)
 def admin_page():
-    return FileResponse(_ADMIN_HTML)
+    with open(_ADMIN_HTML, encoding="utf-8") as f:
+        html = f.read()
+    return HTMLResponse(content=html, media_type="text/html; charset=utf-8")
 
 
 @router.post("/admin/login")
