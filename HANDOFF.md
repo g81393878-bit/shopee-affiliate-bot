@@ -8,7 +8,7 @@
 > - **เมื่องานเสร็จและ commit ครบ:** ให้ล้างเนื้อหาในส่วน 1–5 กลับเป็นสถานะว่าง แล้ว commit
 >   ไฟล์นี้ — เพื่อไม่ให้ AI ตัวถัดไปเข้าใจผิดว่างานยังค้าง
 
-## สถานะ: 🟡 มีงานค้างเฉพาะส่วน 3 (push + deploy) — งานโค้ด commit ครบแล้ว
+## สถานะ: 🟡 งานโค้ดครบ + push + deploy เรียบร้อย — เหลือเฉพาะงาน manual ของเจ้าของร้าน
 
 ---
 
@@ -32,11 +32,15 @@
 
 <!-- ว่าง — ไม่มีงานโค้ดค้าง ทำงานทุกชิ้น commit ครบแล้ว -->
 
-## 3. ขั้นตอนต่อไป
+## 3. ขั้นตอนต่อไป (ทั้งหมดเป็นงาน manual ของเจ้าของร้าน — ไม่ใช่โค้ด)
 
-- ⚠️ **push 13 commits ขึ้น GitHub** (`git push origin main`) — local นำ origin/main อยู่ 13 commits (orchestrator + facebook webhook + docs/skills + persona.py)
-- **trigger deploy บน Render** → production ยังไม่มีฟีเจอร์ใหม่
-- 🔗 ยังไม่มีลิงก์ LINE OA จริง — รอเจ้าของร้านให้ URL (`https://line.me/R/ti/p/@xxxxx`) แล้ว set env `LINE_OA_URL`
+- ✅ **push ขึ้น GitHub เรียบร้อยแล้ว** — `main == origin/main` ที่ `24c80a6`
+- ✅ **deploy บน Render เรียบร้อย** — deploy ล่าสุด `9707a9f` (status `live`) รวมโค้ดใหม่ครบแล้ว
+  - เหลือ `24c80a6` (docs-only: ลบอ้างอิงใน HANDOFF) ยังไม่ deploy — ไม่กระทบบอท ไม่จำเป็นต้องรีบ
+- ⏳ **ตั้ง Facebook env vars บน Render dashboard** (ยังไม่ตั้งเลย — webhook Facebook ยังใช้ mock fallback):
+  `FACEBOOK_APP_ID` · `FACEBOOK_APP_SECRET` · `FACEBOOK_VERIFY_TOKEN` · `FACEBOOK_PAGE_ACCESS_TOKEN`
+- ⏳ **ตั้ง `LINE_OA_URL`** (รอเจ้าของร้านให้ลิงก์ `https://line.me/R/ti/p/@xxxxx`) — ตอนนี้ BOT_INTRO ใช้ fallback ข้อความ
+- ⏳ (ไม่บังคับ) ตั้ง `ANTHROPIC_API_KEY` บน Render — ตอนนี้ orchestrator บอสใหญ่ fallback เป็น Groq
 
 ## 4. ไฟล์ที่ถืออยู่ / โดนแก้
 
@@ -46,8 +50,10 @@
 
 - CI: `.github/workflows/test.yml` รัน `pytest` + coverage gate 85% ทุก push/PR
 - เทสต์ทั้งชุด: 384 passed
+- บอทจริง healthy: `/health` → 200, `llm_provider=groq`, `database_url_configured=true` (URL: `https://shopee-affiliate-bot-9e9n.onrender.com`)
+- Render env vars ตอนนี้มี 9 ตัว: DATABASE_URL, CRON_TOKEN, GROQ_API_KEY, LINE_CHANNEL_ACCESS_TOKEN/SECRET, LLM_PROVIDER, TAVILY_API_KEY, FIRECRAWL_API_KEY, SHEET_WEBHOOK_URL
+  (ยังไม่มี Facebook/* + LINE_OA_URL + ANTHROPIC_API_KEY)
 - ฟีเจอร์ orchestrator ยังเป็นโมดูลเดี่ยว — ยังไม่ถูกเรียกจาก `line_bot.py` (ยังไม่มีผลกับลูกค้าจริง)
 - facebook webhook: หน้าที่ตอนนี้ = แนะนำบอทป้าเข็ม (ไม่ค้นสินค้า/ไม่โพสต์สินค้า ตามเจ้าของร้านสั่ง)
   — ไอเดีย A/B ใน architecture guide (ค้นสินค้า/โพสต์อัตโนมัติ) ถูกพักไว้
-- Push + Deploy รอบก่อนหน้า (`49fb55e`) เรียบร้อยแล้ว — บอทจริงได้โค้ดล่าสุดของงานก่อนหน้า
 - repo สะอาด ไม่มี untracked junk สำหรับงานใหม่
