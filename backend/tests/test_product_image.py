@@ -98,6 +98,64 @@ def test_facebook_og_image_retries_on_empty_image(monkeypatch):
     assert calls["n"] == 2
 
 
+def test_extract_ld_json_images_string():
+    html = '<script type="application/ld+json">{"@type":"Product","image":"https://img.example.com/p.jpg"}</script>'
+    assert pi.extract_ld_json_images(html) == "https://img.example.com/p.jpg"
+
+
+def test_extract_ld_json_images_array_and_contenturl():
+    html = ('<script type="application/ld+json">{"@type":"Product",'
+            '"image":[{"@type":"ImageObject","contentUrl":"https://img.example.com/a.jpg"},'
+            '"https://img.example.com/b.jpg"]}</script>')
+    assert pi.extract_ld_json_images(html) == "https://img.example.com/a.jpg"
+
+
+def test_extract_ld_json_images_invalid_or_missing():
+    assert pi.extract_ld_json_images("") == ""
+    assert pi.extract_ld_json_images("<html>no ld json</html>") == ""
+    assert pi.extract_ld_json_images('<script type="application/ld+json">{not json}</script>') == ""
+    # ไม่มี key image/contentUrl/thumbnailUrl → ว่าง (ไม่ร่อนทั้ง JSON ไปติดรูป noise)
+    assert pi.extract_ld_json_images('<script type="application/ld+json">{"@type":"WebSite"}</script>') == ""
+    # รูปที่เป็น protocol-relative/ไม่ใช่ http → ตัดทิ้ง
+    assert pi.extract_ld_json_images('<script type="application/ld+json">{"image":"//img.example.com/x.jpg"}</script>') == ""
+
+
+def test_derive_product_page_url():
+    assert pi.derive_product_page_url(
+        "https://shopee.co.th/opaanlp/801315692/53006361579?__mobile__=1") == \
+        "https://shopee.co.th/product/801315692/53006361579"
+    assert pi.derive_product_page_url(
+        "https://shopee.co.th/product/801315692/53006361579") == \
+        "https://shopee.co.th/product/801315692/53006361579"
+    assert pi.derive_product_page_url("") == ""
+    assert pi.derive_product_page_url("https://www.google.com/") == ""
+
+
+def test_fetch_product_image_derives_product_page(monkeypatch):
+    """ลิงก์ affiliate redirect ไปหน้า SPA (opaanlp, ไม่มีรูป) → derive หน้า product ปกติแล้วได้รูป"""
+    class Resp:
+        status_code = 200
+
+        def __init__(self, html, url):
+            self.content = html.encode()
+            self.url = url
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+    def fake_get(url, *a, **k):
+        if url.startswith("https://s.shopee.co.th"):
+            return Resp("<html>SPA shell — no og:image</html>",
+                        "https://shopee.co.th/opaanlp/801315692/53006361579")
+        return Resp('<meta property="og:image" content="https://img.example.com/prod.jpg">', url)
+
+    monkeypatch.setattr(pi.requests, "get", fake_get)
+    assert pi.fetch_product_image("https://s.shopee.co.th/xyz") == "https://img.example.com/prod.jpg"
+
+
 def test_fetch_product_image_uses_facebook_scrape_before_firecrawl(monkeypatch):
     """requests หา og:image ไม่ได้ → Facebook scrape ต้องถูกใช้ (ไม่เผา firecrawl)"""
     def boom(*a, **k):

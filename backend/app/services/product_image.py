@@ -3,11 +3,15 @@
 
 เหตุผล: โพสต์สินค้าแบบการ์ดลิงก์ (link param) ให้ Facebook crawl ลิงก์ s.shopee.co.th
 เอาเอง — บางรอบ Shopee กันบอท/redirect ทำให้ได้ title แต่รูป og:image ว่าง (ช่องรูปดำ)
-เลยเปลี่ยนเป็นแนบรูปจริง: ดึง og:image เอง (requests ก่อน → Firecrawl สำรอง)
-แล้วโพสต์ผ่าน /photos พร้อมลิงก์ในแคปชั่น
+เลยเปลี่ยนเป็นแนบรูปจริง: ดึงรูปเองหลายชั้น แล้วโพสต์ผ่าน /photos พร้อมลิงก์ในแคปชั่น
+
+ลำดับหา: หน้าเว็บตรง (og:image) → หน้า product ปกติที่ derive จาก redirect ของลิงก์
+affiliate (s.shopee.co.th → หน้า SPA `opaanlp/{shop}/{item}` ไม่มีรูป แต่
+`/product/{shop}/{item}` มี og:image) → JSON-LD → Facebook og scrape → Firecrawl
 
 best-effort: หาไม่เจอ/โดนบล็อก → คืน "" (ผู้เรียก fallback ไปโพสต์การ์ดลิงก์เดิม)
 """
+import json
 import logging
 import os
 import re
@@ -41,6 +45,79 @@ def extract_og_image(html: str) -> str:
             url = m.group(1).strip()
             if url.startswith(("http://", "https://")):
                 return url
+    return ""
+
+
+def _fetch_html(url: str, timeout: int) -> tuple:
+    """GET หน้าเว็บ (follow redirect) → (html, final_url) — คืน ("", "") ถ้าไม่ 200/ล้ม."""
+    try:
+        r = requests.get(url, timeout=timeout, allow_redirects=True, stream=True,
+                         headers={"User-Agent": BROWSER_UA, "Accept-Language": "th-TH,th;q=0.9"})
+        with r:
+            if r.status_code != 200:
+                return "", ""
+            html = (r.content[:300000] or b"").decode("utf-8", errors="ignore")
+            return html, (getattr(r, "url", "") or "")
+    except requests.exceptions.RequestException as e:
+        logger.debug(f"[product_image] requests ล้ม {url[:45]}: {e}")
+        return "", ""
+
+
+def derive_product_page_url(final_url: str) -> str:
+    """แปลง redirect target ของลิงก์ affiliate Shopee เป็น URL หน้า product ปกติ.
+
+    s.shopee.co.th → redirect ไปหน้า SPA `opaanlp/{shopid}/{itemid}` (ไม่มี og:image)
+    แต่หน้า `/product/{shopid}/{itemid}` มี og:image (เทสต์จริงแล้ว) → ใช้ URL นี้แทน
+    คืน "" ถ้ารูปแบบไม่เข้า (ไม่ใช่หน้า Shopee product)
+    """
+    if not final_url:
+        return ""
+    m = re.search(r'/(?:opaanlp|product|item)/(\d+)/(\d+)', final_url)
+    if not m:
+        return ""
+    base = re.match(r'(https?://[^/]+)', final_url)
+    host = base.group(1) if base else "https://shopee.co.th"
+    return f"{host}/product/{m.group(1)}/{m.group(2)}"
+
+
+def extract_ld_json_images(html: str) -> str:
+    """อ่าน URL รูปจาก <script type="application/ld+json"> — คืน "" ถ้าไม่มี.
+
+    รองรับ image = string | array | {"@type":"ImageObject","contentUrl":...}
+    (ค้นเฉพาะ key image/contentUrl/thumbnailUrl แบบ recursive — ไม่ร่อนทั้ง JSON
+    กันไปติดรูป noise อย่างโลโก้/avatar ของเว็บอื่น)
+    """
+    if not html:
+        return ""
+    for block in re.findall(r'<script[^>]*application/ld\+json[^>]*>(.*?)</script>',
+                            html, re.I | re.S):
+        try:
+            data = json.loads(block.strip())
+        except Exception:
+            continue
+        img = _ld_json_image(data)
+        if img:
+            return img
+    return ""
+
+
+def _ld_json_image(node) -> str:
+    """หา URL รูปแรกในโครงสร้าง JSON-LD (string | list | dict) — คืน "" ถ้าไม่มี."""
+    if isinstance(node, str):
+        return node if node.startswith(("http://", "https://")) else ""
+    if isinstance(node, list):
+        for item in node:
+            img = _ld_json_image(item)
+            if img:
+                return img
+        return ""
+    if isinstance(node, dict):
+        for key in ("image", "contentUrl", "thumbnailUrl"):
+            if key in node:
+                img = _ld_json_image(node[key])
+                if img:
+                    return img
+        return ""
     return ""
 
 
@@ -78,28 +155,33 @@ def _facebook_og_image(url: str, timeout: int = 20, attempts: int = 3,
 
 
 def fetch_product_image(url: str, timeout: int = 25) -> str:
-    """หาลิงก์รูปสินค้า (og:image) → คืน URL หรือ "" (best-effort ไม่ throw).
+    """หาลิงก์รูปสินค้า → คืน URL หรือ "" (best-effort ไม่ throw).
 
-    ลำดับ: requests (ฟรี/เร็ว) → Facebook og scrape (เชื่อถือได้สำหรับ Shopee) →
-    Firecrawl (สำรองสุดท้าย) — เจอตัวไหนคืนตัวนั้น
+    ลำดับ: หน้าเว็บตรง (og:image) → derive หน้า product ปกติจาก redirect ของลิงก์
+    affiliate (opaanlp→product; มี og:image/JSON-LD) → Facebook og scrape → Firecrawl
+    — เจอตัวไหนคืนตัวนั้น
     """
     if not url:
         return ""
-    try:
-        r = requests.get(url, timeout=timeout, allow_redirects=True, stream=True,
-                         headers={"User-Agent": BROWSER_UA, "Accept-Language": "th-TH,th;q=0.9"})
-        with r:
-            if r.status_code == 200:
-                img = extract_og_image((r.content[:300000] or b"").decode("utf-8", errors="ignore"))
+    html, final_url = _fetch_html(url, timeout)
+    if html:
+        img = extract_og_image(html)
+        if img:
+            return img
+        # ลิงก์ affiliate redirect ไปหน้า SPA (opaanlp) ไม่มีรูป → ลองหน้า product ปกติ
+        product_url = derive_product_page_url(final_url or url)
+        if product_url and product_url != url:
+            html2, _ = _fetch_html(product_url, timeout)
+            if html2:
+                img = extract_og_image(html2) or extract_ld_json_images(html2)
                 if img:
                     return img
-    except requests.exceptions.RequestException as e:
-        logger.debug(f"[product_image] requests ล้ม {url[:45]}: {e}")
     img = _facebook_og_image(url)
     if img:
         return img
     try:
-        img = extract_og_image(firecrawl_scrape(url))
+        fhtml = firecrawl_scrape(url)
+        img = extract_og_image(fhtml) or extract_ld_json_images(fhtml)
         if img:
             return img
     except Exception as e:
