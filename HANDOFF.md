@@ -41,14 +41,13 @@
 
 <!-- ว่าง — ไม่มีงานโค้ดค้าง ทำงานทุกชิ้น commit ครบแล้ว -->
 
-- ⏳ เจ้าของต้องตั้ง Google ชีทโพสต์: ทำตามวิธีใน `tools/sheet_posts_apps_script.gs` (3 นาที)
-  → ได้ URL web app → ตั้ง `POSTS_SHEET_WEBHOOK_URL` บน Render → deploy
-  (ยังไม่ตั้ง = บอทโพสต์ปกติ แต่ไม่บันทึกชีท)
 - ⏳ โพสต์ manual 1 อันบนเพจ (04:26, ไม่ใช่ของบอท — ลบด้วย page token ไม่ได้) รอเจ้าของลบเองถ้าต้องการ
+- ⏳ แถว TEST ในชีท "โพสต์เพจ" (หัวข้อ "TEST - ทดสอบการเชื่อมต่อชีท") รอเจ้าของลบเอง
 
 ## 3. ขั้นตอนต่อไป
 
-- ✅ **push + deploy เรียบร้อย** — deploy `dep-d9vvduc9v7es7387u9pg` → `live` (commit `3c4d311`); scheduler auto-post ทำงานในตัวแล้ว
+- ✅ **push + deploy เรียบร้อย** — deploy `dep-d9vvqpdg1s2s73c0rt90` → `live` (commit `a2a9b08`); scheduler auto-post + บันทึกชีทโพสต์ ทำงานแล้ว
+- ✅ ตั้ง env บน Render: `POSTS_SHEET_WEBHOOK_URL` = URL Apps Script (ทดสอบ webhook แล้ว `{"ok":true}`)
 - ✅ ตั้ง env บน Render: `FB_AUTO_POST_INTERVAL=240` (โพสต์แนะนำทุก 4 ชม. — 3 โพสต์ = 12 ชม.) · `FB_POST_PRODUCTS` ยังไม่ตั้ง (= ปิดขายสินค้า ให้คนรู้จักก่อน)
 - ⏳ **เปิดขายสินค้าทีหลัง:** ตั้ง `FB_POST_PRODUCTS=1` บน Render → บอทเริ่มโพสต์สินค้า (หลังโพสต์แนะนำครบ 3 ตัว)
 - ✅ ตั้ง env บน Render ครบ 5 ตัว: FACEBOOK_APP_ID / APP_SECRET / VERIFY_TOKEN / PAGE_ACCESS_TOKEN + LINE_OA_URL (รวม 15 ตัวแล้ว)
@@ -65,11 +64,10 @@
 - CI: `.github/workflows/test.yml` รัน `pytest` + coverage gate 85% ทุก push/PR
 - เทสต์ทั้งชุด: 394 passed
 - บอทจริง healthy: `/health` → 200, `llm_provider=groq`, `database_url_configured=true` (URL: `https://shopee-affiliate-bot-9e9n.onrender.com`)
-- Render env vars ตอนนี้มี 15 ตัว: DATABASE_URL, CRON_TOKEN, GROQ_API_KEY, LINE_CHANNEL_ACCESS_TOKEN/SECRET, LLM_PROVIDER, TAVILY_API_KEY, FIRECRAWL_API_KEY, SHEET_WEBHOOK_URL, FACEBOOK_APP_ID/SECRET/VERIFY_TOKEN/PAGE_ACCESS_TOKEN, LINE_OA_URL, FB_AUTO_POST_INTERVAL
+- Render env vars ตอนนี้มี 16 ตัว: DATABASE_URL, CRON_TOKEN, GROQ_API_KEY, LINE_CHANNEL_ACCESS_TOKEN/SECRET, LLM_PROVIDER, TAVILY_API_KEY, FIRECRAWL_API_KEY, SHEET_WEBHOOK_URL, FACEBOOK_APP_ID/SECRET/VERIFY_TOKEN/PAGE_ACCESS_TOKEN, LINE_OA_URL, FB_AUTO_POST_INTERVAL, POSTS_SHEET_WEBHOOK_URL
   (ยังไม่มีแค่ ANTHROPIC_API_KEY)
 - ฟีเจอร์ orchestrator ยังเป็นโมดูลเดี่ยว — ยังไม่ถูกเรียกจาก `line_bot.py` (ยังไม่มีผลกับลูกค้าจริง)
 - facebook webhook: หน้าที่ตอนนี้ = แนะนำบอทป้าเข็ม (แชท) — ไอเดีย A (ค้นสินค้าในแชท) ถูกพักไว้
 - facebook auto-post: scheduler ในตัว (ไม่พึ่ง cron-job.org) — Phase 1 โพสต์แนะนำตัวป้าเข็มก่อน (กันซ้ำ status=fbintro)
   → Phase 2 โพสต์สินค้า (status=fbpost) เปิดเมื่อ FB_POST_PRODUCTS=1; โพสต์สำเร็จทุกตัว → Google ชีท (ถ้าตั้ง POSTS_SHEET_WEBHOOK_URL)
-- commit `41bbdf6` ยังไม่ push/deploy — รอรวมรอบถัดไป
-- repo สะอาด ไม่มี untracked junk สำหรับงานใหม่
+- repo สะอาด ไม่มี untracked junk สำหรับงานใหม่ (push + deploy ครบทุก commit จนถึง `a2a9b08`)
