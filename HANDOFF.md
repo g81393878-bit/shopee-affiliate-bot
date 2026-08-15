@@ -14,6 +14,8 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- ✅ test(facebook): เพิ่มเทสต์ webhook verify + X-Hub-Signature **ครบกรณี** (`backend/tests/test_facebook_webhook.py` +8 เทสต์ → รวม 402 passed)
+  (verify token: wrong mode / missing challenge / missing token → 403; signature: missing header / unknown algo / malformed → 400; sha1 fallback → 200)
 - ✅ **Rollout Character-first + เปิดขายสินค้า** (วันนี้): push `3f88206` → ตั้ง `FB_POST_PRODUCTS=1` → deploy `dep-da00oalg1s2s73c2npe0` → `live`; ลบโพสต์เก่า "แนะนำตัวหน่อยค่าา" (`...241443245`) + reset dedup `fbintro` (1 แถว) → trigger `/api/cron/facebook-post` 3 ครั้ง = โพสต์ใหม่ 3 ตัว (เปิดตัวป้าเข็ม / วิธีเลือกของ / เตือนภัยช้อปออนไลน์) ขึ้นเพจแล้ว
 - docs: เพิ่ม **คู่มือเจ้าของตั้ง Facebook webhook + เปิดแอป Live** (`docs/facebook-webhook-live-setup.md` — step-by-step พร้อมค่าจริง App/Page ID, Callback URL, Privacy URL, การทดสอบ + ตารางปัญหาที่เจอบ่อย)
 - feat(brand): เพิ่ม**ป้ายชื่อ + สโลแกน**ลงมาสคอต SVG ทั้ง 3 ตัว
@@ -81,4 +83,4 @@
   → Phase 2 โพสต์สินค้า (status=fbpost) เปิดแล้วด้วย FB_POST_PRODUCTS=1 (เริ่ม tick ถัดไป); โพสต์สำเร็จทุกตัว → Google ชีท (POSTS_SHEET_WEBHOOK_URL)
 - Google ชีท: SHEET_WEBHOOK_URL (แชท) และ POSTS_SHEET_WEBHOOK_URL (โพสต์) ชี้ URL เดียวกัน = สคริปต์รวม 1 ตัว
   จัดการ 2 แท็บ (คำถามลูกค้า / FB Posts) — ตั้งใจให้เป็นแบบนี้ ไม่ใช่ bug; เทสต์ทั้ง 2 ทางผ่านแล้ว
-- repo สะอาด ไม่มี untracked junk; commit ล่าสุด `3f88206` push + deploy เรียบร้อยแล้ว
+- repo สะอาด ไม่มี untracked junk; commit ล่าสุด `437f8f3` (test facebook webhook) push แล้ว — deploy โค้ดจริงตัวล่าสุดคือ `3f88206` (test-only ไม่ต้อง deploy ใหม่)
