@@ -426,6 +426,7 @@ def _post_next_local(db) -> Optional[dict]:
     """
     posted = {c.category for c in db.query(models.CampaignLog)
               .filter(models.CampaignLog.status == "fblocal").all()}
+    last_err = None
     for it in fetch_local_items(len(posted)):
         key = local_item_key(it)
         if key in posted:
@@ -440,8 +441,12 @@ def _post_next_local(db) -> Optional[dict]:
             return {"posted": [{"kind": "local", "title": (it["title"] or "")[:45],
                                 "posted": True, "post_id": res["post_id"],
                                 "source": it.get("topic", "")}]}
-        return {"posted": [{"kind": "local", "title": (it["title"] or "")[:45],
-                            "posted": False, "error": res["error"]}]}
+        # โพสต์ล้ม (ลิงก์โดน Facebook ปฏิเสธ ฯลฯ) → ลองตัวถัดไป อย่าให้คลังติดตาย
+        last_err = res["error"]
+        logger.warning(f"[local] โพสต์ล้ม {it['link'][:60]}: {res['error']}")
+    # ล้มทุกตัว → คืน None ให้ rotation ไปลองคลังอื่น (ไม่ block scheduler)
+    if last_err:
+        logger.warning(f"[local] ล้มทุกตัว: {last_err}")
     return None
 
 

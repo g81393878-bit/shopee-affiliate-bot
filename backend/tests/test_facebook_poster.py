@@ -350,6 +350,53 @@ def test_cron_facebook_post_rotation(monkeypatch):
     assert [r["kind"] for r in sheet_rows] == ["intro", "rss", "local"]
 
 
+def test_post_next_local_skips_failed_link(monkeypatch, db):
+    """โพสต์ local ตัวแรกพัง (ลิงก์โดน FB ปฏิเสธ) → ต้องลองตัวถัดไป ไม่ติดตาย"""
+    from app import models
+    monkeypatch.setattr(cron, "fetch_local_items", lambda index=0, max_items=5: [
+        {"guid": "u1", "title": "ลิงก์เฟส", "link": "https://www.facebook.com/x",
+         "summary": "x", "topic": "ของกิน · จ.กรุงเทพมหานคร"},
+        {"guid": "u2", "title": "ร้านวงใน", "link": "https://www.wongnai.com/y",
+         "summary": "y", "topic": "ของกิน · จ.กรุงเทพมหานคร"},
+    ])
+    monkeypatch.setattr(cron, "curate_local_caption",
+                        lambda it, line_oa="": f"ป้า: {it['title']}\n\n👉 https://lin.ee/x")
+    posts = []
+
+    def fake_post_feed(msg, link="", image_url="", background_preset_id=""):
+        posts.append(link)
+        if link == "https://www.facebook.com/x":
+            return {"ok": False, "post_id": None, "error": "Permissions error"}
+        return {"ok": True, "post_id": "post_ok", "error": None}
+
+    monkeypatch.setattr(cron, "post_feed", fake_post_feed)
+    sheet_rows = []
+    monkeypatch.setattr(cron, "log_post_async", sheet_rows.append)
+
+    res = cron._post_next_local(db)
+    assert res is not None and res["posted"][0]["posted"] is True
+    assert res["posted"][0]["title"] == "ร้านวงใน"
+    assert posts == ["https://www.facebook.com/x", "https://www.wongnai.com/y"]
+    # dedup บันทึกเฉพาะตัวที่โพสต์สำเร็จ
+    rows = db.query(models.CampaignLog).filter(models.CampaignLog.status == "fblocal").all()
+    assert len(rows) == 1
+    assert sheet_rows and sheet_rows[0]["kind"] == "local"
+
+
+def test_post_next_local_returns_none_when_all_fail(monkeypatch, db):
+    """ล้มทุกตัว → คืน None ให้ rotation ไปลองคลังอื่น (ไม่ block scheduler)"""
+    monkeypatch.setattr(cron, "fetch_local_items", lambda index=0, max_items=5: [
+        {"guid": "u1", "title": "ลิงก์เสีย", "link": "https://bad.example/1",
+         "summary": "x", "topic": "ของกิน"},
+    ])
+    monkeypatch.setattr(cron, "curate_local_caption",
+                        lambda it, line_oa="": f"ป้า: {it['title']}")
+    monkeypatch.setattr(cron, "post_feed",
+                        lambda msg, link="", **k: {"ok": False, "post_id": None,
+                                                    "error": "HTTP 400"})
+    assert cron._post_next_local(db) is None
+
+
 def test_intro_posts_have_badge_and_image_url(monkeypatch):
     """คลังแคปชั่น 12 ตัว — ทุกตัวต้องมีป้ายข้อความ (badge) + รูปมาสคอต image_url"""
     from app.services import facebook_intro

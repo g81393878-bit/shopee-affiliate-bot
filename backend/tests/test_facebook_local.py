@@ -62,6 +62,29 @@ def test_item_key_sha1_stable_and_short():
     assert fl.item_key({"guid": "x"}) != fl.item_key({"guid": "y"})
 
 
+def test_link_ok_rejects_facebook_domains():
+    """ลิงก์ facebook.com/fb.watch/messenger → Graph API โพสต์ preview ไม่ได้ → ตัด"""
+    assert fl._link_ok("https://www.wongnai.com/listings/x") is True
+    assert fl._link_ok("https://www.facebook.com/groups/123/posts/456") is False
+    assert fl._link_ok("https://fb.watch/video123") is False
+    assert fl._link_ok("https://m.facebook.com/story.php") is False
+    assert fl._link_ok("") is False
+
+
+def test_fetch_local_items_skips_facebook_links(monkeypatch):
+    """Firecrawl มักคืนโพสต์กลุ่มเฟสเป็นผลแรก → ต้องข้ามไม่ให้คลังติดตาย"""
+    from app.services import web_search
+    monkeypatch.setattr(web_search, "firecrawl_search_results", lambda *a, **k: [
+        {"title": "กลุ่มเฟสรวมร้าน", "url": "https://www.facebook.com/groups/123/posts/1",
+         "content": "x"},
+        {"title": "ร้านอร่อยวงใน", "url": "https://www.wongnai.com/listings/x",
+         "content": "y"},
+    ])
+    items = fl.fetch_local_items(0)
+    assert len(items) == 1
+    assert items[0]["link"] == "https://www.wongnai.com/listings/x"
+
+
 def test_curate_local_caption_fallback_when_groq_down(monkeypatch):
     monkeypatch.setattr(fl, "_groq_caption", lambda item: (_ for _ in ()).throw(RuntimeError("down")))
     cap = fl.curate_local_caption(

@@ -15,6 +15,7 @@
 import hashlib
 import logging
 import os
+from urllib.parse import urlparse
 
 from app.config import settings
 from app.services.persona import persona_system_prompt
@@ -22,6 +23,10 @@ from app.services.persona import persona_system_prompt
 logger = logging.getLogger(__name__)
 
 _LINE_PLACEHOLDER = "https://lin.ee/o9Kjp1N"
+
+# ลิงก์ที่ Facebook Graph API ใช้เป็น link preview ไม่ได้ (เจอจริง: โพสต์กลุ่ม facebook.com
+# → "Permissions error" ทำให้คลังท้องถิ่นติดตายซ้ำทุก tick) → ข้ามตั้งแต่ตอน fetch
+_SKIP_HOSTS = ("facebook.com", "fb.com", "fb.watch", "messenger.com", "m.me")
 
 # 77 จังหวัดไทย — หมุนเวียนตามลำดับ (ครอบคลุมทั้งประเทศ)
 _PROVINCES = [
@@ -73,7 +78,7 @@ def fetch_local_items(index: int = 0, max_items: int = 5) -> list:
         title = (r.get("title") or "").strip()
         url = (r.get("url") or "").strip()
         summary = (r.get("content") or "").strip()
-        if not title or not url:
+        if not title or not url or not _link_ok(url):
             continue
         items.append({
             "guid": url,
@@ -84,6 +89,14 @@ def fetch_local_items(index: int = 0, max_items: int = 5) -> list:
             "topic": f"{label} · จ.{province}",
         })
     return items
+
+
+def _link_ok(url: str) -> bool:
+    """ลิงก์ใช้โพสต์ Facebook ได้ไหม — ตัดโดเมน Facebook เอง (เจอ Permissions error)."""
+    host = (urlparse(url or "").hostname or "").lower()
+    if not host:
+        return False
+    return not any(host == h or host.endswith("." + h) for h in _SKIP_HOSTS)
 
 
 def item_key(item: dict) -> str:
