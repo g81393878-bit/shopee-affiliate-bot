@@ -18,18 +18,24 @@ PAGE_ID = os.getenv("FACEBOOK_PAGE_ID", "1307380735783361")
 GRAPH_URL = "https://graph.facebook.com/v21.0"
 
 
-def post_feed(message: str) -> dict:
-    """โพสต์ข้อความลง feed เพจ — คืน {ok, post_id, error}"""
+def post_feed(message: str, link: str = "") -> dict:
+    """โพสต์ลง feed เพจ — คืน {ok, post_id, error}
+
+    link: ถ้าระบุ Facebook จะดึง preview (รูปสินค้า + ชื่อ) จากหน้าเว็บปลายทางอัตโนมัติ
+    """
     token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or ""
     if not token:
         return {"ok": False, "post_id": None, "error": "FACEBOOK_PAGE_ACCESS_TOKEN ไม่ได้ตั้ง"}
     if not (message or "").strip():
         return {"ok": False, "post_id": None, "error": "message ว่าง"}
+    data = {"message": message}
+    if link:
+        data["link"] = link
     try:
         r = httpx.post(
             f"{GRAPH_URL}/{PAGE_ID}/feed",
             params={"access_token": token},
-            data={"message": message},
+            data=data,
             timeout=20,
         )
     except Exception as e:

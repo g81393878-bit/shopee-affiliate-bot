@@ -273,7 +273,10 @@ def _fmt(n: float) -> str:
 
 
 def _build_fb_caption(p) -> str:
-    """caption สำหรับโพสต์เพจ Facebook = caption (Groq/fallback) + แฮชแท็ก + ลิงก์ affiliate"""
+    """caption สำหรับโพสต์เพจ Facebook = caption (Groq/fallback) + แฮชแท็ก
+
+    (ลิงก์ affiliate ส่งเป็น link param ต่างหาก — Facebook จะดึง preview รูปสินค้าให้เอง)
+    """
     caption, tags = "", ""
     try:
         data = generate_script_for_product(p.name, p.category or "",
@@ -288,8 +291,6 @@ def _build_fb_caption(p) -> str:
     lines = [caption]
     if tags:
         lines.append(tags)
-    if p.affiliate_url:
-        lines.append("🛒 " + p.affiliate_url)
     return "\n\n".join(lines)
 
 
@@ -322,7 +323,7 @@ def cron_facebook_post(token: str = "", limit: int = 1):
 
         results = []
         for p in prods:
-            res = post_feed(_build_fb_caption(p))
+            res = post_feed(_build_fb_caption(p), link=p.affiliate_url or "")
             if res["ok"]:
                 db.add(models.CampaignLog(category=str(p.id), recipients=1,
                                           status="fbpost"))

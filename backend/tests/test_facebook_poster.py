@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""เทสต์ facebook-post cron endpoint — เลือกสินค้า → caption → โพสต์ feed (mock ทุกเน็ต).
+"""เทสต์ facebook-post cron endpoint + facebook_poster — mock ทุกเน็ต.
 
-ไม่แตะ Groq/Facebook จริง: mock generate_script_for_product + post_feed
+ไม่แตะ Groq/Facebook จริง: mock generate_script_for_product + post_feed / httpx.post
 """
 import app.api.cron as cron  # noqa: E402
+import app.services.facebook_poster as fp  # noqa: E402
 
 
 def _fake_script(name, category, price, style="standard", tone="neutral"):
@@ -23,7 +24,7 @@ def test_build_fb_caption_fallback(monkeypatch):
     monkeypatch.setattr(cron, "generate_script_for_product", boom)
     out = cron._build_fb_caption(_prod())
     assert "หูฟังบลูทูธ" in out
-    assert "https://shope.ee/test" in out  # ลิงก์ affiliate ติดเสมอแม้ LLM ล้ม
+    assert "shope.ee" not in out  # ลิงก์แยกเป็น link param (ไม่ติดในข้อความ)
 
 
 def test_build_fb_caption_with_tags(monkeypatch):
@@ -32,7 +33,28 @@ def test_build_fb_caption_with_tags(monkeypatch):
     assert "ป้าป้ายยา" in out
     assert "#ของดีบอกต่อ" in out
     assert "#คุ้มมาก" in out
-    assert "https://shope.ee/test" in out
+    assert "shope.ee" not in out
+
+
+def test_post_feed_passes_link(monkeypatch):
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    captured = {}
+
+    class Resp:
+        status_code = 200
+        def json(self):
+            return {"id": "post_999"}
+
+    def fake_post(url, params=None, data=None, timeout=None):
+        captured["url"] = url
+        captured["data"] = data
+        return Resp()
+
+    monkeypatch.setattr(fp.httpx, "post", fake_post)
+    res = fp.post_feed("ข้อความโปรโมท", link="https://shope.ee/test")
+    assert res["ok"] is True and res["post_id"] == "post_999"
+    assert captured["data"]["message"] == "ข้อความโปรโมท"
+    assert captured["data"]["link"] == "https://shope.ee/test"
 
 
 def test_cron_facebook_post_dedup(monkeypatch):
@@ -43,7 +65,7 @@ def test_cron_facebook_post_dedup(monkeypatch):
     monkeypatch.setattr(cron, "generate_script_for_product", _fake_script)
     posted = []
     monkeypatch.setattr(cron, "post_feed",
-                        lambda msg: posted.append(msg) or
+                        lambda msg, link="": posted.append((msg, link)) or
                         {"ok": True, "post_id": f"post_{len(posted)}", "error": None})
     client = TestClient(app)
 
@@ -58,13 +80,13 @@ def test_cron_facebook_post_dedup(monkeypatch):
     assert len(b2) == 1 and b2[0]["posted"] is True
     assert b1[0]["id"] != b2[0]["id"]
     assert len(posted) == 2
+    assert posted[0][1]  # link affiliate ถูกส่งไปด้วย
 
 
 def test_cron_facebook_post_requires_token(monkeypatch):
     from fastapi.testclient import TestClient
     from app.main import app
 
-    # ถ้า CRON_TOKEN ตั้งไว้ + token ผิด → 401 (จำลอง _authorized=False)
     monkeypatch.setattr(cron, "_authorized", lambda t: False)
     client = TestClient(app)
     r = client.post("/api/cron/facebook-post", params={"token": "wrong"})
