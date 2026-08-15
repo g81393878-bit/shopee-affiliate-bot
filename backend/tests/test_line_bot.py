@@ -274,6 +274,13 @@ def test_chat_button_enters_ai_flow(sim):
     assert r2["intent"] == "search"
 
 
+def test_how_to_buy_uses_faq_not_web(sim):
+    # "จะซื้อสินค้าอย่างไร" ต้องตอบวิธีซื้อจากคู่มือ ไม่ใช่ web search ขยะ
+    r = sim.send("U_cust_1", "จะซื้อสินค้าอย่างไร")
+    assert r["intent"] == "manual"
+    assert "สั่งซื้อผ่าน Shopee" in r["preview"]
+
+
 def test_pending_question_web_answer(sim):
     sim.send("U_cust_1", "ฝากคำถาม")
     r2 = sim.send("U_cust_1", "วิธีชงกาแฟให้อร่อย")
