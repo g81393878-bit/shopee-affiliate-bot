@@ -20,7 +20,7 @@
   - Fallback: ถ้า Claude ไม่มี key/ล้ม → ลดขั้นเหลือ Groq ตอบตรง (บอทไม่พัง)
 
 ผลลัพธ์ boss_orchestrate() คืน:
-  {answer: str, plan: [dict], steps: [dict], boss: bool}
+  {answer: str, plan: [dict], steps: [dict], boss: bool, claude_calls: int}
 """
 import json
 import logging
@@ -92,6 +92,16 @@ def _claude_generate(prompt: str, system: str = BOSS_SYSTEM) -> str:
             )
             out = (resp.choices[0].message.content or "").strip()
             if out:
+                usage = getattr(resp, "usage", None)
+                pt = getattr(usage, "prompt_tokens", None)
+                ct = getattr(usage, "completion_tokens", None)
+                if pt is not None and ct is not None:
+                    logger.info(
+                        f"[orchestrator] Claude OK — tokens prompt={pt} "
+                        f"completion={ct} total={pt + ct}"
+                    )
+                else:
+                    logger.info("[orchestrator] Claude OK (ไม่ได้รับ usage tokens)")
                 return out
         except Exception as e:
             last_err = e
@@ -211,7 +221,7 @@ def boss_orchestrate(instruction: str) -> dict:
     """
     instruction = (instruction or "").strip()
     if not instruction:
-        return {"answer": "", "plan": [], "steps": [], "boss": False}
+        return {"answer": "", "plan": [], "steps": [], "boss": False, "claude_calls": 0}
 
     # 1. PLAN — บอสแตกโจทย์เป็นแผน (JSON list ของ steps)
     plan_prompt = (
@@ -226,15 +236,19 @@ def boss_orchestrate(instruction: str) -> dict:
     plan_text = _claude_generate(plan_prompt)
     plan = _parse_plan(plan_text)
 
-    # Claude วางแผนไม่ได้ → fallback Groq ตอบตรง
+    # Claude วางแผนไม่ได้ → fallback Groq ตอบตรง (PLAN กิน Claude ไป 1 รอบ)
     if not plan:
-        logger.warning("[orchestrator] Claude วางแผนไม่สำเร็จ — fallback Groq ตอบตรง")
-        return {"answer": _groq_generate(instruction), "plan": [], "steps": [], "boss": False}
+        logger.warning("[orchestrator] Claude วางแผนไม่สำเร็จ — fallback Groq ตอบตรง (claude_calls=1)")
+        return {"answer": _groq_generate(instruction), "plan": [], "steps": [],
+                "boss": False, "claude_calls": 1}
+
+    claude_calls = 1  # PLAN สำเร็จ — Claude ใช้ไป 1 รอบ (REVIEW จะเพิ่มอีก 1)
 
     # 2. DISPATCH — รันแต่ละขั้นด้วย worker ที่บอสสั่ง
     steps = []
-    for step in plan:
+    for i, step in enumerate(plan, 1):
         worker, task = step["worker"], step["task"]
+        logger.info(f"[orchestrator] dispatch ขั้น {i}/{len(plan)}: worker={worker}, task={task[:80]}")
         if worker == "firecrawl":
             out = _firecrawl_research(task)
         else:  # groq (Claude ไม่เป็น worker — สงวนไว้เป็นบอส plan/review)
@@ -256,12 +270,23 @@ def boss_orchestrate(instruction: str) -> dict:
         "- ตอบสั้นกระชับ ใช้ได้จริง"
     )
     answer = _claude_generate(review_prompt)
+    claude_calls += 1  # REVIEW — Claude รอบที่ 2
 
     # REVIEW ล้มแต่ขั้นย่อยมีผล → ต่อ text จากขั้นย่อยเป็นคำตอบสำรอง
     if not answer:
         answer = "\n".join(s["output"] for s in steps if s["output"])
 
-    return {"answer": answer, "plan": plan, "steps": steps, "boss": True}
+    # สรุปการใช้งานต่อคำตอบ: worker ไหนกี่ขั้น + Claude กี่รอบ (plan+review)
+    worker_counts: dict = {}
+    for s in steps:
+        worker_counts[s["worker"]] = worker_counts.get(s["worker"], 0) + 1
+    logger.info(
+        f"[orchestrator] boss done — claude_calls={claude_calls} (plan+review), "
+        f"steps={len(steps)}, workers={worker_counts}, answer_len={len(answer)}"
+    )
+
+    return {"answer": answer, "plan": plan, "steps": steps, "boss": True,
+            "claude_calls": claude_calls}
 
 
 def orchestrate_product_content(name: str, category: str, price: float,

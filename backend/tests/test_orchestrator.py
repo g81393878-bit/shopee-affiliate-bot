@@ -5,6 +5,7 @@ mock worker ทั้ง 3 ตัว (_claude_generate/_groq_generate/_firecrawl
 ไม่แตะเน็ต/API จริง ตรวจว่าโฟลว์ plan→dispatch→review + fallback ทำงานถูก
 """
 import json
+import logging
 
 from app.services import orchestrator as orch
 
@@ -89,6 +90,22 @@ def test_boss_orchestrate_full_flow(monkeypatch):
     # worker "claude" ในแผนถูก normalize เป็น groq (Claude ไม่เป็น worker)
     assert [s["worker"] for s in result["steps"]] == ["firecrawl", "groq", "groq"]
     assert calls["firecrawl"] == 1 and calls["groq"] == 2
+
+
+def test_boss_orchestrate_logs_workers_and_claude_calls(monkeypatch, caplog):
+    monkeypatch.setattr(orch, "_claude_generate", _fake_claude)
+    monkeypatch.setattr(orch, "_groq_generate", lambda p: "ร่าง Groq")
+    monkeypatch.setattr(orch, "_firecrawl_research", lambda q: "ข้อมูลรีเสิร์ช")
+
+    with caplog.at_level(logging.INFO, logger="app.services.orchestrator"):
+        result = orch.boss_orchestrate("สร้างคอนเทนต์หูฟัง")
+
+    assert result["claude_calls"] == 2
+    text = "\n".join(r.message for r in caplog.records)
+    assert "dispatch ขั้น 1/3: worker=firecrawl" in text
+    assert "dispatch ขั้น 2/3: worker=groq" in text
+    assert "claude_calls=2" in text
+    assert "workers={'firecrawl': 1, 'groq': 2}" in text
 
 
 def test_boss_orchestrate_fallback_when_no_plan(monkeypatch):
