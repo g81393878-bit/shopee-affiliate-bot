@@ -195,6 +195,7 @@ def test_cron_facebook_post_dedup(monkeypatch):
     monkeypatch.setenv("FB_POST_PRODUCTS", "1")  # ข้าม Phase แนะนำตัว → ตรงไปขายสินค้า
     monkeypatch.setattr(cron, "intro_posts", lambda: [])  # ไม่มีโพสต์แนะนำในเทสต์นี้
     monkeypatch.setattr(cron, "short_bg_posts", lambda: [])  # ไม่มีโพสต์พื้นสีในเทสต์นี้
+    monkeypatch.setattr(cron, "fetch_news_items", lambda max_items=20: [])  # ไม่มี RSS ในเทสต์นี้
     posted = []
     sheet_rows = []
     monkeypatch.setattr(cron, "log_post_async", sheet_rows.append)
@@ -270,9 +271,8 @@ def test_facebook_auto_post_loop_calls_runner(monkeypatch):
     assert calls == [1]
 
 
-def test_cron_facebook_post_intro_first(monkeypatch):
-    """Phase 1 — สลับโพสต์ แนะนำตัว(มาสคอต) ↔ ข้อความสั้นพื้นสี พอครบ + ยังไม่เปิด
-    FB_POST_PRODUCTS → หยุด ไม่ขายสินค้า"""
+def test_cron_facebook_post_rotation(monkeypatch):
+    """หมุนเวียน 3 คลัง: แบรนด์ → (สินค้า ยังไม่เปิด) → คอนเทนต์โลก(RSS) → ครบแล้วหยุด"""
     from fastapi.testclient import TestClient
     from app.main import app
 
@@ -280,46 +280,41 @@ def test_cron_facebook_post_intro_first(monkeypatch):
     monkeypatch.delenv("FB_POST_PRODUCTS", raising=False)  # ยังไม่เปิดขายสินค้า
     monkeypatch.setattr(cron, "intro_posts", lambda: [
         {"title": "แนะนำตัว", "caption": "โพสต์แนะนำ 1"},
-        {"title": "ฟีเจอร์เด่น", "caption": "โพสต์แนะนำ 2"},
     ])
-    monkeypatch.setattr(cron, "short_bg_posts", lambda: [
-        {"title": "สั้น1", "caption": "ข้อความสั้น 1", "preset_id": "1903718606535395"},
+    monkeypatch.setattr(cron, "short_bg_posts", lambda: [])
+    monkeypatch.setattr(cron, "fetch_news_items", lambda max_items=20: [
+        {"guid": "g1", "title": "ข่าวน่าสนใจ", "link": "https://news.example/1",
+         "summary": "...", "source": "Test", "topic": "เทค"},
     ])
+    monkeypatch.setattr(cron, "curate_caption",
+                        lambda it, line_oa="": f"ป้าเล่าข่าว: {it['title']}\n\n👉 https://lin.ee/o9Kjp1N")
     posted = []
     sheet_rows = []
     monkeypatch.setattr(cron, "log_post_async", sheet_rows.append)
 
     def fake_post_feed(msg, link="", image_url="", background_preset_id=""):
-        posted.append((msg, background_preset_id))
+        posted.append((msg, link))
         return {"ok": True, "post_id": f"post_{len(posted)}", "error": None}
 
     monkeypatch.setattr(cron, "post_feed", fake_post_feed)
     client = TestClient(app)
 
-    # tick 1 (คู่) → แนะนำตัวตัวที่ 0
+    # tick 1 → slot 0 (แบรนด์) → แนะนำตัว
     b1 = client.post("/api/cron/facebook-post").json()["posted"]
     assert b1[0]["kind"] == "intro" and b1[0]["index"] == 0
 
-    # tick 2 (คี่) → ข้อความสั้นพื้นสี (มี preset_id)
+    # tick 2 → slot 1 (สินค้า ยังไม่เปิด → ข้าม) → slot 2 (RSS) → โพสต์ข่าว + ลิงก์ข่าว
     b2 = client.post("/api/cron/facebook-post").json()["posted"]
-    assert b2[0]["kind"] == "bg" and b2[0]["preset_id"] == "1903718606535395"
+    assert b2[0]["kind"] == "rss" and b2[0]["title"] == "ข่าวน่าสนใจ"
+    assert posted[-1][1] == "https://news.example/1"  # ลิงก์ข่าวเป็น link param (preview)
 
-    # tick 3 (คู่) → แนะนำตัวตัวที่ 1
-    b3 = client.post("/api/cron/facebook-post").json()["posted"]
-    assert b3[0]["kind"] == "intro" and b3[0]["index"] == 1
+    # tick 3 → ทุกคลังหมด (RSS กันซ้ำ + แบรนด์ครบ + สินค้ายังไม่เปิด) → หยุด
+    r3 = client.post("/api/cron/facebook-post")
+    assert r3.json()["posted"] == []
+    assert "FB_POST_PRODUCTS" in r3.json()["note"]
 
-    # tick 4 (คี่) → พื้นสีครบ → fallback แนะนำตัวครบ → หยุด (ไม่โพสต์สินค้า)
-    r4 = client.post("/api/cron/facebook-post")
-    assert r4.json()["posted"] == []
-    assert "FB_POST_PRODUCTS" in r4.json()["note"]
-
-    assert len(posted) == 3  # intro 2 + bg 1
-    assert len(sheet_rows) == 3  # ทั้ง 3 ตัวถูกบันทึกชีท
-    assert [r["kind"] for r in sheet_rows] == ["intro", "bg", "intro"]
-    assert sheet_rows[0]["post_id"] == "post_1"
-    assert sheet_rows[0]["post_url"] == "https://www.facebook.com/post_1"
-    # โพสต์พื้นสีใช้ background_preset_id ไม่มี link/image
-    assert posted[1][1] == "1903718606535395"
+    assert len(posted) == 2
+    assert [r["kind"] for r in sheet_rows] == ["intro", "rss"]
 
 
 def test_intro_posts_have_badge_and_image_url(monkeypatch):

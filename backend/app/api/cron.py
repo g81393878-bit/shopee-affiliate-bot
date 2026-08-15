@@ -31,6 +31,7 @@ from app.services.line_quota import push_guard
 from app.services.product_cards import product_cards_message
 from app.services.facebook_poster import post_feed, log_post_async
 from app.services.facebook_intro import intro_posts, short_bg_posts
+from app.services.facebook_curated import fetch_news_items, item_key, curate_caption
 from linebot import LineBotApi
 from linebot.models import TextSendMessage
 
@@ -361,71 +362,113 @@ def _post_next_short_bg(db) -> Optional[dict]:
     return None
 
 
-def run_facebook_auto_post(limit: int = 1) -> dict:
-    """โพสต์ลงเพจ Facebook อัตโนมัติ — Phase 1 แนะนำตัวก่อน → Phase 2 ขายสินค้าทีหลัง
+def _post_next_brand(db) -> Optional[dict]:
+    """แบรนด์: สลับ แนะนำตัว (มาสคอต) ↔ ข้อความสั้นพื้นสี (tick คู่/คี่ ตามจำนวนที่โพสต์แล้ว)"""
+    brand_posted = (db.query(models.CampaignLog)
+                      .filter(models.CampaignLog.status.in_(["fbintro", "fbbg"]))
+                      .count())
+    bg_turn = brand_posted % 2 == 1
+    if bg_turn:
+        res = _post_next_short_bg(db)
+        if res is not None:
+            return res
+        return _post_next_intro(db)
+    res = _post_next_intro(db)
+    if res is not None:
+        return res
+    return _post_next_short_bg(db)
 
-    Phase 1: สลับโพสต์คอนเทนต์ 2 แบบ (ให้คนรู้จักก่อน) ทีละตัวจนครบ —
-             - แนะนำตัว (รูปมาสคอต, status='fbintro')
-             - ข้อความสั้นพื้นสี (text background, status='fbbg') — สลับ tick คู่/คี่
-    Phase 2: โพสต์สินค้า — เปิดเมื่อตั้ง FB_POST_PRODUCTS=1 เท่านั้น (ยังไม่ตั้ง = โพสต์แนะนำ
-             ครบแล้วก็หยุด ไม่ขายสินค้าจนกว่าเจ้าของจะพร้อม)
-    (เรียกได้ทั้งจาก HTTP endpoint และ scheduler ในตัว — กันโพสต์ซ้ำด้วย CampaignLog)
+
+def _post_next_product(db, limit: int = 1) -> Optional[dict]:
+    """โพสต์สินค้าถัดไป (Phase 2) — เปิดเมื่อตั้ง FB_POST_PRODUCTS=1 เท่านั้น
+
+    คืน None ถ้ายังไม่เปิด หรือสินค้าเข้าเกณฑ์หมดแล้ว (ให้ rotation ไปลองคลังอื่น)
+    """
+    if os.getenv("FB_POST_PRODUCTS", "").lower() not in ("1", "true", "yes"):
+        return None
+    min_sales = int(os.getenv("MIN_SALES", "2000") or 2000)
+    posted_ids = {int(c.category) for c in db.query(models.CampaignLog)
+                  .filter(models.CampaignLog.status == "fbpost").all()
+                  if str(c.category).isdigit()}
+    query = (db.query(models.Product)
+               .filter(models.Product.link_status == "ok",
+                       models.Product.sales_count >= min_sales))
+    if posted_ids:
+        query = query.filter(~models.Product.id.in_(posted_ids))
+    prods = (query.order_by(models.Product.commission.desc(),
+                            models.Product.ai_score.desc())
+                   .limit(limit).all())
+    if not prods:
+        return None
+    results = []
+    for p in prods:
+        res = post_feed(_build_fb_caption(p), link=p.affiliate_url or "")
+        if res["ok"]:
+            db.add(models.CampaignLog(category=str(p.id), recipients=1, status="fbpost"))
+            db.commit()
+            log_post_async(_post_sheet_row("product", p.name[:45],
+                                           _build_fb_caption(p), p.affiliate_url or "",
+                                           res["post_id"]))
+            results.append({"id": p.id, "name": p.name[:45], "posted": True,
+                            "post_id": res["post_id"]})
+        else:
+            results.append({"id": p.id, "name": p.name[:45], "posted": False,
+                            "error": res["error"]})
+    return {"posted": results}
+
+
+def _post_next_curated(db) -> Optional[dict]:
+    """โพสต์คอนเทนต์โลก (RSS) — กันซ้ำด้วย status='fbrss', category=sha1(guid|link)"""
+    posted = {c.category for c in db.query(models.CampaignLog)
+              .filter(models.CampaignLog.status == "fbrss").all()}
+    for it in fetch_news_items():
+        key = item_key(it)
+        if key in posted:
+            continue
+        caption = curate_caption(it)
+        res = post_feed(caption, link=it["link"])
+        if res["ok"]:
+            db.add(models.CampaignLog(category=key, recipients=1, status="fbrss"))
+            db.commit()
+            log_post_async(_post_sheet_row("rss", (it["title"] or "")[:45],
+                                           caption, it["link"], res["post_id"]))
+            return {"posted": [{"kind": "rss", "title": (it["title"] or "")[:45],
+                                "posted": True, "post_id": res["post_id"],
+                                "source": it.get("source", "")}]}
+        return {"posted": [{"kind": "rss", "title": (it["title"] or "")[:45],
+                            "posted": False, "error": res["error"]}]}
+    return None
+
+
+def run_facebook_auto_post(limit: int = 1) -> dict:
+    """โพสต์ลงเพจ Facebook อัตโนมัติ — หมุนเวียน 3 คลัง: แบรนด์ → สินค้า → คอนเทนต์โลก (วนซ้ำ)
+
+    - แบรนด์ (status=fbintro/fbbg): แนะนำตัว(มาสคอต) ↔ ข้อความสั้นพื้นสี
+    - สินค้า (status=fbpost): เปิดเมื่อตั้ง FB_POST_PRODUCTS=1 เท่านั้น
+    - คอนเทนต์โลก (status=fbrss): ข่าว/เทรนด์จาก RSS เขียนเสียงป้าเข็ม (Groq)
+    กันโพสต์ซ้ำด้วย CampaignLog — เรียกได้ทั้ง HTTP endpoint และ scheduler ในตัว
     """
     db = SessionLocal()
     try:
-        # สลับคอนเทนต์โซเชียล: tick คู่ → แนะนำตัว (มาสคอต), tick คี่ → ข้อความสั้นพื้นสี
-        social_posted = (db.query(models.CampaignLog)
-                           .filter(models.CampaignLog.status.in_(["fbintro", "fbbg"]))
-                           .count())
-        bg_turn = social_posted % 2 == 1
-        if bg_turn:
-            res = _post_next_short_bg(db)
-            if res is not None:
-                return res
-            intro = _post_next_intro(db)
-            if intro is not None:
-                return intro
-        else:
-            intro = _post_next_intro(db)
-            if intro is not None:
-                return intro
-            res = _post_next_short_bg(db)
+        brand_n = (db.query(models.CampaignLog)
+                     .filter(models.CampaignLog.status.in_(["fbintro", "fbbg"])).count())
+        prod_n = (db.query(models.CampaignLog)
+                     .filter(models.CampaignLog.status == "fbpost").count())
+        rss_n = (db.query(models.CampaignLog)
+                     .filter(models.CampaignLog.status == "fbrss").count())
+        slot = (brand_n + prod_n + rss_n) % 3  # 0=แบรนด์, 1=สินค้า, 2=คอนเทนต์โลก
+        for s in (slot, (slot + 1) % 3, (slot + 2) % 3):
+            if s == 0:
+                res = _post_next_brand(db)
+            elif s == 1:
+                res = _post_next_product(db, limit)
+            else:
+                res = _post_next_curated(db)
             if res is not None:
                 return res
         if os.getenv("FB_POST_PRODUCTS", "").lower() not in ("1", "true", "yes"):
-            return {"posted": [], "note": "โพสต์แนะนำตัว + พื้นสีครบแล้ว — ตั้ง FB_POST_PRODUCTS=1 เพื่อเริ่มโพสต์สินค้า"}
-
-        min_sales = int(os.getenv("MIN_SALES", "2000") or 2000)
-        posted_ids = {int(c.category) for c in db.query(models.CampaignLog)
-                      .filter(models.CampaignLog.status == "fbpost").all()
-                      if str(c.category).isdigit()}
-        query = (db.query(models.Product)
-                   .filter(models.Product.link_status == "ok",
-                           models.Product.sales_count >= min_sales))
-        if posted_ids:
-            query = query.filter(~models.Product.id.in_(posted_ids))
-        prods = (query.order_by(models.Product.commission.desc(),
-                                models.Product.ai_score.desc())
-                       .limit(limit).all())
-        if not prods:
-            return {"posted": [], "note": "ไม่มีสินค้าเข้าเกณฑ์ (หรือโพสต์ครบแล้ว)"}
-
-        results = []
-        for p in prods:
-            res = post_feed(_build_fb_caption(p), link=p.affiliate_url or "")
-            if res["ok"]:
-                db.add(models.CampaignLog(category=str(p.id), recipients=1,
-                                          status="fbpost"))
-                db.commit()
-                log_post_async(_post_sheet_row("product", p.name[:45],
-                                               _build_fb_caption(p), p.affiliate_url or "",
-                                               res["post_id"]))
-                results.append({"id": p.id, "name": p.name[:45], "posted": True,
-                                "post_id": res["post_id"]})
-            else:
-                results.append({"id": p.id, "name": p.name[:45], "posted": False,
-                                "error": res["error"]})
-        return {"posted": results}
+            return {"posted": [], "note": "โพสต์แบรนด์ครบแล้ว — ตั้ง FB_POST_PRODUCTS=1 เพื่อโพสต์สินค้า"}
+        return {"posted": [], "note": "ไม่มีคอนเทนต์ใหม่ (สินค้าครบ / รอ RSS feed)"}
     finally:
         db.close()
 
