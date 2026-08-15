@@ -184,3 +184,48 @@ def test_format_market_memory_contains_skills(clean_prefs):
     md = format_market_memory(result)
     assert "หูฟัง" in md
     assert '"radar_min_demand_score": 65' in md
+
+
+def test_cron_hermes_learn_endpoint(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    import app.api.cron as cron
+
+    fake_result = {
+        "skills": {"trending_categories": ["หูฟัง"], "radar_min_demand_score": 65},
+        "report": {"chat_count": 2, "facebook_demand_count": 1},
+        "reason": "test",
+    }
+    monkeypatch.setattr(cron, "_authorized", lambda t: True)
+    monkeypatch.setattr(cron, "analyze_market", lambda db: fake_result)
+    client = TestClient(app)
+    r = client.post("/api/cron/hermes-learn")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["learned"] is True
+    assert body["skills"]["trending_categories"] == ["หูฟัง"]
+    assert body["reason"] == "test"
+
+
+def test_cron_hermes_learn_requires_token(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    import app.api.cron as cron
+
+    monkeypatch.setattr(cron, "_authorized", lambda t: False)
+    client = TestClient(app)
+    r = client.post("/api/cron/hermes-learn", params={"token": "wrong"})
+    assert r.status_code == 401
+
+
+def test_cron_hermes_learn_returns_learned_false_when_llm_fails(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    import app.api.cron as cron
+
+    monkeypatch.setattr(cron, "_authorized", lambda t: True)
+    monkeypatch.setattr(cron, "analyze_market", lambda db: None)
+    client = TestClient(app)
+    r = client.post("/api/cron/hermes-learn")
+    assert r.status_code == 200
+    assert r.json()["learned"] is False

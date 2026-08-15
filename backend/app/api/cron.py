@@ -26,6 +26,7 @@ from app.db import SessionLocal
 from app import models
 from app.services.link_checker import check_affiliate_link
 from app.services.ai_generator import format_hashtags_text, generate_script_for_product
+from app.services.hermes_brain import analyze_market
 from app.services.price_refresh import refresh_price
 from app.services.line_quota import push_guard
 from app.services.product_cards import product_cards_message
@@ -117,6 +118,33 @@ def cron_analyze(token: str = "", limit: int = 5):
                 logger.error(f"analyze failed for {p.id}: {e}")
                 failed.append({"id": p.id, "name": p.name[:50], "error": str(e)[:80]})
         return {"generated": done, "failed": failed, "still_missing": max(0, len(missing) - len(done))}
+    finally:
+        db.close()
+
+
+@router.post("/hermes-learn")
+def cron_hermes_learn(token: str = ""):
+    """Hermes AI learning loop — วิเคราะห์ตลาด 48 ชม. แล้วให้ Groq ปรับ skills (hot-reload)
+
+    เรียกจาก cron-job.org วันละ 1 ครั้ง (ต้องส่ง ?token=<CRON_TOKEN>). LLM ล้ม →
+    คืน learned=False และไม่เขียนทับ skills เดิม (fail-safe).
+    """
+    if not _authorized(token):
+        raise HTTPException(status_code=401, detail="invalid token")
+    db = SessionLocal()
+    try:
+        result = analyze_market(db)
+        if result is None:
+            return {
+                "learned": False,
+                "detail": "LLM unavailable (ไม่มี GROQ_API_KEY หรือทุก key ล้ม) — skills คงเดิม",
+            }
+        return {
+            "learned": True,
+            "skills": result["skills"],
+            "reason": result["reason"],
+            "market": result["report"],
+        }
     finally:
         db.close()
 
