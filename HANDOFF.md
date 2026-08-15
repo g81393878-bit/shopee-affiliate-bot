@@ -14,6 +14,8 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- feat(brand): เพิ่ม**ป้ายชื่อ + สโลแกน**ลงมาสคอต SVG ทั้ง 3 ตัว
+  (`assets/pa-khem-mascot-{1,2,3}.svg` + `preview.html` — ป้าย "ป้าเข็ม ขายของ" / "ถ้าไม่คุ้ม ป้าบอกให้" ที่อกผ้ากันเปื้อน)
 - `f9ece4c` feat(brand): สร้าง**มาสคอตป้าเข็ม SVG 3 ท่า** + คู่มือภาพลักษณ์
   (`assets/pa-khem-mascot-{1,2,3}.svg` ตัวเดียวกันเปลี่ยนท่า/อุปกรณ์; `docs/pa-khem-visual-identity.md` จานสี/ฟอนต์/แปลง PNG)
 - `c2cb0be` docs: เพิ่ม **ป้าเข็ม Brand Bible** (`docs/pa-khem-brand-bible.md`) — Character ก่อน Product
