@@ -14,6 +14,7 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- ✅ chore(cleanup): **ลบโพสต์ทดสอบบนเพจ 10 ตัว** (ช่วง debug 11:15–12:14 UTC: bg/สินค้า/RSS/local/intro ที่ trigger เอง) ผ่าน Graph API DELETE — เพจเหลือ 13 โพสต์ (12 rollout + 1 manual 04:26 ที่ไม่ใช่บอท); dedup ใน CampaignLog ยังอยู่ → บอทไม่โพสต์ซ้ำตัวที่ลบ; **commit assets/ ของเจ้าของ** (ลบ SVG มาสคอต + เพิ่ม PNG) — repo สะอาดแล้ว
 - ✅ chore(render): **คืน `FB_AUTO_POST_INTERVAL` 240 (4 ชม.)** — จบช่วงทดสอบ (เคยลดเป็น 60 เพื่อเทสต์) → render.yaml value=240 + PUT env บน Render + deploy `dep-da05l51t0dsc738v500g` live; บอทโพสต์อัตโนมัติทุก 4 ชม. หมุน 4 คลัง (แบรนด์→สินค้า→ข่าว→ท้องถิ่น)
 - ✅ feat(facebook): **โพสต์สินค้าแนบรูปจริง (ไม่พึ่งการ์ดลิงก์)** — ปัญหา: บางโพสต์การ์ดลิงก์ `s.shopee.co.th` รูปว่าง (Shopee กัน facebookexternalhit บางรอบ) → แก้: เพิ่ม `products.image_url` (migrate ALTER แล้วบน Supabase) + `product_image.py` (`fetch_product_image` ดึงรูปผ่าน **Facebook og scrape `scrape=true`** เพราะ Shopee เป็น SPA กัน requests/firecrawl ไม่เห็น `<meta og:image>` → FB crawler ดึงได้ คืน `down-th.img.susercontent.com/...`) → `_post_next_product` โพสต์ `/photos` แนบรูป + ลิงก์ affiliate ในแคปชั่น (fallback การ์ดลิงก์ถ้าหาไม่ได้) + แก้ bug เรียก `_build_fb_caption` ซ้ำ 2 รอบ — 450 passed — deploy `dep-da05f561egvs73fur6hg` live (commit `f374d14`); เทสต์จริง: สินค้า #20 ANCHI → full_picture = scontent-*.fbcdn.net (รูปอัปโหลดจริง) + ลิงก์ `s.shopee.co.th/7Kw73GWSLp` ในแคปชั่น
 - ✅ fix(facebook): **คลังท้องถิ่นไม่ติดตายบนลิงก์ facebook.com** — Firecrawl มักคืนโพสต์กลุ่มเฟสเป็นผลแรก → Graph API link preview เจอ "Permissions error" และโค้ดเดิมหยุดทันที → แก้ 2 จุด: `facebook_local.py` กรองลิงก์ facebook.com/fb.watch/messenger ออกตอน fetch + `_post_next_local` ลองตัวถัดไปเมื่อล้ม / คืน None ถ้าล้มหมด (rotation ไปคลังอื่น) — 438 passed — **push+deploy แล้ว** (`7de8881` → `dep-da04mm61egvs73ft8thg` live); **เทสต์จริงบนเพจ**: โพสต์ local ตัวแรก "100 ร้านอาหารกรุงเทพ..." (wongnai, `...941443245`) — ตรวจ Graph API แล้ว caption มี `lin.ee/o9Kjp1N` + hashtags + น้ำเสียงป้าเข็ม ครบ
@@ -100,9 +101,9 @@
   (2) คอนเทนต์โลก status=fbrss — ข่าว RSS → Groq เขียนเสียงป้าเข็ม + ลิงก์ LINE (feed: Beartai/Techhub/The Standard; override `RSS_SOURCES_JSON`; dedup sha1(guid))
   (3) ท้องถิ่น status=fblocal — ร้านอร่อย/ของฝาก/ของกิน Firecrawl search หมุน 77 จังหวัด × 3 หัวข้อ → Groq + ลิงก์ LINE (dedup sha1(url); Firecrawl ล้ม → ข้ามไม่พัง)
   → โพสต์สำเร็จทุกตัว → Google ชีท (POSTS_SHEET_WEBHOOK_URL); kind = intro / bg / product / rss / local
-- ⚠️ **หมายเหตุ ownership:** `assets/` มีงานของคุณเจ้าของเอง (ลบ SVG มาสคอตเดิม + เพิ่ม PNG ใหม่ 2 ไฟล์ `1e8c7fdf-*.png` / `pa-khem-avatar.png`) — **ยังไม่ commit** ปล่อยไว้ให้เจ้าของ/ไม่ทับงานนี้
+- ✅ `assets/` commit แล้ว (SVG → PNG ของเจ้าของ) — ไม่มีงานค้างใน git แล้ว
 - Google ชีท: SHEET_WEBHOOK_URL (แชท) และ POSTS_SHEET_WEBHOOK_URL (โพสต์) ชี้ URL เดียวกัน = สคริปต์รวม 1 ตัว
   จัดการ 2 แท็บ (คำถามลูกค้า / FB Posts) — ตั้งใจให้เป็นแบบนี้ ไม่ใช่ bug; เทสต์ทั้ง 2 ทางผ่านแล้ว
-- repo: commit ล่าสุด `f374d14` (โพสต์สินค้าแนบรูป) push แล้ว — deploy โค้ดจริงตัวล่าสุดคือ `dep-da05l51t0dsc738v500g` (live, หลังคืน interval 240); DB migrate แล้ว: `products.image_url` (ALTER ADD COLUMN) — untracked/deleted ยังเหลือเฉพาะงานของคุณเจ้าของใน `assets/` (ดูหมายเหตุ ownership)
+- repo สะอาดแล้ว (commit assets + ไม่มี untracked); commit ล่าสุด push แล้ว — deploy โค้ดจริงตัวล่าสุดคือ `dep-da05l51t0dsc738v500g` (live, หลังคืน interval 240); DB migrate แล้ว: `products.image_url` (ALTER ADD COLUMN)
 - ✅ ตัวกรองอักษรต่างภาษา (เคยค้าง): `app/services/text_cleaner.py` + เรียกใน `post_feed` — เจอคำ "دیزاین" จาก Groq แล้วตัดทิ้งก่อนโพสต์ (427 passed)
 - ⚠️ **token Facebook:** `backend/.env` (local) หมดอายุแล้ว (Session expired 14 ส.ค.) แต่ **Render ยังใช้ token valid ตัวอื่น** (`EAAR9k...PCbT`) — production โพสต์ได้ปกติ; ถ้าจะตรวจเพจ/เทสต์จาก local ต้องดึง token จาก Render (Management API GET env-vars) มาใส่ชั่วคราว (ยังไม่ได้ sync ลง `.env` — รอเจ้าของยืนยัน)
