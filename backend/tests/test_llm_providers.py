@@ -5,7 +5,9 @@
 - generate_script_for_product / analyze_product_with_ai: เดิน anthropic branch (mock client
   คืน JSON) แล้ว parse กลับเป็น schema ที่ถูกต้อง — ไม่ fallback ไป mock script
 """
+import ast
 import json
+from pathlib import Path
 
 import pytest
 
@@ -209,3 +211,74 @@ def test_min_interval_seconds_from_rpm(monkeypatch):
     assert _min_interval_seconds() == 2.0
     monkeypatch.setattr(settings, "LLM_RATE_LIMIT_RPM", 0)
     assert _min_interval_seconds() == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Regression: ทุก LLM call ใน services ต้องห่อ call_with_backoff
+# ---------------------------------------------------------------------------
+
+SERVICES_DIR = Path(__file__).resolve().parent.parent / "app" / "services"
+
+
+def _unwrapped_llm_calls(source_path: Path):
+    """คืน list[(lineno, snippet)] ของ LLM call ที่ไม่อยู่ใน call_with_backoff(...).
+
+    ใช้ ast (ไม่ใช่ grep) → จับเฉพาะโค้ดจริง กัน false positive จาก comment/docstring.
+    """
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    parent = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parent[child] = node
+
+    violations = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        is_llm_call = False
+        if isinstance(func, ast.Attribute):
+            if func.attr == "generate_content":
+                is_llm_call = True
+            elif func.attr == "create" and isinstance(func.value, ast.Attribute) and func.value.attr == "completions":
+                is_llm_call = True
+        if not is_llm_call:
+            continue
+
+        # เดินขึ้น ancestor: create/generate_content → lambda → call_with_backoff(...)
+        wrapped = False
+        p = parent.get(node)
+        while p is not None:
+            if isinstance(p, ast.Lambda):
+                gp = parent.get(p)
+                if isinstance(gp, ast.Call) and isinstance(gp.func, ast.Name) and gp.func.id == "call_with_backoff":
+                    wrapped = True
+                    break
+            p = parent.get(p)
+        if not wrapped:
+            violations.append((node.lineno, ast.unparse(node).strip()[:70]))
+    return violations
+
+
+def test_all_service_llm_calls_wrapped_in_call_with_backoff():
+    """Regression: ห้ามมี chat.completions.create / generate_content นอก call_with_backoff.
+
+    ถ้ามีคนเพิ่ม LLM call ใหม่โดยไม่ห่อ retry/throttle → เทสต์นี้พังทันที.
+    """
+    py_files = sorted(SERVICES_DIR.glob("*.py"))
+    assert py_files, f"ไม่พบไฟล์ .py ใน {SERVICES_DIR}"
+
+    problems = {}
+    for path in py_files:
+        bad = _unwrapped_llm_calls(path)
+        if bad:
+            problems[path.name] = bad
+
+    assert not problems, (
+        "พบ LLM call ที่ไม่ห่อ call_with_backoff — ห่อก่อน commit:\n"
+        + "\n".join(
+            f"  {name}:{line}: {snippet}"
+            for name, bad in problems.items()
+            for line, snippet in bad
+        )
+    )
