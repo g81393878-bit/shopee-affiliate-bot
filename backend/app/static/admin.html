@@ -330,7 +330,7 @@ async function loadShopeeStatus() {
     if (s.configured) {
       badge.textContent = 'พร้อม';
       badge.className = 'badge ok';
-      $('shopeeBody').innerHTML = '✅ ตั้งค่าแล้ว — ค้นสินค้าจากคลัง Shopee ได้เลย (พิมพ์คำค้นแล้วกด ค้น)';
+      $('shopeeBody').innerHTML = '[OK] ตั้งค่าแล้ว — ค้นสินค้าจากคลัง Shopee ได้เลย (พิมพ์คำค้นแล้วกด ค้น)';
     } else {
       badge.textContent = 'รออนุมัติ';
       badge.className = 'badge none';
@@ -477,7 +477,7 @@ async function addProduct() {
     ['aName','aUrl','aCat'].forEach(id => $(id).value = '');
     ['aPrice','aComm','aSales','aRating'].forEach(id => $(id).value = '0');
     loadProducts(); loadStats(); loadCategories();
-    alert('✅ เพิ่มสินค้าแล้ว');
+    alert('[OK] เพิ่มสินค้าแล้ว');
   } catch (e) { alert(e.message); }
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -499,10 +499,10 @@ async function loadRadarFeed() {
     $('radarNext').disabled = radarState.page >= pages;
     $('radarRows').innerHTML = d.feed.map(ev => {
       const t = ev.sent_at ? new Date(ev.sent_at).toLocaleString('th-TH') : '-';
-      const statusBadge = `<span class="badge ${ev.status}">${{posted:'✅ โพสต์แล้ว', ignored:'⏭ ข้าม', failed:'❌ ผิดพลาด'}[ev.status]||ev.status}</span>`;
+      const statusBadge = `<span class="badge ${ev.status}">${{posted:'posted', ignored:'ignored', failed:'failed'}[ev.status]||ev.status}</span>`;
       const prod = ev.matched_product;
       const prodCell = prod
-        ? `<a href="${esc(prod.affiliate_url)}" target="_blank" style="color:var(--red);text-decoration:none">🛍 ${esc(prod.name?.slice(0,40))}</a><br><span style="font-size:11px;color:var(--gray)">฿${(prod.price||0).toLocaleString()} · ขาย ${(prod.sales_count||0).toLocaleString()}</span>`
+        ? `<a href="${esc(prod.affiliate_url)}" target="_blank" style="color:var(--red);text-decoration:none">[shop] ${esc(prod.name?.slice(0,40))}</a><br><span style="font-size:11px;color:var(--gray)">฿${(prod.price||0).toLocaleString()} · ขาย ${(prod.sales_count||0).toLocaleString()}</span>`
         : '<span style="color:var(--gray)">—</span>';
       const lead = ev.source_lead;
       const leadCell = lead?.fb_post_url
@@ -535,7 +535,7 @@ async function loadCooldown() {
         const pct = Math.min(100, Math.round((ch - cat.remaining_hours) / ch * 100));
         const avail = new Date(cat.available_at + 'Z').toLocaleString('th-TH');
         return `<div class="cooldown-card locked">
-          <h4>🔒 ${esc(cat.category)}</h4>
+          <h4>[lock] ${esc(cat.category)}</h4>
           <div class="time" style="color:var(--red)">${cat.remaining_hours} ชม.</div>
           <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:var(--border)"></div></div>
           <div class="sub">โพสต์ได้อีกครั้ง: ${avail}</div>
@@ -543,7 +543,7 @@ async function loadCooldown() {
       } else {
         const last = cat.last_posted_at ? new Date(cat.last_posted_at + 'Z').toLocaleString('th-TH') : '-';
         return `<div class="cooldown-card avail">
-          <h4>✅ ${esc(cat.category)}</h4>
+          <h4>[ok] ${esc(cat.category)}</h4>
           <div class="time" style="color:var(--green)">พร้อมโพสต์</div>
           <div class="sub">ครั้งล่าสุด: ${last}</div>
         </div>`;
@@ -551,7 +551,7 @@ async function loadCooldown() {
     }
     $('lockedGrid').innerHTML = d.categories_on_cooldown.length
       ? d.categories_on_cooldown.map(c => makeCard(c, true)).join('')
-      : '<div style="color:var(--green);font-size:13px;padding:8px">ไม่มีหมวดใดติด Cooldown 🎉</div>';
+      : '<div style="color:var(--green);font-size:13px;padding:8px">ไม่มีหมวดใดติด Cooldown</div>';
     $('availGrid').innerHTML = d.categories_available.length
       ? d.categories_available.map(c => makeCard(c, false)).join('')
       : '<div style="color:var(--gray);font-size:13px;padding:8px">ยังไม่มีประวัติการโพสต์</div>';
