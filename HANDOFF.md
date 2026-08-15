@@ -8,12 +8,14 @@
 > - **เมื่องานเสร็จและ commit ครบ:** ให้ล้างเนื้อหาในส่วน 1–5 กลับเป็นสถานะว่าง แล้ว commit
 >   ไฟล์นี้ — เพื่อไม่ให้ AI ตัวถัดไปเข้าใจผิดว่างานยังค้าง
 
-## สถานะ: 🟡 มีโค้ดใหม่ (facebook auto-post) ยังไม่ push/deploy — เหลืองานบน Facebook ฝั่งเจ้าของ
+## สถานะ: 🟡 โค้ด push + deploy ครบแล้ว — เหลืองาน manual ฝั่งเจ้าของ (cron-job.org + Facebook Live)
 
 ---
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- `38e9cde` feat(facebook): post_feed รองรับ `link` param — Facebook ดึง preview รูปสินค้าจากลิงก์อัตโนมัติ
+  (แยก affiliate URL ออกจากข้อความมาเป็น link param → โพสต์เป็นการ์ดมีรูป; เทสต์จริงยืนยันแล้ว)
 - `a5c0c7f` feat(facebook): เพิ่ม auto-post ลงเพจ Facebook — cron `/api/cron/facebook-post`
   (ไฟล์ใหม่ `app/services/facebook_poster.py` + เลือกสินค้าที่ยังไม่โพสต์ → caption Groq/fallback → feed; 4 เทสต์)
 - `ef52a63` feat(persona): ปรับแก้ตัวตนป้าเข็มเป็นแม่ค้าออนไลน์ Shopee Affiliate ด้วย RCAO Framework (`persona.py`)
@@ -34,12 +36,12 @@
 
 <!-- ว่าง — ไม่มีงานโค้ดค้าง ทำงานทุกชิ้น commit ครบแล้ว -->
 
+- โพสต์ test บนเพจ 2 อัน (ข้อความล้วน + ลิงก์การ์ด) รอเจ้าของลบเองถ้าต้องการ
+
 ## 3. ขั้นตอนต่อไป
 
-- ⚠️ **push โค้ดใหม่ขึ้น GitHub** (`git push origin main`) — local นำ origin หลาย commit (facebook auto-post + render_set_env.py + docs)
-- ⚠️ **trigger deploy บน Render** → ให้ production ได้ cron `/api/cron/facebook-post` (โค้ดล่าสุดยังไม่ deploy)
-- ⏳ ตั้ง cron-job.org ยิง `POST /api/cron/facebook-post?token=...` ตามรอบที่ต้องการ (เช่น ทุก 4 ชม.)
-- ✅ push + deploy รอบก่อนหน้าเรียบร้อย (deploy `dep-d9vuro8jo6nc73db0qjg` → `live`, commit `24c80a6`)
+- ✅ **push + deploy เรียบร้อย** — deploy `dep-d9vv5fjf2k7s73c4a5og` → `live` (commit `38e9cde`); endpoint cron ขึ้น production แล้ว (401 ถ้าไม่มี/ผิด token)
+- ⏳ ตั้ง cron-job.org ยิง `POST https://shopee-affiliate-bot-9e9n.onrender.com/api/cron/facebook-post?token=<CRON_TOKEN>` — ช่วงทดสอบทุก 10 นาที, หลัง test ผ่านลดเป็นทุก 4 ชม.
 - ✅ ตั้ง env บน Render ครบ 5 ตัว: FACEBOOK_APP_ID / APP_SECRET / VERIFY_TOKEN / PAGE_ACCESS_TOKEN + LINE_OA_URL (รวม 14 ตัว)
 - ⏳ **ตั้ง Webhook บน Facebook**: Messenger → Settings → Callback URL `https://shopee-affiliate-bot-9e9n.onrender.com/api/webhooks/facebook` + Verify Token (ค่าใน `tools/render_env.local.json`) → Verify and Save → Subscribe page events
 - ⏳ **เปิดแอปเป็น Live**: App Settings → Basic → ใส่ Privacy Policy URL `https://shopee-affiliate-bot-9e9n.onrender.com/privacy` → สลับโหมดเป็น Live (ตอนนี้ยัง Development → ลูกค้าทั่วไปทักเพจไม่ได้)
@@ -52,7 +54,7 @@
 ## 5. หมายเหตุ
 
 - CI: `.github/workflows/test.yml` รัน `pytest` + coverage gate 85% ทุก push/PR
-- เทสต์ทั้งชุด: 388 passed
+- เทสต์ทั้งชุด: 388 passed (วิธี A link preview มี 5 เทสต์ใหม่ รวมอยู่ในนี้)
 - บอทจริง healthy: `/health` → 200, `llm_provider=groq`, `database_url_configured=true` (URL: `https://shopee-affiliate-bot-9e9n.onrender.com`)
 - Render env vars ตอนนี้มี 14 ตัว (ครบ Facebook + LINE_OA_URL แล้ว): DATABASE_URL, CRON_TOKEN, GROQ_API_KEY, LINE_CHANNEL_ACCESS_TOKEN/SECRET, LLM_PROVIDER, TAVILY_API_KEY, FIRECRAWL_API_KEY, SHEET_WEBHOOK_URL, FACEBOOK_APP_ID/SECRET/VERIFY_TOKEN/PAGE_ACCESS_TOKEN, LINE_OA_URL
   (ยังไม่มีแค่ ANTHROPIC_API_KEY)
