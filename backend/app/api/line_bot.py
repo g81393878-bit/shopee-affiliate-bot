@@ -699,10 +699,22 @@ OWNER_ONLY_CUSTOMER_REPLY = (
 )
 
 
+# กัน keyword "คีย์" (คีย์ AI/API) ไปแมตช์ซับสตริงใน "คีย์บอร์ด"/"คีย์บอรด" (keyboard)
+# — ลูกค้าหาคีย์บอร์ดต้องได้สินค้า ไม่ใช่คำตอบเรื่องคีย์ AI (คลังจริงมีคีย์บอร์ด 5+6 ตัว)
+KEYBOARD_VARIANTS = ("คีย์บอร์ด", "คีย์บอรด")
+
+
+def _mask_keyboard(t: str) -> str:
+    """'คีย์บอร์ด'/'คีย์บอรด' → 'คียบอร์ด' (ตัดสระโท) กัน keyword 'คีย์' แมตช์กลางคำ"""
+    for kb in KEYBOARD_VARIANTS:
+        t = t.replace(kb, "คียบอร์ด")
+    return t
+
+
 def bot_manual_reply(text: str, is_owner: bool = False) -> str:
     """ตอบคำถามเรื่องบอทจากคู่มือ — เจอหัวข้อตามคำสำคัญตอบเฉพาะส่วน, ไม่ตรง → คู่มือเต็ม
     หัวข้อติดตั้ง/สมัคร/รายได้ = เฉพาะเจ้าของร้าน; ลูกค้าทั่วไปได้คำตอบสั้นชี้ทาง"""
-    t = (text or "").strip().lower().replace(" ", "")
+    t = _mask_keyboard((text or "").strip().lower().replace(" ", ""))
     if any(k in t for k in INSTALL_KWS) or _wants_code_buttons(t):
         return INSTALL_REPLY_OWNER if is_owner else INSTALL_REPLY_CUSTOMER
     for kws, section in BOT_MANUAL_SECTIONS:
@@ -1949,7 +1961,7 @@ PENDING_CANCEL_IF = (
 
 def is_bot_manual_request(text: str) -> bool:
     """ลูกค้าถามเรื่องบอท/อยากรู้วิธีใช้? (คุยกับป้าเข็ม / คู่มือ / ใช้ยังไง...) — ตอบจากคู่มือเท่านั้น"""
-    t = (text or "").strip().lower().replace(" ", "")
+    t = _mask_keyboard((text or "").strip().lower().replace(" ", ""))
     return any(p in t for p in BOT_MANUAL_PHRASES)
 
 

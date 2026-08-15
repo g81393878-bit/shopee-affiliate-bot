@@ -439,6 +439,42 @@ def test_manual_owner_gets_section(sim):
     assert "LINE OA" in r["preview"]
 
 
+# ---------- คีย์บอร์ด ต้องไม่โดน "คีย์" (API key) จับเป็นคู่มือ ----------
+def test_keyboard_query_routes_to_search(sim, db):
+    """หาคีย์บอร์ดต้องได้สินค้า ไม่ใช่คำตอบเรื่องคีย์ AI (คำ 'คีย์' ชน 'คีย์บอร์ด')"""
+    db.add(models.Product(
+        name="คีย์บอร์ดไร้สาย Bluetooth", category="อุปกรณ์เสริม", price=500,
+        sales_count=5000, affiliate_url="https://shope.ee/test",
+        link_status="ok", ai_score=70))
+    db.commit()
+    try:
+        r = sim.send("U_cust_1", "คีย์บอร์ดไร้สาย")
+        assert r["intent"] == "search", f"คีย์บอร์ดโดนจับเป็น {r['intent']}: {r['preview'][:80]}"
+        assert "คีย์บอร์ด" in r["preview"]
+    finally:
+        db.query(models.Product).filter(models.Product.name == "คีย์บอร์ดไร้สาย Bluetooth").delete()
+        db.commit()
+
+
+def test_keyboard_typo_not_manual(sim):
+    """'คีย์บอรด' (พิมพ์ ด แทน รด์) ก็ต้องไม่หลุดไปคู่มือคีย์ AI"""
+    r = sim.send("U_cust_1", "คีย์บอรดไร้สาย")
+    assert r["intent"] != "manual", f"คีย์บอรดโดนจับเป็น manual: {r['preview'][:80]}"
+
+
+def test_keyboard_not_manual_request():
+    assert lb.is_bot_manual_request("คีย์บอร์ดไร้สาย") is False
+    assert lb.is_bot_manual_request("คีย์บอร์ด") is False
+    assert lb.is_bot_manual_request("คีย์บอรด") is False
+
+
+def test_key_api_query_still_manual(sim):
+    """คีย์ AI/โควต้า ยังเป็นคำถามคู่มือเหมือนเดิม (ไม่หลุดไปค้นสินค้า)"""
+    r = sim.send("U_cust_1", "คีย์ ai หมดแล้วทำไง")
+    assert r["intent"] == "manual"
+    assert "คีย์ AI" in r["preview"]
+
+
 # ---------- ตัวเลขไทยคำในเงื่อนไขราคา (ลูกค้าจริง: "ถุงเท้าไม่เกินร้อย") ----------
 @pytest.mark.parametrize("s,expect", [
     ("ร้อย", 100.0), ("สองร้อย", 200.0), ("พัน", 1000.0), ("สองพัน", 2000.0),
