@@ -45,6 +45,7 @@ cd backend && DATABASE_URL="postgresql://postgres.usqhvujqmnxqrdoovvnp:$(cat ~/.
 ```bash
 cd backend && .venv/Scripts/python.exe ../tools/_backfill_content_template.py
 ```
+(หมายเหตุ: การรันใน Windows อาจพบปัญหาตัวอักษร ให้กำหนด `$env:PYTHONIOENCODING="utf-8"` ด้วยหากพบ Error)
 
 - สคริปต์เรียงตาม `ai_score` สูงก่อน (เหมือน cron) และ batch commit 500 แถว/ครั้ง
 - Template มาจาก `backend/app/services/ai_generator.py::build_template_script()` (เสียงป้าเข็มสำเร็จรูป)
@@ -57,6 +58,7 @@ curl -X POST "https://shopee-affiliate-bot-9e9n.onrender.com/api/cron/analyze?to
 
 - cron-job.org รันอัตโนมัติทุก 2 ชม. (`limit=30`) — backlog ~600 ตัว ≈ 40 ชม. กว่าจะครบ
 - `limit` default 5; ใช้ `limit` ใหญ่ระวัง Groq rate limit
+- **Groq Rate Limit Fallback**: หากโควตา Groq เต็ม (429 Rate limit reached) ระบบจะพยายามสลับ API Key อัตโนมัติ หากเต็มทุกคีย์ สคริปต์จะไม่พัง แต่จะสลับไปใช้ Template (ไม่ใช้ LLM) ให้กับสินค้าในล็อตนั้นแทน
 
 ## ตรวจผล
 

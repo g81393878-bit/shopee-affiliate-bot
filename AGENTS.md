@@ -105,3 +105,9 @@ AI หลายตัว (Codebuff / Claude Code / Cursor …) อาจสล�
 5. **งานใหญ่ที่หยุดกลางคัน: เขียนลง HANDOFF.md ที่ root** (แล้ว commit) — ใช้เทมเพลตในไฟล์ (งานที่ทำแล้ว / งานค้าง / ขั้นตอนต่อไป / ไฟล์ที่ถืออยู่ / หมายเหตุ) แล้วตั้งสถานะ "มีงานค้าง"; เมื่องานเสร็จให้ล้างกลับเป็น "ว่าง" และ commit
 6. **ห้ามทิ้งสคริปต์ชั่วคราวใน repo** — ไฟล์ `_*` ที่สร้างเพื่อ debug/รันเทสต์ ต้องลบก่อน commit (ดู `tools/search_test.py` docstring: ชั่วคราว ไม่ commit ใช้งาน)
 7. **อย่าเชื่อสถานะจากความจำ — ตรวจไฟล์จริง** — ไฟล์อาจถูก agent ตัวอื่น/IDE/user แก้ระหว่างทำงาน (เปลี่ยน branch ได้ด้วย) ก่อนแก้ไฟล์ใด ให้ `git diff` เทียบกับ HEAD เสมอ เพื่อแยกงานของตัวเองออกจากของคนอื่น
+
+## Tracking & Analytics Limitations
+
+- **Sales & Clicks:** The system CANNOT track actual affiliate sales or conversions automatically. Shopee Affiliate does not provide webhooks or real-time APIs for individual order conversions. The 'sales_count' reflects the global Shopee sales, not our bot's conversions. To track conversions, export data manually from Shopee's web dashboard and match it with 'facebook_demand_events'.
+- **View Tracking:** We do not use link shorteners, so we cannot track clicks/views on products. Traffic goes directly to s.shopee.co.th. Interest is gauged via chat volume instead.
+- **Customer Behavior:** Tracked via 'chat_logs' (intents) and 'user_preferences'. Admin dashboard only shows aggregate stats, but the raw data is used for Data Flywheel ML training.
