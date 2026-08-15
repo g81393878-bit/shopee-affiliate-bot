@@ -77,9 +77,20 @@ async def verify_webhook(request: Request):
 3. Click **Verify and Save** to initiate the handshake.
 4. Subscribe the webhook to your Page (Messenger → Settings → Webhooks → Subscribe to Page events), then generate a **Page Access Token** by connecting the Page.
 
+### 7. Fix / Verify Webhook via Graph API (no browser needed)
+The webhook has **two layers** — both must be present or the bot stays silent:
+1. **App-level callback URL:** `POST https://graph.facebook.com/{app_id}/subscriptions` with `object=page`, `callback_url`, `verify_token`, `fields=messages,messaging_postbacks,message_reads,message_deliveries`.
+2. **Page subscription (Add Subscriptions):** `POST https://graph.facebook.com/{page_id}/subscribed_apps` with `subscribed_fields=messages,...`. A correct callback URL but empty `GET /{page_id}/subscribed_apps` (`{"data":[]}`) is the usual "bot silent" cause.
+
+- Pre-flight the verify handshake before registering: `GET https://<host>/api/webhooks/facebook?hub.mode=subscribe&hub.verify_token=<token>&hub.challenge=test` must return `test` (200, plain text).
+- Delete stale subscriptions with `DELETE https://graph.facebook.com/{app_id}/subscriptions` (e.g. leftover `object=user` pointing at another app).
+
 ## Common Mistakes
 * **App Secret Hidden:** Forgetting to enter the Facebook account password to reveal the App Secret.
 * **Incorrect Domain Format:** Writing `https://example.com/` instead of `example.com` in the **App Domains** field.
 * **Invalid Privacy Policy URL:** Meta verifies that the Privacy Policy URL returns a `200 OK` HTTP status. Using a dead link or localhost URL will prevent switching the app to Live Mode.
 * **Wrong endpoint path:** Using `/webhook` instead of the repo's actual path `/api/webhooks/facebook` — the verify handshake will fail.
 * **Verify token mismatch:** Setting `FACEBOOK_VERIFY_TOKEN` in `.env` but entering a different value in the Facebook Webhook settings — Meta rejects the handshake with 403.
+* **Two-layer subscription:** Setting only the callback URL but not subscribing the Page (Add Subscriptions) — the page webhook never fires and the bot is silent even with a valid callback.
+* **`render.com` vs `onrender.com`:** The Render host is `shopee-affiliate-bot-9e9n.onrender.com` (with `on`). Typing `...render.com` makes Meta reject the Privacy URL (404) and blocks Live.
+* **Live switch has no API:** Switching Development→Live can only be done in the browser. To confirm Live, have a **non-admin** (non-tester) account message the Page — webhook only fires for non-admins when the app is Live.
