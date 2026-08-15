@@ -10,6 +10,7 @@ logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)  # กัน BE
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 import httpx
 
 from app.db import engine, Base
@@ -100,6 +101,10 @@ app.include_router(line_bot.router, prefix="/api")
 app.include_router(facebook_bot.router, prefix="/api")
 app.include_router(cron.router, prefix="/api")
 app.include_router(admin_dashboard.router)  # แดชบอร์ดแอดมิน (/admin + /api/admin/*)
+
+# ไฟล์ static (รูปมาสคอตป้าเข็มสำหรับโพสต์ Facebook เป็นต้น) — เสิร์ฟที่ /static/*
+_STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
 @app.get("/")
 def read_root():

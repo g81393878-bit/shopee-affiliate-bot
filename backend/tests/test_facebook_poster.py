@@ -237,7 +237,7 @@ def test_cron_facebook_post_intro_first(monkeypatch):
     sheet_rows = []
     monkeypatch.setattr(cron, "log_post_async", sheet_rows.append)
     monkeypatch.setattr(cron, "post_feed",
-                        lambda msg, link="": posted.append(msg) or
+                        lambda msg, link="", image_url="": posted.append(msg) or
                         {"ok": True, "post_id": f"post_{len(posted)}", "error": None})
     client = TestClient(app)
 
@@ -258,3 +258,17 @@ def test_cron_facebook_post_intro_first(monkeypatch):
     assert all(r["kind"] == "intro" for r in sheet_rows)
     assert sheet_rows[0]["post_id"] == "post_1"
     assert sheet_rows[0]["post_url"] == "https://www.facebook.com/post_1"
+
+
+def test_intro_posts_have_badge_and_image_url(monkeypatch):
+    """คลังแคปชั่น 12 ตัว — ทุกตัวต้องมีป้ายข้อความ (badge) + รูปมาสคอต image_url"""
+    from app.services import facebook_intro
+    monkeypatch.delenv("LINE_OA_URL", raising=False)
+    monkeypatch.delenv("INTRO_IMAGE_URL", raising=False)
+    posts = facebook_intro.intro_posts()
+    assert len(posts) == 12
+    assert posts[0]["caption"].startswith("🏷️ เรื่องป้า")
+    for p in posts:
+        assert p["title"] and p["caption"]
+        assert p["caption"].startswith("🏷️ ")  # badge เป็นป้ายข้อความนำหน้าเสมอ
+        assert p["image_url"].endswith("/static/pa-khem-avatar.png")

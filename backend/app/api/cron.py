@@ -322,7 +322,7 @@ def _post_next_intro(db) -> Optional[dict]:
     for i, p in enumerate(posts):
         if i in posted_idx:
             continue
-        res = post_feed(p["caption"])  # ข้อความล้วน — ลิงก์ LINE OA อยู่ในข้อความแล้ว
+        res = post_feed(p["caption"], image_url=p.get("image_url") or "")  # แนบรูปมาสคอต (ถ้ามี)
         if res["ok"]:
             db.add(models.CampaignLog(category=str(i), recipients=1, status="fbintro"))
             db.commit()
