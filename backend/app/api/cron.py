@@ -26,7 +26,7 @@ from app.db import SessionLocal
 from app import models
 from app.services.link_checker import check_affiliate_link
 from app.services.ai_generator import format_hashtags_text, generate_script_for_product
-from app.services.hermes_brain import analyze_market
+from app.services.hermes_brain import analyze_market, market_tone
 from app.services.price_refresh import refresh_price
 from app.services.line_quota import push_guard
 from app.services.product_cards import product_cards_message
@@ -98,10 +98,11 @@ def cron_analyze(token: str = "", limit: int = 5):
         with_content = {c.product_id for c in db.query(models.Content).all()}
         missing = [p for p in db.query(models.Product).all() if p.id not in with_content]
         missing.sort(key=lambda p: p.ai_score or 0, reverse=True)
+        tone = market_tone(db)  # Hermes hot-reload: ท่าทีตามสถานการณ์ตลาด
         done, failed = [], []
         for p in missing[:limit]:
             try:
-                data = generate_script_for_product(p.name, p.category or "", float(p.price or 0), "Standard")
+                data = generate_script_for_product(p.name, p.category or "", float(p.price or 0), "Standard", market_tone=tone)
                 caption = data.get("caption", "")
                 hashtags = format_hashtags_text(data.get("hashtags"))
                 if hashtags:

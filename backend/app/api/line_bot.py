@@ -21,6 +21,7 @@ from app.services.product_cards import product_cards_message, link_button_messag
 from app.services.line_quota import push_guard
 from app.services.category import guess_category, CATEGORY_KEYWORDS, normalize_query
 from app.services.web_search import web_search_answer
+from app.services.hermes_brain import load_skills_safe
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -178,14 +179,40 @@ def format_product_message(db: Session, user: models.User, products: list,
     return product_cards_message(db, user, products, title, is_owner=is_owner)
 
 
+def _hermes_skills(db: Session) -> dict:
+    """ทักษะ hot-reload จาก Hermes AI (system_preferences) — fail-open เป็น default
+    ถ้าตารางยังไม่มี (ก่อน migration) ต้องไม่ crash เส้นทางแชทหลัก"""
+    return load_skills_safe(db)
+
+
+def _trending_boost(products: list, trending) -> list:
+    """เรียงสินค้าให้หมวดมาแรง (Hermes) ขึ้นก่อน — หมวดอื่นคงลำดับเดิม (ai_score desc).
+
+    ใช้เมื่อลูกค้าไม่ได้ระบุหมวดเจาะจง (เช่น "วันนี้ขายอะไรดี"/"มีอะไรใหม่") เพื่อให้
+    ป้าเข็มเชียร์หมวดที่ตลาดกำลังตามหาอยู่ก่อน (stable sort กันลำดับเดิมพัง).
+    """
+    trend = [c for c in (trending or []) if c]
+    if not trend or not products:
+        return products
+
+    def rank(p):
+        try:
+            return trend.index(p.category or "")
+        except ValueError:
+            return len(trend)
+
+    return sorted(products, key=rank)
+
+
 def handle_today_deals(db: Session, user: models.User, is_owner: bool = False) -> str:
     """วันนี้ขายอะไรดี — หมุนเวียนสินค้าจากกลุ่มคะแนนสูงสุด (เลื่อนวันละ 1 ตัว)
     เพื่อให้สินค้าใหม่ ๆ ได้โผล่หน้าแนะนำด้วย ไม่ใช่ซ้ำชุดเดิมทุกวัน
-    นโยบายเด็ดขาด: ตอบเฉพาะสินค้าลิงก์ OK + ยอดขายถึงเกณฑ์เท่านั้น"""
+    หมวดมาแรง (Hermes) ได้ดันขึ้นก่อน นโยบายเด็ดขาด: ตอบเฉพาะสินค้าลิงก์ OK + ยอดขายถึงเกณฑ์"""
     pool = (db.query(models.Product)
               .filter(models.Product.link_status == "ok",
                       models.Product.sales_count >= MIN_SALES)
               .order_by(models.Product.ai_score.desc()).limit(9).all())
+    pool = _trending_boost(pool, _hermes_skills(db).get("trending_categories"))
     if not pool:
         return product_cards_message(db, user, [], is_owner=is_owner)
     # เลื่อนหน้าต่าง 3 ตัว ตามวันที่ (day-of-year) → วันใหม่ได้ชุดใหม่ ไม่ซ้ำ
@@ -1364,6 +1391,7 @@ def handle_new_arrivals(db, user, line_user_id: str, is_owner: bool = False):
                                          "🆕 สินค้าใหม่ที่อาจถูกใจคุณ! (ตามหมวดที่เคยสนใจ)",
                                          is_owner=is_owner)
     if recent:
+        recent = _trending_boost(recent, _hermes_skills(db).get("trending_categories"))
         return product_cards_message(db, user, recent[:3],
                                      "🆕 สินค้าใหม่เข้าคลังล่าสุด", is_owner=is_owner)
     return TextSendMessage(text="ตอนนี้ยังไม่มีสินค้าใหม่ค่ะ ลองค้นชื่อสินค้าดู หรือแตะ ขายดีวันนี้ ได้เลยนะคะ 😊")

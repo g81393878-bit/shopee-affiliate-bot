@@ -62,6 +62,26 @@ def save_skills(db, skills: dict) -> None:
     db.commit()
 
 
+def load_skills_safe(db) -> dict:
+    """load_skills แบบไม่ crash — ตาราง system_preferences ยังไม่มี (dev / ก่อนรัน
+    migration) → คืน default ครบ ไม่ทำเส้นทางแชท/คอนเทนต์หลักพัง."""
+    try:
+        return load_skills(db)
+    except Exception as e:  # noqa: BLE001 — ตาราง optional ต้อง fail-open
+        logger.warning(f"[Hermes] โหลด skills ไม่ได้ ({e}) — ใช้ default")
+        return dict(DEFAULT_SKILLS)
+
+
+def market_tone(db) -> str:
+    """อ่าน pa_khem_tone (hot-reload จาก Hermes) — คืน str สำหรับ persona prompt.
+
+    ใช้ load_skills_safe: ไม่มีตาราง/ค่า → คืน default tone (ใจดี เป็นกันเอง) ไม่งั้น
+    cron analyze / LINE บอทจะ crash ตอนระบบยังไม่ migrate.
+    """
+    skills = load_skills_safe(db)
+    return str(skills.get("pa_khem_tone") or "").strip()
+
+
 def gather_market_data(db, hours: int = 48) -> dict:
     """รวมข้อมูลตลาดย้อนหลัง N ชม. → report dict (aggregation ล้วน ไม่แตะ LLM)."""
     cutoff = _now() - datetime.timedelta(hours=hours)

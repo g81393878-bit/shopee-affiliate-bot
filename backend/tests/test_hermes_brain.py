@@ -20,6 +20,8 @@ from app.services.hermes_brain import (
     format_market_memory,
     gather_market_data,
     load_skills,
+    load_skills_safe,
+    market_tone,
     merge_skills,
     save_skills,
 )
@@ -229,3 +231,60 @@ def test_cron_hermes_learn_returns_learned_false_when_llm_fails(monkeypatch):
     r = client.post("/api/cron/hermes-learn")
     assert r.status_code == 200
     assert r.json()["learned"] is False
+
+
+# --- M3: hot-reload เข้า LINE bot + cron analyze + persona ---
+
+def test_market_tone_returns_saved_tone(clean_prefs):
+    save_skills(clean_prefs, {"pa_khem_tone": "เน้นความคุ้มค่า ของถูก"})
+    assert market_tone(clean_prefs) == "เน้นความคุ้มค่า ของถูก"
+
+
+def test_market_tone_returns_default_when_missing(clean_prefs):
+    assert market_tone(clean_prefs) == DEFAULT_SKILLS["pa_khem_tone"]
+
+
+def test_load_skills_safe_falls_back_when_table_missing(clean_prefs, monkeypatch):
+    def boom(db):
+        raise RuntimeError("relation 'system_preferences' does not exist")
+
+    monkeypatch.setattr("app.services.hermes_brain.load_skills", boom)
+    assert load_skills_safe(clean_prefs) == DEFAULT_SKILLS
+    # market_tone ก็ต้องไม่ crash ต่อด้วย (ใช้ load_skills_safe ภายใน)
+    assert market_tone(clean_prefs) == DEFAULT_SKILLS["pa_khem_tone"]
+
+
+def test_trending_boost_puts_trending_first():
+    import app.api.line_bot as lb
+
+    P = type("P", (), {})
+    prods = [P(), P(), P(), P()]
+    prods[0].category = "หูฟัง"
+    prods[1].category = "แก้วน้ำ"
+    prods[2].category = "พัดลม"
+    prods[3].category = "หูฟัง"
+    out = lb._trending_boost(prods, ["พัดลม", "หูฟัง"])
+    # หมวดมาแรงขึ้นก่อนตามลำดับใน trending; หมวดอื่น (แก้วน้ำ) คงตามหลัง
+    assert [p.category for p in out] == ["พัดลม", "หูฟัง", "หูฟัง", "แก้วน้ำ"]
+
+
+def test_trending_boost_noop_when_no_trending():
+    import app.api.line_bot as lb
+
+    P = type("P", (), {})
+    prods = [P(), P()]
+    prods[0].category = "หูฟัง"
+    prods[1].category = "แก้วน้ำ"
+    assert lb._trending_boost(prods, []) == prods
+    assert lb._trending_boost(prods, None) == prods
+
+
+def test_persona_injects_market_tone_only_when_set():
+    from app.services.persona import persona_system_prompt
+
+    with_tone = persona_system_prompt(market_tone="เน้นความคุ้มค่า ของถูก")
+    assert "MARKET CONTEXT" in with_tone
+    assert "เน้นความคุ้มค่า ของถูก" in with_tone
+    # ไม่มี market_tone → ไม่มี section MARKET CONTEXT (พฤติกรรมเดิมไม่เปลี่ยน)
+    without_tone = persona_system_prompt()
+    assert "MARKET CONTEXT" not in without_tone

@@ -43,11 +43,18 @@ TONE_ADAPTATIONS = {
 }
 
 
-def persona_system_prompt(base: str = "", tone: str = "neutral") -> str:
-    """System prompt = บุคลิกป้าเข็ม (+ สำเนียงตามวัย) + หน้าที่ของโมเดล"""
+def persona_system_prompt(base: str = "", tone: str = "neutral", market_tone: str = "") -> str:
+    """System prompt = บุคลิกป้าเข็ม (+ สำเนียงตามวัย) + ท่าทีตามตลาด (Hermes) + หน้าที่ของโมเดล"""
     parts = [PERSONA_PROMPT]
     if tone in TONE_ADAPTATIONS:
         parts.append(TONE_ADAPTATIONS[tone])
+    if market_tone and market_tone.strip():
+        parts.append(
+            "# MARKET CONTEXT (ท่าทีตามสถานการณ์ตลาดที่ Hermes วิเคราะห์)\n"
+            f"ช่วงนี้ให้เน้นโทน/จุดขายตามนี้: {market_tone.strip()}\n"
+            "- ถ้าเน้นความคุ้มค่า/ของถูก → ย้ำเรื่องราคาประหยัด คุ้มเงิน ไม่แพงเกินไป\n"
+            "- ถ้าเน้นการให้คำปรึกษา/ใจดี → อธิบายละเอียดขึ้น เป็นกันเอง ให้ข้อมูลรอบด้าน"
+        )
     if base:
         parts.append(base)
     return "\n\n".join(parts)
