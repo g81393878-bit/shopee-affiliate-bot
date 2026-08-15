@@ -8,12 +8,13 @@
 > - **เมื่องานเสร็จและ commit ครบ:** ให้ล้างเนื้อหาในส่วน 1–5 กลับเป็นสถานะว่าง แล้ว commit
 >   ไฟล์นี้ — เพื่อไม่ให้ AI ตัวถัดไปเข้าใจผิดว่างานยังค้าง
 
-## สถานะ: 🟢 ว่าง — งานล่าสุด (แก้เรดาร์โพสต์ระเบิด 102 ตัว + ล้าง daily limit) เสร็จสมบูรณ์ + deploy live (commit de394e7, /health 200)
+## สถานะ: 🟢 ว่าง — งานล่าสุด (หาต้นตอแถว 'posted' หลอก 102 แถว + guard กัน test lead เข้า production) เสร็จสมบูรณ์ + deploy live (commit 667b97e, /health 200)
 
 ---
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- ✅ fix(radar): **guard กัน test/mock lead เข้า production** (commit `667b97e`) — `_looks_like_test_lead()` + skip `fb_sample_`/`fb_mock_`/`demo_` ใน ingest endpoint ตอน DATABASE_URL เป็น postgres (production); ต้นตอ 102 แถว 'posted' หลอก = lead สังเคราะห์ `fb_mock_bulk_*` (author User_0..User_N) ที่ถูก insert ตรงเข้า prod DB 17:06 UTC 15/08 (sent_at คงที่ก่อน created_at = หลักฐานว่า insert ตรง ไม่ผ่าน ingest loop) — โค้ดนี้ไม่อยู่ใน repo (สคริปต์ temp ถูกลบ)
 - ✅ fix(radar): **hard หา daily post limit + ล้าง mojibake** (commit `de394e7`) — `RADAR_MAX_DAILY_POSTS` เป็นของแอดมินเท่านั้น clamp [1,25] (Hermes/system_preferences ห้าม override โควต้าโพสต์ — ต้นเหตุโพสต์ระเบิด 102 ตัวใน 7 วิ), `merge_skills` strip `radar_daily_post_limit` ไม่ให้ persist, `_strip_garbled`/`_clean_llm_data` ล้าง lone surrogates + U+FFFD จาก product_keyword กัน mojibake + เทสต์ 567 ผ่าน; **unblock production: reset 102 แถว facebook_demand_events posted→ignored** (daily limit window เหลือ 0) + deploy live `de394e7`
 - ✅ feat(llm): **rate-limit + retry กัน HTTP 429** — `call_with_backoff()` (retry 429/5xx แบบ exponential + เคารพ Retry-After แต่ cap max_delay) + `throttle_llm_request()` (จำกัด RPM process-wide, env `LLM_RATE_LIMIT_RPM` / `LLM_RETRY_*`) ใน `llm_clients.py`; ครอบครบทุก LLM call site (demand_radar_ai, hermes_brain, ai_generator, ai_analyzer, web_search, facebook_curated, facebook_local, orchestrator) + regression guard ใน `test_llm_providers.py` → เทสต์ 563 ผ่าน; **deploy live บน production (commit `9b3b98f`) + env 4 ตัวตั้งบน Render ครบ** → /health 200
 - ✅ feat(content): **backfill คอนเทนต์แบบ template (ไม่ใช้ Groq)** — เพิ่ม `build_template_script()` ใน `app/services/ai_generator.py` (เสียงป้าเข็มสำเร็จรูป, field ครบ SCRIPT_KEYS) + refactor fallback เดิมมาใช้ตัวเดียวกัน + `tools/_backfill_content_template.py` ต่อ Supabase ตรงเติม `contents` ของสินค้าที่ยังไม่มี (เรียง ai_score สูงก่อน, batch 500) + skill `.agents/skills/content-backfill/` + เทสต์ใหม่ `test_ai_generator_template.py`
