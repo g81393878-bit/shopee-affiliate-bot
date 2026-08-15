@@ -464,7 +464,7 @@ def admin_radar_feed(
     """ดึงประวัติดีลที่ Radar โพสต์ขึ้น Facebook Page พร้อมสถิติวันนี้"""
     db = _db()
     try:
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.timezone.utc)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
         # นับโพสต์วันนี้
@@ -557,7 +557,7 @@ def admin_radar_cooldown(_: None = Depends(require_admin)):
     """ดึงสถานะ Cooldown แต่ละหมวดหมู่ — ว่าโพสต์ได้หรือยัง อีกกี่ชั่วโมง"""
     db = _db()
     try:
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.timezone.utc)
         cutoff = now - datetime.timedelta(hours=RADAR_CATEGORY_COOLDOWN_HOURS)
 
         # ดึงโพสต์ล่าสุดของแต่ละ category ใน 24h ที่ผ่านมา โดย join กับตาราง Product
