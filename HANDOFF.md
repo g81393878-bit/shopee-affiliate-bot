@@ -14,6 +14,7 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- ✅ feat(facebook): **โพสต์สินค้าแนบรูปจริง (ไม่พึ่งการ์ดลิงก์)** — ปัญหา: บางโพสต์การ์ดลิงก์ `s.shopee.co.th` รูปว่าง (Shopee กัน facebookexternalhit บางรอบ) → แก้: เพิ่ม `products.image_url` (migrate ALTER แล้วบน Supabase) + `product_image.py` (`fetch_product_image` ดึงรูปผ่าน **Facebook og scrape `scrape=true`** เพราะ Shopee เป็น SPA กัน requests/firecrawl ไม่เห็น `<meta og:image>` → FB crawler ดึงได้ คืน `down-th.img.susercontent.com/...`) → `_post_next_product` โพสต์ `/photos` แนบรูป + ลิงก์ affiliate ในแคปชั่น (fallback การ์ดลิงก์ถ้าหาไม่ได้) + แก้ bug เรียก `_build_fb_caption` ซ้ำ 2 รอบ — 450 passed — deploy `dep-da05f561egvs73fur6hg` live (commit `f374d14`); เทสต์จริง: สินค้า #20 ANCHI → full_picture = scontent-*.fbcdn.net (รูปอัปโหลดจริง) + ลิงก์ `s.shopee.co.th/7Kw73GWSLp` ในแคปชั่น
 - ✅ fix(facebook): **คลังท้องถิ่นไม่ติดตายบนลิงก์ facebook.com** — Firecrawl มักคืนโพสต์กลุ่มเฟสเป็นผลแรก → Graph API link preview เจอ "Permissions error" และโค้ดเดิมหยุดทันที → แก้ 2 จุด: `facebook_local.py` กรองลิงก์ facebook.com/fb.watch/messenger ออกตอน fetch + `_post_next_local` ลองตัวถัดไปเมื่อล้ม / คืน None ถ้าล้มหมด (rotation ไปคลังอื่น) — 438 passed — **push+deploy แล้ว** (`7de8881` → `dep-da04mm61egvs73ft8thg` live); **เทสต์จริงบนเพจ**: โพสต์ local ตัวแรก "100 ร้านอาหารกรุงเทพ..." (wongnai, `...941443245`) — ตรวจ Graph API แล้ว caption มี `lin.ee/o9Kjp1N` + hashtags + น้ำเสียงป้าเข็ม ครบ
 - ✅ feat(facebook): **คลังโพสต์ท้องถิ่น (ร้านอร่อย/ของฝาก/ของกิน)** — ไฟล์ใหม่ `app/services/facebook_local.py`: Firecrawl search หมุน 77 จังหวัด × 3 หัวข้อ → Groq เขียนเสียงป้าเข็ม + **ลิงก์ LINE OA ทุกตัว** → dedup `status='fblocal'` (sha1(url)); `web_search.py` เพิ่ม `firecrawl_search_results()` (ผลดิบ best-effort); `cron.py` เพิ่ม `_post_next_local` + `run_facebook_auto_post` เปลี่ยนเป็น **หมุนเวียน 4 คลัง: แบรนด์ → สินค้า → คอนเทนต์โลก → ท้องถิ่น** (slot % 4) — 434 passed — deploy `dep-da04jm0jo6nc73dngk40` → live (commit `c7ca520`)
 - ✅ feat(facebook): **ตัวกรองอักษรต่างภาษา** — ไฟล์ใหม่ `app/services/text_cleaner.py` (`sanitize_post_text` ตัด script ที่ไม่ใช่ไทย/Latin/ตัวเลข/เครื่องหมาย/สัญลักษณ์/emoji — ครอบคลุมอาหรับ/เปอร์เซีย/ซีริลลิก/CJK...) + เรียกใน `post_feed` ก่อนโพสต์ทุกตัว (chokepoint เดียวครอบทั้ง 4 คลัง: แบรนด์/สินค้า/RSS/ท้องถิ่น) — 427 passed; **ยังไม่ commit/deploy** (รอเจ้าของสั่ง)
@@ -88,7 +89,7 @@
 ## 5. หมายเหตุ
 
 - CI: `.github/workflows/test.yml` รัน `pytest` + coverage gate 85% ทุก push/PR
-- เทสต์ทั้งชุด: 438 passed
+- เทสต์ทั้งชุด: 450 passed
 - บอทจริง healthy: `/health` → 200, `llm_provider=groq`, `database_url_configured=true` (URL: `https://shopee-affiliate-bot-9e9n.onrender.com`)
 - Render env vars ตอนนี้มี 20 ตัว: DATABASE_URL, CRON_TOKEN, GROQ_API_KEY, LINE_CHANNEL_ACCESS_TOKEN/SECRET, LLM_PROVIDER, TAVILY_API_KEY, FIRECRAWL_API_KEY, SHEET_WEBHOOK_URL, FACEBOOK_APP_ID/SECRET/VERIFY_TOKEN/PAGE_ACCESS_TOKEN, LINE_OA_URL, FB_AUTO_POST_INTERVAL, FB_POST_PRODUCTS, POSTS_SHEET_WEBHOOK_URL, ANTHROPIC_API_KEY, ANTHROPIC_MODEL, ADMIN_LINE_USER_ID (ตั้งเป็น `Uc88eb...` = default เดิม — ทำให้ explicit + เพิ่มใน render.yaml sync:false)
 - ฟีเจอร์ orchestrator ยังเป็นโมดูลเดี่ยว — ยังไม่ถูกเรียกจาก `line_bot.py` (ยังไม่มีผลกับลูกค้าจริง); บอสใหญ่ใช้ Claude จริง (ANTHROPIC_API_KEY ตั้งบน Render) + `BOSS_SYSTEM` บริบทเต็ม; Claude สงวนเป็นบอส plan/review เท่านั้น งานกลาง/เฉพาะกิจให้ groq + firecrawl (ไม่เผาโควตา Claude)
@@ -101,6 +102,6 @@
 - ⚠️ **หมายเหตุ ownership:** `assets/` มีงานของคุณเจ้าของเอง (ลบ SVG มาสคอตเดิม + เพิ่ม PNG ใหม่ 2 ไฟล์ `1e8c7fdf-*.png` / `pa-khem-avatar.png`) — **ยังไม่ commit** ปล่อยไว้ให้เจ้าของ/ไม่ทับงานนี้
 - Google ชีท: SHEET_WEBHOOK_URL (แชท) และ POSTS_SHEET_WEBHOOK_URL (โพสต์) ชี้ URL เดียวกัน = สคริปต์รวม 1 ตัว
   จัดการ 2 แท็บ (คำถามลูกค้า / FB Posts) — ตั้งใจให้เป็นแบบนี้ ไม่ใช่ bug; เทสต์ทั้ง 2 ทางผ่านแล้ว
-- repo: commit ล่าสุด `7de8881` (fix facebook.com link ในคลังท้องถิ่น) push แล้ว — deploy โค้ดจริงตัวล่าสุดคือ `dep-da04u9c9v7es738jne1g` (live, หลังตั้ง ADMIN_LINE_USER_ID); untracked/deleted ยังเหลือเฉพาะงานของคุณเจ้าของใน `assets/` (ดูหมายเหตุ ownership)
+- repo: commit ล่าสุด `f374d14` (โพสต์สินค้าแนบรูป) push แล้ว — deploy โค้ดจริงตัวล่าสุดคือ `dep-da05f561egvs73fur6hg` (live); DB migrate แล้ว: `products.image_url` (ALTER ADD COLUMN) — untracked/deleted ยังเหลือเฉพาะงานของคุณเจ้าของใน `assets/` (ดูหมายเหตุ ownership)
 - ✅ ตัวกรองอักษรต่างภาษา (เคยค้าง): `app/services/text_cleaner.py` + เรียกใน `post_feed` — เจอคำ "دیزاین" จาก Groq แล้วตัดทิ้งก่อนโพสต์ (427 passed)
 - ⚠️ **token Facebook:** `backend/.env` (local) หมดอายุแล้ว (Session expired 14 ส.ค.) แต่ **Render ยังใช้ token valid ตัวอื่น** (`EAAR9k...PCbT`) — production โพสต์ได้ปกติ; ถ้าจะตรวจเพจ/เทสต์จาก local ต้องดึง token จาก Render (Management API GET env-vars) มาใส่ชั่วคราว (ยังไม่ได้ sync ลง `.env` — รอเจ้าของยืนยัน)
