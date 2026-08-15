@@ -274,3 +274,12 @@ class LeadAction(Base):
     demand_event = relationship("FacebookDemandEvent", back_populates="actions")
     lead = relationship("FacebookDetectedLead", back_populates="actions")
 
+
+class SystemPreference(Base):
+    """Hermes AI: สมองกลจดจำสภาวะตลาดและการตั้งค่าบอทแบบไดนามิก (Hot-Reload)"""
+    __tablename__ = "system_preferences"
+
+    key = Column(String(100), primary_key=True, index=True)
+    value = Column(JSON, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+

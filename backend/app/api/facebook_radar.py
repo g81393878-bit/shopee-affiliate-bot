@@ -372,8 +372,18 @@ def ingest_facebook_leads(
 
         lead.status = "processed"
 
-        # 5. ตรวจสอบเงื่อนไข Demand Score >= 70
-        if is_high_demand(demand_score, threshold=70):
+        # [Hermes AI] โหลดทักษะที่ AI เรียนรู้มาเพื่อปรับพฤติกรรมบอทแบบไดนามิก
+        hermes_pref = db.query(models.SystemPreference).filter(models.SystemPreference.key == "hermes_skills").first()
+        hermes_skills = hermes_pref.value if hermes_pref and hermes_pref.value else {}
+        radar_min_score = hermes_skills.get("radar_min_demand_score", 70)
+        # Hermes override ได้เฉพาะตอนตั้งค่าจริง (ไม่ None) — ไม่งั้น fallback env เดิม
+        # (กัน Hermes ไปทับ RADAR_MAX_DAILY_POSTS ที่แอดมินตั้งไว้)
+        daily_limit = hermes_skills.get("radar_daily_post_limit")
+        if daily_limit is None:
+            daily_limit = int(os.getenv("RADAR_MAX_DAILY_POSTS", "5"))
+
+        # 5. ตรวจสอบเงื่อนไข Demand Score >= radar_min_score
+        if is_high_demand(demand_score, threshold=radar_min_score):
             high_demand_count += 1
             # 5.1 จับคู่สินค้าในคลัง (link_status == 'ok')
             match_res = match_best_product_for_demand(
@@ -405,6 +415,7 @@ def ingest_facebook_leads(
             )
             daily_limit_ok = check_daily_post_limit_allowed(
                 db=db,
+                max_posts=daily_limit,
             )
 
             matched_id = matched_product.id if matched_product else None
