@@ -14,6 +14,7 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- ✅ feat(render): ตั้ง `ANTHROPIC_API_KEY` + `ANTHROPIC_MODEL=claude-opus-5` บน Render → orchestrator บอสใหญ่ใช้ Claude จริง (ทดสอบ key ใช้ได้แล้ว "สวัสดี"); deploy `dep-da00v6bl550s73cb86l0` → `live` (19 env vars)
 - ✅ test(facebook): เพิ่มเทสต์ webhook verify + X-Hub-Signature **ครบกรณี** (`backend/tests/test_facebook_webhook.py` +8 เทสต์ → รวม 402 passed)
   (verify token: wrong mode / missing challenge / missing token → 403; signature: missing header / unknown algo / malformed → 400; sha1 fallback → 200)
 - ✅ **Rollout Character-first + เปิดขายสินค้า** (วันนี้): push `3f88206` → ตั้ง `FB_POST_PRODUCTS=1` → deploy `dep-da00oalg1s2s73c2npe0` → `live`; ลบโพสต์เก่า "แนะนำตัวหน่อยค่าา" (`...241443245`) + reset dedup `fbintro` (1 แถว) → trigger `/api/cron/facebook-post` 3 ครั้ง = โพสต์ใหม่ 3 ตัว (เปิดตัวป้าเข็ม / วิธีเลือกของ / เตือนภัยช้อปออนไลน์) ขึ้นเพจแล้ว
@@ -64,7 +65,6 @@
 - ✅ ตั้ง env บน Render ครบ: FACEBOOK_APP_ID / APP_SECRET / VERIFY_TOKEN / PAGE_ACCESS_TOKEN + LINE_OA_URL (รวม 17 ตัวแล้ว)
 - ⏳ **ตั้ง Webhook บน Facebook** (เจ้าของทำเอง — ตาม `docs/facebook-webhook-live-setup.md`): Callback URL `https://shopee-affiliate-bot-9e9n.onrender.com/api/webhooks/facebook` + Verify Token (ค่าใน `tools/render_env.local.json`) → Verify and Save → Add Subscriptions ติ๊ก `messages`
 - ⏳ **เปิดแอปเป็น Live** (เจ้าของทำเอง — ตาม `docs/facebook-webhook-live-setup.md`): Basic Settings → App Domains + Privacy Policy URL → สลับ Development → Live (ตอนนี้ยัง Development → ลูกค้าทั่วไปทักเพจไม่ได้)
-- ⏳ (ไม่บังคับ) ตั้ง `ANTHROPIC_API_KEY` บน Render — ตอนนี้ orchestrator บอสใหญ่ fallback เป็น Groq
 
 ## 4. ไฟล์ที่ถืออยู่ / โดนแก้
 
@@ -75,9 +75,8 @@
 - CI: `.github/workflows/test.yml` รัน `pytest` + coverage gate 85% ทุก push/PR
 - เทสต์ทั้งชุด: 402 passed
 - บอทจริง healthy: `/health` → 200, `llm_provider=groq`, `database_url_configured=true` (URL: `https://shopee-affiliate-bot-9e9n.onrender.com`)
-- Render env vars ตอนนี้มี 17 ตัว: DATABASE_URL, CRON_TOKEN, GROQ_API_KEY, LINE_CHANNEL_ACCESS_TOKEN/SECRET, LLM_PROVIDER, TAVILY_API_KEY, FIRECRAWL_API_KEY, SHEET_WEBHOOK_URL, FACEBOOK_APP_ID/SECRET/VERIFY_TOKEN/PAGE_ACCESS_TOKEN, LINE_OA_URL, FB_AUTO_POST_INTERVAL, FB_POST_PRODUCTS, POSTS_SHEET_WEBHOOK_URL
-  (ยังไม่มีแค่ ANTHROPIC_API_KEY)
-- ฟีเจอร์ orchestrator ยังเป็นโมดูลเดี่ยว — ยังไม่ถูกเรียกจาก `line_bot.py` (ยังไม่มีผลกับลูกค้าจริง)
+- Render env vars ตอนนี้มี 19 ตัว: DATABASE_URL, CRON_TOKEN, GROQ_API_KEY, LINE_CHANNEL_ACCESS_TOKEN/SECRET, LLM_PROVIDER, TAVILY_API_KEY, FIRECRAWL_API_KEY, SHEET_WEBHOOK_URL, FACEBOOK_APP_ID/SECRET/VERIFY_TOKEN/PAGE_ACCESS_TOKEN, LINE_OA_URL, FB_AUTO_POST_INTERVAL, FB_POST_PRODUCTS, POSTS_SHEET_WEBHOOK_URL, ANTHROPIC_API_KEY, ANTHROPIC_MODEL
+- ฟีเจอร์ orchestrator ยังเป็นโมดูลเดี่ยว — ยังไม่ถูกเรียกจาก `line_bot.py` (ยังไม่มีผลกับลูกค้าจริง); แต่ตอนนี้บอสใหญ่ใช้ Claude จริงแล้ว (ANTHROPIC_API_KEY ตั้งบน Render) ไม่ fallback Groq
 - facebook webhook: หน้าที่ตอนนี้ = แนะนำบอทป้าเข็ม (แชท) — ไอเดีย A (ค้นสินค้าในแชท) ถูกพักไว้
 - facebook auto-post: scheduler ในตัว (ไม่พึ่ง cron-job.org) — Phase 1 โพสต์แนะนำตัวป้าเข็ม (status=fbintro) ครบ 3 ตัวแล้ว
   → Phase 2 โพสต์สินค้า (status=fbpost) เปิดแล้วด้วย FB_POST_PRODUCTS=1 (เริ่ม tick ถัดไป); โพสต์สำเร็จทุกตัว → Google ชีท (POSTS_SHEET_WEBHOOK_URL)
