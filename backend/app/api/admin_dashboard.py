@@ -514,7 +514,7 @@ def admin_radar_feed(
                 "demand_score": ev.demand_score,
                 "urgency": ev.urgency,
                 "product_keyword": ev.product_keyword,
-                "product_category": ev.product_category,
+                "product_category": product.category if product else None,
                 "ai_comment_draft": ev.ai_comment_draft,
                 "matched_product": {
                     "id": product.id,
@@ -560,18 +560,19 @@ def admin_radar_cooldown(_: None = Depends(require_admin)):
         now = datetime.datetime.utcnow()
         cutoff = now - datetime.timedelta(hours=RADAR_CATEGORY_COOLDOWN_HOURS)
 
-        # ดึงโพสต์ล่าสุดของแต่ละ category ใน 24h ที่ผ่านมา
+        # ดึงโพสต์ล่าสุดของแต่ละ category ใน 24h ที่ผ่านมา โดย join กับตาราง Product
         recent_events = (
             db.query(
-                models.FacebookDemandEvent.product_category,
+                models.Product.category,
                 func.max(models.FacebookDemandEvent.notification_sent_at).label("last_posted_at"),
             )
+            .join(models.Product, models.FacebookDemandEvent.matched_product_id == models.Product.id)
             .filter(
                 models.FacebookDemandEvent.notification_status == "posted",
                 models.FacebookDemandEvent.notification_sent_at >= cutoff,
-                models.FacebookDemandEvent.product_category.isnot(None),
+                models.Product.category.isnot(None),
             )
-            .group_by(models.FacebookDemandEvent.product_category)
+            .group_by(models.Product.category)
             .all()
         )
 
