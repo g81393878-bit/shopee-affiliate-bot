@@ -14,6 +14,7 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- ✅ feat(llm): **rate-limit + retry กัน HTTP 429** — `call_with_backoff()` (retry 429/5xx แบบ exponential + เคารพ Retry-After แต่ cap max_delay) + `throttle_llm_request()` (จำกัด RPM process-wide, env `LLM_RATE_LIMIT_RPM` / `LLM_RETRY_*`) ใน `llm_clients.py`; `demand_radar_ai.py` ทุกจุดยิง LLM ถูกครอบแล้ว → เรดาร์วิเคราะห์โพสต์เยอะ ๆ ไม่หลุดเพราะ 429 (เทสต์ 562 ผ่าน; `conftest.py` blank LLM keys ให้เทสต์ deterministic ไม่แตะ API จริง)
 - ✅ feat(content): **backfill คอนเทนต์แบบ template (ไม่ใช้ Groq)** — เพิ่ม `build_template_script()` ใน `app/services/ai_generator.py` (เสียงป้าเข็มสำเร็จรูป, field ครบ SCRIPT_KEYS) + refactor fallback เดิมมาใช้ตัวเดียวกัน + `tools/_backfill_content_template.py` ต่อ Supabase ตรงเติม `contents` ของสินค้าที่ยังไม่มี (เรียง ai_score สูงก่อน, batch 500) + skill `.agents/skills/content-backfill/` + เทสต์ใหม่ `test_ai_generator_template.py`
 - ✅ feat(facebook): **Messenger webhook + แอพ Live ครบวงจร** — แก้ callback URL ให้ชี้ที่ `/api/webhooks/facebook` (เดิมชี้ผิดไป `huan-khuen-cafe`) + subscribe เพจ "ป้าเข็ม ขายของ" เข้ากับแอพ (Add Subscriptions ผ่าน Graph API) + สลับแอพเป็น Live — เทสต์จริง 22:08 ลูกค้าทัก "สวัสดี" บอทตอบแนะนำ + ลิงก์ LINE (`lin.ee/o9Kjp1N`) อัตโนมัติ
 - ✅ data: **backfill `products.image_url` 1,672 ตัว** ด้วย fetch แบบใหม่ (og:image ตรงจากหน้า Shopee — ฟรี/เร็ว ไม่พึ่ง FB token/Firecrawl) → โพสต์ FB แนบรูปจริง (scontent CDN) ไม่ใช่การ์ดดำ
@@ -33,6 +34,7 @@
 
 ## 5. หมายเหตุ
 
+*   ⚠️ **commit `05e45f1` (agent อื่น, push ขึ้น origin แล้ว) ต้นไม้ ณ commit นั้น import พัง**: `demand_radar_ai.py` ใช้ `call_with_backoff` (งาน rate-limit ที่โดนกวาดปนเข้าไป) แต่ `llm_clients.py` ยังไม่มีฟังก์ชันนั้นตอน commit → commit `6fff794` ของเราที่เติมนิยามให้ถูก commit ตามมา ใครมีประวัติเก่าต้อง pull/reset ตามใหม่
 *   การทดสอบทั้งหมดของ Social Demand Radar ใน `tests/test_facebook_demand_radar.py` ผ่านการ Mock การวิเคราะห์อย่างสมบูรณ์แบบเพื่อหลีกเลี่ยงผลกระทบจาก Rate Limit 429 ของ API ภายนอก และแก้ปัญหา Mojibake บนระบบ Windows ส่งผลให้เทสต์ทำงานได้เสถียรและเร็วขึ้นมาก
 *   เพิ่มระบบ Relevance Safeguard ใน `product_matcher.py` เพื่อบล็อกดีลสินค้าหากไม่มีสินค้าในคลังที่ตรงกับความต้องการของลูกค้าจริง (Relevance Score < 12.0) ป้องกันการสแปมและยิงโพสต์มั่วซั่วขึ้นบนเพจ
 *   Facebook Messenger webhook + Live เรียบร้อยแล้ว (ยืนยันจากลูกค้าจริงที่ทักแชทแล้วบอทตอบ); ล้าง subscription เก่า `object=user` ที่ชี้ `huan-khuen-cafe` แล้ว — ตอนนี้เหลือ subscription เดียว `object=page` ชี้ที่บอทป้าเข็ม
