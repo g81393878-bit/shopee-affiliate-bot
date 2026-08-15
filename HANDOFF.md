@@ -35,7 +35,7 @@
 
 ## 5. หมายเหตุ
 
-*   🚨 **เรดาร์เคยโพสต์ระเบิด 102 ตัวใน 7 วินาที** (17:06 UTC 15/08, ids 5–104) เพราะ Hermes/รุ่นเก่าปล่อยให้ daily limit ทะลุ — โพสต์พวกนั้นยังอยู่บนเพจ Facebook (ต้องลบในเพจเองถ้าต้องการ); ระบบ DB ถูก reset แล้ว (posted→ignored 102 แถว) + โค้ดใหม่ clamp กันแล้ว
+*   🚨 **เรดาร์เคยมีแถว `facebook_demand_events` สถานะ `posted` 102 แถวใน 7 วินาที** (17:06 UTC 15/08, ids 5–104) — หลักฐาน `notification_sent_at` เท่ากันหมด (17:06:47.113) ทั้งที่ `created_at` ต่อเนื่อง → เป็นแถวหลอก/จากรุ่นเก่า **ไม่ใช่โพสต์จริงบนเพจ** (เจ้าของยืนยันเพจไม่มี); แถวพวกนั้นทำให้ daily-limit counter เต็ม → บอทหยุดโพสต์; DB reset แล้ว (posted→ignored 102 แถว) + โค้ดใหม่ clamp กันแล้ว
 *   ⚠️ **commit `05e45f1` (agent อื่น, push ขึ้น origin แล้ว) ต้นไม้ ณ commit นั้น import พัง**: `demand_radar_ai.py` ใช้ `call_with_backoff` (งาน rate-limit ที่โดนกวาดปนเข้าไป) แต่ `llm_clients.py` ยังไม่มีฟังก์ชันนั้นตอน commit → commit `6fff794` ของเราที่เติมนิยามให้ถูก commit ตามมา ใครมีประวัติเก่าต้อง pull/reset ตามใหม่
 *   ✅ **Production deploy สำเร็จ**: live ที่ commit `9b3b98f` (งาน 429 ครบ + regression test) — deploy เดิมของ `05e45f1` = `update_failed` (ยืนยัน commit นั้นพังจริง); ตั้ง env `LLM_RATE_LIMIT_RPM=20`/`LLM_RETRY_MAX_ATTEMPTS=3`/`LLM_RETRY_BASE_DELAY=1.0`/`LLM_RETRY_MAX_DELAY=30.0` บน Render แล้ว; `GET /health` → 200
 *   การทดสอบทั้งหมดของ Social Demand Radar ใน `tests/test_facebook_demand_radar.py` ผ่านการ Mock การวิเคราะห์อย่างสมบูรณ์แบบเพื่อหลีกเลี่ยงผลกระทบจาก Rate Limit 429 ของ API ภายนอก และแก้ปัญหา Mojibake บนระบบ Windows ส่งผลให้เทสต์ทำงานได้เสถียรและเร็วขึ้นมาก
