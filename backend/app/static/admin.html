@@ -257,7 +257,12 @@ let state = { page: 1, perPage: 25, editingId: null, debounce: null };
 
 async function api(url, opts) {
   const r = await fetch(url, opts);
-  if (r.status === 401) { location.reload(); throw new Error("unauth"); }
+  if (r.status === 401) {
+    // รีโหลดเฉพาะเมื่อ app กำลังแสดงอยู่ (session หมดอายุระหว่างใช้งาน)
+    // ถ้า app ยังซ่อนอยู่ (ช่วง init) อย่า reload — จะเกิด infinite loop
+    if (!$('app').classList.contains('hidden')) location.reload();
+    throw new Error("unauth");
+  }
   if (!r.ok) { const j = await r.json().catch(()=>({})); throw new Error(j.detail || j.error || r.status); }
   return r.json();
 }
