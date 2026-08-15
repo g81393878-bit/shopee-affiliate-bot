@@ -14,8 +14,10 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- `229ac7f` fix(sheet): **รวมสคริปต์ Google ชีทเป็นไฟล์เดียว** — จัดการทั้งแชทลูกค้า + โพสต์จาก URL เดียว
+  (`tools/sheet_posts_apps_script.gs` แทน `sheet_apps_script.gs` — dispatch ด้วย field `kind`; แก้ปัญหาผู้ใช้วางทับโปรเจกต์แชทเดิมจนแชทหยุดบันทึก)
 - `41bbdf6` feat(facebook): **บันทึกโพสต์ทุกตัวลง Google ชีทอัตโนมัติ** (`POSTS_SHEET_WEBHOOK_URL`)
-  (ไฟล์ใหม่ `tools/sheet_posts_apps_script.gs` — ชีทแท็บ "โพสต์เพจ"; cron บันทึกทั้ง intro/product ที่โพสต์สำเร็จ; ไม่ตั้ง env = ไม่บันทึก)
+  (ไฟล์ใหม่ `tools/sheet_posts_apps_script.gs`; cron บันทึกทั้ง intro/product ที่โพสต์สำเร็จ; ไม่ตั้ง env = ไม่บันทึก)
 - `3c4d311` feat(facebook): ปรับ auto-post เป็น **Phase 1 แนะนำตัวป้าเข็มก่อน → Phase 2 ขายสินค้าทีหลัง**
   (ไฟล์ใหม่ `app/services/facebook_intro.py` 3 โพสต์; cron โพสต์แนะนำก่อน → ขายเฉพาะเมื่อตั้ง FB_POST_PRODUCTS=1;
   scheduler ในตัวใน `main.py` โพสต์ทุก FB_AUTO_POST_INTERVAL นาที — ไม่พึ่ง cron-job.org)
@@ -42,8 +44,7 @@
 <!-- ว่าง — ไม่มีงานโค้ดค้าง ทำงานทุกชิ้น commit ครบแล้ว -->
 
 - ⏳ โพสต์ manual 1 อันบนเพจ (04:26, ไม่ใช่ของบอท — ลบด้วย page token ไม่ได้) รอเจ้าของลบเองถ้าต้องการ
-- ⏳ แถว TEST ในชีทแท็บ "FB Posts" (หัวข้อ "TEST 2 - ยืนยันเขียนลงแท็บ FB Posts") รอเจ้าของลบเอง
-  (แท็บเป็นชื่ออังกฤษ "FB Posts" — เจ้าของ Deploy สคริปต์ฉบับอังกฤษเพราะไทยมีปัญหา syntax error)
+- ⏳ แถว TEST ในชีท (แท็บ "FB Posts" มี "TEST 2" + "TEST post" · แท็บ "คำถามลูกค้า" มี "ทดสอบแชท" U_TEST) รอเจ้าของลบเอง
 
 ## 3. ขั้นตอนต่อไป
 
@@ -71,4 +72,6 @@
 - facebook webhook: หน้าที่ตอนนี้ = แนะนำบอทป้าเข็ม (แชท) — ไอเดีย A (ค้นสินค้าในแชท) ถูกพักไว้
 - facebook auto-post: scheduler ในตัว (ไม่พึ่ง cron-job.org) — Phase 1 โพสต์แนะนำตัวป้าเข็มก่อน (กันซ้ำ status=fbintro)
   → Phase 2 โพสต์สินค้า (status=fbpost) เปิดเมื่อ FB_POST_PRODUCTS=1; โพสต์สำเร็จทุกตัว → Google ชีท (ถ้าตั้ง POSTS_SHEET_WEBHOOK_URL)
-- repo สะอาด ไม่มี untracked junk สำหรับงานใหม่ (push + deploy ครบทุก commit จนถึง `a2a9b08`)
+- Google ชีท: SHEET_WEBHOOK_URL (แชท) และ POSTS_SHEET_WEBHOOK_URL (โพสต์) ชี้ URL เดียวกัน = สคริปต์รวม 1 ตัว
+  จัดการ 2 แท็บ (คำถามลูกค้า / FB Posts) — ตั้งใจให้เป็นแบบนี้ ไม่ใช่ bug; เทสต์ทั้ง 2 ทางผ่านแล้ว
+- repo สะอาด ไม่มี untracked junk สำหรับงานใหม่ (push ครบ; commit ล่าสุด `229ac7f` เป็นสคริปต์รวม ยังไม่ต้อง deploy เพราะเป็นฝั่ง Google ไม่ใช่โค้ด Render)
