@@ -129,7 +129,8 @@ def test_merge_skills_clamps_high_and_keeps_defaults(clean_prefs):
     assert out["radar_min_demand_score"] == MAX_DEMAND_SCORE
     # ฟิลด์ที่ LLM ไม่ส่ง → คง default
     assert out["trending_categories"] == DEFAULT_SKILLS["trending_categories"]
-    assert out["radar_daily_post_limit"] == DEFAULT_SKILLS["radar_daily_post_limit"]
+    # radar_daily_post_limit ไม่อยู่ใน DEFAULT → ต้องหายไป (ให้ radar ใช้ env เดิม)
+    assert "radar_daily_post_limit" not in out
 
 
 def test_save_and_load_skills_roundtrip(clean_prefs):
@@ -137,8 +138,8 @@ def test_save_and_load_skills_roundtrip(clean_prefs):
     loaded = load_skills(clean_prefs)
     assert loaded["radar_min_demand_score"] == 60
     assert loaded["pa_khem_tone"] == "กระชับ"
-    # คีย์ที่ไม่ได้บันทึก → ใช้ default
-    assert loaded["radar_daily_post_limit"] == DEFAULT_SKILLS["radar_daily_post_limit"]
+    # radar_daily_post_limit ไม่อยู่ใน DEFAULT → ไม่มีคีย์นี้ (ให้ radar ใช้ env เดิม)
+    assert "radar_daily_post_limit" not in loaded
     # save ทับ (upsert ไม่เพิ่มแถว)
     save_skills(clean_prefs, {"radar_min_demand_score": 65})
     count = (clean_prefs.query(models.SystemPreference)
@@ -244,6 +245,13 @@ def test_market_tone_returns_saved_tone(clean_prefs):
 
 def test_market_tone_returns_default_when_missing(clean_prefs):
     assert market_tone(clean_prefs) == DEFAULT_SKILLS["pa_khem_tone"]
+
+
+def test_default_skills_has_no_radar_daily_post_limit(clean_prefs):
+    # radar_daily_post_limit ต้องไม่อยู่ใน default — ไม่งั้น Hermes จะไปทับ env
+    # RADAR_MAX_DAILY_POSTS ที่แอดมินตั้งไว้โดยไม่ได้ตั้งใจ (เรดาร์ต้อง fallback env)
+    assert "radar_daily_post_limit" not in DEFAULT_SKILLS
+    assert "radar_daily_post_limit" not in load_skills_safe(clean_prefs)
 
 
 def test_load_skills_safe_falls_back_when_table_missing(clean_prefs, monkeypatch):

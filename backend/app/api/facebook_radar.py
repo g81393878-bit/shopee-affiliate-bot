@@ -35,6 +35,7 @@ from app.services.facebook_poster import log_post_async, post_feed
 from app.services.line_quota import push_guard
 from app.services.product_cards import format_radar_deal_flex_message
 from app.services.product_matcher import match_best_product_for_demand
+from app.services.hermes_brain import load_skills_safe
 
 logger = logging.getLogger(__name__)
 
@@ -373,8 +374,9 @@ def ingest_facebook_leads(
         lead.status = "processed"
 
         # [Hermes AI] โหลดทักษะที่ AI เรียนรู้มาเพื่อปรับพฤติกรรมบอทแบบไดนามิก
-        hermes_pref = db.query(models.SystemPreference).filter(models.SystemPreference.key == "hermes_skills").first()
-        hermes_skills = hermes_pref.value if hermes_pref and hermes_pref.value else {}
+        # (load_skills_safe = fail-open — ตาราง system_preferences ยังไม่มีก่อน
+        # migration ก็ไม่ crash endpoint นี้ คืน DEFAULT ครบแทน)
+        hermes_skills = load_skills_safe(db)
         radar_min_score = hermes_skills.get("radar_min_demand_score", 70)
         # Hermes override ได้เฉพาะตอนตั้งค่าจริง (ไม่ None) — ไม่งั้น fallback env เดิม
         # (กัน Hermes ไปทับ RADAR_MAX_DAILY_POSTS ที่แอดมินตั้งไว้)

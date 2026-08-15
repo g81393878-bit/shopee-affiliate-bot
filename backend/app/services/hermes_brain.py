@@ -25,9 +25,11 @@ HERMES_SKILLS_KEY = "hermes_skills"
 DEFAULT_SKILLS = {
     "trending_categories": ["ทั่วไป"],
     "radar_min_demand_score": 70,
-    "radar_daily_post_limit": 5,
     "pa_khem_tone": "ใจดี เป็นกันเอง ช่วยเหลือเต็มที่",
 }
+# หมายเหตุ: radar_daily_post_limit **ไม่อยู่**ใน DEFAULT — ค่ายังไม่ตั้ง → คืน None
+# ให้ facebook_radar fallback ไป env RADAR_MAX_DAILY_POSTS (แอดมินเป็นเจ้าของค่าจริง)
+# Hermes override ได้เฉพาะตอน save ค่าเข้ามาจริง ๆ เท่านั้น ไม่งั้นทับ env เดิม.
 MIN_DEMAND_SCORE = 50
 MAX_DEMAND_SCORE = 90
 
@@ -145,7 +147,8 @@ def merge_skills(current: dict, llm_result: dict) -> dict:
     """ผสานผล LLM เข้ากับ skills ปัจจุบัน — clamp radar_min_demand_score ให้ [50, 90].
 
     LLM ปรับแค่ 3 ฟิลด์ (trending_categories / radar_min_demand_score /
-    pa_khem_tone); radar_daily_post_limit คงค่าจาก current ไว้ (LLM ไม่แตะ).
+    pa_khem_tone); radar_daily_post_limit คงค่าจาก current ไว้ (LLM ไม่แตะ —
+    และถ้าไม่เคยตั้ง = ไม่มีคีย์นี้ ให้ radar ใช้ env RADAR_MAX_DAILY_POSTS).
     """
     merged = dict(current or DEFAULT_SKILLS)
 
