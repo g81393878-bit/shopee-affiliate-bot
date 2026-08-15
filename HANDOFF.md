@@ -15,6 +15,7 @@
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
 - ✅ **Rollout Character-first + เปิดขายสินค้า** (วันนี้): push `3f88206` → ตั้ง `FB_POST_PRODUCTS=1` → deploy `dep-da00oalg1s2s73c2npe0` → `live`; ลบโพสต์เก่า "แนะนำตัวหน่อยค่าา" (`...241443245`) + reset dedup `fbintro` (1 แถว) → trigger `/api/cron/facebook-post` 3 ครั้ง = โพสต์ใหม่ 3 ตัว (เปิดตัวป้าเข็ม / วิธีเลือกของ / เตือนภัยช้อปออนไลน์) ขึ้นเพจแล้ว
+- docs: เพิ่ม **คู่มือเจ้าของตั้ง Facebook webhook + เปิดแอป Live** (`docs/facebook-webhook-live-setup.md` — step-by-step พร้อมค่าจริง App/Page ID, Callback URL, Privacy URL, การทดสอบ + ตารางปัญหาที่เจอบ่อย)
 - feat(brand): เพิ่ม**ป้ายชื่อ + สโลแกน**ลงมาสคอต SVG ทั้ง 3 ตัว
   (`assets/pa-khem-mascot-{1,2,3}.svg` + `preview.html` — ป้าย "ป้าเข็ม ขายของ" / "ถ้าไม่คุ้ม ป้าบอกให้" ที่อกผ้ากันเปื้อน)
 - `f9ece4c` feat(brand): สร้าง**มาสคอตป้าเข็ม SVG 3 ท่า** + คู่มือภาพลักษณ์
@@ -59,8 +60,8 @@
 - ✅ ตั้ง env บน Render: `POSTS_SHEET_WEBHOOK_URL` = URL Apps Script (ทดสอบ webhook แล้ว `{"ok":true}`)
 - ✅ ตั้ง env บน Render: `FB_AUTO_POST_INTERVAL=240` + `FB_POST_PRODUCTS=1` → โพสต์แนะนำครบ 3 ตัวแล้ว บอทจะเริ่มโพสต์สินค้าเองทุก 4 ชม. (tick ถัดไป ~10:51)
 - ✅ ตั้ง env บน Render ครบ: FACEBOOK_APP_ID / APP_SECRET / VERIFY_TOKEN / PAGE_ACCESS_TOKEN + LINE_OA_URL (รวม 17 ตัวแล้ว)
-- ⏳ **ตั้ง Webhook บน Facebook**: Messenger → Settings → Callback URL `https://shopee-affiliate-bot-9e9n.onrender.com/api/webhooks/facebook` + Verify Token (ค่าใน `tools/render_env.local.json`) → Verify and Save → Subscribe page events
-- ⏳ **เปิดแอปเป็น Live**: App Settings → Basic → ใส่ Privacy Policy URL `https://shopee-affiliate-bot-9e9n.onrender.com/privacy` → สลับโหมดเป็น Live (ตอนนี้ยัง Development → ลูกค้าทั่วไปทักเพจไม่ได้)
+- ⏳ **ตั้ง Webhook บน Facebook** (เจ้าของทำเอง — ตาม `docs/facebook-webhook-live-setup.md`): Callback URL `https://shopee-affiliate-bot-9e9n.onrender.com/api/webhooks/facebook` + Verify Token (ค่าใน `tools/render_env.local.json`) → Verify and Save → Add Subscriptions ติ๊ก `messages`
+- ⏳ **เปิดแอปเป็น Live** (เจ้าของทำเอง — ตาม `docs/facebook-webhook-live-setup.md`): Basic Settings → App Domains + Privacy Policy URL → สลับ Development → Live (ตอนนี้ยัง Development → ลูกค้าทั่วไปทักเพจไม่ได้)
 - ⏳ (ไม่บังคับ) ตั้ง `ANTHROPIC_API_KEY` บน Render — ตอนนี้ orchestrator บอสใหญ่ fallback เป็น Groq
 
 ## 4. ไฟล์ที่ถืออยู่ / โดนแก้
