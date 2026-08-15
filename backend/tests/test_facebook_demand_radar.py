@@ -332,7 +332,7 @@ def test_t1_f5_auntie_khem_deal_copy():
 
 
 def test_t1_f6_fastapi_leads_intake_endpoint(client, db_session):
-    """[R4] Verifies POST /api/admin/facebook-radar/leads receives and processes leads."""
+    """[R4] Verifies POST /api/admin/facebook-radar/leads receives and auto-posts leads to Facebook Page & Sheets."""
     post_id = f"t1_lead_{int(time.time() * 1000)}"
     payload = {
         "leads": [
@@ -347,7 +347,23 @@ def test_t1_f6_fastapi_leads_intake_endpoint(client, db_session):
         ]
     }
 
-    with patch("app.api.facebook_radar.dispatch_radar_line_alert", return_value=True) as mock_alert:
+    mock_ai = {
+        "intent": "recommendation_request",
+        "demand_score": 85,
+        "urgency": "medium",
+        "budget": 400.0,
+        "budget_text": "400 บาท",
+        "product_keyword": "ชุดคลุมท้อง",
+        "detected_category": "แฟชั่น",
+        "pain_points": ["ใส่สบาย"],
+        "sentiment": "positive",
+        "reasoning": "ทดสอบ"
+    }
+
+    with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "page_post_t1_001", "error": None}) as mock_post, \
+         patch("app.api.facebook_radar.log_post_async") as mock_sheets, \
+         patch("app.api.facebook_radar.dispatch_radar_line_alert") as mock_line_alert, \
+         patch("app.api.facebook_radar.analyze_lead_intent_and_demand", return_value=mock_ai):
         resp = client.post("/api/admin/facebook-radar/leads", json=payload)
         assert resp.status_code == 200
         data = resp.json()
@@ -355,9 +371,16 @@ def test_t1_f6_fastapi_leads_intake_endpoint(client, db_session):
         assert data["total_received"] == 1
         assert data["processed"] == 1
         assert data["high_demand_count"] == 1
-        assert data["alerts_sent"] == 1
-        assert data["results"][0]["status"] == "deal_matched_and_alerted"
-        assert mock_alert.called
+        assert data["alerts_sent"] == 0
+        assert data["results"][0]["status"] == "deal_matched_and_posted"
+        assert data["results"][0]["alert_sent"] is False
+        assert mock_post.called
+        assert mock_sheets.called
+        sheet_payload = mock_sheets.call_args[0][0]
+        assert sheet_payload["kind"] == "radar"
+        assert sheet_payload["post_id"] == "page_post_t1_001"
+        assert "https://shope.ee/" in sheet_payload["link"]
+        mock_line_alert.assert_not_called()
 
 
 def test_t1_f7_fastapi_admin_action_endpoint(client, db_session):
@@ -445,7 +468,8 @@ def test_t1_f9_local_fb_monitor_tool(client):
 
     # Live test with TestClient
     tracker.clear()
-    with patch("app.api.facebook_radar.dispatch_radar_line_alert", return_value=True):
+    with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "mon_post_1", "error": None}), \
+         patch("app.api.facebook_radar.log_post_async"):
         res_live = monitor.run_monitor_iteration(
             api_url="http://testserver",
             token=TEST_SECRET_TOKEN,
@@ -497,7 +521,7 @@ def test_t2_empty_and_whitespace_inputs():
 
 
 def test_t2_lead_deduplication_idempotency(client, db_session):
-    """[Idempotency] Submitting the same post twice returns already_processed without duplicate alert."""
+    """[Idempotency] Submitting the same post twice returns already_processed without duplicate post or Sheets log."""
     post_id = f"dedup_t2_{int(time.time() * 1000)}"
     payload = {
         "fb_post_id": post_id,
@@ -508,13 +532,15 @@ def test_t2_lead_deduplication_idempotency(client, db_session):
         "post_url": f"https://facebook.com/groups/tech/posts/{post_id}",
     }
 
-    with patch("app.api.facebook_radar.dispatch_radar_line_alert", return_value=True) as mock_alert:
+    with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "post_dedup_001", "error": None}) as mock_post, \
+         patch("app.api.facebook_radar.log_post_async") as mock_sheets:
         # First ingest
         r1 = client.post("/api/admin/facebook-radar/leads", json=payload)
         assert r1.status_code == 200
         d1 = r1.json()
         assert d1["high_demand_count"] == 1
-        assert mock_alert.call_count == 1
+        assert mock_post.call_count == 1
+        assert mock_sheets.call_count == 1
 
         # Second ingest of duplicate post
         r2 = client.post("/api/admin/facebook-radar/leads", json=payload)
@@ -527,8 +553,9 @@ def test_t2_lead_deduplication_idempotency(client, db_session):
         assert d2["results"][0]["status"] == "already_processed"
         assert d2["results"][0]["alert_sent"] is False
 
-        # Alert should not have fired again
-        assert mock_alert.call_count == 1
+        # Post and Sheets should not have fired again
+        assert mock_post.call_count == 1
+        assert mock_sheets.call_count == 1
 
     # Verify single record in DB
     cnt = db_session.query(models.FacebookDetectedLead).filter_by(fb_post_id=post_id).count()
@@ -593,7 +620,21 @@ def test_t2_no_matching_product_or_all_dead_links(client, db_session):
         "post_url": f"https://facebook.com/posts/{post_id}",
     }
 
-    with patch("app.api.facebook_radar.dispatch_radar_line_alert", return_value=True):
+    mock_ai_res = {
+        "intent": "buy_request",
+        "demand_score": 90,
+        "urgency": "high",
+        "budget": 50000.0,
+        "budget_text": "50000 บาท",
+        "product_keyword": "เครื่องวัดคลื่นรังสีคอสมิก",
+        "detected_category": "ทั่วไป",
+        "pain_points": ["ด่วนมาก"],
+        "sentiment": "urgent",
+        "reasoning": "ทดสอบ"
+    }
+
+    with patch("app.api.facebook_radar.post_feed") as mock_post, \
+         patch("app.api.facebook_radar.analyze_lead_intent_and_demand", return_value=mock_ai_res):
         resp = client.post("/api/admin/facebook-radar/leads", json=payload)
         assert resp.status_code == 200
         data = resp.json()
@@ -601,6 +642,7 @@ def test_t2_no_matching_product_or_all_dead_links(client, db_session):
 
         lead = db_session.query(models.FacebookDetectedLead).filter_by(fb_post_id=post_id).first()
         assert lead is not None
+        mock_post.assert_not_called()
 
 
 # ===========================================================================
@@ -610,7 +652,7 @@ def test_t2_no_matching_product_or_all_dead_links(client, db_session):
 def test_t3_full_e2e_lifecycle_and_data_flywheel(client, db_session):
     """[E2E] Full lifecycle:
     Ingestion -> AI analysis -> Product Matching -> Auntie Khem Copy -> Demand Event ->
-    LINE Alert -> Admin Feedback Action -> Conversion Metrics Update ->
+    Page Auto-Post -> Sheets Log -> Admin Feedback Action -> Conversion Metrics Update ->
     Stats Aggregation -> List Leads Pagination.
     """
     post_id = f"e2e_full_{int(time.time() * 1000)}"
@@ -624,14 +666,33 @@ def test_t3_full_e2e_lifecycle_and_data_flywheel(client, db_session):
         "raw_data": {"likes": 12, "comments": 4},
     }
 
+    mock_ai = {
+        "intent": "recommendation_request",
+        "demand_score": 90,
+        "urgency": "medium",
+        "budget": 500.0,
+        "budget_text": "500 บาท",
+        "product_keyword": "เบาะรองนั่ง",
+        "detected_category": "เฟอร์นิเจอร์",
+        "pain_points": ["ปวดหลัง"],
+        "sentiment": "positive",
+        "reasoning": "หาเบาะรองนั่ง"
+    }
+
     # Step 1: Ingest Lead via API
-    with patch("app.api.facebook_radar.dispatch_radar_line_alert", return_value=True) as mock_alert:
+    with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "e2e_fb_post_001", "error": None}) as mock_post, \
+         patch("app.api.facebook_radar.log_post_async") as mock_sheets, \
+         patch("app.api.facebook_radar.dispatch_radar_line_alert") as mock_line_alert, \
+         patch("app.api.facebook_radar.analyze_lead_intent_and_demand", return_value=mock_ai):
         resp_ingest = client.post("/api/admin/facebook-radar/leads", json=lead_payload)
         assert resp_ingest.status_code == 200
         ingest_data = resp_ingest.json()
         assert ingest_data["high_demand_count"] == 1
-        assert ingest_data["alerts_sent"] == 1
-        assert mock_alert.called
+        assert ingest_data["alerts_sent"] == 0
+        assert ingest_data["results"][0]["status"] == "deal_matched_and_posted"
+        assert mock_post.called
+        assert mock_sheets.called
+        mock_line_alert.assert_not_called()
 
     # Step 2: Verify Database Event State
     lead = db_session.query(models.FacebookDetectedLead).filter_by(fb_post_id=post_id).first()
@@ -642,7 +703,7 @@ def test_t3_full_e2e_lifecycle_and_data_flywheel(client, db_session):
     assert event is not None
     assert event.demand_score >= 70
     assert event.matched_product_id is not None
-    assert event.notification_status == "sent"
+    assert event.notification_status == "posted"
     assert "https://shope.ee/" in event.ai_comment_draft
 
     # Step 3: Admin records action & conversions via API (Data Flywheel)
@@ -832,7 +893,155 @@ def test_t4_real_world_thai_workloads(client, db_session):
         },
     ]
 
-    with patch("app.api.facebook_radar.dispatch_radar_line_alert", return_value=True) as mock_alert:
+    def mock_analyze(post_text, author_name=None):
+        text = post_text or ""
+        if "ชุดคลุมท้อง" in text:
+            return {
+                "intent": "recommendation_request",
+                "demand_score": 85,
+                "urgency": "high",
+                "budget": 400.0,
+                "budget_text": "400 บาท",
+                "product_keyword": "ชุดคลุมท้อง",
+                "detected_category": "แฟชั่น",
+                "pain_points": ["ระบายอากาศ"],
+                "sentiment": "positive",
+                "reasoning": "หาชุดคลุมท้อง"
+            }
+        elif "หูฟังบลูทูธ" in text:
+            return {
+                "intent": "buy_request",
+                "demand_score": 90,
+                "urgency": "medium",
+                "budget": 500.0,
+                "budget_text": "500 บาท",
+                "product_keyword": "หูฟังบลูทูธ",
+                "detected_category": "หูฟัง",
+                "pain_points": ["ตัดเสียงรบกวน"],
+                "sentiment": "positive",
+                "reasoning": "อยากได้หูฟัง"
+            }
+        elif "เบาะรองนั่ง" in text:
+            return {
+                "intent": "recommendation_request",
+                "demand_score": 88,
+                "urgency": "medium",
+                "budget": 1000.0,
+                "budget_text": "1000 บาท",
+                "product_keyword": "เบาะรองนั่ง",
+                "detected_category": "เฟอร์นิเจอร์",
+                "pain_points": ["ปวดหลัง"],
+                "sentiment": "positive",
+                "reasoning": "หาเบาะรองนั่ง"
+            }
+        elif "แมวโรคไต" in text or "อาหารเปียกแมว" in text:
+            return {
+                "intent": "buy_request",
+                "demand_score": 85,
+                "urgency": "low",
+                "budget": 350.0,
+                "budget_text": "350 บาท",
+                "product_keyword": "อาหารแมว",
+                "detected_category": "สัตว์เลี้ยง",
+                "pain_points": ["ทานยาก"],
+                "sentiment": "positive",
+                "reasoning": "ตามหาอาหารแมว"
+            }
+        elif "เตือนภัย" in text or " blacklist" in text:
+            return {
+                "intent": "spam_or_warning",
+                "demand_score": 15,
+                "urgency": "low",
+                "budget": None,
+                "budget_text": None,
+                "product_keyword": None,
+                "detected_category": "ทั่วไป",
+                "pain_points": [],
+                "sentiment": "negative",
+                "reasoning": "แจ้งเตือนภัย"
+            }
+        elif "เสื้อผ้ามือสอง" in text or "ปล่อยเสื้อผ้า" in text:
+            return {
+                "intent": "spam_or_warning",
+                "demand_score": 20,
+                "urgency": "low",
+                "budget": None,
+                "budget_text": None,
+                "product_keyword": None,
+                "detected_category": "ทั่วไป",
+                "pain_points": [],
+                "sentiment": "neutral",
+                "reasoning": "ปล่อยของมือสอง"
+            }
+        elif "ปั๊มฟอล" in text:
+            return {
+                "intent": "spam_or_warning",
+                "demand_score": 10,
+                "urgency": "low",
+                "budget": None,
+                "budget_text": None,
+                "product_keyword": None,
+                "detected_category": "ทั่วไป",
+                "pain_points": [],
+                "sentiment": "neutral",
+                "reasoning": "ฝากร้าน/สแปม"
+            }
+        elif "ฝนตกหนัก" in text:
+            return {
+                "intent": "general_discussion",
+                "demand_score": 5,
+                "urgency": "low",
+                "budget": None,
+                "budget_text": None,
+                "product_keyword": None,
+                "detected_category": "ทั่วไป",
+                "pain_points": [],
+                "sentiment": "neutral",
+                "reasoning": "พูดคุยสภาพอากาศ"
+            }
+        elif "พัดลม" in text:
+            return {
+                "intent": "buy_request",
+                "demand_score": 88,
+                "urgency": "high",
+                "budget": 259.0,
+                "budget_text": "259 บาท",
+                "product_keyword": "พัดลม",
+                "detected_category": "พัดลม",
+                "pain_points": ["พัดลมพัง", "ร้อน"],
+                "sentiment": "urgent",
+                "reasoning": "พัดลมพังต้องการซื้อด่วน"
+            }
+        elif "เครื่องฟอกอากาศ" in text:
+            return {
+                "intent": "recommendation_request",
+                "demand_score": 90,
+                "urgency": "medium",
+                "budget": 2500.0,
+                "budget_text": "2,500 บาท",
+                "product_keyword": "เครื่องฟอกอากาศ",
+                "detected_category": "เครื่องใช้ไฟฟ้า",
+                "pain_points": ["กรองฝุ่น"],
+                "sentiment": "positive",
+                "reasoning": "หาเครื่องฟอกอากาศ"
+            }
+        return {
+            "intent": "general_discussion",
+            "demand_score": 40,
+            "urgency": "low",
+            "budget": None,
+            "budget_text": None,
+            "product_keyword": None,
+            "detected_category": "ทั่วไป",
+            "pain_points": [],
+            "sentiment": "neutral",
+            "reasoning": "ทั่วไป"
+        }
+
+    with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "rw_fb_123", "error": None}) as mock_post, \
+         patch("app.api.facebook_radar.log_post_async") as mock_sheets, \
+         patch("app.api.facebook_radar.dispatch_radar_line_alert") as mock_line_alert, \
+         patch("app.api.facebook_radar.analyze_lead_intent_and_demand", side_effect=mock_analyze):
         resp = client.post("/api/admin/facebook-radar/leads", json={"leads": batch_posts})
         assert resp.status_code == 200
         data = resp.json()
@@ -840,22 +1049,288 @@ def test_t4_real_world_thai_workloads(client, db_session):
         assert data["total_received"] == 10
         assert data["processed"] == 10
         assert data["high_demand_count"] == 6
-        assert data["alerts_sent"] == 6
-        assert mock_alert.call_count == 6
+        assert data["alerts_sent"] == 0
+        mock_line_alert.assert_not_called()
 
-        # Check high demand results
-        high_demand_pids = {"rw_001_maternity", "rw_002_earbuds", "rw_003_cushion", "rw_004_catfood", "rw_009_fan", "rw_010_airpurifier"}
+        # Check high demand results (first 5 succeed within max_posts=5, 6th ignored due to rate limit)
+        high_demand_pids = ["rw_001_maternity", "rw_002_earbuds", "rw_003_cushion", "rw_004_catfood", "rw_009_fan", "rw_010_airpurifier"]
         low_demand_pids = {"rw_005_scam", "rw_006_secondhand", "rw_007_spam", "rw_008_weather"}
 
         for res in data["results"]:
             pid = res["fb_post_id"]
-            if pid in high_demand_pids:
-                assert res["status"] == "deal_matched_and_alerted"
+            if pid in high_demand_pids[:5]:
+                assert res["status"] == "deal_matched_and_posted"
                 assert res["demand_score"] >= 70
-                assert res["alert_sent"] is True
+                assert res["alert_sent"] is False
                 assert res["matched_product_id"] is not None
+            elif pid == high_demand_pids[5]:
+                # 6th high demand item hits daily limit of 5
+                assert res["status"] == "ignored"
+                assert res["demand_score"] >= 70
+                assert res["alert_sent"] is False
             elif pid in low_demand_pids:
                 assert res["status"] == "low_demand_ignored"
                 assert res["demand_score"] < 70
                 assert res["alert_sent"] is False
                 assert res["matched_product_id"] is None
+
+
+# ===========================================================================
+# Dedicated Tests for Auto-Posting, 24h Cooldown, Rate Limiting & Sheets (R1-R4)
+# ===========================================================================
+
+def test_radar_24h_category_cooldown(client, db_session):
+    """[R2 Cooldown] Verifies 24-hour Category Cooldown:
+    1. First post in category 'แฟชั่น' -> posts successfully ('deal_matched_and_posted').
+    2. Second post in same category 'แฟชั่น' within 24h -> rejected with status='ignored' and notification_status='ignored'.
+    3. Post in different category 'หูฟัง' within 24h -> posts successfully ('deal_matched_and_posted').
+    4. Post in category 'แฟชั่น' after 24h cooldown expires -> posts successfully.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    def mock_cooldown_ai(post_text, author_name=None):
+        text = post_text or ""
+        if "ชุดคลุมท้อง" in text:
+            return {
+                "intent": "recommendation_request",
+                "demand_score": 85,
+                "urgency": "medium",
+                "budget": 400.0,
+                "budget_text": "400 บาท",
+                "product_keyword": "ชุดคลุมท้อง",
+                "detected_category": "แฟชั่น",
+                "pain_points": ["ใส่สบาย"],
+                "sentiment": "positive",
+                "reasoning": "ทดสอบ"
+            }
+        elif "หูฟังบลูทูธ" in text:
+            return {
+                "intent": "recommendation_request",
+                "demand_score": 90,
+                "urgency": "medium",
+                "budget": 500.0,
+                "budget_text": "500 บาท",
+                "product_keyword": "หูฟังบลูทูธ",
+                "detected_category": "หูฟัง",
+                "pain_points": ["ตัดเสียง"],
+                "sentiment": "positive",
+                "reasoning": "ทดสอบ"
+            }
+        return {"intent": "general_discussion", "demand_score": 40}
+
+    # 1. First lead in 'แฟชั่น'
+    p1 = {
+        "fb_post_id": f"cool_1_{int(time.time() * 1000)}",
+        "author_name": "ลูกค้า 1",
+        "post_text": "อยากได้ชุดคลุมท้องใส่สบายๆ ผ้านิ่มๆ งบ 400 บาท",
+        "post_url": "https://facebook.com/post/cool_1",
+    }
+    with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "fb_cool_1", "error": None}) as mock_post, \
+         patch("app.api.facebook_radar.log_post_async") as mock_sheets, \
+         patch("app.api.facebook_radar.analyze_lead_intent_and_demand", side_effect=mock_cooldown_ai):
+        r1 = client.post("/api/admin/facebook-radar/leads", json=p1)
+        assert r1.status_code == 200
+        d1 = r1.json()
+        assert d1["results"][0]["status"] == "deal_matched_and_posted"
+        assert mock_post.call_count == 1
+        assert mock_sheets.call_count == 1
+
+    # 2. Second lead in 'แฟชั่น' within 24h (Cooldown Blocked)
+    p2 = {
+        "fb_post_id": f"cool_2_{int(time.time() * 1000)}",
+        "author_name": "ลูกค้า 2",
+        "post_text": "ตามหาชุดคลุมท้องแฟชั่นสวยๆ งบ 450 บาท ด่วนมาก",
+        "post_url": "https://facebook.com/post/cool_2",
+    }
+    with patch("app.api.facebook_radar.post_feed") as mock_post, \
+         patch("app.api.facebook_radar.log_post_async") as mock_sheets, \
+         patch("app.api.facebook_radar.analyze_lead_intent_and_demand", side_effect=mock_cooldown_ai):
+        r2 = client.post("/api/admin/facebook-radar/leads", json=p2)
+        assert r2.status_code == 200
+        d2 = r2.json()
+        assert d2["results"][0]["status"] == "ignored"
+        assert d2["alerts_sent"] == 0
+        mock_post.assert_not_called()
+        mock_sheets.assert_not_called()
+
+        # Verify notification_status is 'ignored' in database
+        lead2 = db_session.query(models.FacebookDetectedLead).filter_by(fb_post_id=p2["fb_post_id"]).first()
+        assert lead2 is not None
+        ev2 = db_session.query(models.FacebookDemandEvent).filter_by(lead_id=lead2.id).first()
+        assert ev2 is not None
+        assert ev2.notification_status == "ignored"
+
+    # 3. Third lead in a different category 'หูฟัง' -> Allowed
+    p3 = {
+        "fb_post_id": f"cool_3_{int(time.time() * 1000)}",
+        "author_name": "ลูกค้า 3",
+        "post_text": "อยากได้หูฟังบลูทูธไร้สายตัดเสียงรบกวนดีๆ งบ 500 บาท",
+        "post_url": "https://facebook.com/post/cool_3",
+    }
+    with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "fb_cool_3", "error": None}) as mock_post, \
+         patch("app.api.facebook_radar.log_post_async") as mock_sheets, \
+         patch("app.api.facebook_radar.analyze_lead_intent_and_demand", side_effect=mock_cooldown_ai):
+        r3 = client.post("/api/admin/facebook-radar/leads", json=p3)
+        assert r3.status_code == 200
+        d3 = r3.json()
+        assert d3["results"][0]["status"] == "deal_matched_and_posted"
+        assert mock_post.call_count == 1
+        assert mock_sheets.call_count == 1
+
+    # 4. Age the first demand event by 25 hours to simulate cooldown expiration
+    lead1 = db_session.query(models.FacebookDetectedLead).filter_by(fb_post_id=p1["fb_post_id"]).first()
+    ev1 = db_session.query(models.FacebookDemandEvent).filter_by(lead_id=lead1.id).first()
+    ev1.created_at = datetime.now(timezone.utc) - timedelta(hours=25)
+    db_session.commit()
+
+    # Now fourth lead in 'แฟชั่น' should pass cooldown
+    p4 = {
+        "fb_post_id": f"cool_4_{int(time.time() * 1000)}",
+        "author_name": "ลูกค้า 4",
+        "post_text": "มีใครแนะนำชุดคลุมท้องใส่สบายๆ ผ้านิ่มๆ งบ 400 บาท บ้างคะ",
+        "post_url": "https://facebook.com/post/cool_4",
+    }
+    with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "fb_cool_4", "error": None}) as mock_post, \
+         patch("app.api.facebook_radar.log_post_async") as mock_sheets, \
+         patch("app.api.facebook_radar.analyze_lead_intent_and_demand", side_effect=mock_cooldown_ai):
+        r4 = client.post("/api/admin/facebook-radar/leads", json=p4)
+        assert r4.status_code == 200
+        d4 = r4.json()
+        assert d4["results"][0]["status"] == "deal_matched_and_posted"
+        assert mock_post.call_count == 1
+        assert mock_sheets.call_count == 1
+
+
+def test_radar_daily_post_rate_limit(client, db_session, monkeypatch):
+    """[R2 Rate Limit] Verifies daily post rate limit (e.g. max 3 posts/24h):
+    - Posts 1, 2, 3 in distinct categories succeed.
+    - Post 4 in a 4th distinct category is rejected with status='ignored'.
+    """
+    monkeypatch.setenv("RADAR_MAX_DAILY_POSTS", "3")
+
+    posts = [
+        # Cat 1: แฟชั่น
+        {"fb_post_id": f"rl_1_{int(time.time()*1000)}", "post_text": "ตามหาชุดคลุมท้อง งบ 500 บาท", "post_url": "https://fb.com/1"},
+        # Cat 2: หูฟัง
+        {"fb_post_id": f"rl_2_{int(time.time()*1000)}", "post_text": "อยากได้หูฟังบลูทูธ งบ 500 บาท", "post_url": "https://fb.com/2"},
+        # Cat 3: เฟอร์นิเจอร์
+        {"fb_post_id": f"rl_3_{int(time.time()*1000)}", "post_text": "อยากได้เบาะรองนั่งเพื่อสุขภาพ งบ 500 บาท", "post_url": "https://fb.com/3"},
+        # Cat 4: สัตว์เลี้ยง (Should be blocked by daily rate limit of 3)
+        {"fb_post_id": f"rl_4_{int(time.time()*1000)}", "post_text": "ตามหาอาหารแมวสูตรดูแลไต โรคไต งบ 500 บาท", "post_url": "https://fb.com/4"},
+    ]
+
+    def mock_rl_ai(post_text, author_name=None):
+        text = post_text or ""
+        if "ชุดคลุมท้อง" in text:
+            return {"intent": "buy_request", "demand_score": 85, "product_keyword": "ชุดคลุมท้อง", "detected_category": "แฟชั่น", "budget": 500.0}
+        elif "หูฟัง" in text:
+            return {"intent": "buy_request", "demand_score": 85, "product_keyword": "หูฟังบลูทูธ", "detected_category": "หูฟัง", "budget": 500.0}
+        elif "เบาะรองนั่ง" in text:
+            return {"intent": "buy_request", "demand_score": 85, "product_keyword": "เบาะรองนั่ง", "detected_category": "เฟอร์นิเจอร์", "budget": 500.0}
+        elif "อาหารแมว" in text:
+            return {"intent": "buy_request", "demand_score": 85, "product_keyword": "อาหารแมว", "detected_category": "สัตว์เลี้ยง", "budget": 500.0}
+        return {"intent": "general_discussion", "demand_score": 40}
+
+    with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "fb_rl_ok", "error": None}) as mock_post, \
+         patch("app.api.facebook_radar.log_post_async") as mock_sheets, \
+         patch("app.api.facebook_radar.analyze_lead_intent_and_demand", side_effect=mock_rl_ai):
+        for idx, p in enumerate(posts[:3]):
+            resp = client.post("/api/admin/facebook-radar/leads", json=p)
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["results"][0]["status"] == "deal_matched_and_posted"
+
+        assert mock_post.call_count == 3
+        assert mock_sheets.call_count == 3
+
+        # 4th post exceeding daily limit
+        resp4 = client.post("/api/admin/facebook-radar/leads", json=posts[3])
+        assert resp4.status_code == 200
+        data4 = resp4.json()
+        assert data4["results"][0]["status"] == "ignored"
+        assert mock_post.call_count == 3
+        assert mock_sheets.call_count == 3
+
+        lead4 = db_session.query(models.FacebookDetectedLead).filter_by(fb_post_id=posts[3]["fb_post_id"]).first()
+        ev4 = db_session.query(models.FacebookDemandEvent).filter_by(lead_id=lead4.id).first()
+        assert ev4.notification_status == "ignored"
+
+
+def test_radar_google_sheets_logging_payload(client, db_session):
+    """[R3 Sheets] Verifies the exact Google Sheets payload formatted for tools/sheet_posts_apps_script.gs."""
+    post_id = f"sheet_test_{int(time.time() * 1000)}"
+    payload = {
+        "fb_post_id": post_id,
+        "author_name": "คุณแม่สมศรี",
+        "post_text": "มีใครแนะนำชุดคลุมท้องใส่สบายๆ บ้างคะ งบไม่เกิน 500 บาท",
+        "post_url": f"https://facebook.com/posts/{post_id}",
+    }
+
+    mock_ai = {
+        "intent": "recommendation_request",
+        "demand_score": 90,
+        "urgency": "medium",
+        "budget": 500.0,
+        "budget_text": "500 บาท",
+        "product_keyword": "ชุดคลุมท้อง",
+        "detected_category": "แฟชั่น",
+        "pain_points": ["ใส่สบาย"],
+        "sentiment": "positive",
+        "reasoning": "ทดสอบ"
+    }
+
+    with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "page_post_8888", "error": None}), \
+         patch("app.api.facebook_radar.log_post_async") as mock_sheets, \
+         patch("app.api.facebook_radar.analyze_lead_intent_and_demand", return_value=mock_ai):
+        resp = client.post("/api/admin/facebook-radar/leads", json=payload)
+        assert resp.status_code == 200
+        assert mock_sheets.called
+
+        sheet_payload = mock_sheets.call_args[0][0]
+        assert isinstance(sheet_payload, dict)
+        assert sheet_payload["kind"] == "radar"
+        assert "ชุดคลุมท้อง" in sheet_payload["title"]
+        assert len(sheet_payload["message"]) > 10
+        assert "https://shope.ee/" in sheet_payload["link"]
+        assert sheet_payload["post_id"] == "page_post_8888"
+        assert sheet_payload["post_url"] == "https://www.facebook.com/page_post_8888"
+        assert "created_at" in sheet_payload
+
+
+def test_radar_post_feed_failure_handling(client, db_session):
+    """[Error Handling] When post_feed returns ok=False, demand event is marked 'failed' and no Sheets row is logged."""
+    post_id = f"fail_post_{int(time.time() * 1000)}"
+    payload = {
+        "fb_post_id": post_id,
+        "author_name": "นายทดสอบ",
+        "post_text": "อยากได้หูฟังบลูทูธไร้สายตัดเสียงรบกวนดีๆ งบ 500 บาท",
+        "post_url": f"https://facebook.com/posts/{post_id}",
+    }
+
+    mock_ai = {
+        "intent": "buy_request",
+        "demand_score": 90,
+        "urgency": "medium",
+        "budget": 500.0,
+        "budget_text": "500 บาท",
+        "product_keyword": "หูฟังบลูทูธ",
+        "detected_category": "หูฟัง",
+        "pain_points": ["ตัดเสียงรบกวน"],
+        "sentiment": "positive",
+        "reasoning": "ทดสอบ"
+    }
+
+    with patch("app.api.facebook_radar.post_feed", return_value={"ok": False, "post_id": None, "error": "Facebook API 400 Bad Request"}) as mock_post, \
+         patch("app.api.facebook_radar.log_post_async") as mock_sheets, \
+         patch("app.api.facebook_radar.analyze_lead_intent_and_demand", return_value=mock_ai):
+        resp = client.post("/api/admin/facebook-radar/leads", json=payload)
+        assert resp.status_code == 200
+        data = resp.json()
+
+        assert data["results"][0]["status"] == "deal_matched_post_failed"
+        assert data["results"][0]["alert_sent"] is False
+        mock_sheets.assert_not_called()
+
+        lead = db_session.query(models.FacebookDetectedLead).filter_by(fb_post_id=post_id).first()
+        ev = db_session.query(models.FacebookDemandEvent).filter_by(lead_id=lead.id).first()
+        assert ev.notification_status == "failed"

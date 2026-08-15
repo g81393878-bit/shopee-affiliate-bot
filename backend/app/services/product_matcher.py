@@ -254,9 +254,31 @@ def match_best_product_for_demand(
     top_candidates = scored_candidates[:limit]
     best = top_candidates[0] if top_candidates else None
 
+    # กรองความสอดคล้อง (Relevance Safeguard): ป้องกันการจับคู่สินค้าที่ไม่ตรงกับความต้องการของลูกค้าเลย
+    # หากระบุ keyword ชัดเจน แต่ได้ Relevance Score ต่ำมาก (Relevance < 12.0 จากคะแนนเต็ม 40.0)
+    # แสดงว่าสินค้าในคลังไม่ตรงกับคีย์เวิร์ดที่สกัดได้เลย (ความคล้ายคลึงต่ำมาก และไม่เจอในชื่อ/หมวดหมู่)
+    if best and best["product"] and kw:
+        q_norm = _nfc(normalize_query(kw.strip().lower()))
+        p_name = _nfc(normalize_query((best["product"].name or "").strip().lower()))
+        p_cat = _nfc((best["product"].category or "").strip().lower())
+        
+        relevance = 0.0
+        if q_norm:
+            if q_norm in p_name:
+                relevance = 30.0
+            elif q_norm in p_cat or (p_cat and p_cat in q_norm):
+                relevance = 25.0
+            else:
+                sim = _calculate_string_similarity(q_norm, p_name)
+                relevance = sim * 30.0
+        
+        if relevance < 12.0:
+            logger.info(f"Product matching rejected due to low relevance score ({relevance:.2f} < 12.0) for query: '{kw}' and product: '{best['product'].name}'")
+            best = None
+
     return {
         "best_product": best["product"] if best else None,
         "match_score": best["score"] if best else 0.0,
         "suggested_reasons": best["reasons"] if best else [],
-        "candidates": top_candidates,
+        "candidates": top_candidates if best else [],
     }

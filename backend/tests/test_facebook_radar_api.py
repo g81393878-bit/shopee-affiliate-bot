@@ -94,7 +94,8 @@ def test_high_demand_lead_ingestion_creates_event_and_alert(client, db_session):
     """เมื่อส่งโพสต์ที่มีความสนใจซื้อสูง (Score >= 70):
     - ต้องบันทึก facebook_detected_leads
     - สร้าง facebook_demand_events พร้อม matched_product และ ai_comment_draft
-    - ส่งการแจ้งเตือน LINE Push Alert (notification_status == 'sent')
+    - ยิงโพสต์ขึ้น Facebook Page ทันที (post_feed) และบันทึกลง Google Sheets (log_post_async)
+    - notification_status == 'posted' และไม่มีการส่ง LINE alert (alerts_sent == 0)
     """
     post_id = f"test_fb_high_{int(time.time() * 1000)}"
     payload = {
@@ -108,7 +109,9 @@ def test_high_demand_lead_ingestion_creates_event_and_alert(client, db_session):
         "raw_data": {"likes": 15, "comments": 4},
     }
 
-    with patch("app.api.facebook_radar.dispatch_radar_line_alert", return_value=True) as mock_alert:
+    with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "test_fb_page_post_123", "error": None}) as mock_post, \
+         patch("app.api.facebook_radar.log_post_async") as mock_sheets, \
+         patch("app.api.facebook_radar.dispatch_radar_line_alert") as mock_line_alert:
         resp = client.post("/api/admin/facebook-radar/leads", json=payload)
         assert resp.status_code == 200
         data = resp.json()
@@ -116,16 +119,18 @@ def test_high_demand_lead_ingestion_creates_event_and_alert(client, db_session):
         assert data["total_received"] == 1
         assert data["processed"] == 1
         assert data["high_demand_count"] == 1
-        assert data["alerts_sent"] == 1
+        assert data["alerts_sent"] == 0
 
         result = data["results"][0]
         assert result["fb_post_id"] == post_id
-        assert result["status"] == "deal_matched_and_alerted"
+        assert result["status"] == "deal_matched_and_posted"
         assert result["demand_score"] >= 70
-        assert result["alert_sent"] is True
+        assert result["alert_sent"] is False
         assert result["matched_product_id"] is not None
 
-        mock_alert.assert_called_once()
+        mock_post.assert_called_once()
+        mock_sheets.assert_called_once()
+        mock_line_alert.assert_not_called()
 
     # ตรวจสอบข้อมูลในฐานข้อมูล
     lead = (
@@ -145,7 +150,7 @@ def test_high_demand_lead_ingestion_creates_event_and_alert(client, db_session):
     assert event is not None
     assert event.demand_score >= 70
     assert event.matched_product_id is not None
-    assert event.notification_status == "sent"
+    assert event.notification_status == "posted"
     assert event.ai_comment_draft is not None
     assert len(event.ai_comment_draft) > 10
 
@@ -158,7 +163,7 @@ def test_low_demand_lead_ingestion_stores_lead_without_event_or_alert(client, db
     """เมื่อส่งโพสต์ที่ไม่มีความสนใจซื้อ (เช่น โพสต์เตือนภัยมิจฉาชีพ):
     - บันทึก facebook_detected_leads
     - ไม่มีการสร้าง facebook_demand_events
-    - ไม่มีการส่งการแจ้งเตือน LINE Alert (alerts_sent == 0)
+    - ไม่มีการโพสต์ Facebook Page และไม่ส่งแจ้งเตือน LINE Alert (alerts_sent == 0)
     """
     post_id = f"test_fb_low_{int(time.time() * 1000)}"
     payload = {
@@ -172,7 +177,9 @@ def test_low_demand_lead_ingestion_stores_lead_without_event_or_alert(client, db
         "raw_data": {"likes": 50, "comments": 20},
     }
 
-    with patch("app.api.facebook_radar.dispatch_radar_line_alert") as mock_alert:
+    with patch("app.api.facebook_radar.post_feed") as mock_post, \
+         patch("app.api.facebook_radar.log_post_async") as mock_sheets, \
+         patch("app.api.facebook_radar.dispatch_radar_line_alert") as mock_line_alert:
         resp = client.post("/api/admin/facebook-radar/leads", json=payload)
         assert resp.status_code == 200
         data = resp.json()
@@ -189,7 +196,9 @@ def test_low_demand_lead_ingestion_stores_lead_without_event_or_alert(client, db
         assert result["alert_sent"] is False
         assert result["matched_product_id"] is None
 
-        mock_alert.assert_not_called()
+        mock_post.assert_not_called()
+        mock_sheets.assert_not_called()
+        mock_line_alert.assert_not_called()
 
     # ตรวจสอบในฐานข้อมูล
     lead = (
@@ -215,8 +224,8 @@ def test_low_demand_lead_ingestion_stores_lead_without_event_or_alert(client, db
 
 def test_lead_deduplication_idempotency(client, db_session):
     """ส่งโพสต์ซ้ำเดิมสองครั้ง:
-    - ครั้งแรกสร้าง Lead + Event
-    - ครั้งที่สองต้องคืน status='already_processed' โดยไม่สร้างแถวซ้ำและไม่ส่งแจ้งเตือนซ้ำ
+    - ครั้งแรกสร้าง Lead + Event + โพสต์เพจ
+    - ครั้งที่สองต้องคืน status='already_processed' โดยไม่สร้างแถวซ้ำและไม่โพสต์ซ้ำ
     """
     post_id = f"test_fb_dedup_{int(time.time() * 1000)}"
     payload = {
@@ -229,13 +238,15 @@ def test_lead_deduplication_idempotency(client, db_session):
         "post_time": datetime.now(timezone.utc).isoformat(),
     }
 
-    with patch("app.api.facebook_radar.dispatch_radar_line_alert", return_value=True) as mock_alert:
+    with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "test_dedup_pid", "error": None}) as mock_post, \
+         patch("app.api.facebook_radar.log_post_async") as mock_sheets:
         # ครั้งที่ 1
         resp1 = client.post("/api/admin/facebook-radar/leads", json=payload)
         assert resp1.status_code == 200
         data1 = resp1.json()
         assert data1["high_demand_count"] == 1
-        assert mock_alert.call_count == 1
+        assert mock_post.call_count == 1
+        assert mock_sheets.call_count == 1
 
         # ครั้งที่ 2 (ส่ง payload เดิมซ้ำ)
         resp2 = client.post("/api/admin/facebook-radar/leads", json=payload)
@@ -252,8 +263,9 @@ def test_lead_deduplication_idempotency(client, db_session):
         assert result2["status"] == "already_processed"
         assert result2["alert_sent"] is False
 
-        # Alert ไม่ควรถูกเรียกเพิ่ม
-        assert mock_alert.call_count == 1
+        # โพสต์ / Sheets ไม่ควรถูกเรียกเพิ่ม
+        assert mock_post.call_count == 1
+        assert mock_sheets.call_count == 1
 
     # ตรวจสอบจำนวน record ใน DB ว่าไม่มี duplicate
     lead_count = (
@@ -280,7 +292,8 @@ def test_admin_action_recording_flywheel(client, db_session):
         "post_text": "มีใครแนะนำหูฟังบลูทูธไร้สายบ้างครับ ขอแบบราคาไม่เกิน 300 บาท",
         "post_url": f"https://facebook.com/groups/tech_th/posts/{post_id}",
     }
-    with patch("app.api.facebook_radar.dispatch_radar_line_alert", return_value=True):
+    with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "act_pid_1", "error": None}), \
+         patch("app.api.facebook_radar.log_post_async"):
         resp = client.post("/api/admin/facebook-radar/leads", json=payload)
         assert resp.status_code == 200
 
@@ -524,3 +537,50 @@ def test_radar_deal_flex_message_structure(db_session):
     assert "facebook.com" in buttons[0]["action"]["uri"]
     assert buttons[1]["action"]["type"] == "uri"
     assert buttons[1]["action"]["label"] == "🛒 ตรวจสอบสินค้าบน Shopee"
+
+
+# ---------------------------------------------------------------------------
+# 9. Test Category Cooldown & Daily Rate Limit Rejections
+# ---------------------------------------------------------------------------
+
+def test_high_demand_lead_category_cooldown_and_rate_limit_api(client, db_session):
+    """ทดสอบการปฏิเสธโพสต์ซ้ำหมวดเดิมใน 24 ชั่วโมง:
+    - ครั้งที่ 1: โพสต์สำเร็จ -> status='deal_matched_and_posted', event='posted'
+    - ครั้งที่ 2 ในหมวดเดิมภายใน 24 ชม: ปฏิเสธ -> status='ignored', event='ignored'
+    """
+    p1 = {
+        "fb_post_id": f"api_cool_1_{int(time.time() * 1000)}",
+        "author_name": "ลูกค้าหมวดแฟชั่น 1",
+        "post_text": "อยากได้ชุดคลุมท้องใส่สบายๆ ผ้านิ่มๆ งบ 400 บาท",
+        "post_url": "https://facebook.com/post/api_cool_1",
+    }
+    with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "fb_api_cool_1", "error": None}) as mock_post, \
+         patch("app.api.facebook_radar.log_post_async") as mock_sheets:
+        resp1 = client.post("/api/admin/facebook-radar/leads", json=p1)
+        assert resp1.status_code == 200
+        data1 = resp1.json()
+        assert data1["results"][0]["status"] == "deal_matched_and_posted"
+        assert mock_post.call_count == 1
+        assert mock_sheets.call_count == 1
+
+    # โพสต์ที่ 2 หมวดเดิมภายใน 24 ชั่วโมง
+    p2 = {
+        "fb_post_id": f"api_cool_2_{int(time.time() * 1000)}",
+        "author_name": "ลูกค้าหมวดแฟชั่น 2",
+        "post_text": "ตามหาชุดคลุมท้องผ้าฝ้ายทรงหลวม งบ 500 บาท ด่วน",
+        "post_url": "https://facebook.com/post/api_cool_2",
+    }
+    with patch("app.api.facebook_radar.post_feed") as mock_post, \
+         patch("app.api.facebook_radar.log_post_async") as mock_sheets:
+        resp2 = client.post("/api/admin/facebook-radar/leads", json=p2)
+        assert resp2.status_code == 200
+        data2 = resp2.json()
+        assert data2["results"][0]["status"] == "ignored"
+        assert data2["alerts_sent"] == 0
+        mock_post.assert_not_called()
+        mock_sheets.assert_not_called()
+
+        lead2 = db_session.query(models.FacebookDetectedLead).filter_by(fb_post_id=p2["fb_post_id"]).first()
+        ev2 = db_session.query(models.FacebookDemandEvent).filter_by(lead_id=lead2.id).first()
+        assert ev2 is not None
+        assert ev2.notification_status == "ignored"

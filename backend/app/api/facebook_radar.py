@@ -11,7 +11,7 @@ Endpoints:
 - ตรวจสอบผ่าน Session Cookie (pkh_admin), Header (X-Admin-Token / Authorization), หรือ Query (?token=)
 - ในสภาพแวดล้อม Local / Testing ที่ไม่มีการตั้งค่า Token สามารถเข้าถึงได้โดยอัตโนมัติ
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import hashlib
 import hmac
@@ -31,6 +31,7 @@ from app.services.demand_radar_ai import (
     generate_auntie_khem_deal_comment,
     is_high_demand,
 )
+from app.services.facebook_poster import log_post_async, post_feed
 from app.services.line_quota import push_guard
 from app.services.product_cards import format_radar_deal_flex_message
 from app.services.product_matcher import match_best_product_for_demand
@@ -123,6 +124,69 @@ def require_admin_auth(
 
 
 # ---------------------------------------------------------------------------
+# Rate Limiting & Cooldown Guards
+# ---------------------------------------------------------------------------
+
+def check_category_cooldown_allowed(
+    db: Session,
+    category: Optional[str],
+    cooldown_hours: Optional[int] = None,
+) -> bool:
+    """Checks if a product category was posted via demand radar within the cooldown window.
+    Returns True if allowed to post (no recent post in same category), False if in cooldown.
+    """
+    if not category:
+        return True
+
+    if cooldown_hours is None:
+        try:
+            cooldown_hours = int(os.getenv("RADAR_CATEGORY_COOLDOWN_HOURS", "24"))
+        except (ValueError, TypeError):
+            cooldown_hours = 24
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=cooldown_hours)
+
+    recent_count = (
+        db.query(models.FacebookDemandEvent.id)
+        .join(models.Product, models.FacebookDemandEvent.matched_product_id == models.Product.id)
+        .filter(
+            models.FacebookDemandEvent.notification_status.in_(["posted", "sent"]),
+            models.FacebookDemandEvent.created_at >= cutoff,
+            models.Product.category == category,
+        )
+        .count()
+    )
+    return recent_count == 0
+
+
+def check_daily_post_limit_allowed(
+    db: Session,
+    max_posts: Optional[int] = None,
+    window_hours: int = 24,
+) -> bool:
+    """Checks if total demand radar auto-posts in the sliding window is below the daily limit.
+    Returns True if allowed to post, False if daily limit reached.
+    """
+    if max_posts is None:
+        try:
+            max_posts = int(os.getenv("RADAR_MAX_DAILY_POSTS", "5"))
+        except (ValueError, TypeError):
+            max_posts = 5
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=window_hours)
+
+    total_posts = (
+        db.query(models.FacebookDemandEvent.id)
+        .filter(
+            models.FacebookDemandEvent.notification_status.in_(["posted", "sent"]),
+            models.FacebookDemandEvent.created_at >= cutoff,
+        )
+        .count()
+    )
+    return total_posts < max_posts
+
+
+# ---------------------------------------------------------------------------
 # Helper Functions
 # ---------------------------------------------------------------------------
 
@@ -133,40 +197,11 @@ def dispatch_radar_line_alert(
     matched_product: Optional[models.Product] = None,
     group_name: Optional[str] = None,
 ) -> bool:
-    """Dispatches a LINE Push Flex Message to ADMIN_LINE_USER_ID"""
-    # 1. Check push quota guard
-    if not push_guard(db):
-        logger.warning("LINE push quota exhausted. Skipping radar alert.")
-        return False
-
-    admin_line_id = os.getenv("ADMIN_LINE_USER_ID", "Uc88eb3896b0e4bcc5fbaa9b78ac1294e")
-    token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
-
-    # Format Flex message
-    flex_msg = format_radar_deal_flex_message(
-        group_name=group_name or (lead.group.group_name if lead.group else "กลุ่ม Facebook"),
-        post_text=lead.post_text,
-        post_url=lead.post_url,
-        demand_score=demand_event.demand_score,
-        urgency=demand_event.urgency,
-        matched_product=matched_product,
-        suggested_reasons=demand_event.suggested_reason if isinstance(demand_event.suggested_reason, list) else [],
-        copy_text=demand_event.ai_comment_draft or "",
-    )
-
-    if not token or "mock" in token.lower():
-        logger.info(f"[MOCK LINE ALERT] Radar deal flex alert sent to admin {admin_line_id}")
-        return True
-
-    try:
-        from linebot import LineBotApi
-        bot_api = LineBotApi(token)
-        bot_api.push_message(admin_line_id, flex_msg)
-        logger.info(f"Sent LINE radar push alert to {admin_line_id}")
-        return True
-    except Exception as e:
-        logger.warning(f"Failed to dispatch LINE radar push alert: {e}")
-        return False
+    """[DEPRECATED / DEACTIVATED] Social Demand Radar V1 uses 100% Facebook Page auto-posting.
+    LINE admin alerts are deactivated to prevent alert fatigue.
+    """
+    logger.debug("LINE radar alerts are deactivated in favor of Facebook Page auto-posting.")
+    return False
 
 
 def _normalize_lead_item(raw: Any) -> Dict[str, Any]:
@@ -221,10 +256,11 @@ def ingest_facebook_leads(
     3. หาก Demand Score >= 70:
        - จับคู่สินค้าในคลัง (link_status == 'ok')
        - สร้างข้อความแนะนำสไตล์ป้าเข็ม
-       - บันทึก FacebookDemandEvent
-       - ส่งการแจ้งเตือน LINE Push Alert ถึง ADMIN_LINE_USER_ID
+       - ตรวจสอบ Category Cooldown (24 ชม.) และ Daily Rate Limit (3-5 โพสต์/วัน)
+       - หากติด Cooldown/Rate limit: บันทึก Demand Event (notification_status='ignored') และคืน status='ignored'
+       - หากผ่านเงื่อนไข: ยิงโพสต์อัตโนมัติขึ้นเพจ Facebook ทันที (post_feed) และบันทึกลง Google Sheets (log_post_async)
     4. หาก Demand Score < 70:
-       - บันทึก Lead สถานะ processed/ignored โดยไม่สร้าง Demand Event และไม่ส่งแจ้งเตือน
+       - บันทึก Lead สถานะ processed โดยไม่สร้าง Demand Event
     """
     raw_items: List[Any] = []
     if isinstance(payload, schemas.LeadIngestPayload):
@@ -245,7 +281,6 @@ def ingest_facebook_leads(
     results: List[schemas.IngestedLeadResult] = []
     processed_count = 0
     high_demand_count = 0
-    alerts_sent_count = 0
 
     for item in items:
         fb_post_id = item["fb_post_id"]
@@ -340,7 +375,7 @@ def ingest_facebook_leads(
         # 5. ตรวจสอบเงื่อนไข Demand Score >= 70
         if is_high_demand(demand_score, threshold=70):
             high_demand_count += 1
-            # จับคู่สินค้าในคลัง
+            # 5.1 จับคู่สินค้าในคลัง (link_status == 'ok')
             match_res = match_best_product_for_demand(
                 db=db,
                 product_keyword=product_keyword,
@@ -349,7 +384,7 @@ def ingest_facebook_leads(
             matched_product = match_res.get("best_product")
             suggested_reasons = match_res.get("suggested_reasons", [])
 
-            # ร่างข้อความสไตล์ป้าเข็ม
+            # 5.2 ร่างข้อความสไตล์ป้าเข็ม
             copy_text = None
             if matched_product:
                 copy_text = generate_auntie_khem_deal_comment(
@@ -363,41 +398,106 @@ def ingest_facebook_leads(
                     lead_intent_data=analysis,
                 )
 
-            # บันทึก FacebookDemandEvent
-            demand_event = models.FacebookDemandEvent(
-                lead_id=lead.id,
-                intent=intent,
-                demand_score=demand_score,
-                urgency=urgency,
-                budget=budget_text,
-                product_keyword=product_keyword,
-                matched_product_id=matched_product.id if matched_product else None,
-                suggested_reason=suggested_reasons,
-                ai_comment_draft=copy_text,
-                notification_status="pending",
-            )
-            db.add(demand_event)
-            db.flush()
-
-            # ส่งการแจ้งเตือน LINE Push Alert
-            alert_sent = dispatch_radar_line_alert(
+            # 5.3 ตรวจสอบ Safety Guards: Category Cooldown (24h) & Daily Rate Limit
+            cooldown_ok = check_category_cooldown_allowed(
                 db=db,
-                lead=lead,
-                demand_event=demand_event,
-                matched_product=matched_product,
-                group_name=group_name,
+                category=matched_product.category if matched_product else None,
             )
-
-            if alert_sent:
-                demand_event.notification_status = "sent"
-                demand_event.notification_sent_at = datetime.now(timezone.utc)
-                alerts_sent_count += 1
-                status_str = "deal_matched_and_alerted"
-            else:
-                demand_event.notification_status = "failed"
-                status_str = "deal_matched_alert_failed"
+            daily_limit_ok = check_daily_post_limit_allowed(
+                db=db,
+            )
 
             matched_id = matched_product.id if matched_product else None
+
+            if not cooldown_ok or not daily_limit_ok:
+                # บันทึก Demand Event สถานะ 'ignored' เมื่อติด Cooldown หรือ Daily Limit
+                demand_event = models.FacebookDemandEvent(
+                    lead_id=lead.id,
+                    intent=intent,
+                    demand_score=demand_score,
+                    urgency=urgency,
+                    budget=budget_text,
+                    product_keyword=product_keyword,
+                    matched_product_id=matched_id,
+                    suggested_reason=suggested_reasons,
+                    ai_comment_draft=copy_text,
+                    notification_status="ignored",
+                )
+                db.add(demand_event)
+                db.flush()
+
+                status_str = "ignored"
+                alert_sent = False
+            elif matched_product and copy_text:
+                # ผ่าน Safety Guards ทั้งหมด -> โพสต์ขึ้น Facebook Page ทันที
+                demand_event = models.FacebookDemandEvent(
+                    lead_id=lead.id,
+                    intent=intent,
+                    demand_score=demand_score,
+                    urgency=urgency,
+                    budget=budget_text,
+                    product_keyword=product_keyword,
+                    matched_product_id=matched_id,
+                    suggested_reason=suggested_reasons,
+                    ai_comment_draft=copy_text,
+                    notification_status="pending",
+                )
+                db.add(demand_event)
+                db.flush()
+
+                image_url = (matched_product.image_url or "").strip()
+                if image_url:
+                    post_res = post_feed(
+                        message=copy_text,
+                        image_url=image_url,
+                    )
+                else:
+                    post_res = post_feed(
+                        message=copy_text,
+                        link=matched_product.affiliate_url or "",
+                    )
+
+                if post_res.get("ok"):
+                    demand_event.notification_status = "posted"
+                    demand_event.notification_sent_at = datetime.now(timezone.utc)
+                    post_id = str(post_res.get("post_id") or "")
+                    post_url = f"https://www.facebook.com/{post_id}" if post_id else ""
+
+                    # บันทึกประวัติโพสต์ลง Google Sheets ผ่าน POSTS_SHEET_WEBHOOK_URL
+                    log_post_async({
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                        "kind": "radar",
+                        "title": (matched_product.name or "")[:45],
+                        "message": (copy_text or "")[:1000],
+                        "link": matched_product.affiliate_url or "",
+                        "post_id": post_id,
+                        "post_url": post_url,
+                    })
+                    status_str = "deal_matched_and_posted"
+                else:
+                    demand_event.notification_status = "failed"
+                    status_str = "deal_matched_post_failed"
+
+                alert_sent = False
+            else:
+                # ไม่พบสินค้าที่ตรงกันในคลัง
+                demand_event = models.FacebookDemandEvent(
+                    lead_id=lead.id,
+                    intent=intent,
+                    demand_score=demand_score,
+                    urgency=urgency,
+                    budget=budget_text,
+                    product_keyword=product_keyword,
+                    matched_product_id=matched_id,
+                    suggested_reason=suggested_reasons,
+                    ai_comment_draft=copy_text,
+                    notification_status="failed",
+                )
+                db.add(demand_event)
+                db.flush()
+
+                status_str = "deal_matched_post_failed"
+                alert_sent = False
         else:
             alert_sent = False
             status_str = "low_demand_ignored"
@@ -422,7 +522,7 @@ def ingest_facebook_leads(
         total_received=total_received,
         processed=processed_count,
         high_demand_count=high_demand_count,
-        alerts_sent=alerts_sent_count,
+        alerts_sent=0,
         results=results,
     )
 
