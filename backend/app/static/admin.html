@@ -57,6 +57,25 @@ a.del { color:var(--red); cursor:pointer; text-decoration:underline; margin-left
 #saveBtn { background:var(--red); color:#fff; }
 #cancelBtn { background:#eee; color:#333; }
 .url-box { font-size:11px; color:var(--gray); word-break:break-all; background:var(--light); padding:6px; border-radius:6px; margin-top:10px; }
+/* radar */
+.posted { background:#E8F8F0; color:var(--green); }
+.ignored { background:#F2F3F4; color:var(--gray); }
+.failed { background:#FDECEA; color:var(--red); }
+.cooldown-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px; }
+.cooldown-card { background:#fff; border:1px solid var(--border); border-radius:10px; padding:14px; }
+.cooldown-card h4 { margin:0 0 8px; font-size:14px; }
+.cooldown-card .time { font-size:22px; font-weight:bold; }
+.cooldown-card .sub { font-size:12px; color:var(--gray); margin-top:4px; }
+.cooldown-card.avail { border-left:4px solid var(--green); }
+.cooldown-card.locked { border-left:4px solid var(--red); }
+.progress-bar { background:var(--border); border-radius:6px; height:8px; overflow:hidden; margin:6px 0; }
+.progress-fill { height:100%; border-radius:6px; transition:width .4s; }
+.stat-banner { display:flex; gap:10px; align-items:center; background:#fff; border:1px solid var(--border); border-radius:10px; padding:12px 16px; margin-bottom:14px; flex-wrap:wrap; }
+.stat-banner .big { font-size:24px; font-weight:bold; color:var(--red); }
+.stat-banner .lbl { font-size:13px; color:var(--gray); }
+.stat-banner .sep { width:1px; height:40px; background:var(--border); }
+.caption-box { font-size:12px; background:var(--light); padding:6px 8px; border-radius:6px; max-height:60px; overflow:hidden; cursor:pointer; transition:max-height .3s; white-space:pre-wrap; word-break:break-word; }
+.caption-box.open { max-height:300px; }
 </style>
 </head>
 <body>
@@ -74,6 +93,8 @@ a.del { color:var(--red); cursor:pointer; text-decoration:underline; margin-left
     <nav>
       <button id="tabStats" class="active" onclick="showTab('stats')">📊 สถิติ</button>
       <button id="tabProducts" onclick="showTab('products')">📦 สินค้า</button>
+      <button id="tabRadar" onclick="showTab('radar')">📡 Radar Feed</button>
+      <button id="tabCooldown" onclick="showTab('cooldown')">⏰ Cooldown</button>
     </nav>
     <button id="logout">ออกจากระบบ</button>
   </header>
@@ -141,6 +162,46 @@ a.del { color:var(--red); cursor:pointer; text-decoration:underline; margin-left
           <button id="nextBtn" onclick="page(1)">ถัดไป →</button>
         </div>
       </section>
+    </div>
+
+    <!-- Radar Feed -->
+    <div id="viewRadar" class="hidden">
+      <div class="stat-banner" id="radarBanner">
+        <div><div class="big" id="radarPostedToday">…</div><div class="lbl">โพสต์วันนี้</div></div>
+        <div class="sep"></div>
+        <div><div class="big" id="radarRemaining">…</div><div class="lbl">เหลือวันนี้</div></div>
+        <div class="sep"></div>
+        <div><div class="big" id="radarTotal">…</div><div class="lbl">รวมทั้งหมด</div></div>
+        <div style="margin-left:auto"><button onclick="loadRadarFeed()" style="padding:7px 16px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer">🔄 รีเฟรช</button></div>
+      </div>
+      <section class="panel">
+        <table>
+          <thead><tr><th>เวลา</th><th>สถานะ</th><th>Keyword</th><th>หมวด</th><th>Score</th><th>สินค้าแนะนำ</th><th>แคปชั่นป้าเข็ม</th><th>ต้นทาง</th></tr></thead>
+          <tbody id="radarRows"></tbody>
+        </table>
+        <div class="pager">
+          <button id="radarPrev" onclick="radarPage(-1)">← ก่อนหน้า</button>
+          <span id="radarPageInfo"></span>
+          <button id="radarNext" onclick="radarPage(1)">ถัดไป →</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- Cooldown Monitor -->
+    <div id="viewCooldown" class="hidden">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <h2 style="margin:0;font-size:16px">⏰ สถานะ Cooldown แต่ละหมวดหมู่</h2>
+        <button onclick="loadCooldown()" style="padding:7px 16px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer">🔄 รีเฟรช</button>
+      </div>
+      <section class="panel" style="margin-bottom:16px">
+        <h3 style="color:var(--red)">🔒 ติด Cooldown (โพสต์ไม่ได้)</h3>
+        <div class="cooldown-grid" id="lockedGrid"><div style="color:var(--gray);font-size:13px">กำลังโหลด…</div></div>
+      </section>
+      <section class="panel">
+        <h3 style="color:var(--green)">✅ พร้อมโพสต์ได้</h3>
+        <div class="cooldown-grid" id="availGrid"><div style="color:var(--gray);font-size:13px">กำลังโหลด…</div></div>
+      </section>
+      <div style="font-size:12px;color:var(--gray);text-align:center;margin-top:8px" id="cooldownUpdated"></div>
     </div>
   </main>
 </div>
@@ -225,11 +286,13 @@ $('logout').onclick = () => { fetch('/admin/logout', { method: 'POST' }).then(()
 
 // ---- tabs ----
 function showTab(t) {
-  $('viewStats').classList.toggle('hidden', t !== 'stats');
-  $('viewProducts').classList.toggle('hidden', t !== 'products');
-  $('tabStats').classList.toggle('active', t === 'stats');
-  $('tabProducts').classList.toggle('active', t === 'products');
-  if (t === 'stats') { loadStats(); loadShopeeStatus(); loadQuota(); }
+  ['stats','products','radar','cooldown'].forEach(n => {
+    $('view' + n.charAt(0).toUpperCase() + n.slice(1)).classList.toggle('hidden', t !== n);
+    $('tab'  + n.charAt(0).toUpperCase() + n.slice(1)).classList.toggle('active', t === n);
+  });
+  if (t === 'stats')    { loadStats(); loadShopeeStatus(); loadQuota(); }
+  if (t === 'radar')    { loadRadarFeed(); }
+  if (t === 'cooldown') { loadCooldown(); }
 }
 
 // ---- stats ----
@@ -413,6 +476,83 @@ async function addProduct() {
   } catch (e) { alert(e.message); }
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// ---- Radar Feed ----
+let radarState = { page: 1, perPage: 20 };
+function radarPage(d) { radarState.page = Math.max(1, radarState.page + d); loadRadarFeed(); }
+async function loadRadarFeed() {
+  const offset = (radarState.page - 1) * radarState.perPage;
+  try {
+    const d = await api(`/api/admin/radar/feed?limit=${radarState.perPage}&offset=${offset}`);
+    $('radarPostedToday').textContent = d.posted_today;
+    $('radarRemaining').textContent = d.remaining_today;
+    $('radarTotal').textContent = d.total;
+    const total = d.total;
+    const pages = Math.max(1, Math.ceil(total / radarState.perPage));
+    $('radarPageInfo').textContent = `หน้า ${radarState.page}/${pages} · ${total} รายการ`;
+    $('radarPrev').disabled = radarState.page <= 1;
+    $('radarNext').disabled = radarState.page >= pages;
+    $('radarRows').innerHTML = d.feed.map(ev => {
+      const t = ev.sent_at ? new Date(ev.sent_at).toLocaleString('th-TH') : '-';
+      const statusBadge = `<span class="badge ${ev.status}">${{posted:'✅ โพสต์แล้ว', ignored:'⏭ ข้าม', failed:'❌ ผิดพลาด'}[ev.status]||ev.status}</span>`;
+      const prod = ev.matched_product;
+      const prodCell = prod
+        ? `<a href="${esc(prod.affiliate_url)}" target="_blank" style="color:var(--red);text-decoration:none">🛍 ${esc(prod.name?.slice(0,40))}</a><br><span style="font-size:11px;color:var(--gray)">฿${(prod.price||0).toLocaleString()} · ขาย ${(prod.sales_count||0).toLocaleString()}</span>`
+        : '<span style="color:var(--gray)">—</span>';
+      const lead = ev.source_lead;
+      const leadCell = lead?.fb_post_url
+        ? `<a href="${esc(lead.fb_post_url)}" target="_blank" style="font-size:12px">${esc(lead.author_name||'')}<br>${esc((lead.post_text_snippet||'').slice(0,50))}…</a>`
+        : (lead?.post_text_snippet ? esc(lead.post_text_snippet.slice(0,60)) : '—');
+      const caption = ev.ai_comment_draft ? `<div class="caption-box" onclick="this.classList.toggle('open')">${esc(ev.ai_comment_draft)}</div>` : '—';
+      return `<tr>
+        <td style="white-space:nowrap;font-size:12px">${t}</td>
+        <td>${statusBadge}</td>
+        <td>${esc(ev.product_keyword||'-')}</td>
+        <td><span style="font-size:12px">${esc(ev.product_category||'-')}</span></td>
+        <td><b>${ev.demand_score!=null?ev.demand_score:'-'}</b></td>
+        <td>${prodCell}</td>
+        <td>${caption}</td>
+        <td>${leadCell}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--gray);padding:30px">ยังไม่มีดีลที่โพสต์</td></tr>';
+  } catch (e) { $('radarRows').innerHTML = `<tr><td colspan="8" style="color:var(--red)">${esc(e.message)}</td></tr>`; }
+}
+
+// ---- Cooldown Monitor ----
+async function loadCooldown() {
+  $('lockedGrid').innerHTML = '<div style="color:var(--gray);font-size:13px">กำลังโหลด…</div>';
+  $('availGrid').innerHTML  = '<div style="color:var(--gray);font-size:13px">กำลังโหลด…</div>';
+  try {
+    const d = await api('/api/admin/radar/cooldown');
+    const ch = d.cooldown_hours;
+    function makeCard(cat, locked) {
+      if (locked) {
+        const pct = Math.min(100, Math.round((ch - cat.remaining_hours) / ch * 100));
+        const avail = new Date(cat.available_at + 'Z').toLocaleString('th-TH');
+        return `<div class="cooldown-card locked">
+          <h4>🔒 ${esc(cat.category)}</h4>
+          <div class="time" style="color:var(--red)">${cat.remaining_hours} ชม.</div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:var(--border)"></div></div>
+          <div class="sub">โพสต์ได้อีกครั้ง: ${avail}</div>
+        </div>`;
+      } else {
+        const last = cat.last_posted_at ? new Date(cat.last_posted_at + 'Z').toLocaleString('th-TH') : '-';
+        return `<div class="cooldown-card avail">
+          <h4>✅ ${esc(cat.category)}</h4>
+          <div class="time" style="color:var(--green)">พร้อมโพสต์</div>
+          <div class="sub">ครั้งล่าสุด: ${last}</div>
+        </div>`;
+      }
+    }
+    $('lockedGrid').innerHTML = d.categories_on_cooldown.length
+      ? d.categories_on_cooldown.map(c => makeCard(c, true)).join('')
+      : '<div style="color:var(--green);font-size:13px;padding:8px">ไม่มีหมวดใดติด Cooldown 🎉</div>';
+    $('availGrid').innerHTML = d.categories_available.length
+      ? d.categories_available.map(c => makeCard(c, false)).join('')
+      : '<div style="color:var(--gray);font-size:13px;padding:8px">ยังไม่มีประวัติการโพสต์</div>';
+    $('cooldownUpdated').textContent = `อัปเดตล่าสุด: ${new Date().toLocaleString('th-TH')} · Cooldown ${ch} ชม./หมวด`;
+  } catch (e) { $('lockedGrid').innerHTML = `<div style="color:var(--red)">${esc(e.message)}</div>`; }
+}
 
 init();
 </script>

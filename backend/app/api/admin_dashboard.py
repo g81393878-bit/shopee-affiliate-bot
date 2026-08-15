@@ -443,3 +443,159 @@ def admin_delete_product(pid: int, _: None = Depends(require_admin)):
         return {"ok": True, "id": pid}
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# Facebook Radar — Radar Feed & Cooldown Monitor
+# ---------------------------------------------------------------------------
+
+RADAR_MAX_DAILY_POSTS = int(os.getenv("RADAR_MAX_DAILY_POSTS", "5"))
+RADAR_CATEGORY_COOLDOWN_HOURS = int(os.getenv("RADAR_CATEGORY_COOLDOWN_HOURS", "24"))
+
+
+@router.get("/api/admin/radar/feed")
+def admin_radar_feed(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    _: None = Depends(require_admin),
+):
+    """ดึงประวัติดีลที่ Radar โพสต์ขึ้น Facebook Page พร้อมสถิติวันนี้"""
+    db = _db()
+    try:
+        now = datetime.datetime.utcnow()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # นับโพสต์วันนี้
+        posted_today = (
+            db.query(func.count(models.FacebookDemandEvent.id))
+            .filter(
+                models.FacebookDemandEvent.notification_status == "posted",
+                models.FacebookDemandEvent.notification_sent_at >= today_start,
+            )
+            .scalar()
+            or 0
+        )
+
+        # ดึง Feed ล่าสุด (เฉพาะที่ posted / ignored)
+        events = (
+            db.query(models.FacebookDemandEvent)
+            .filter(
+                models.FacebookDemandEvent.notification_status.in_(["posted", "ignored", "failed"])
+            )
+            .order_by(models.FacebookDemandEvent.notification_sent_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+
+        feed = []
+        for ev in events:
+            # ดึงข้อมูลสินค้าที่แมตช์ไว้
+            product = None
+            if ev.matched_product_id:
+                product = db.query(models.Product).filter(
+                    models.Product.id == ev.matched_product_id
+                ).first()
+
+            # ดึงข้อมูลโพสต์ต้นทาง
+            lead = None
+            if ev.lead_id:
+                lead = db.query(models.FacebookDetectedLead).filter(
+                    models.FacebookDetectedLead.id == ev.lead_id
+                ).first()
+
+            feed.append({
+                "id": ev.id,
+                "status": ev.notification_status,
+                "sent_at": ev.notification_sent_at.isoformat() if ev.notification_sent_at else None,
+                "intent": ev.intent,
+                "demand_score": ev.demand_score,
+                "urgency": ev.urgency,
+                "product_keyword": ev.product_keyword,
+                "product_category": ev.product_category,
+                "ai_comment_draft": ev.ai_comment_draft,
+                "matched_product": {
+                    "id": product.id,
+                    "name": product.name,
+                    "affiliate_url": product.affiliate_url,
+                    "image_url": getattr(product, "image_url", None),
+                    "price": float(product.price) if product.price else None,
+                    "sales_count": product.sales_count,
+                } if product else None,
+                "source_lead": {
+                    "fb_post_id": lead.fb_post_id if lead else None,
+                    "fb_post_url": lead.fb_post_url if lead else None,
+                    "author_name": lead.author_name if lead else None,
+                    "post_text_snippet": (lead.post_text or "")[:120] if lead else None,
+                } if lead else None,
+            })
+
+        total = (
+            db.query(func.count(models.FacebookDemandEvent.id))
+            .filter(
+                models.FacebookDemandEvent.notification_status.in_(["posted", "ignored", "failed"])
+            )
+            .scalar()
+            or 0
+        )
+
+        return {
+            "posted_today": int(posted_today),
+            "daily_limit": RADAR_MAX_DAILY_POSTS,
+            "remaining_today": max(0, RADAR_MAX_DAILY_POSTS - int(posted_today)),
+            "total": int(total),
+            "feed": feed,
+        }
+    finally:
+        db.close()
+
+
+@router.get("/api/admin/radar/cooldown")
+def admin_radar_cooldown(_: None = Depends(require_admin)):
+    """ดึงสถานะ Cooldown แต่ละหมวดหมู่ — ว่าโพสต์ได้หรือยัง อีกกี่ชั่วโมง"""
+    db = _db()
+    try:
+        now = datetime.datetime.utcnow()
+        cutoff = now - datetime.timedelta(hours=RADAR_CATEGORY_COOLDOWN_HOURS)
+
+        # ดึงโพสต์ล่าสุดของแต่ละ category ใน 24h ที่ผ่านมา
+        recent_events = (
+            db.query(
+                models.FacebookDemandEvent.product_category,
+                func.max(models.FacebookDemandEvent.notification_sent_at).label("last_posted_at"),
+            )
+            .filter(
+                models.FacebookDemandEvent.notification_status == "posted",
+                models.FacebookDemandEvent.notification_sent_at >= cutoff,
+                models.FacebookDemandEvent.product_category.isnot(None),
+            )
+            .group_by(models.FacebookDemandEvent.product_category)
+            .all()
+        )
+
+        categories = []
+        for row in recent_events:
+            cat = row[0]
+            last_at = row[1]
+            if last_at:
+                elapsed_hours = (now - last_at).total_seconds() / 3600
+                remaining_hours = max(0.0, RADAR_CATEGORY_COOLDOWN_HOURS - elapsed_hours)
+                available_at = last_at + datetime.timedelta(hours=RADAR_CATEGORY_COOLDOWN_HOURS)
+                categories.append({
+                    "category": cat,
+                    "on_cooldown": remaining_hours > 0,
+                    "last_posted_at": last_at.isoformat(),
+                    "available_at": available_at.isoformat(),
+                    "remaining_hours": round(remaining_hours, 1),
+                })
+
+        # หมวดที่ไม่มีประวัติใน 24h ถือว่าพร้อมโพสต์ได้
+        return {
+            "cooldown_hours": RADAR_CATEGORY_COOLDOWN_HOURS,
+            "categories_on_cooldown": [c for c in categories if c["on_cooldown"]],
+            "categories_available": [c for c in categories if not c["on_cooldown"]],
+            "checked_at": now.isoformat(),
+        }
+    finally:
+        db.close()
+

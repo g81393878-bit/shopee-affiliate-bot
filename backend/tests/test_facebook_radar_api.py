@@ -111,7 +111,16 @@ def test_high_demand_lead_ingestion_creates_event_and_alert(client, db_session):
 
     with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "test_fb_page_post_123", "error": None}) as mock_post, \
          patch("app.api.facebook_radar.log_post_async") as mock_sheets, \
-         patch("app.api.facebook_radar.dispatch_radar_line_alert") as mock_line_alert:
+         patch("app.api.facebook_radar.dispatch_radar_line_alert") as mock_line_alert, \
+         patch("app.api.facebook_radar.analyze_lead_intent_and_demand", return_value={
+             "intent": "buy",
+             "demand_score": 85,
+             "urgency": "medium",
+             "budget": 400,
+             "product_keyword": "ชุดคลุมท้อง",
+             "product_category": "เสื้อผ้าคุณแม่",
+             "reasoning": "ลูกค้าระบุงบชัดเจน 400 บาท และหาของซื้อจริง",
+         }):
         resp = client.post("/api/admin/facebook-radar/leads", json=payload)
         assert resp.status_code == 200
         data = resp.json()
@@ -131,6 +140,7 @@ def test_high_demand_lead_ingestion_creates_event_and_alert(client, db_session):
         mock_post.assert_called_once()
         mock_sheets.assert_called_once()
         mock_line_alert.assert_not_called()
+
 
     # ตรวจสอบข้อมูลในฐานข้อมูล
     lead = (
