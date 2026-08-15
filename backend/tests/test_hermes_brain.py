@@ -133,6 +133,16 @@ def test_merge_skills_clamps_high_and_keeps_defaults(clean_prefs):
     assert "radar_daily_post_limit" not in out
 
 
+def test_merge_skills_strips_radar_daily_post_limit_even_if_stored(clean_prefs):
+    # แม้ stored skills เก่ายังมี radar_daily_post_limit (จากรุ่นก่อน) → merge ต้องถอดทิ้ง
+    # ไม่งั้น Hermes จะเก็บค่าโควต้าโพสต์ไว้แล้วทับ env RADAR_MAX_DAILY_POSTS
+    stored = dict(DEFAULT_SKILLS)
+    stored["radar_daily_post_limit"] = 25
+    out = merge_skills(stored, {"radar_min_demand_score": 70})
+    assert "radar_daily_post_limit" not in out
+    assert out["radar_min_demand_score"] == 70
+
+
 def test_save_and_load_skills_roundtrip(clean_prefs):
     save_skills(clean_prefs, {"radar_min_demand_score": 60, "pa_khem_tone": "กระชับ"})
     loaded = load_skills(clean_prefs)

@@ -26,8 +26,27 @@ from app.db import SessionLocal
 from app.main import app
 from app import models
 from app.services.product_cards import format_radar_deal_flex_message
+from app.api.facebook_radar import _safe_daily_post_limit
 
 TEST_ADMIN_TOKEN = os.getenv("CRON_TOKEN") or os.getenv("ADMIN_DASHBOARD_PASSWORD") or "test_radar_admin_secret"
+
+
+def test_safe_daily_post_limit_clamps_and_ignores_bad_values(monkeypatch):
+    # default 5 เมื่อ env ไม่ได้ตั้ง
+    monkeypatch.delenv("RADAR_MAX_DAILY_POSTS", raising=False)
+    assert _safe_daily_post_limit() == 5
+    # ค่าปกติ
+    monkeypatch.setenv("RADAR_MAX_DAILY_POSTS", "10")
+    assert _safe_daily_post_limit() == 10
+    # ค่าที่สูงผิดปกติ (misconfig/Hermes เก่า) → clamp ที่ cap
+    monkeypatch.setenv("RADAR_MAX_DAILY_POSTS", "999")
+    assert _safe_daily_post_limit() == 25
+    # ค่าขยะ → fallback 5
+    monkeypatch.setenv("RADAR_MAX_DAILY_POSTS", "abc")
+    assert _safe_daily_post_limit() == 5
+    # ติดลบ/ศูนย์ → clamp เป็น 1
+    monkeypatch.setenv("RADAR_MAX_DAILY_POSTS", "0")
+    assert _safe_daily_post_limit() == 1
 
 
 @pytest.fixture

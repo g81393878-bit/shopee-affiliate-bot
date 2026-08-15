@@ -37,6 +37,31 @@ def _nfc(s: str) -> str:
              .replace("\u0e4d\u0e33", "\u0e33"))  # กันรูปแบบซ้ำ
 
 
+def _strip_garbled(s: str) -> str:
+    """ล้างอักขระขยะจาก LLM output — lone surrogates (surrogateescape) และ U+FFFD
+    ที่ทำให้คีย์เวิร์ด/หมวดหมู่เป็น mojibake แล้วแมตช์สินค้าไม่เจอ."""
+    if not s:
+        return ""
+    s = "".join(c for c in s if not (0xDC80 <= ord(c) <= 0xDFFF) and c != "\ufffd")
+    return _nfc(s.strip())
+
+
+def _clean_llm_data(data: Any) -> Any:
+    """ล้างฟิลด์ข้อความในผล LLM (product_keyword / detected_category / intent / urgency /
+    reasoning / pain_points) กัน mojibake — ฟิลด์ตัวเลขผ่านไปเหมือนเดิม."""
+    if isinstance(data, dict):
+        out = {}
+        for k, v in data.items():
+            if isinstance(v, str):
+                out[k] = _strip_garbled(v)
+            elif isinstance(v, list):
+                out[k] = [_strip_garbled(x) if isinstance(x, str) else x for x in v]
+            else:
+                out[k] = v
+        return out
+    return data
+
+
 _THAI_DIGIT_WORDS = {
     "หนึ่ง": 1, "ยี่": 2, "สอง": 2, "สาม": 3, "สี่": 4,
     "ห้า": 5, "หก": 6, "เจ็ด": 7, "แปด": 8, "เก้า": 9,
@@ -376,7 +401,7 @@ def analyze_lead_intent_and_demand(post_text: str, author_name: Optional[str] = 
                         )
                     )
                     content = response.choices[0].message.content
-                    data = json.loads(content)
+                    data = _clean_llm_data(json.loads(content))
                     if isinstance(data, dict) and "demand_score" in data:
                         data["demand_score"] = int(data.get("demand_score", 0))
                         return data
@@ -407,7 +432,7 @@ def analyze_lead_intent_and_demand(post_text: str, author_name: Optional[str] = 
                         content = content[7:]
                     if content.endswith("```"):
                         content = content[:-3]
-                    data = json.loads(content.strip())
+                    data = _clean_llm_data(json.loads(content.strip()))
                     if isinstance(data, dict) and "demand_score" in data:
                         data["demand_score"] = int(data.get("demand_score", 0))
                         return data
@@ -431,7 +456,7 @@ def analyze_lead_intent_and_demand(post_text: str, author_name: Optional[str] = 
                     generation_config={"response_mime_type": "application/json"},
                 )
             )
-            data = json.loads(response.text)
+            data = _clean_llm_data(json.loads(response.text))
             if isinstance(data, dict) and "demand_score" in data:
                 data["demand_score"] = int(data.get("demand_score", 0))
                 return data
@@ -454,7 +479,7 @@ def analyze_lead_intent_and_demand(post_text: str, author_name: Optional[str] = 
                     temperature=0.2,
                 )
             )
-            data = json.loads(response.choices[0].message.content)
+            data = _clean_llm_data(json.loads(response.choices[0].message.content))
             if isinstance(data, dict) and "demand_score" in data:
                 data["demand_score"] = int(data.get("demand_score", 0))
                 return data

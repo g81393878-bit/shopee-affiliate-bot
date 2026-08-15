@@ -44,6 +44,22 @@ router = APIRouter(prefix="/admin/facebook-radar", tags=["facebook-radar"])
 
 COOKIE_NAME = "pkh_admin"
 
+# ห้ามให้ daily post limit เกินค่านี้ — กัน misconfig/Hermes ทำให้เพจล้นโพสต์
+MAX_DAILY_POSTS_CAP = 25
+
+
+def _safe_daily_post_limit() -> int:
+    """อ่าน RADAR_MAX_DAILY_POSTS (env เท่านั้น) พร้อม clamp [1, MAX_DAILY_POSTS_CAP].
+
+    ตั้งใจไม่ให้ Hermes / system_preferences มา override โควต้าโพสต์ —
+    เพราะเคยเกิด Hermes ตั้งค่าสูงแล้วบอทโพสต์ระเบิด 21 ตัวในวินาทีเดียว.
+    """
+    try:
+        val = int(os.getenv("RADAR_MAX_DAILY_POSTS", "5"))
+    except (ValueError, TypeError):
+        val = 5
+    return max(1, min(val, MAX_DAILY_POSTS_CAP))
+
 
 # ---------------------------------------------------------------------------
 # Admin Authentication Dependency
@@ -379,11 +395,10 @@ def ingest_facebook_leads(
         # migration ก็ไม่ crash endpoint นี้ คืน DEFAULT ครบแทน)
         hermes_skills = load_skills_safe(db)
         radar_min_score = hermes_skills.get("radar_min_demand_score", 70)
-        # Hermes override ได้เฉพาะตอนตั้งค่าจริง (ไม่ None) — ไม่งั้น fallback env เดิม
-        # (กัน Hermes ไปทับ RADAR_MAX_DAILY_POSTS ที่แอดมินตั้งไว้)
-        daily_limit = hermes_skills.get("radar_daily_post_limit")
-        if daily_limit is None:
-            daily_limit = int(os.getenv("RADAR_MAX_DAILY_POSTS", "5"))
+        # Daily post limit เป็นของแอดมินเท่านั้น (env RADAR_MAX_DAILY_POSTS) —
+        # Hermes เรียนปรับได้แค่ radar_min_demand_score ไม่ใช่โควต้าโพสต์
+        # (เคยเจอ Hermes ตั้ง radar_daily_post_limit สูง → โพสต์ระเบิด 21 ตัวในวินาทีเดียว)
+        daily_limit = _safe_daily_post_limit()
 
         # 5. ตรวจสอบเงื่อนไข Demand Score >= radar_min_score
         if is_high_demand(demand_score, threshold=radar_min_score):

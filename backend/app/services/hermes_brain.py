@@ -157,6 +157,9 @@ def gather_market_data(db, hours: int = 48) -> dict:
 def merge_skills(current: dict, llm_result: dict) -> dict:
     """ผสานผล LLM เข้ากับ skills ปัจจุบัน — clamp radar_min_demand_score ให้ [50, 90]."""
     merged = dict(current or DEFAULT_SKILLS)
+    # radar_daily_post_limit เป็นของแอดมิน (env RADAR_MAX_DAILY_POSTS) — ห้าม persist
+    # ผ่าน Hermes (เคยทำให้บอทโพสต์ระเบิด 21 ตัวในวินาทีเดียว)
+    merged.pop("radar_daily_post_limit", None)
 
     cats = llm_result.get("trending_categories")
     if isinstance(cats, list) and cats:

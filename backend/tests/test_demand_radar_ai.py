@@ -21,6 +21,8 @@ from app.services.demand_radar_ai import (
     parse_post_budget,
     _extract_heuristic_keyword,
     _nfc,
+    _strip_garbled,
+    _clean_llm_data,
 )
 from app.services.product_matcher import (
     calculate_product_match_score,
@@ -41,6 +43,30 @@ def test_thai_nfc_normalization():
 
     decomposed2 = "น\u0e4d\u0e32"
     assert _nfc(decomposed2) == "นำ"
+
+
+def test_strip_garbled_removes_surrogates_and_replacement_chars():
+    """Lone surrogates (surrogateescape) + U+FFFD ต้องถูกถอดทิ้งจากคีย์เวิร์ด LLM
+    (กัน mojibake ทำให้แมตช์สินค้าไม่เจอ)."""
+    dirty = "แ\udc81อ\udc9bทำ\udc84ลิ\udc9b"
+    cleaned = _strip_garbled(dirty)
+    assert "\udc81" not in cleaned
+    assert "\ufffd" not in cleaned
+    # เหลือเฉพาะอักขระไทยที่สมบูรณ์ (แ อ ท ำ ล ิ)
+    assert cleaned == "แอทำลิ"
+
+
+def test_clean_llm_data_cleans_string_fields_keeps_numbers():
+    out = _clean_llm_data({
+        "product_keyword": "หูฟัง\udc9b",
+        "detected_category": "อุปกรณ์เสริม\ufffd",
+        "pain_points": ["ตัดเสียง\udc84", "ลมแรง"],
+        "demand_score": 85,
+    })
+    assert out["product_keyword"] == "หูฟัง"
+    assert out["detected_category"] == "อุปกรณ์เสริม"
+    assert out["pain_points"] == ["ตัดเสียง", "ลมแรง"]
+    assert out["demand_score"] == 85  # ตัวเลขไม่โดนแตะ
 
 
 def test_parse_post_budget_formats():
