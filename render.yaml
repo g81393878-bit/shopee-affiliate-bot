@@ -48,6 +48,14 @@ services:
         sync: false  # Firecrawl web search สำรอง (ถ้า Tavily ล้ม/หมด quota) — ฟรี ที่ firecrawl.dev
       - key: LLM_PROVIDER
         value: groq
+      - key: LLM_RATE_LIMIT_RPM
+        sync: false  # จำกัด LLM call/นาที (default 20) — กัน Groq 429 ตอนเรดาร์ยิงหลายโพสต์; 0 = ปิด throttle
+      - key: LLM_RETRY_MAX_ATTEMPTS
+        sync: false  # จำนวน retry 429/5xx (default 3)
+      - key: LLM_RETRY_BASE_DELAY
+        sync: false  # backoff เริ่มต้นเป็นวินาที (default 1.0)
+      - key: LLM_RETRY_MAX_DELAY
+        sync: false  # cap ระยะ backoff เป็นวินาที (default 30.0)
       - key: FB_AUTO_POST_INTERVAL
         value: 240  # นาทีระหว่างโพสต์ Facebook อัตโนมัติ (0 = ปิด) — 4 ชม. (คืนค่าหลังจบช่วงทดสอบ)
       - key: FB_POST_PRODUCTS
