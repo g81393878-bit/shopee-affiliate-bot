@@ -327,6 +327,67 @@ def test_pending_question_ttl_expiry(sim):
     assert r2["intent"] == "search"  # พ้น TTL → กลับโหมดค้นสินค้าปกติ
 
 
+# ---------- ฝากคำถาม: คำถามคู่มือ/เทียบ/ค้นเน็ต/ของใหม่ ต้องไม่หลุดไป web ขยะ ----------
+def test_pending_manual_question_not_web(sim):
+    sim.send("U_cust_1", "ฝากคำถาม")
+    r2 = sim.send("U_cust_1", "ติดตั้งยังไง")
+    assert r2["intent"] == "manual"
+    assert "ไม่ต้องติดตั้งอะไรเลย" in r2["preview"]
+
+
+def test_pending_refund_question_manual(sim):
+    sim.send("U_cust_1", "ฝากคำถาม")
+    r2 = sim.send("U_cust_1", "คืนเงินได้ไหม")
+    assert r2["intent"] == "manual"
+    assert "คืนเงิน" in r2["preview"]
+
+
+def test_pending_damaged_question_manual(sim):
+    """'ของชำรุด' ต้องไป FAQ คืนสินค้า ไม่ใช่ web/fallback"""
+    r = sim.send("U_cust_1", "ของชำรุด ทำไง")
+    assert r["intent"] == "manual"
+    assert "คืนเงิน" in r["preview"] or "คืนสินค้า" in r["preview"]
+
+
+def test_pending_compare(sim):
+    sim.send("U_cust_1", "ฝากคำถาม")
+    r2 = sim.send("U_cust_1", "เทียบ หูฟังบลูทูธไร้สาย รุ่นโปร กับ แก้วสแตนเลส 316 เก็บความเย็น")
+    assert r2["intent"] == "compare"
+
+
+def test_pending_web_search_request(sim):
+    sim.send("U_cust_1", "ฝากคำถาม")
+    r2 = sim.send("U_cust_1", "ค้นเน็ต สภาพอากาศวันนี้")
+    assert r2["intent"] == "web"
+
+
+def test_pending_new_arrivals(sim):
+    # "มีอะไรใหม่" เป็นปุ่มเมนู → อยู่ใน PENDING_CANCEL_IF (ถือว่าเปลี่ยนใจ) ใช้ "มีของใหม่" แทน
+    sim.send("U_cust_1", "ฝากคำถาม")
+    r2 = sim.send("U_cust_1", "มีของใหม่")
+    assert r2["intent"] == "new"
+
+
+def test_pending_new_arrivals_question_suffix(sim):
+    """'มีของใหม่ไหม' (มีคำถามต่อท้าย) ก็ต้องไป new ไม่ใช่ fallback"""
+    sim.send("U_cust_1", "ฝากคำถาม")
+    r2 = sim.send("U_cust_1", "มีของใหม่ไหม")
+    assert r2["intent"] == "new"
+
+
+# ---------- คำสุภาพล้วน (ครับ/จ้า/ค่ะ) ต้องไม่แมตช์ทุกสินค้า ----------
+@pytest.mark.parametrize("text", ["ครับ", "ครับผม", "จ้า", "ค่ะ", "คะ", "นะคะ"])
+def test_polite_word_search_returns_nothing(db, text):
+    """พิมพ์แค่คำลงท้ายสุภาพ → ตัดแล้วเหลือค่าว่าง อย่า "" in name แมตช์ทั้งร้าน"""
+    assert lb.search_products(db, text) == []
+
+
+def test_polite_word_not_all_products(sim):
+    """ผ่านบอทจริง: 'ครับ' ต้องไม่คืนสินค้าทั้งร้าน (intent search)"""
+    r = sim.send("U_cust_1", "ครับ")
+    assert r["intent"] != "search"
+
+
 # ---------- โทนวัย (youth/elder) — ครอบทุกตัวแปร tone ----------
 def test_detect_tone():
     assert lb.detect_tone("จัดให้เลย 555 คับ") == "youth"

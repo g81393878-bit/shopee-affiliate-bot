@@ -484,12 +484,12 @@ BOT_MANUAL_PHRASES = (
     "ดาวน์โหลด", "github", "ซอร์สโค้ด", "ซอร์ส", "source",
     # คำถามสามัญแบบคนไม่รู้เรื่องถาม (ของแท้/คุณภาพ/จัดส่ง/ร้าน/ขอบคุณ/ราคา)
     "ขายอะไรบ้าง", "ของแท้", "ของปลอม", "คุณภาพ", "สินค้าดี", "ของดี",
-    "ดีจริง", "คุณภาพดี", "ใครเป็นคนขาย", "ใครขาย", "ร้านอยู่ที่ไหน",
+    "ดีจริง", "คุณภาพดี", "ใครเป็นคนขาย", "ใครขาย", "เจ้าของร้าน", "ร้านอยู่ที่ไหน",
     "อยู่ที่ไหน", "มีหน้าร้าน", "ส่งของกี่วัน", "กี่วันถึง", "จัดส่งกี่วัน",
     "ราคาเท่าไหร่", "ราคาเท่าไร", "ขอบคุณ", "ขอบใจ",
 
     # FAQ ยอดนิยม (สากล: คืนเงิน/ค่าส่ง/ชำระเงิน/โปร/บอทไม่ตอบ)
-    "คืนเงิน", "คืนสินค้า", "คืนของ", "เปลี่ยนสินค้า", "refund",
+    "คืนเงิน", "คืนสินค้า", "คืนของ", "เปลี่ยนสินค้า", "เปลี่ยนของ", "ชำรุด", "สินค้าเสีย", "refund",
     "ค่าส่ง", "ค่าจัดส่ง", "ส่งฟรี", "ขนส่ง",
     "ชำระเงิน", "จ่ายเงิน", "จ่ายยังไง", "โอนเงิน", "โอนจ่าย",
     "คูปอง", "โปรโมชั่น", "ส่วนลด", "ลดราคา", "มีโปร",
@@ -1677,6 +1677,10 @@ def search_products(db: Session, query: str) -> list:
         return []
     # คำพ้อง/การันต์ไทย (ชาร์ท=ชาร์จ, บลูธูธ=บลูทูธ, iphone=ไอโฟน, type-c=type c)
     q = strip_question_suffix(_strip_polite_suffix(_nfc(normalize_query(q))))
+    if not q:
+        # เหลือแต่คำลงท้ายสุภาพ ("ครับ"/"จ้า"/"ค่ะ") → ไม่มีคำค้นจริง อย่าแมตช์ทุกสินค้า
+        # ("" in name = True เสมอ ไม่งั้นลูกค้าพิมพ์แค่ "ครับ" ได้สินค้าทั้งร้าน)
+        return []
     min_price, max_price = parse_price_conditions(query)
     # ขนาดที่ลูกค้าถาม ("1 ลิตร"/"16 นิ้ว") — แยกไปกรองท้ายสุด ไม่ใช่ตัดทิ้ง
     size_spec = parse_size_spec(query)
@@ -2115,8 +2119,9 @@ def message_text(event):
         if pending_ts and not is_owner and normalized_text not in DELETE_PHRASES \
                 and not any(p in normalized_text for p in PENDING_CANCEL_IF) and not is_contact_request(normalized_text):
             _pending_question.pop(line_user_id, None)
-            # ป้าเข็มตอบเองทั้งหมด (NUANOSE: AI = พนักงาน) — ค้นสินค้า → พัสดุ →
-            # เรื่องร้าน/สั่งซื้อ → ความรู้ทั่วไป ไม่ push เจ้าของ
+            # ป้าเข็มตอบเองทั้งหมด (NUANOSE: AI = พนักงาน) — mirror routing ข้อความตรงๆ:
+            # ค้นสินค้า → พัสดุ → ของใหม่ → คู่มือ/FAQ → เรื่องร้าน → เทียบ → อารมณ์ →
+            # ค้นเน็ต → ความรู้ทั่วไป → ถ่อมตัว ไม่ push เจ้าของ
             hits = search_products(db, normalized_text)
             if hits:
                 reply = format_product_message(db, user, hits,
@@ -2128,11 +2133,38 @@ def message_text(event):
                 # พัสดุ/เลขพัสดุ/ของถึงยัง → สอนเช็คเองในแอป Shopee (ป้าเป็นนายหน้า ไม่มีเลขพัสดุ)
                 reply = [TextSendMessage(text=WISMO_REPLY), WISMO_BUTTON]
                 intent = 'wismo'
+            elif strip_question_suffix(normalized_text) in NEW_PHRASES:
+                # "มีอะไรใหม่"/"มีของใหม่ไหม" → ดันของใหม่หมวดที่เคยสนใจ (เหมือนพิมพ์ตรงๆ)
+                reply = handle_new_arrivals(db, user, line_user_id, is_owner)
+                intent = 'new'
+            elif is_bot_manual_request(normalized_text):
+                # คำถามคู่มือ (ติดตั้ง/คืนเงิน/ค่าคอม/โค้ด...) → ตอบจากคู่มือเฉพาะส่วน
+                # ไม่ปล่อยไป web search (เคยตอบขยะยาวนอกเรื่องตอนถามผ่านเมนูฝากคำถาม)
+                reply = TextSendMessage(text=bot_manual_reply(normalized_text, is_owner))
+                intent = 'manual'
+                if _wants_code_buttons(normalized_text):
+                    reply = [reply, _github_button_card()]
             elif any(m in normalized_text for m in STORE_QUESTION_MARKERS):
-                # เรื่องร้าน/สั่งซื้อ/ราคา/ชำระเงิน → ตอบวิธีจัดการเอง (นายหน้า ไม่มีข้อมูลสั่งซื้อ)
+                # เรื่องร้าน/สั่งซื้อ/ราคา/ชำระเงิน (ที่ไม่ใช่คำถามคู่มือตรงๆ) → ตอบวิธีจัดการเอง
                 reply = TextSendMessage(text=STORE_QUESTION_SELF_SERVICE)
                 intent = 'manual'
                 interest_cat = guess_category(user_text)
+            elif normalized_text.startswith(COMPARE_PREFIXES):
+                # เทียบสินค้า A กับ B → ตารางข้อเท็จจริง (เหมือนพิมพ์ตรงๆ)
+                reply = handle_compare(db, normalized_text, user, is_owner)
+                intent = 'compare'
+            elif detect_emotion(normalized_text):
+                # ระบายอารมณ์ → เห็นใจก่อนตามโทนวัย (เหมือนพิมพ์ตรงๆ)
+                _etype, emo_reply = detect_emotion(normalized_text)
+                tone_reply = emotion_reply(_etype, tone)
+                if tone_reply:
+                    emo_reply = tone_reply
+                reply = TextSendMessage(text=emo_reply, quick_reply=quick_reply_items())
+                intent = 'emotion'
+            elif is_web_search_request(normalized_text):
+                # สั่งค้นเน็ตตรงๆ ("ค้นเน็ต ...") → หาข้อมูลทั่วไป
+                reply = _web_answer_messages(_web_search_text(normalized_text))
+                intent = 'web'
             elif looks_like_question(normalized_text):
                 wanswer = web_search_answer(normalized_text)
                 if wanswer["text"].startswith("🔍 ป้าเข็มหาข้อมูลมาให้แล้วจ๊ะ:"):
@@ -2166,8 +2198,8 @@ def message_text(event):
             # ลิงก์อยู่ในปุ่มการ์ด (ไม่ใช่ข้อความ) — กัน LINE ธง "ไม่ปลอดภัย"
             reply = [TextSendMessage(text=WISMO_REPLY), WISMO_BUTTON]
             intent = 'wismo'
-        elif normalized_text in NEW_PHRASES:
-            # มีอะไรใหม่ — ดันสินค้าใหม่หมวดที่เคนสนใจ (จำจาก chat_logs + ที่บอกให้จำไว้)
+        elif strip_question_suffix(normalized_text) in NEW_PHRASES:
+            # มีอะไรใหม่/มีของใหม่ไหม — ดันสินค้าใหม่หมวดที่เคยสนใจ (จำจาก chat_logs + ที่บอกให้จำไว้)
             reply = handle_new_arrivals(db, user, line_user_id, is_owner)
             intent = 'new'
         elif normalized_text.startswith(REMEMBER_SAVE_PREFIXES) or normalized_text.startswith(REMEMBER_SHOW_PHRASES):
