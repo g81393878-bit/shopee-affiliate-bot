@@ -30,7 +30,7 @@ from app.services.price_refresh import refresh_price
 from app.services.line_quota import push_guard
 from app.services.product_cards import product_cards_message
 from app.services.facebook_poster import post_feed, log_post_async
-from app.services.facebook_intro import intro_posts
+from app.services.facebook_intro import intro_posts, short_bg_posts
 from linebot import LineBotApi
 from linebot.models import TextSendMessage
 
@@ -334,21 +334,66 @@ def _post_next_intro(db) -> Optional[dict]:
     return None
 
 
+def _post_next_short_bg(db) -> Optional[dict]:
+    """โพสต์ข้อความสั้นพื้นสีถัดไป (Phase 1 — สลับกับโพสต์แนะนำตัว)
+
+    กันซ้ำด้วย CampaignLog status='fbbg' (category = index โพสต์) — โพสต์ทีละตัว
+    ข้อความ ≤ 130 ตัวอักษร ส่งผ่าน post_feed(background_preset_id=...) ไม่มีรูป/ลิงก์
+    คืน dict result หรือ None ถ้าโพสต์พื้นสีครบทุกตัวแล้ว
+    """
+    posts = short_bg_posts()
+    posted_idx = {int(c.category) for c in db.query(models.CampaignLog)
+                  .filter(models.CampaignLog.status == "fbbg").all()
+                  if str(c.category).isdigit()}
+    for i, p in enumerate(posts):
+        if i in posted_idx:
+            continue
+        res = post_feed(p["caption"], background_preset_id=p["preset_id"])
+        if res["ok"]:
+            db.add(models.CampaignLog(category=str(i), recipients=1, status="fbbg"))
+            db.commit()
+            log_post_async(_post_sheet_row("bg", p["title"], p["caption"], "", res["post_id"]))
+            return {"posted": [{"kind": "bg", "index": i, "title": p["title"],
+                                "posted": True, "post_id": res["post_id"],
+                                "preset_id": p["preset_id"]}]}
+        return {"posted": [{"kind": "bg", "index": i, "title": p["title"],
+                            "posted": False, "error": res["error"]}]}
+    return None
+
+
 def run_facebook_auto_post(limit: int = 1) -> dict:
     """โพสต์ลงเพจ Facebook อัตโนมัติ — Phase 1 แนะนำตัวก่อน → Phase 2 ขายสินค้าทีหลัง
 
-    Phase 1: โพสต์คอนเทนต์แนะนำตัวป้าเข็ม (ให้คนรู้จักก่อน) ทีละตัวจนครบ
+    Phase 1: สลับโพสต์คอนเทนต์ 2 แบบ (ให้คนรู้จักก่อน) ทีละตัวจนครบ —
+             - แนะนำตัว (รูปมาสคอต, status='fbintro')
+             - ข้อความสั้นพื้นสี (text background, status='fbbg') — สลับ tick คู่/คี่
     Phase 2: โพสต์สินค้า — เปิดเมื่อตั้ง FB_POST_PRODUCTS=1 เท่านั้น (ยังไม่ตั้ง = โพสต์แนะนำ
              ครบแล้วก็หยุด ไม่ขายสินค้าจนกว่าเจ้าของจะพร้อม)
     (เรียกได้ทั้งจาก HTTP endpoint และ scheduler ในตัว — กันโพสต์ซ้ำด้วย CampaignLog)
     """
     db = SessionLocal()
     try:
-        intro = _post_next_intro(db)
-        if intro is not None:
-            return intro
+        # สลับคอนเทนต์โซเชียล: tick คู่ → แนะนำตัว (มาสคอต), tick คี่ → ข้อความสั้นพื้นสี
+        social_posted = (db.query(models.CampaignLog)
+                           .filter(models.CampaignLog.status.in_(["fbintro", "fbbg"]))
+                           .count())
+        bg_turn = social_posted % 2 == 1
+        if bg_turn:
+            res = _post_next_short_bg(db)
+            if res is not None:
+                return res
+            intro = _post_next_intro(db)
+            if intro is not None:
+                return intro
+        else:
+            intro = _post_next_intro(db)
+            if intro is not None:
+                return intro
+            res = _post_next_short_bg(db)
+            if res is not None:
+                return res
         if os.getenv("FB_POST_PRODUCTS", "").lower() not in ("1", "true", "yes"):
-            return {"posted": [], "note": "โพสต์แนะนำตัวครบแล้ว — ตั้ง FB_POST_PRODUCTS=1 เพื่อเริ่มโพสต์สินค้า"}
+            return {"posted": [], "note": "โพสต์แนะนำตัว + พื้นสีครบแล้ว — ตั้ง FB_POST_PRODUCTS=1 เพื่อเริ่มโพสต์สินค้า"}
 
         min_sales = int(os.getenv("MIN_SALES", "2000") or 2000)
         posted_ids = {int(c.category) for c in db.query(models.CampaignLog)

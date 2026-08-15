@@ -194,6 +194,7 @@ def test_cron_facebook_post_dedup(monkeypatch):
     monkeypatch.setattr(cron, "generate_script_for_product", _fake_script)
     monkeypatch.setenv("FB_POST_PRODUCTS", "1")  # ข้าม Phase แนะนำตัว → ตรงไปขายสินค้า
     monkeypatch.setattr(cron, "intro_posts", lambda: [])  # ไม่มีโพสต์แนะนำในเทสต์นี้
+    monkeypatch.setattr(cron, "short_bg_posts", lambda: [])  # ไม่มีโพสต์พื้นสีในเทสต์นี้
     posted = []
     sheet_rows = []
     monkeypatch.setattr(cron, "log_post_async", sheet_rows.append)
@@ -270,7 +271,8 @@ def test_facebook_auto_post_loop_calls_runner(monkeypatch):
 
 
 def test_cron_facebook_post_intro_first(monkeypatch):
-    """Phase 1 — โพสต์แนะนำตัวก่อน พอครบ + ยังไม่เปิด FB_POST_PRODUCTS → หยุด ไม่ขายสินค้า"""
+    """Phase 1 — สลับโพสต์ แนะนำตัว(มาสคอต) ↔ ข้อความสั้นพื้นสี พอครบ + ยังไม่เปิด
+    FB_POST_PRODUCTS → หยุด ไม่ขายสินค้า"""
     from fastapi.testclient import TestClient
     from app.main import app
 
@@ -280,31 +282,44 @@ def test_cron_facebook_post_intro_first(monkeypatch):
         {"title": "แนะนำตัว", "caption": "โพสต์แนะนำ 1"},
         {"title": "ฟีเจอร์เด่น", "caption": "โพสต์แนะนำ 2"},
     ])
+    monkeypatch.setattr(cron, "short_bg_posts", lambda: [
+        {"title": "สั้น1", "caption": "ข้อความสั้น 1", "preset_id": "1903718606535395"},
+    ])
     posted = []
     sheet_rows = []
     monkeypatch.setattr(cron, "log_post_async", sheet_rows.append)
-    monkeypatch.setattr(cron, "post_feed",
-                        lambda msg, link="", image_url="": posted.append(msg) or
-                        {"ok": True, "post_id": f"post_{len(posted)}", "error": None})
+
+    def fake_post_feed(msg, link="", image_url="", background_preset_id=""):
+        posted.append((msg, background_preset_id))
+        return {"ok": True, "post_id": f"post_{len(posted)}", "error": None}
+
+    monkeypatch.setattr(cron, "post_feed", fake_post_feed)
     client = TestClient(app)
 
-    r1 = client.post("/api/cron/facebook-post")
-    b1 = r1.json()["posted"]
-    assert len(b1) == 1 and b1[0]["kind"] == "intro" and b1[0]["index"] == 0
+    # tick 1 (คู่) → แนะนำตัวตัวที่ 0
+    b1 = client.post("/api/cron/facebook-post").json()["posted"]
+    assert b1[0]["kind"] == "intro" and b1[0]["index"] == 0
 
-    r2 = client.post("/api/cron/facebook-post")
-    b2 = r2.json()["posted"]
-    assert b2[0]["kind"] == "intro" and b2[0]["index"] == 1
+    # tick 2 (คี่) → ข้อความสั้นพื้นสี (มี preset_id)
+    b2 = client.post("/api/cron/facebook-post").json()["posted"]
+    assert b2[0]["kind"] == "bg" and b2[0]["preset_id"] == "1903718606535395"
 
-    # intro ครบแล้ว + FB_POST_PRODUCTS ไม่ตั้ง → หยุด (ไม่โพสต์สินค้า)
-    r3 = client.post("/api/cron/facebook-post")
-    assert r3.json()["posted"] == []
-    assert "FB_POST_PRODUCTS" in r3.json()["note"]
-    assert len(posted) == 2  # โพสต์แค่ intro 2 ตัว ไม่มีสินค้า
-    assert len(sheet_rows) == 2  # intro ทั้ง 2 ตัวถูกบันทึกชีท
-    assert all(r["kind"] == "intro" for r in sheet_rows)
+    # tick 3 (คู่) → แนะนำตัวตัวที่ 1
+    b3 = client.post("/api/cron/facebook-post").json()["posted"]
+    assert b3[0]["kind"] == "intro" and b3[0]["index"] == 1
+
+    # tick 4 (คี่) → พื้นสีครบ → fallback แนะนำตัวครบ → หยุด (ไม่โพสต์สินค้า)
+    r4 = client.post("/api/cron/facebook-post")
+    assert r4.json()["posted"] == []
+    assert "FB_POST_PRODUCTS" in r4.json()["note"]
+
+    assert len(posted) == 3  # intro 2 + bg 1
+    assert len(sheet_rows) == 3  # ทั้ง 3 ตัวถูกบันทึกชีท
+    assert [r["kind"] for r in sheet_rows] == ["intro", "bg", "intro"]
     assert sheet_rows[0]["post_id"] == "post_1"
     assert sheet_rows[0]["post_url"] == "https://www.facebook.com/post_1"
+    # โพสต์พื้นสีใช้ background_preset_id ไม่มี link/image
+    assert posted[1][1] == "1903718606535395"
 
 
 def test_intro_posts_have_badge_and_image_url(monkeypatch):
@@ -319,3 +334,17 @@ def test_intro_posts_have_badge_and_image_url(monkeypatch):
         assert p["title"] and p["caption"]
         assert p["caption"].startswith("🏷️ ")  # badge เป็นป้ายข้อความนำหน้าเสมอ
         assert p["image_url"].endswith("/static/pa-khem-avatar.png")
+
+
+def test_short_bg_posts_short_text_and_rotating_presets(monkeypatch):
+    """คลังข้อความสั้นพื้นสี — ทุกตัว ≤ 130 ตัวอักษร + มี preset_id + สีหมุนเวียนไม่ซ้ำติดกัน"""
+    from app.services import facebook_intro
+    posts = facebook_intro.short_bg_posts()
+    assert len(posts) == 8
+    preset_ids = []
+    for p in posts:
+        assert p["title"] and p["caption"] and p["preset_id"]
+        assert len(p["caption"]) <= 130  # Facebook จำกัดข้อความพื้นสี ≤ 130 ตัวอักษร
+        preset_ids.append(p["preset_id"])
+    # 8 สีต่างกันหมด (หมุนเวียนไม่ซ้ำ) — ไม่งั้นจะโพสต์พื้นสีเดิมซ้ำกัน
+    assert len(set(preset_ids)) == 8
