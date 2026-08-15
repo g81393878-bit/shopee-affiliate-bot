@@ -292,17 +292,25 @@ def scrape_real_facebook_posts(
     posts: List[Dict[str, Any]] = []
     url = group_url or f"https://www.facebook.com/groups/{group_id}"
     
-    print("   ↳ 🕵️  [Stealth] Starting Undetected Chrome Browser...")
+    print("   ↳ 🕵️  [Stealth] Starting Undetected Chrome Browser with advanced configurations...")
     options = uc.ChromeOptions()
     options.headless = False
+    options.add_argument('--no-first-run')
+    options.add_argument('--no-service-autorun')
+    options.add_argument('--password-store=basic')
     
     # Launch browser using undetected_chromedriver with version matching the host Chrome
     driver = uc.Chrome(options=options, version_main=151)
+    driver.set_script_timeout(10)
+    driver.set_page_load_timeout(15)
     
     try:
         # Navigate to domain first to set cookies
         print(f"   ↳ 🌐 Accessing Facebook domain to inject session cookies...")
-        driver.get("https://www.facebook.com/")
+        try:
+            driver.get("https://www.facebook.com/")
+        except Exception:
+            pass # Ignore timeouts on initial domain load
         time.sleep(2)
         
         # Load and inject cookies
@@ -322,11 +330,26 @@ def scrape_real_facebook_posts(
             except Exception as e:
                 print(f"   ↳ ⚠️ Cookie Injection Error: {e}")
                 
+        # Perform refresh and Cloudflare/Captcha bypass (if present)
+        driver.refresh()
+        time.sleep(3)
+        try:
+            driver.uc_gui_click_captcha()
+            time.sleep(2)
+        except Exception:
+            pass
+            
         # Now navigate to target group URL
         print(f"   ↳ 🌐 Navigating to Group: {url}")
         driver.get(url)
         time.sleep(5)
         
+        try:
+            driver.uc_gui_click_captcha()
+            time.sleep(2)
+        except Exception:
+            pass
+            
         print(f"   ↳ 📄 Page Title: {driver.title}")
         
         # Wait a moment for dynamic load
