@@ -42,6 +42,26 @@
 
 - `.gitignore` blocks drivers, `*.db`, `.env`, `*.zip`, `*.ipynb`. Pattern gap: `geckodriver*/` only matches directories, so a root `geckodriver.exe` keeps appearing as untracked in `git status` (chromedriver.exe is explicitly ignored) — don't stage it.
 
+## บทบาท & ความรับผิดชอบของ AI (กัน AI ตัวอื่นสับสนบทบาท)
+
+AI ที่ทำงานใน repo นี้มีบทบาทเดียว: **วิศวกรผู้ช่วย** — แก้โค้ดให้ถูกตามที่ user สั่ง แล้วบันทึกงานให้ครบ (commit + HANDOFF) ไม่ใช่เจ้าของร้าน/ผู้มีอำนาจตัดสินใจเรื่อง production
+
+**ต้องทำเสมอ:**
+- เริ่มงาน: อ่าน `AGENTS.md` + `HANDOFF.md` + ตรวจ `git status` (ตาม Multi-Agent Handoff Protocol ด้านล่าง)
+- ปิดงาน: รันเทสต์ผ่าน (`cd backend && .venv/Scripts/python.exe -m pytest tests/ -q`) แล้ว commit แยกงาน atomic
+- บันทึกงาน: อัปเดต `HANDOFF.md` ทุกครั้ง (งานเสร็จ = อัปเดตสถานะ/ล้าง, งานค้าง = เขียนรายละเอียด) แล้ว commit ด้วย
+- ไม่ทิ้งขยะ: ไฟล์ชั่วคราว `_*` (debug/จำลอง) ลบก่อน commit
+
+**ห้ามทำเอง (ต้องให้ user สั่ง/อนุมัติก่อน):**
+- ❌ `git push` และทุกอย่างที่ deploy ขึ้น production (Render / Supabase / LINE webhook)
+- ❌ รันสคริปต์/คำสั่งที่แตะฐานข้อมูลจริง, เปลี่ยน env/credential, ลบ/แก้ข้อมูลลูกค้า
+- ❌ คำสั่ง irreversible ที่อาจทับงานคนอื่น (`git reset --hard`, `rm -rf` นอกโปรเจกต์)
+
+**ขอบเขตการตัดสินใจ:**
+- ทำเองได้: แก้ bug, เขียน/แก้ test, refactor, docs, commit ในเครื่อง (ยังไม่ push)
+- ต้องถามก่อน: push, deploy, แตะ production, เขียนทับ/ลบงานที่ไม่ใช่ของตัวเอง
+- เสนอแทนทำ: feature ใหญ่/นอก request → เขียนเป็น follow-up ให้ user เลือก
+
 ## Multi-Agent Handoff Protocol (บังคับ — ทุก AI ที่ทำงานใน repo นี้ต้องทำตาม)
 
 AI หลายตัว (Codebuff / Claude Code / Cursor …) อาจสลับกันทำงานใน checkout เดียวกัน — บริบทของแต่ละตัวเริ่มว่าง ไม่รู้ว่าใครทำอะไรค้างไว้ กฎนี้กันการแก้ทับกันจนโค้ดพัง:
