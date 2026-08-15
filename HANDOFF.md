@@ -14,7 +14,9 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
-<!-- ว่าง — งานทั้งหมดได้รับการทดสอบและพัฒนาเสร็จสมบูรณ์เรียบร้อยแล้ว -->
+- ✅ feat(facebook): **Messenger webhook + แอพ Live ครบวงจร** — แก้ callback URL ให้ชี้ที่ `/api/webhooks/facebook` (เดิมชี้ผิดไป `huan-khuen-cafe`) + subscribe เพจ "ป้าเข็ม ขายของ" เข้ากับแอพ (Add Subscriptions ผ่าน Graph API) + สลับแอพเป็น Live — เทสต์จริง 22:08 ลูกค้าทัก "สวัสดี" บอทตอบแนะนำ + ลิงก์ LINE (`lin.ee/o9Kjp1N`) อัตโนมัติ
+- ✅ data: **backfill `products.image_url` 1,672 ตัว** ด้วย fetch แบบใหม่ (og:image ตรงจากหน้า Shopee — ฟรี/เร็ว ไม่พึ่ง FB token/Firecrawl) → โพสต์ FB แนบรูปจริง (scontent CDN) ไม่ใช่การ์ดดำ
+- ✅ feat(products): **eager backfill image_url ตอน import** (commit `725c966`) — สินค้าใหม่ได้รูปทันที ไม่ต้องรอโพสต์ FB
 
 ## 2. งานค้าง
 
@@ -32,3 +34,4 @@
 
 *   การทดสอบทั้งหมดของ Social Demand Radar ใน `tests/test_facebook_demand_radar.py` ผ่านการ Mock การวิเคราะห์อย่างสมบูรณ์แบบเพื่อหลีกเลี่ยงผลกระทบจาก Rate Limit 429 ของ API ภายนอก และแก้ปัญหา Mojibake บนระบบ Windows ส่งผลให้เทสต์ทำงานได้เสถียรและเร็วขึ้นมาก
 *   เพิ่มระบบ Relevance Safeguard ใน `product_matcher.py` เพื่อบล็อกดีลสินค้าหากไม่มีสินค้าในคลังที่ตรงกับความต้องการของลูกค้าจริง (Relevance Score < 12.0) ป้องกันการสแปมและยิงโพสต์มั่วซั่วขึ้นบนเพจ
+*   Facebook Messenger webhook + Live เรียบร้อยแล้ว (ยืนยันจากลูกค้าจริงที่ทักแชทแล้วบอทตอบ); ล้าง subscription เก่า `object=user` ที่ชี้ `huan-khuen-cafe` แล้ว — ตอนนี้เหลือ subscription เดียว `object=page` ชี้ที่บอทป้าเข็ม
