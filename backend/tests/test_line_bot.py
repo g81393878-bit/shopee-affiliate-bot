@@ -125,7 +125,7 @@ ROUTING = [
     ("วันนี้ขายอะไรดี", "deals"),
     ("อันดับขายดี", "top"),
     ("หมวดสินค้า", "browse"),
-    ("คุยกับป้าเข็ม", "manual"),
+    ("คุยกับป้าเข็ม", "human"),
     ("สั่งแล้ว ของถึงยัง", "wismo"),
     ("ค้นเน็ต สภาพอากาศวันนี้", "web"),
     ("เทียบหูฟัง A กับ B", "compare"),
@@ -263,6 +263,15 @@ def test_pending_question_store_marker(sim):
     r2 = sim.send("U_cust_1", "พัสดุของฉันอยู่ไหน")
     assert r2["intent"] == "manual"
     assert r2["owner_pushes"] == []  # ป้าเข็มตอบวิธีเช็คเอง ไม่ปลุกเจ้าของ (NUANOSE)
+
+
+def test_chat_button_enters_ai_flow(sim):
+    # "คุยกับป้าเข็ม" ต้องเข้าแชท AI (ไม่ใช่คู่มือตายตัว) — NUANOSE: AI ตอบเอง
+    r1 = sim.send("U_cust_1", "คุยกับป้าเข็ม")
+    assert r1["intent"] == "human"
+    assert "พิมพ์คำถาม" in r1["preview"]
+    r2 = sim.send("U_cust_1", "หูฟัง")
+    assert r2["intent"] == "search"
 
 
 def test_pending_question_web_answer(sim):

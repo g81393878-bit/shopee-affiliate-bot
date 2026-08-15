@@ -54,7 +54,7 @@ Only the LINE webhook URL (`POST /api/webhooks/line`) points at Render directly 
 | `มีอะไรใหม่` | New arrivals in your preferred category |
 | `สั่งแล้ว` / `เลขพัสดุ` | How to track an order on Shopee |
 | `ลบข้อมูลฉัน` | Delete all personal data (PDPA) |
-| `คุยกับป้าเข็ม` | Bot manual / FAQ |
+| `คุยกับป้าเข็ม` / `ฝากคำถาม` | Chat with Pa Khem — AI answers your question |
 
 ---
 
