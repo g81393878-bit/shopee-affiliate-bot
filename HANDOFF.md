@@ -14,6 +14,8 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- `c2cb0be` docs: เพิ่ม **ป้าเข็ม Brand Bible** (`docs/pa-khem-brand-bible.md`) — Character ก่อน Product
+  (Positioning "ถ้าไม่คุ้ม ป้าบอกให้" + ตัวตน/บุคลิก/ภาษา/คำติดปาก + 5 Content Pillars + กติกา Say/Don't Say + KPI Phase 0)
 - `229ac7f` fix(sheet): **รวมสคริปต์ Google ชีทเป็นไฟล์เดียว** — จัดการทั้งแชทลูกค้า + โพสต์จาก URL เดียว
   (`tools/sheet_posts_apps_script.gs` แทน `sheet_apps_script.gs` — dispatch ด้วย field `kind`; แก้ปัญหาผู้ใช้วางทับโปรเจกต์แชทเดิมจนแชทหยุดบันทึก)
 - `41bbdf6` feat(facebook): **บันทึกโพสต์ทุกตัวลง Google ชีทอัตโนมัติ** (`POSTS_SHEET_WEBHOOK_URL`)
@@ -43,6 +45,8 @@
 
 <!-- ว่าง — ไม่มีงานโค้ดค้าง ทำงานทุกชิ้น commit ครบแล้ว -->
 
+- ⚠️ **โพสต์แนะนำตัวชุดปัจจุบัน (`facebook_intro.py` + `docs/facebook-content.md`) ขัดกับ Brand Bible**
+  (ตอนนี้เน้น "ฟีเจอร์บอท" — ต้องเขียนใหม่เป็น Character-first ตามเสา 1–4 ของ brand bible)
 - ⏳ โพสต์ manual 1 อันบนเพจ (04:26, ไม่ใช่ของบอท — ลบด้วย page token ไม่ได้) รอเจ้าของลบเองถ้าต้องการ
 - ⏳ แถว TEST ในชีท (แท็บ "FB Posts" มี "TEST 2" + "TEST post" · แท็บ "คำถามลูกค้า" มี "ทดสอบแชท" U_TEST) รอเจ้าของลบเอง
 
