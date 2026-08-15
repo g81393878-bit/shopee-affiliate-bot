@@ -49,7 +49,7 @@ services:
       - key: LLM_PROVIDER
         value: groq
       - key: FB_AUTO_POST_INTERVAL
-        value: 60  # นาทีระหว่างโพสต์ Facebook อัตโนมัติ (0 = ปิด) — ลดเหลือ 60 (ทุก 1 ชม.) ชั่วคราวเพื่อทดสอบ (เดิม 240)
+        value: 240  # นาทีระหว่างโพสต์ Facebook อัตโนมัติ (0 = ปิด) — 4 ชม. (คืนค่าหลังจบช่วงทดสอบ)
       - key: FB_POST_PRODUCTS
         value: ""  # ตั้งเป็น 1 เพื่อเปิด Phase 2 โพสต์ขายสินค้า (หลังโพสต์แนะนำตัวครบ) — ตอนนี้ปิดไว้
       - key: POSTS_SHEET_WEBHOOK_URL
