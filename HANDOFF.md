@@ -14,6 +14,9 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- ✅ fix(facebook): **ลบโพสต์สินค้าการ์ดลิงก์เก่า 2 ตัว + โพสต์ใหม่แบบแนบรูป** — โพสต์ "Za Facial Mask" (id 937, 939) ที่ขึ้นก่อน og-scrape fix (โค้ดเดิมโพสต์การ์ดลิงก์ → รูปดำ) → ลบโพสต์เก่า 2 ตัว + backfill `products.image_url` + โพสต์ใหม่เป็น `type=photo` (รูปขึ้น scontent CDN) + reset dedup `fbpost` — ตรวจ Graph API แล้วทั้ง 2 ตัว full_picture = scontent-*.fbcdn.net
+- ✅ fix(facebook): **retry Facebook og scrape** — Shopee เสิร์ฟ og:image ให้ crawler FB ไม่สม่ำเสมอ (scrape บางรอบคืน `image` ว่าง → โพสต์ตก fallback การ์ดลิงก์) → `_facebook_og_image` retry 3 รอบ (delay 1s) ก่อนยอมแพ้ + เทสต์ใหม่ — 458 passed (commit `11b7cbb`)
+
 - ✅ chore(cleanup): **ลบโพสต์ทดสอบบนเพจ 10 ตัว** (ช่วง debug 11:15–12:14 UTC: bg/สินค้า/RSS/local/intro ที่ trigger เอง) ผ่าน Graph API DELETE — เพจเหลือ 13 โพสต์ (12 rollout + 1 manual 04:26 ที่ไม่ใช่บอท); dedup ใน CampaignLog ยังอยู่ → บอทไม่โพสต์ซ้ำตัวที่ลบ; **commit assets/ ของเจ้าของ** (ลบ SVG มาสคอต + เพิ่ม PNG) — repo สะอาดแล้ว
 - ✅ chore(render): **คืน `FB_AUTO_POST_INTERVAL` 240 (4 ชม.)** — จบช่วงทดสอบ (เคยลดเป็น 60 เพื่อเทสต์) → render.yaml value=240 + PUT env บน Render + deploy `dep-da05l51t0dsc738v500g` live; บอทโพสต์อัตโนมัติทุก 4 ชม. หมุน 4 คลัง (แบรนด์→สินค้า→ข่าว→ท้องถิ่น)
 - ✅ feat(facebook): **โพสต์สินค้าแนบรูปจริง (ไม่พึ่งการ์ดลิงก์)** — ปัญหา: บางโพสต์การ์ดลิงก์ `s.shopee.co.th` รูปว่าง (Shopee กัน facebookexternalhit บางรอบ) → แก้: เพิ่ม `products.image_url` (migrate ALTER แล้วบน Supabase) + `product_image.py` (`fetch_product_image` ดึงรูปผ่าน **Facebook og scrape `scrape=true`** เพราะ Shopee เป็น SPA กัน requests/firecrawl ไม่เห็น `<meta og:image>` → FB crawler ดึงได้ คืน `down-th.img.susercontent.com/...`) → `_post_next_product` โพสต์ `/photos` แนบรูป + ลิงก์ affiliate ในแคปชั่น (fallback การ์ดลิงก์ถ้าหาไม่ได้) + แก้ bug เรียก `_build_fb_caption` ซ้ำ 2 รอบ — 450 passed — deploy `dep-da05f561egvs73fur6hg` live (commit `f374d14`); เทสต์จริง: สินค้า #20 ANCHI → full_picture = scontent-*.fbcdn.net (รูปอัปโหลดจริง) + ลิงก์ `s.shopee.co.th/7Kw73GWSLp` ในแคปชั่น
@@ -91,7 +94,7 @@
 ## 5. หมายเหตุ
 
 - CI: `.github/workflows/test.yml` รัน `pytest` + coverage gate 85% ทุก push/PR
-- เทสต์ทั้งชุด: 450 passed
+- เทสต์ทั้งชุด: 458 passed
 - บอทจริง healthy: `/health` → 200, `llm_provider=groq`, `database_url_configured=true` (URL: `https://shopee-affiliate-bot-9e9n.onrender.com`)
 - Render env vars ตอนนี้มี 20 ตัว: DATABASE_URL, CRON_TOKEN, GROQ_API_KEY, LINE_CHANNEL_ACCESS_TOKEN/SECRET, LLM_PROVIDER, TAVILY_API_KEY, FIRECRAWL_API_KEY, SHEET_WEBHOOK_URL, FACEBOOK_APP_ID/SECRET/VERIFY_TOKEN/PAGE_ACCESS_TOKEN, LINE_OA_URL, FB_AUTO_POST_INTERVAL, FB_POST_PRODUCTS, POSTS_SHEET_WEBHOOK_URL, ANTHROPIC_API_KEY, ANTHROPIC_MODEL, ADMIN_LINE_USER_ID (ตั้งเป็น `Uc88eb...` = default เดิม — ทำให้ explicit + เพิ่มใน render.yaml sync:false)
 - ฟีเจอร์ orchestrator ยังเป็นโมดูลเดี่ยว — ยังไม่ถูกเรียกจาก `line_bot.py` (ยังไม่มีผลกับลูกค้าจริง); บอสใหญ่ใช้ Claude จริง (ANTHROPIC_API_KEY ตั้งบน Render) + `BOSS_SYSTEM` บริบทเต็ม; Claude สงวนเป็นบอส plan/review เท่านั้น งานกลาง/เฉพาะกิจให้ groq + firecrawl (ไม่เผาโควตา Claude)
@@ -106,4 +109,5 @@
   จัดการ 2 แท็บ (คำถามลูกค้า / FB Posts) — ตั้งใจให้เป็นแบบนี้ ไม่ใช่ bug; เทสต์ทั้ง 2 ทางผ่านแล้ว
 - repo สะอาดแล้ว (commit assets + ไม่มี untracked); commit ล่าสุด push แล้ว — deploy โค้ดจริงตัวล่าสุดคือ `dep-da05l51t0dsc738v500g` (live, หลังคืน interval 240); DB migrate แล้ว: `products.image_url` (ALTER ADD COLUMN)
 - ✅ ตัวกรองอักษรต่างภาษา (เคยค้าง): `app/services/text_cleaner.py` + เรียกใน `post_feed` — เจอคำ "دیزاین" จาก Groq แล้วตัดทิ้งก่อนโพสต์ (427 passed)
+- ⚠️ **มีงานค้างใน working tree ที่ไม่ใช่ของ session นี้ (Social Demand Radar V1)** — `backend/app/models.py` (+97: FacebookGroupMonitor ฯลฯ), `backend/app/schemas.py` (+166), `backend/tests/conftest.py`, ไฟล์ใหม่ `backend/tests/test_social_demand_radar_models.py`, `supabase/migrations/20260815194500_social_demand_radar.sql`, และไดเรกทอรี `.agents/*` — เป็นของ agent/เจ้าของอีกคนที่ทำงานคู่กัน ยังไม่ commit — **ห้าม stage/commit/ลบ**; commit `11b7cbb` นี้ครอบเฉพาะ product_image retry เท่านั้น
 - ⚠️ **token Facebook:** `backend/.env` (local) หมดอายุแล้ว (Session expired 14 ส.ค.) แต่ **Render ยังใช้ token valid ตัวอื่น** (`EAAR9k...PCbT`) — production โพสต์ได้ปกติ; ถ้าจะตรวจเพจ/เทสต์จาก local ต้องดึง token จาก Render (Management API GET env-vars) มาใส่ชั่วคราว (ยังไม่ได้ sync ลง `.env` — รอเจ้าของยืนยัน)
