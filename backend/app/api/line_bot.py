@@ -21,7 +21,7 @@ from app.services.product_cards import product_cards_message, link_button_messag
 from app.services.line_quota import push_guard
 from app.services.category import guess_category, CATEGORY_KEYWORDS, normalize_query
 from app.services.web_search import web_search_answer
-from app.services.hermes_brain import load_skills_safe
+from app.services.hermes_brain import load_skills_safe, market_emphasis
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -183,6 +183,13 @@ def _hermes_skills(db: Session) -> dict:
     """ทักษะ hot-reload จาก Hermes AI (system_preferences) — fail-open เป็น default
     ถ้าตารางยังไม่มี (ก่อน migration) ต้องไม่ crash เส้นทางแชทหลัก"""
     return load_skills_safe(db)
+
+
+def _append_market_emphasis(text: str, emphasis: str) -> str:
+    """ต่อท้ายวลี market tone (Hermes) เข้าข้อความ — ไม่ซ้ำถ้ามีอยู่แล้ว"""
+    if emphasis and emphasis not in (text or ""):
+        return f"{text}\n\n{emphasis}"
+    return text
 
 
 def _trending_boost(products: list, trending) -> list:
@@ -2137,6 +2144,7 @@ def message_text(event):
     try:
         user = get_or_create_line_user(db, line_user_id)
         tone = get_tone(db, line_user_id, normalized_text)
+        emphasis = market_emphasis(db)  # Hermes hot-reload: ท่าทีตลาด ("" ถ้ายังไม่ learn)
         # --- ฝากคำถาม 2 ขั้น: ลูกค้าเพิ่งแตะ "ฝากคำถาม" → ข้อความถัดไป = คำถามจริง ---
         # (วางก่อน branch อื่น — ให้ทุกข้อความถัดไปถูกจับเป็นคำถาม ยกเว้นลบข้อมูล/ยกเลิก)
         pending_ts = _pending_question.get(line_user_id)
@@ -2240,7 +2248,7 @@ def message_text(event):
             intent = 'campaign'
         elif is_greeting(normalized_text):
             # แนวสากล: ทักทาย + ปุ่มทางเลือก — ไม่ยิงสินค้าจนกว่าลูกค้าจะบอกความต้องการ
-            reply = TextSendMessage(text=greeting_text_for(user.name, tone),
+            reply = TextSendMessage(text=_append_market_emphasis(greeting_text_for(user.name, tone), emphasis),
                                     quick_reply=quick_reply_items())
             intent = 'greeting'
         elif normalized_text in WHY_US_PHRASES:
@@ -2248,7 +2256,7 @@ def message_text(event):
             reply = TextSendMessage(text=why_us_text(tone))
             intent = 'why_us'
         elif normalized_text == "ค้นสินค้า":
-            reply = TextSendMessage(text=search_guide(tone),)
+            reply = TextSendMessage(text=_append_market_emphasis(search_guide(tone), emphasis),)
             intent = 'guide'
         elif (normalized_text in CATEGORY_MENU_PHRASES
               or _strip_polite_suffix(normalized_text) in CATEGORY_MENU_PHRASES):
@@ -2366,7 +2374,7 @@ def message_text(event):
                         intent = 'nosearch'
                         interest_cat = cat if cat != "อื่นๆ" else None
                     else:
-                        text = nosearch_fallback_text(user_text, tone)
+                        text = _append_market_emphasis(nosearch_fallback_text(user_text, tone), emphasis)
                         # NUANOSE: ป้าเข็มตอบเอง ไม่ push เจ้าของ — intent='nosearch' ถูก log
                         # ไว้ใน chat_logs แล้ว เจ้าของดู gap ของคลังได้ทีหลังใน dashboard
                         reply = TextSendMessage(text=text, quick_reply=quick_reply_items())

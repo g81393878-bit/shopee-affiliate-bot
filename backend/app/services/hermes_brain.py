@@ -82,6 +82,34 @@ def market_tone(db) -> str:
     return str(skills.get("pa_khem_tone") or "").strip()
 
 
+# --- แปลง pa_khem_tone → วลีสั้นต่อท้ายข้อความแชท (hot-reload) ---
+# ห้ามคืน raw tone จาก LLM ตรง ๆ (กันข้อความแปลก/โฆษณาเกินจริงเข้าห้องลูกค้า) —
+# จับเฉพาะหมวดที่รู้จักแล้วตอบเป็น template คงที่แทน
+VALUE_SIGNALS = ("คุ้ม", "ถูก", "ประหยัด", "ราคา", "งบ")
+CARING_SIGNALS = ("ใจดี", "ปรึกษา", "ละเอียด", "เป็นกันเอง", "ช่วยเหลือ", "แนะนำ", "ใส่ใจ")
+
+
+def market_emphasis_for(tone: str) -> str:
+    """pa_khem_tone → วลีเสริมท้ายข้อความ (คืน "" ถ้า default/ว่าง/ไม่รู้จัก).
+
+    Pure function — แยกออกมาให้เทสต์ได้โดยไม่ต้องต่อ DB. Default tone คืน ""
+    (ยังไม่ learning → ไม่เปลี่ยนพฤติกรรมแชทเดิม).
+    """
+    t = (tone or "").strip()
+    if not t or t == DEFAULT_SKILLS["pa_khem_tone"]:
+        return ""
+    if any(k in t for k in VALUE_SIGNALS):
+        return "ช่วงนี้ป้าเข็มเน้นของคุ้ม ราคาเบา ๆ เป็นพิเศษนะจ๊ะ 💰"
+    if any(k in t for k in CARING_SIGNALS):
+        return "ช่วงนี้ป้าเข็มจะอธิบายละเอียด ๆ ใส่ใจเป็นพิเศษจ๊ะ 🤗"
+    return ""
+
+
+def market_emphasis(db) -> str:
+    """market_emphasis_for(market_tone(db)) — hot-reload + fail-open เป็น ""."""
+    return market_emphasis_for(market_tone(db))
+
+
 def gather_market_data(db, hours: int = 48) -> dict:
     """รวมข้อมูลตลาดย้อนหลัง N ชม. → report dict (aggregation ล้วน ไม่แตะ LLM)."""
     cutoff = _now() - datetime.timedelta(hours=hours)

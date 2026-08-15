@@ -21,6 +21,8 @@ from app.services.hermes_brain import (
     gather_market_data,
     load_skills,
     load_skills_safe,
+    market_emphasis,
+    market_emphasis_for,
     market_tone,
     merge_skills,
     save_skills,
@@ -288,3 +290,40 @@ def test_persona_injects_market_tone_only_when_set():
     # ไม่มี market_tone → ไม่มี section MARKET CONTEXT (พฤติกรรมเดิมไม่เปลี่ยน)
     without_tone = persona_system_prompt()
     assert "MARKET CONTEXT" not in without_tone
+
+
+def test_market_emphasis_for_default_is_empty():
+    assert market_emphasis_for(DEFAULT_SKILLS["pa_khem_tone"]) == ""
+    assert market_emphasis_for("") == ""
+    assert market_emphasis_for(None) == ""
+
+
+def test_market_emphasis_for_value_tone():
+    out = market_emphasis_for("เน้นความคุ้มค่า ของถูก")
+    assert out != ""
+    assert "คุ้ม" in out
+
+
+def test_market_emphasis_for_caring_tone():
+    out = market_emphasis_for("ใจดี ให้คำปรึกษา")
+    assert out != ""
+    assert "ละเอียด" in out
+
+
+def test_market_emphasis_for_unknown_tone_is_empty():
+    # LLM คืนโทนที่ไม่รู้จัก → ไม่ฉีดอะไรเข้าห้องลูกค้า (กันข้อความแปลก)
+    assert market_emphasis_for("มั่ว ๆ ไม่รู้จัก xyz") == ""
+
+
+def test_greeting_appends_market_emphasis_when_learned(clean_prefs, sim):
+    save_skills(clean_prefs, {"pa_khem_tone": "เน้นความคุ้มค่า ของถูก"})
+    r = sim.send("U_cust", "สวัสดี")
+    assert r["intent"] == "greeting"
+    assert "เน้นของคุ้ม" in r["preview"]
+
+
+def test_greeting_has_no_emphasis_when_default(clean_prefs, sim):
+    r = sim.send("U_cust", "สวัสดี")
+    assert r["intent"] == "greeting"
+    assert "เน้นของคุ้ม" not in r["preview"]
+    assert "ใส่ใจเป็นพิเศษ" not in r["preview"]
