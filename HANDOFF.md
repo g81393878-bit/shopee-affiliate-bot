@@ -90,7 +90,7 @@
 - CI: `.github/workflows/test.yml` รัน `pytest` + coverage gate 85% ทุก push/PR
 - เทสต์ทั้งชุด: 438 passed
 - บอทจริง healthy: `/health` → 200, `llm_provider=groq`, `database_url_configured=true` (URL: `https://shopee-affiliate-bot-9e9n.onrender.com`)
-- Render env vars ตอนนี้มี 19 ตัว: DATABASE_URL, CRON_TOKEN, GROQ_API_KEY, LINE_CHANNEL_ACCESS_TOKEN/SECRET, LLM_PROVIDER, TAVILY_API_KEY, FIRECRAWL_API_KEY, SHEET_WEBHOOK_URL, FACEBOOK_APP_ID/SECRET/VERIFY_TOKEN/PAGE_ACCESS_TOKEN, LINE_OA_URL, FB_AUTO_POST_INTERVAL, FB_POST_PRODUCTS, POSTS_SHEET_WEBHOOK_URL, ANTHROPIC_API_KEY, ANTHROPIC_MODEL
+- Render env vars ตอนนี้มี 20 ตัว: DATABASE_URL, CRON_TOKEN, GROQ_API_KEY, LINE_CHANNEL_ACCESS_TOKEN/SECRET, LLM_PROVIDER, TAVILY_API_KEY, FIRECRAWL_API_KEY, SHEET_WEBHOOK_URL, FACEBOOK_APP_ID/SECRET/VERIFY_TOKEN/PAGE_ACCESS_TOKEN, LINE_OA_URL, FB_AUTO_POST_INTERVAL, FB_POST_PRODUCTS, POSTS_SHEET_WEBHOOK_URL, ANTHROPIC_API_KEY, ANTHROPIC_MODEL, ADMIN_LINE_USER_ID (ตั้งเป็น `Uc88eb...` = default เดิม — ทำให้ explicit + เพิ่มใน render.yaml sync:false)
 - ฟีเจอร์ orchestrator ยังเป็นโมดูลเดี่ยว — ยังไม่ถูกเรียกจาก `line_bot.py` (ยังไม่มีผลกับลูกค้าจริง); บอสใหญ่ใช้ Claude จริง (ANTHROPIC_API_KEY ตั้งบน Render) + `BOSS_SYSTEM` บริบทเต็ม; Claude สงวนเป็นบอส plan/review เท่านั้น งานกลาง/เฉพาะกิจให้ groq + firecrawl (ไม่เผาโควตา Claude)
 - facebook webhook: หน้าที่ตอนนี้ = แนะนำบอทป้าเข็ม (แชท) — ไอเดีย A (ค้นสินค้าในแชท) ถูกพักไว้- facebook auto-post: scheduler ในตัว (ไม่พึ่ง cron-job.org) — **หมุนเวียน 4 คลัง (slot = จำนวนโพสต์ fb* ทั้งหมด % 4)**:
   (0) แบรนด์ status=fbintro/fbbg = แนะนำตัว(มาสคอต 12 ตัว, ป้าย 🏷️ + รูป) ↔ ข้อความสั้นพื้นสี(8 ตัว, ≤130 ตัว, 8 สี) — สลับคู่/คี่; ทุกตัวลงท้ายลิงก์ `LINE_OA_URL`
@@ -101,6 +101,6 @@
 - ⚠️ **หมายเหตุ ownership:** `assets/` มีงานของคุณเจ้าของเอง (ลบ SVG มาสคอตเดิม + เพิ่ม PNG ใหม่ 2 ไฟล์ `1e8c7fdf-*.png` / `pa-khem-avatar.png`) — **ยังไม่ commit** ปล่อยไว้ให้เจ้าของ/ไม่ทับงานนี้
 - Google ชีท: SHEET_WEBHOOK_URL (แชท) และ POSTS_SHEET_WEBHOOK_URL (โพสต์) ชี้ URL เดียวกัน = สคริปต์รวม 1 ตัว
   จัดการ 2 แท็บ (คำถามลูกค้า / FB Posts) — ตั้งใจให้เป็นแบบนี้ ไม่ใช่ bug; เทสต์ทั้ง 2 ทางผ่านแล้ว
-- repo: commit ล่าสุด `7de8881` (fix facebook.com link ในคลังท้องถิ่น) push แล้ว — deploy โค้ดจริงตัวล่าสุดคือ `dep-da04mm61egvs73ft8thg` (live); untracked/deleted ยังเหลือเฉพาะงานของคุณเจ้าของใน `assets/` (ดูหมายเหตุ ownership)
+- repo: commit ล่าสุด `7de8881` (fix facebook.com link ในคลังท้องถิ่น) push แล้ว — deploy โค้ดจริงตัวล่าสุดคือ `dep-da04u9c9v7es738jne1g` (live, หลังตั้ง ADMIN_LINE_USER_ID); untracked/deleted ยังเหลือเฉพาะงานของคุณเจ้าของใน `assets/` (ดูหมายเหตุ ownership)
 - ✅ ตัวกรองอักษรต่างภาษา (เคยค้าง): `app/services/text_cleaner.py` + เรียกใน `post_feed` — เจอคำ "دیزاین" จาก Groq แล้วตัดทิ้งก่อนโพสต์ (427 passed)
 - ⚠️ **token Facebook:** `backend/.env` (local) หมดอายุแล้ว (Session expired 14 ส.ค.) แต่ **Render ยังใช้ token valid ตัวอื่น** (`EAAR9k...PCbT`) — production โพสต์ได้ปกติ; ถ้าจะตรวจเพจ/เทสต์จาก local ต้องดึง token จาก Render (Management API GET env-vars) มาใส่ชั่วคราว (ยังไม่ได้ sync ลง `.env` — รอเจ้าของยืนยัน)

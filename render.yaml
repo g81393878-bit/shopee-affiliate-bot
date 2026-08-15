@@ -36,6 +36,8 @@ services:
         sync: false
       - key: ADMIN_DASHBOARD_PASSWORD
         sync: false  # รหัสผ่านแดชบอร์ดแอดมิน (/admin) — ไม่ตั้ง = ใช้ CRON_TOKEN แทน
+      - key: ADMIN_LINE_USER_ID
+        sync: false  # LINE userId ของเจ้าของร้าน — เห็นข้อมูลแอดมินในการ์ด + รับรายงานประจำวัน
       - key: SHOPEE_AFFILIATE_PARTNER_ID
         sync: false  # Shopee Affiliate Open API (รออนุมัติ → ได้ทางอีเมล)
       - key: SHOPEE_AFFILIATE_SECRET
