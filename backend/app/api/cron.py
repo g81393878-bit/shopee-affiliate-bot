@@ -28,6 +28,7 @@ from app.services.ai_generator import format_hashtags_text, generate_script_for_
 from app.services.price_refresh import refresh_price
 from app.services.line_quota import push_guard
 from app.services.product_cards import product_cards_message
+from app.services.facebook_poster import post_feed
 from linebot import LineBotApi
 from linebot.models import TextSendMessage
 
@@ -269,6 +270,71 @@ def cron_reengage(token: str = "", days_silent: int = 7, limit: int = 10):
 
 def _fmt(n: float) -> str:
     return f"{n:,.2f}".rstrip("0").rstrip(".")
+
+
+def _build_fb_caption(p) -> str:
+    """caption สำหรับโพสต์เพจ Facebook = caption (Groq/fallback) + แฮชแท็ก + ลิงก์ affiliate"""
+    caption, tags = "", ""
+    try:
+        data = generate_script_for_product(p.name, p.category or "",
+                                           float(p.price or 0), "Standard")
+        caption = (data.get("caption") or "").strip()
+        tags = format_hashtags_text(data.get("hashtags"))
+    except Exception as e:
+        logger.warning(f"[facebook-post] generate caption failed: {e}")
+    if not caption:
+        caption = (f"🛍️ {p.name} — ราคา {float(p.price or 0):,.0f} บาท "
+                   f"ขายแล้ว {p.sales_count:,} ชิ้น ⭐ {p.rating}")
+    lines = [caption]
+    if tags:
+        lines.append(tags)
+    if p.affiliate_url:
+        lines.append("🛒 " + p.affiliate_url)
+    return "\n\n".join(lines)
+
+
+@router.post("/facebook-post")
+def cron_facebook_post(token: str = "", limit: int = 1):
+    """โพสต์คอนเทนต์สินค้าลงเพจ Facebook อัตโนมัติ (ไอเดีย B — auto-post)
+
+    - เลือกสินค้า link ok + ขายถึงเกณฑ์ + ยังไม่เคยโพสต์ (กันซ้ำด้วย CampaignLog status='fbpost')
+      เรียงตามค่าคอม/คะแนน AI สูงสุด → caption ผ่าน Groq (fallback ข้อความตรง) → feed
+    - เรียกจาก cron-job.org ตามรอบที่ต้องการ (เช่น ทุก 4 ชม.) — มี CRON_TOKEN lock เหมือน cron อื่น
+    """
+    if not _authorized(token):
+        raise HTTPException(status_code=401, detail="invalid token")
+    db = SessionLocal()
+    try:
+        min_sales = int(os.getenv("MIN_SALES", "2000") or 2000)
+        posted_ids = {int(c.category) for c in db.query(models.CampaignLog)
+                      .filter(models.CampaignLog.status == "fbpost").all()
+                      if str(c.category).isdigit()}
+        query = (db.query(models.Product)
+                   .filter(models.Product.link_status == "ok",
+                           models.Product.sales_count >= min_sales))
+        if posted_ids:
+            query = query.filter(~models.Product.id.in_(posted_ids))
+        prods = (query.order_by(models.Product.commission.desc(),
+                                models.Product.ai_score.desc())
+                       .limit(limit).all())
+        if not prods:
+            return {"posted": [], "note": "ไม่มีสินค้าเข้าเกณฑ์ (หรือโพสต์ครบแล้ว)"}
+
+        results = []
+        for p in prods:
+            res = post_feed(_build_fb_caption(p))
+            if res["ok"]:
+                db.add(models.CampaignLog(category=str(p.id), recipients=1,
+                                          status="fbpost"))
+                db.commit()
+                results.append({"id": p.id, "name": p.name[:45], "posted": True,
+                                "post_id": res["post_id"]})
+            else:
+                results.append({"id": p.id, "name": p.name[:45], "posted": False,
+                                "error": res["error"]})
+        return {"posted": results}
+    finally:
+        db.close()
 
 
 @router.post("/daily-report")
