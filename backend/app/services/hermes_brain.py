@@ -17,7 +17,7 @@ import logging
 
 from app import models
 from app.config import settings
-from app.services.llm_clients import groq_clients
+from app.services.llm_clients import call_with_backoff, groq_clients
 
 logger = logging.getLogger(__name__)
 
@@ -203,15 +203,17 @@ def _call_llm(prompt: dict) -> dict | None:
     last_err = None
     for client in clients:
         try:
-            response = client.chat.completions.create(
-                model=settings.GROQ_MODEL,
-                messages=[
-                    {"role": "system", "content": "You are a JSON-only response bot."},
-                    {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.2,
-                timeout=60,
+            response = call_with_backoff(
+                lambda: client.chat.completions.create(
+                    model=settings.GROQ_MODEL,
+                    messages=[
+                        {"role": "system", "content": "You are a JSON-only response bot."},
+                        {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.2,
+                    timeout=60,
+                )
             )
             parsed = json.loads(response.choices[0].message.content)
             if not isinstance(parsed, dict):
