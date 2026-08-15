@@ -35,6 +35,25 @@ def _require_script_keys(data: dict) -> dict:
     return data
 
 
+def build_template_script(product_name: str, category: str = "", price: float = 0.0,
+                          style: str = "standard", tone: str = "neutral") -> dict:
+    """สคริปต์คอนเทนต์แบบ template (ไม่เรียก LLM) — เสียงป้าเข็มสำเร็จรูป
+
+    ใช้เป็น (1) fallback เมื่อ LLM ทุก provider พัง และ (2) backfill สินค้าที่ไม่มี
+    คอนเทนต์โดยไม่ต้องเสีย Groq — field ครบ SCRIPT_KEYS เหมือนผลจาก LLM.
+    """
+    return {
+        "hook": f"หยุดก่อนจ๊ะ! ป้าเพิ่งเจอ {product_name} ของดี ราคาไม่แพงแต่ใช้ดีจริง ต้องมาบอกต่อ",
+        "problem": "หลายคนบ่นว่าของแบบนี้ซื้อมาแล้วพังง่าย หรือแพงเกินราคา จนบางทีก็ไม่รู้จะเชื่อใคร",
+        "solution": f"ตัวนี้ป้าลองใช้เองแล้วจ๊ะ สไตล์ {style} คุณภาพดีสมราคา ใช้ประจำได้เรื่อย ๆ คุ้มมาก",
+        "cta": "ใครสนใจกดลิงก์ในตะกร้า Shopee ได้เลยจ๊ะ ป้าจัดให้ ของแท้ราคาดี",
+        "caption": f"ป้าใช้เองมาสักพักแล้วจ๊ะ {product_name} ดีจริง คุ้มมาก ลองดูจ๊ะ ไม่ลองไม่รู้! #ของดีบอกต่อ #ป้าป้ายยา #คุ้มมาก",
+        "hashtags": ["ของดีบอกต่อ", "ป้าป้ายยา", "คุ้มมาก", style],
+        "title": f"ป้าป้ายยา {product_name} สไตล์ {style}",
+        "thumbnail_prompt": f"Warm friendly photo of {product_name} on a wooden shop counter with soft daylight, cozy local shop vibe",
+    }
+
+
 def generate_script_for_product(product_name: str, category: str, price: float, style: str = "standard", tone: str = "neutral") -> dict:
     """
     Generate a customized TikTok/Shorts video script for a product.
@@ -157,14 +176,5 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
                 logger.warning(f"Anthropic key {client.api_key[:8]}... failed: {e} — ลอง key ถัดไป")
         logger.error(f"Anthropic script generation failed with all keys: {last_err}. Falling back to default script.")
 
-    # Mock script generation fallback (เสียงป้าเข็ม)
-    return {
-        "hook": f"หยุดก่อนจ๊ะ! ป้าเพิ่งเจอ {product_name} ของดี ราคาไม่แพงแต่ใช้ดีจริง ต้องมาบอกต่อ",
-        "problem": f"หลายคนบ่นว่าของแบบนี้ซื้อมาแล้วพังง่าย หรือแพงเกินราคา จนบางทีก็ไม่รู้จะเชื่อใคร",
-        "solution": f"ตัวนี้ป้าลองใช้เองแล้วจ๊ะ สไตล์ {style} คุณภาพดีสมราคา ใช้ประจำได้เรื่อย ๆ คุ้มมาก",
-        "cta": f"ใครสนใจกดลิงก์ในตะกร้า Shopee ได้เลยจ๊ะ ป้าจัดให้ ของแท้ราคาดี",
-        "caption": f"ป้าใช้เองมาสักพักแล้วจ๊ะ {product_name} ดีจริง คุ้มมาก ลองดูจ๊ะ ไม่ลองไม่รู้! #ของดีบอกต่อ #ป้าป้ายยา #คุ้มมาก",
-        "hashtags": ["ของดีบอกต่อ", "ป้าป้ายยา", "คุ้มมาก", style],
-        "title": f"ป้าป้ายยา {product_name} สไตล์ {style}",
-        "thumbnail_prompt": f"Warm friendly photo of {product_name} on a wooden shop counter with soft daylight, cozy local shop vibe"
-    }
+    # Mock script generation fallback (เสียงป้าเข็ม) — ไม่เรียก LLM
+    return build_template_script(product_name, category, price, style, tone)
