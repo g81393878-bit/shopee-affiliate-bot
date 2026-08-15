@@ -15,7 +15,8 @@
 // ============================================================
 
 // REQUIRED: ID of the target Google Sheet (same or different from chat-log sheet)
-var SPREADSHEET_ID = '';   // e.g. '1AbCdEfGhIjKlMnOpQrStUvWxYz1234567890'
+// = ชีทเดียวกับ sheet_apps_script.gs ของคุณ (แท็บใหม่ 'โพสต์เพจ' — ไม่แตะแท็บ 'คำถามลูกค้า')
+var SPREADSHEET_ID = '1UmWfFTkC7PjPV9h32mf639fhaJWraK8Vg_JK5C-Yqmg';
 
 var SHEET_NAME = 'โพสต์เพจ';   // sheet tab name (changeable)
 var HEADER = ['เวลา', 'ประเภท', 'หัวข้อ', 'ข้อความ', 'ลิงก์', 'Post ID', 'URL โพสต์'];
