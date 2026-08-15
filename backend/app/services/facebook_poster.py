@@ -44,23 +44,35 @@ def log_post_async(row: dict) -> None:
         pass
 
 
-def post_feed(message: str, link: str = "", image_url: str = "") -> dict:
+def post_feed(message: str, link: str = "", image_url: str = "",
+              background_preset_id: str = "") -> dict:
     """โพสต์ลง feed เพจ — คืน {ok, post_id, error}
 
     link: ถ้าระบุ Facebook จะดึง preview (รูปสินค้า + ชื่อ) จากหน้าเว็บปลายทางอัตโนมัติ
     image_url: ถ้าระบุ จะโพสต์รูปนั้น (URL สาธารณะที่ Facebook เข้าถึงได้) พร้อม message
       เป็น caption ผ่าน POST /{page-id}/photos — ใช้กับรูปมาสคอต/ภาพนิ่งที่ไม่ได้มาจาก link
       (ถ้ามี image_url จะใช้ endpoint /photos และไม่ส่ง link — Facebook เลือก media อย่างเดียว)
+    background_preset_id: ถ้าระบุ จะโพสต์ข้อความล้วนบนพื้นสี (text_format_preset_id
+      พารามิเตอร์ไม่เป็นทางการของ Graph API) — ใช้กับโพสต์สั้น ≤ 130 ตัวอักษร
+      ข้อจำกัดของ Facebook: ห้ามมี media/link (มีแล้วพื้นสีจะถูก ignore) → ถ้าส่งค่านี้
+      จะไม่แนบ link และ image_url ด้วย
     """
     token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or ""
     if not token:
         return {"ok": False, "post_id": None, "error": "FACEBOOK_PAGE_ACCESS_TOKEN ไม่ได้ตั้ง"}
     image_url = (image_url or "").strip()
-    if not (message or "").strip() and not image_url:
+    background_preset_id = (background_preset_id or "").strip()
+    if not (message or "").strip() and not image_url and not background_preset_id:
         return {"ok": False, "post_id": None,
                 "error": "ต้องมี message หรือ image_url อย่างใดอย่างหนึ่ง"}
 
-    if image_url:
+    if background_preset_id:
+        # พื้นสี (text-only): Facebook กำหนดให้โพสต์ข้อความล้วน (ไม่มี media/link)
+        # และข้อความ ≤ 130 ตัวอักษร — เกินจะถูก 400 ปฏิเสธ
+        endpoint = f"{GRAPH_URL}/{PAGE_ID}/feed"
+        data = {"message": (message or "").strip(),
+                "text_format_preset_id": background_preset_id}
+    elif image_url:
         # โพสต์รูป: url ต้องเป็นลิงก์สาธารณะ (Facebook ดาวน์โหลดเอง); message = caption (ไม่บังคับ)
         endpoint = f"{GRAPH_URL}/{PAGE_ID}/photos"
         data = {"url": image_url}

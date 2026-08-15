@@ -132,6 +132,53 @@ def test_post_feed_image_only_without_caption(monkeypatch):
     assert "message" not in captured["data"]  # ไม่มี caption
 
 
+def test_post_feed_background_preset_uses_feed_endpoint(monkeypatch):
+    """background_preset_id → โพสต์ข้อความล้วนบนพื้นสี (text_format_preset_id)"""
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    captured = {}
+
+    class Resp:
+        status_code = 200
+        def json(self):
+            return {"id": "bg_post_1"}
+
+    def fake_post(url, params=None, data=None, timeout=None):
+        captured["url"] = url
+        captured["data"] = data
+        return Resp()
+
+    monkeypatch.setattr(fp.httpx, "post", fake_post)
+    res = fp.post_feed("ขายของ ราคาเท่าช้อปปี้", background_preset_id="1903718606535395")
+    assert res["ok"] is True and res["post_id"] == "bg_post_1"
+    assert captured["url"].endswith("/feed")  # พื้นสี → /feed ไม่ใช่ /photos
+    assert captured["data"]["message"] == "ขายของ ราคาเท่าช้อปปี้"
+    assert captured["data"]["text_format_preset_id"] == "1903718606535395"
+
+
+def test_post_feed_background_preset_ignores_link_and_image(monkeypatch):
+    """พื้นสีห้ามมี media/link — Facebook จะ ignore preset ถ้ามี → ต้องไม่ส่ง link/image_url"""
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    captured = {}
+
+    class Resp:
+        status_code = 200
+        def json(self):
+            return {"id": "bg_post_2"}
+
+    def fake_post(url, params=None, data=None, timeout=None):
+        captured["data"] = data
+        return Resp()
+
+    monkeypatch.setattr(fp.httpx, "post", fake_post)
+    res = fp.post_feed("โปรพื้นสี", link="https://shope.ee/test",
+                       image_url="https://example.com/mascot.png",
+                       background_preset_id="219266485227663")
+    assert res["ok"] is True
+    assert "link" not in captured["data"]
+    assert "url" not in captured["data"]  # ไม่ส่ง image_url (media จะทำให้พื้นสีถูก ignore)
+    assert captured["data"]["text_format_preset_id"] == "219266485227663"
+
+
 def test_post_feed_rejects_empty_message_and_no_image(monkeypatch):
     monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
     res = fp.post_feed("")
