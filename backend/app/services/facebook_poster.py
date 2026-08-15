@@ -44,22 +44,37 @@ def log_post_async(row: dict) -> None:
         pass
 
 
-def post_feed(message: str, link: str = "") -> dict:
+def post_feed(message: str, link: str = "", image_url: str = "") -> dict:
     """โพสต์ลง feed เพจ — คืน {ok, post_id, error}
 
     link: ถ้าระบุ Facebook จะดึง preview (รูปสินค้า + ชื่อ) จากหน้าเว็บปลายทางอัตโนมัติ
+    image_url: ถ้าระบุ จะโพสต์รูปนั้น (URL สาธารณะที่ Facebook เข้าถึงได้) พร้อม message
+      เป็น caption ผ่าน POST /{page-id}/photos — ใช้กับรูปมาสคอต/ภาพนิ่งที่ไม่ได้มาจาก link
+      (ถ้ามี image_url จะใช้ endpoint /photos และไม่ส่ง link — Facebook เลือก media อย่างเดียว)
     """
     token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or ""
     if not token:
         return {"ok": False, "post_id": None, "error": "FACEBOOK_PAGE_ACCESS_TOKEN ไม่ได้ตั้ง"}
-    if not (message or "").strip():
-        return {"ok": False, "post_id": None, "error": "message ว่าง"}
-    data = {"message": message}
-    if link:
-        data["link"] = link
+    image_url = (image_url or "").strip()
+    if not (message or "").strip() and not image_url:
+        return {"ok": False, "post_id": None,
+                "error": "ต้องมี message หรือ image_url อย่างใดอย่างหนึ่ง"}
+
+    if image_url:
+        # โพสต์รูป: url ต้องเป็นลิงก์สาธารณะ (Facebook ดาวน์โหลดเอง); message = caption (ไม่บังคับ)
+        endpoint = f"{GRAPH_URL}/{PAGE_ID}/photos"
+        data = {"url": image_url}
+        if (message or "").strip():
+            data["message"] = (message or "").strip()
+    else:
+        endpoint = f"{GRAPH_URL}/{PAGE_ID}/feed"
+        data = {"message": message}
+        if link:
+            data["link"] = link
+
     try:
         r = httpx.post(
-            f"{GRAPH_URL}/{PAGE_ID}/feed",
+            endpoint,
             params={"access_token": token},
             data=data,
             timeout=20,
@@ -71,7 +86,9 @@ def post_feed(message: str, link: str = "") -> dict:
         body = r.json()
     except Exception:
         body = {}
-    if r.status_code == 200 and body.get("id"):
-        return {"ok": True, "post_id": body["id"], "error": None}
+    # /photos คืนทั้ง id (รูป) และ post_id (โพสต์ feed) — ใช้ post_id เพราะลิงก์ตรงโพสต์มากกว่า
+    pid = body.get("post_id") or body.get("id")
+    if r.status_code == 200 and pid:
+        return {"ok": True, "post_id": pid, "error": None}
     err = (body.get("error") or {}).get("message") or f"HTTP {r.status_code}"
     return {"ok": False, "post_id": None, "error": str(err)[:200]}

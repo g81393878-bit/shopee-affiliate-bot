@@ -87,6 +87,58 @@ def test_post_feed_passes_link(monkeypatch):
     assert captured["data"]["link"] == "https://shope.ee/test"
 
 
+def test_post_feed_image_url_uses_photos_endpoint(monkeypatch):
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    captured = {}
+
+    class Resp:
+        status_code = 200
+        def json(self):
+            # /photos คืนทั้ง id (รูป) และ post_id (โพสต์ feed)
+            return {"id": "photo_1", "post_id": "page_post_1"}
+
+    def fake_post(url, params=None, data=None, timeout=None):
+        captured["url"] = url
+        captured["data"] = data
+        return Resp()
+
+    monkeypatch.setattr(fp.httpx, "post", fake_post)
+    res = fp.post_feed("เปิดตัวป้าเข็ม", image_url="https://example.com/mascot.png")
+    assert res["ok"] is True
+    assert res["post_id"] == "page_post_1"  # ใช้ post_id (ลิงก์โพสต์) ไม่ใช่ photo id
+    assert captured["url"].endswith("/photos")
+    assert captured["data"]["url"] == "https://example.com/mascot.png"
+    assert captured["data"]["message"] == "เปิดตัวป้าเข็ม"
+    assert "link" not in captured["data"]  # โพสต์รูป → ไม่ส่ง link
+
+
+def test_post_feed_image_only_without_caption(monkeypatch):
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    captured = {}
+
+    class Resp:
+        status_code = 200
+        def json(self):
+            return {"id": "photo_2"}
+
+    def fake_post(url, params=None, data=None, timeout=None):
+        captured["data"] = data
+        return Resp()
+
+    monkeypatch.setattr(fp.httpx, "post", fake_post)
+    res = fp.post_feed("", image_url="https://example.com/mascot.png")
+    assert res["ok"] is True
+    assert captured["data"]["url"] == "https://example.com/mascot.png"
+    assert "message" not in captured["data"]  # ไม่มี caption
+
+
+def test_post_feed_rejects_empty_message_and_no_image(monkeypatch):
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    res = fp.post_feed("")
+    assert res["ok"] is False
+    assert "message" in res["error"] or "image_url" in res["error"]
+
+
 def test_cron_facebook_post_dedup(monkeypatch):
     from fastapi.testclient import TestClient
     from app.main import app
