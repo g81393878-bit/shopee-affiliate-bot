@@ -173,3 +173,31 @@ Supabase PostgreSQL (cloud database)
 | `LINE_CHANNEL_ACCESS_TOKEN` | LINE Developers → Messaging API → Channel Access Token |
 | `LINE_CHANNEL_SECRET` | LINE Developers → Messaging API → Channel Secret |
 | `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com) → Get API Key |
+
+---
+
+## 🛡️ Safety & Rollback Guide (คู่มือความปลอดภัยและการย้อนกลับ)
+
+หากเกิดกรณีระบบพัง หรือโค้ดหลังจากการอัปเดตมีปัญหา สามารถย้อนกลับเวอร์ชันที่ใช้งานได้ปกติ 100% ทันทีผ่าน 2 ช่องทางนี้:
+
+### 1. ย้อนกลับทันทีผ่านแผงควบคุม Render (ไม่ต้องแตะโค้ด)
+- ไปที่หน้าบริการของบริการคุณใน [Render Dashboard](https://dashboard.render.com/)
+- เลือกแท็บ **Deploys** ด้านซ้ายมือ
+- หาประวัติการ Deploy ล่าสุดตัวที่เคยทำงานได้ปกติ (จะมีปุ่มสีเขียว `Live`)
+- คลิกที่ไอคอนจุดสามจุด `...` ขวาบนของรายการ Deploy นั้น
+- เลือก **Rollback to this deploy**
+- เซิร์ฟเวอร์จะย้อนกลับไปใช้โค้ดตัวเก่าที่ทำงานได้ทันทีภายใน 1 นาที
+
+### 2. ย้อนกลับในโค้ดเครื่องคอมพิวเตอร์ของคุณ (Git Rollback)
+หากทำการเขียนโค้ดแก้แล้วรันไม่ขึ้นและต้องการดึงโค้ดเวอร์ชันล่าสุดของ GitHub กลับมาทับใหม่:
+```bash
+git reset --hard origin/main
+```
+หรือย้อนกลับไป Commit ก่อนหน้า 1 ขั้น:
+```bash
+git reset --hard HEAD~1
+```
+แล้วทำการ Push ทับขึ้น GitHub:
+```bash
+git push origin main --force
+```
