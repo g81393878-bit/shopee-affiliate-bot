@@ -14,6 +14,7 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- `c085ab0` feat(persona): ปรับปรุงตัวตนป้าเข็มตาม RCAO Framework สำหรับการจัดการความรู้ชุมชน (`persona.py`)
 - `a29aec7` feat(facebook): รองรับ `LINE_OA_URL` — ใส่ลิงก์ LINE OA ใน `BOT_INTRO` + ชุดโพสต์ (fallback บอกชื่อร้าน)
 - `9b35347` docs: เพิ่มชุดโพสต์ Facebook แนะนำบอทป้าเข็ม (`docs/facebook-content.md` — 3 caption + เนื้อ + image prompt)
 - `d6ab88f` docs(skills): align facebook-app-config SKILL กับตัวจริง (FACEBOOK_VERIFY_TOKEN + /api/webhooks/facebook)
@@ -33,8 +34,8 @@
 
 ## 3. ขั้นตอนต่อไป
 
-- ⚠️ **push 12 commits ขึ้น GitHub** (`git push origin main`) — local นำ origin/main อยู่ 12 commits (orchestrator + facebook webhook + docs/skills)
-- **trigger deploy บน Render** → production ยังไม่มีฟีเจอร์ orchestrator + facebook webhook
+- ⚠️ **push 13 commits ขึ้น GitHub** (`git push origin main`) — local นำ origin/main อยู่ 13 commits (orchestrator + facebook webhook + docs/skills + persona.py)
+- **trigger deploy บน Render** → production ยังไม่มีฟีเจอร์ใหม่
 - 🔗 ยังไม่มีลิงก์ LINE OA จริง — รอเจ้าของร้านให้ URL (`https://line.me/R/ti/p/@xxxxx`) แล้ว set env `LINE_OA_URL`
 
 ## 4. ไฟล์ที่ถืออยู่ / โดนแก้
