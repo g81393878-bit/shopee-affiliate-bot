@@ -14,6 +14,8 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- `41bbdf6` feat(facebook): **บันทึกโพสต์ทุกตัวลง Google ชีทอัตโนมัติ** (`POSTS_SHEET_WEBHOOK_URL`)
+  (ไฟล์ใหม่ `tools/sheet_posts_apps_script.gs` — ชีทแท็บ "โพสต์เพจ"; cron บันทึกทั้ง intro/product ที่โพสต์สำเร็จ; ไม่ตั้ง env = ไม่บันทึก)
 - `3c4d311` feat(facebook): ปรับ auto-post เป็น **Phase 1 แนะนำตัวป้าเข็มก่อน → Phase 2 ขายสินค้าทีหลัง**
   (ไฟล์ใหม่ `app/services/facebook_intro.py` 3 โพสต์; cron โพสต์แนะนำก่อน → ขายเฉพาะเมื่อตั้ง FB_POST_PRODUCTS=1;
   scheduler ในตัวใน `main.py` โพสต์ทุก FB_AUTO_POST_INTERVAL นาที — ไม่พึ่ง cron-job.org)
@@ -39,7 +41,10 @@
 
 <!-- ว่าง — ไม่มีงานโค้ดค้าง ทำงานทุกชิ้น commit ครบแล้ว -->
 
-- โพสต์ test บนเพจ 2 อัน (ข้อความล้วน + ลิงก์การ์ด) รอเจ้าของลบเองถ้าต้องการ
+- ⏳ เจ้าของต้องตั้ง Google ชีทโพสต์: ทำตามวิธีใน `tools/sheet_posts_apps_script.gs` (3 นาที)
+  → ได้ URL web app → ตั้ง `POSTS_SHEET_WEBHOOK_URL` บน Render → deploy
+  (ยังไม่ตั้ง = บอทโพสต์ปกติ แต่ไม่บันทึกชีท)
+- ⏳ โพสต์ manual 1 อันบนเพจ (04:26, ไม่ใช่ของบอท — ลบด้วย page token ไม่ได้) รอเจ้าของลบเองถ้าต้องการ
 
 ## 3. ขั้นตอนต่อไป
 
@@ -58,12 +63,13 @@
 ## 5. หมายเหตุ
 
 - CI: `.github/workflows/test.yml` รัน `pytest` + coverage gate 85% ทุก push/PR
-- เทสต์ทั้งชุด: 392 passed
+- เทสต์ทั้งชุด: 394 passed
 - บอทจริง healthy: `/health` → 200, `llm_provider=groq`, `database_url_configured=true` (URL: `https://shopee-affiliate-bot-9e9n.onrender.com`)
 - Render env vars ตอนนี้มี 15 ตัว: DATABASE_URL, CRON_TOKEN, GROQ_API_KEY, LINE_CHANNEL_ACCESS_TOKEN/SECRET, LLM_PROVIDER, TAVILY_API_KEY, FIRECRAWL_API_KEY, SHEET_WEBHOOK_URL, FACEBOOK_APP_ID/SECRET/VERIFY_TOKEN/PAGE_ACCESS_TOKEN, LINE_OA_URL, FB_AUTO_POST_INTERVAL
   (ยังไม่มีแค่ ANTHROPIC_API_KEY)
 - ฟีเจอร์ orchestrator ยังเป็นโมดูลเดี่ยว — ยังไม่ถูกเรียกจาก `line_bot.py` (ยังไม่มีผลกับลูกค้าจริง)
 - facebook webhook: หน้าที่ตอนนี้ = แนะนำบอทป้าเข็ม (แชท) — ไอเดีย A (ค้นสินค้าในแชท) ถูกพักไว้
 - facebook auto-post: scheduler ในตัว (ไม่พึ่ง cron-job.org) — Phase 1 โพสต์แนะนำตัวป้าเข็มก่อน (กันซ้ำ status=fbintro)
-  → Phase 2 โพสต์สินค้า (status=fbpost) เปิดเมื่อ FB_POST_PRODUCTS=1
+  → Phase 2 โพสต์สินค้า (status=fbpost) เปิดเมื่อ FB_POST_PRODUCTS=1; โพสต์สำเร็จทุกตัว → Google ชีท (ถ้าตั้ง POSTS_SHEET_WEBHOOK_URL)
+- commit `41bbdf6` ยังไม่ push/deploy — รอรวมรอบถัดไป
 - repo สะอาด ไม่มี untracked junk สำหรับงานใหม่
