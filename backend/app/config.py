@@ -34,6 +34,9 @@ class Settings:
     FACEBOOK_VERIFY_TOKEN: str = os.getenv("FACEBOOK_VERIFY_TOKEN", "")
     FACEBOOK_PAGE_ACCESS_TOKEN: str = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN", "")
 
+    # ลิงก์ LINE OA จริง (https://line.me/R/ti/p/@xxxxx) — ใช้ในข้อความแนะนำบอท
+    LINE_OA_URL: str = os.getenv("LINE_OA_URL", "")
+
     # Shopee Affiliate Open API (จากอีเมล Shopee หลังอนุมัติ)
     SHOPEE_AFFILIATE_PARTNER_ID: str = os.getenv("SHOPEE_AFFILIATE_PARTNER_ID", "")
     SHOPEE_AFFILIATE_SECRET: str = os.getenv("SHOPEE_AFFILIATE_SECRET", "")

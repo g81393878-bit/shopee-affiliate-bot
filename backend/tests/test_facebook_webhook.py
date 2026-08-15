@@ -114,3 +114,16 @@ def test_verify_signature_sha1_supported(monkeypatch):
     assert fb._verify_signature(body, _sign(body, "my_secret", "sha1")) is True
     assert fb._verify_signature(body, "sha256=deadbeef") is False
     assert fb._verify_signature(body, "") is False
+
+
+def test_bot_intro_includes_line_oa_url_when_set():
+    intro = fb._build_intro("https://line.me/R/ti/p/@pakhem")
+    assert "https://line.me/R/ti/p/@pakhem" in intro
+    assert "แอดไลน์" in intro
+
+
+def test_bot_intro_fallback_without_url():
+    intro = fb._build_intro("")
+    assert "แอดไลน์ร้าน" in intro
+    assert "ป้าเข็ม ขายของ" in intro
+    assert "line.me" not in intro
