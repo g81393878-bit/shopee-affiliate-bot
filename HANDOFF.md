@@ -39,6 +39,7 @@
   - เหลือ `24c80a6` (docs-only: ลบอ้างอิงใน HANDOFF) ยังไม่ deploy — ไม่กระทบบอท ไม่จำเป็นต้องรีบ
 - ⏳ **ตั้ง Facebook env vars บน Render dashboard** (ยังไม่ตั้งเลย — webhook Facebook ยังใช้ mock fallback):
   `FACEBOOK_APP_ID` · `FACEBOOK_APP_SECRET` · `FACEBOOK_VERIFY_TOKEN` · `FACEBOOK_PAGE_ACCESS_TOKEN`
+  → มีสคริปต์พร้อมใช้: เติมค่าจริงใน `tools/render_set_env.py` แล้วรัน `python tools/render_set_env.py` (set env + deploy)
 - ⏳ **ตั้ง `LINE_OA_URL`** (รอเจ้าของร้านให้ลิงก์ `https://line.me/R/ti/p/@xxxxx`) — ตอนนี้ BOT_INTRO ใช้ fallback ข้อความ
 - ⏳ (ไม่บังคับ) ตั้ง `ANTHROPIC_API_KEY` บน Render — ตอนนี้ orchestrator บอสใหญ่ fallback เป็น Groq
 
