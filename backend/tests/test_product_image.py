@@ -55,5 +55,39 @@ def test_fetch_product_image_empty_when_all_fail(monkeypatch):
         raise requests.exceptions.RequestException("down")
 
     monkeypatch.setattr(pi.requests, "get", boom)
+    monkeypatch.delenv("FACEBOOK_PAGE_ACCESS_TOKEN", raising=False)
     monkeypatch.setattr(pi, "firecrawl_scrape", lambda url: "")
     assert pi.fetch_product_image("https://s.shopee.co.th/x") == ""
+
+
+def test_facebook_og_image_returns_url(monkeypatch):
+    """Facebook og scrape คืน image → ใช้ลิงก์นั้น (Shopee กัน requests แต่ยอม FB)"""
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    captured = {}
+
+    def fake_post(url, params=None, timeout=None):
+        captured["params"] = params
+        return type("R", (), {"json": lambda self: {
+            "image": [{"url": "https://down-th.img.susercontent.com/file/promo-x"}],
+        }})()
+
+    monkeypatch.setattr(pi.requests, "post", fake_post)
+    assert pi._facebook_og_image("https://s.shopee.co.th/x") == \
+        "https://down-th.img.susercontent.com/file/promo-x"
+    assert captured["params"]["scrape"] == "true"
+    assert captured["params"]["access_token"] == "tok123"
+
+
+def test_fetch_product_image_uses_facebook_scrape_before_firecrawl(monkeypatch):
+    """requests หา og:image ไม่ได้ → Facebook scrape ต้องถูกใช้ (ไม่เผา firecrawl)"""
+    def boom(*a, **k):
+        raise requests.exceptions.RequestException("down")
+
+    monkeypatch.setattr(pi.requests, "get", boom)
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    monkeypatch.setattr(pi, "_facebook_og_image",
+                        lambda url, timeout=20: "https://img.example.com/fb-og.jpg")
+    called = []
+    monkeypatch.setattr(pi, "firecrawl_scrape", lambda url: called.append(url) or "")
+    assert pi.fetch_product_image("https://s.shopee.co.th/x") == "https://img.example.com/fb-og.jpg"
+    assert called == []  # firecrawl ไม่ถูกเรียก (facebook ได้รูปก่อน)

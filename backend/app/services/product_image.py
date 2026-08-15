@@ -9,6 +9,7 @@
 best-effort: หาไม่เจอ/โดนบล็อก → คืน "" (ผู้เรียก fallback ไปโพสต์การ์ดลิงก์เดิม)
 """
 import logging
+import os
 import re
 
 import requests
@@ -42,11 +43,36 @@ def extract_og_image(html: str) -> str:
     return ""
 
 
-def fetch_product_image(url: str, timeout: int = 25) -> str:
-    """เปิดหน้าสินค้า (ตาม redirect ลิงก์สั้น) → คืน URL og:image หรือ "".
+def _facebook_og_image(url: str, timeout: int = 20) -> str:
+    """ให้ Facebook crawl ลิงก์เอง (scrape=true) แล้วอ่าน og:image กลับ.
 
-    requests ฟรีก่อน (ไม่เผา Firecrawl credit); หน้าโดน anti-bot → Firecrawl scrape
-    เป็นสำรอง — best-effort ไม่ throw ล้มคืน ""
+    เหตุผล: Shopee เป็น SPA + กันบอท — requests/firecrawl ไม่เห็น <meta og:image>
+    แต่ crawler ของ Facebook (ที่มี infra ถูกต้อง) ดึงได้ → ใช้ลิงก์ที่ Facebook scrape
+    มาเป็นรูปโพสต์ (ยืนยันแล้วกับลิงก์จริง: คืน down-th.img.susercontent.com/...)
+    """
+    token = (os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or "").strip()
+    if not token:
+        return ""
+    try:
+        r = requests.post("https://graph.facebook.com/v21.0/",
+                          params={"id": url, "scrape": "true", "access_token": token},
+                          timeout=timeout)
+        data = r.json()
+        images = data.get("image") or []
+        for it in images:
+            u = (it.get("url") if isinstance(it, dict) else it) or ""
+            if u.startswith(("http://", "https://")):
+                return u
+    except Exception as e:
+        logger.warning(f"[product_image] facebook og scrape ล้ม {url[:45]}: {e}")
+    return ""
+
+
+def fetch_product_image(url: str, timeout: int = 25) -> str:
+    """หาลิงก์รูปสินค้า (og:image) → คืน URL หรือ "" (best-effort ไม่ throw).
+
+    ลำดับ: requests (ฟรี/เร็ว) → Facebook og scrape (เชื่อถือได้สำหรับ Shopee) →
+    Firecrawl (สำรองสุดท้าย) — เจอตัวไหนคืนตัวนั้น
     """
     if not url:
         return ""
@@ -60,6 +86,9 @@ def fetch_product_image(url: str, timeout: int = 25) -> str:
                     return img
     except requests.exceptions.RequestException as e:
         logger.debug(f"[product_image] requests ล้ม {url[:45]}: {e}")
+    img = _facebook_og_image(url)
+    if img:
+        return img
     try:
         img = extract_og_image(firecrawl_scrape(url))
         if img:
