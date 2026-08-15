@@ -89,6 +89,25 @@ def test_faq_does_not_promise_human_reply(sim, text, expect):
         assert bad not in r["preview"], f"{text!r} ยังมี '{bad}' ในคำตอบ"
 
 
+# ---------- Bulk: ทุก reply ในคู่มือต้องไม่มีวลี escalation ----------
+# สแกนทุกข้อความที่ bot_manual_reply ส่งได้ (ทุก FAQ + fallback) — ไม่ใช่แค่ 3 FAQ ข้างบน
+MANUAL_REPLY_SOURCES = [
+    ("BOT_MANUAL_SECTIONS", [reply for _kws, reply in lb.BOT_MANUAL_SECTIONS]),
+    ("BOT_MANUAL", [lb.BOT_MANUAL]),
+    ("INSTALL_REPLY_CUSTOMER", [lb.INSTALL_REPLY_CUSTOMER]),
+    ("INSTALL_REPLY_OWNER", [lb.INSTALL_REPLY_OWNER]),
+    ("OWNER_ONLY_CUSTOMER_REPLY", [lb.OWNER_ONLY_CUSTOMER_REPLY]),
+]
+
+
+@pytest.mark.parametrize("source_name,replies", MANUAL_REPLY_SOURCES)
+def test_all_manual_replies_no_human_escalation(source_name, replies):
+    for reply in replies:
+        assert isinstance(reply, str) and reply.strip(), f"{source_name} มี reply ว่าง"
+        for bad in HUMAN_ESCALATION_WORDS:
+            assert bad not in reply, f"{source_name} ยังมี '{bad}': {reply[:100]!r}"
+
+
 # ---------- ขยะ/อิโมจิ/พิมพ์ผิด ไม่ปลุกเจ้าของ ----------
 NOISE = ["zzzzzz", "asdfghjkl", "555555", "🙂", "!!!"]
 
