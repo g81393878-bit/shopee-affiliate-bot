@@ -37,6 +37,9 @@ flowchart TD
 
 ## 3. ขั้นตอนการตั้งค่าเพื่อเชื่อมต่อทั้งหมดเข้าด้วยกัน (Step-by-Step Integration)
 
+> ✅ **ขั้นที่ 1–2 ถูก implement แล้ว** ใน `backend/app/api/facebook_bot.py` — endpoint `GET/POST /api/webhooks/facebook`
+> พร้อม verify token (GET ตอบ `hub.challenge`) + ตรวจ `X-Hub-Signature-256` (POST) ส่วนขั้นที่ 3–4 ยังต้องทำบนเว็บ Facebook เอง
+
 หากคุณต้องการเชื่อมเพจ Facebook เข้ากับระบบบอทตัวเดิมของคุณ ให้ทำตาม 4 ขั้นตอนนี้ครับ:
 
 ```mermaid
