@@ -127,3 +127,117 @@ def test_bot_intro_fallback_without_url():
     assert "แอดไลน์ร้าน" in intro
     assert "ป้าเข็ม ขายของ" in intro
     assert "line.me" not in intro
+
+
+def test_get_verify_rejects_wrong_mode(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.setattr(fb, "FACEBOOK_VERIFY_TOKEN", "my_token")
+    client = TestClient(app)
+    resp = client.get("/api/webhooks/facebook", params={
+        "hub.mode": "unsubscribe",
+        "hub.verify_token": "my_token",
+        "hub.challenge": "CHALLENGE_123",
+    })
+    assert resp.status_code == 403
+
+
+def test_get_verify_rejects_missing_challenge(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.setattr(fb, "FACEBOOK_VERIFY_TOKEN", "my_token")
+    client = TestClient(app)
+    resp = client.get("/api/webhooks/facebook", params={
+        "hub.mode": "subscribe",
+        "hub.verify_token": "my_token",
+        # ไม่ส่ง hub.challenge — Facebook ต้องมีเสมอ
+    })
+    assert resp.status_code == 403
+
+
+def test_get_verify_rejects_missing_token(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.setattr(fb, "FACEBOOK_VERIFY_TOKEN", "my_token")
+    client = TestClient(app)
+    resp = client.get("/api/webhooks/facebook", params={
+        "hub.mode": "subscribe",
+        "hub.challenge": "CHALLENGE_123",
+        # ไม่ส่ง hub.verify_token
+    })
+    assert resp.status_code == 403
+
+
+def test_post_rejects_missing_signature_header(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    # secret จริง (ไม่ mock) แต่ไม่ส่ง header ลายเซ็น → ต้อง reject
+    monkeypatch.setattr(fb, "FACEBOOK_APP_SECRET", "my_secret")
+    monkeypatch.setattr(fb, "FACEBOOK_PAGE_ACCESS_TOKEN", "")
+    client = TestClient(app)
+    resp = client.post("/api/webhooks/facebook",
+                       json={"object": "page", "entry": []})
+    assert resp.status_code == 400
+
+
+def test_post_accepts_sha1_fallback_header(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.setattr(fb, "FACEBOOK_APP_SECRET", "my_secret")
+    monkeypatch.setattr(fb, "FACEBOOK_PAGE_ACCESS_TOKEN", "")
+    client = TestClient(app)
+
+    payload = {"object": "page", "entry": []}
+    body = json.dumps(payload).encode()
+    # header เก่าแบบ sha1 (ไม่ใช่ -256) — code รองรับ fallback
+    resp = client.post("/api/webhooks/facebook", content=body, headers={
+        "Content-Type": "application/json",
+        "X-Hub-Signature": _sign(body, "my_secret", "sha1"),
+    })
+    assert resp.status_code == 200
+
+
+def test_post_rejects_unknown_algo(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.setattr(fb, "FACEBOOK_APP_SECRET", "my_secret")
+    monkeypatch.setattr(fb, "FACEBOOK_PAGE_ACCESS_TOKEN", "")
+    client = TestClient(app)
+    resp = client.post("/api/webhooks/facebook",
+                       json={"object": "page", "entry": []},
+                       headers={"X-Hub-Signature-256": "sha512=deadbeef"})
+    assert resp.status_code == 400
+
+
+def test_post_rejects_malformed_signature(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.setattr(fb, "FACEBOOK_APP_SECRET", "my_secret")
+    monkeypatch.setattr(fb, "FACEBOOK_PAGE_ACCESS_TOKEN", "")
+    client = TestClient(app)
+    # ไม่มี "=" → _verify_signature คืน False → reject
+    resp = client.post("/api/webhooks/facebook",
+                       json={"object": "page", "entry": []},
+                       headers={"X-Hub-Signature-256": "noequalsmark"})
+    assert resp.status_code == 400
+
+
+def test_verify_signature_edge_cases(monkeypatch):
+    monkeypatch.setattr(fb, "FACEBOOK_APP_SECRET", "my_secret")
+    body = b"payload"
+    # ไม่มีตัวคั่น "="
+    assert fb._verify_signature(body, "noseparator") is False
+    # algorithm ที่ไม่รู้จัก (รองรับแค่ sha256 / sha1)
+    assert fb._verify_signature(body, "sha512=" + "0" * 40) is False
+    # signature ว่าง
+    assert fb._verify_signature(body, "") is False
+    # whitespace หน้าหลัง → strip แล้วยังตรงกันได้
+    good = _sign(body, "my_secret", "sha256")
+    assert fb._verify_signature(body, "  " + good + "  ") is True
