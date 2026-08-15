@@ -578,7 +578,7 @@ async function loadCooldown() {
     function makeCard(cat, locked) {
       if (locked) {
         const pct = Math.min(100, Math.round((ch - cat.remaining_hours) / ch * 100));
-        const avail = new Date(cat.available_at + 'Z').toLocaleString('th-TH');
+        const avail = new Date(cat.available_at).toLocaleString('th-TH');
         return `<div class="cooldown-card locked">
           <h4>🔒 ${esc(cat.category)}</h4>
           <div class="time" style="color:var(--red)">${cat.remaining_hours} ชม.</div>
@@ -586,7 +586,7 @@ async function loadCooldown() {
           <div class="sub">โพสต์ได้อีกครั้ง: ${avail}</div>
         </div>`;
       } else {
-        const last = cat.last_posted_at ? new Date(cat.last_posted_at + 'Z').toLocaleString('th-TH') : '-';
+        const last = cat.last_posted_at ? new Date(cat.last_posted_at).toLocaleString('th-TH') : '-';
         return `<div class="cooldown-card avail">
           <h4>✅ ${esc(cat.category)}</h4>
           <div class="time" style="color:var(--green)">พร้อมโพสต์</div>
