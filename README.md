@@ -105,7 +105,7 @@ Without env vars, the app boots in mock mode (bot won't work for real) — set r
 | `LINE_CHANNEL_SECRET` | ✅ | LINE channel secret |
 | `GROQ_API_KEY` | ✅ | Groq API key (comma-separate multiple for round-robin failover) |
 | `GROQ_MODEL` | | Model override (default `llama-3.3-70b-versatile`) |
-| `LLM_PROVIDER` | | `gemini` \| `openai` \| `groq` (default `groq` in production) |
+| `LLM_PROVIDER` | | `gemini` \| `openai` \| `groq` \| `anthropic` (default `groq` in production) |
 | `GEMINI_API_KEY` | | For `LLM_PROVIDER=gemini` |
 | `CRON_TOKEN` | | Locks `/api/cron/*` endpoints (call with `?token=...`) |
 | `ADMIN_DASHBOARD_PASSWORD` | | `/admin` password (falls back to `CRON_TOKEN`; unset both → dashboard off) |

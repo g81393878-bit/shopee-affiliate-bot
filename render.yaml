@@ -18,6 +18,10 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false  # Claude (บอสใหญ่) — ถ้า LLM_PROVIDER=anthropic; key ตั้งใน Render dashboard เอง
+      - key: ANTHROPIC_MODEL
+        sync: false  # default claude-opus-5
       - key: CRON_TOKEN
         sync: false
       - key: ADMIN_DASHBOARD_PASSWORD

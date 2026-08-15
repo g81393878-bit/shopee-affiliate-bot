@@ -223,5 +223,40 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
                 logger.warning(f"Groq key {client.api_key[:8]}... failed: {e} — ลอง key ถัดไป")
         logger.error(f"Groq API analysis failed with all keys: {last_err}. Falling back to mock data.")
 
+    elif provider == "anthropic" and settings.ANTHROPIC_API_KEY and "mock" not in settings.ANTHROPIC_API_KEY.lower():
+        from app.services.llm_clients import anthropic_clients
+        clients = anthropic_clients()
+        prompt = f"""
+        Analyze this Shopee product for short-video (TikTok/Reels) affiliate marketing:
+        Product Name: {name}
+        Category: {category}
+        Price: {price} Baht
+        Rating: {rating}/5
+        Sales Count: {sales_count}
+        Commission: {commission} Baht
+        Score: {score}/100
+
+        Respond with ONLY the raw JSON object (no markdown fences, no extra text)
+        exactly matching this schema (content fields in Thai):
+        {{"product_score": {score}, "recommendation": "string", "reasons": ["string"], "content_ideas": ["string"], "script": {{"hook": "string", "problem": "string", "solution": "string", "cta": "string", "caption": "string", "hashtags": ["string"], "title": "string", "thumbnail_prompt": "string"}}}}
+        """
+        last_err = None
+        for client in clients:
+            try:
+                # Anthropic OpenAI-compat: response_format ถูก ignore → สั่ง JSON ใน prompt เอง
+                response = client.chat.completions.create(
+                    model=settings.ANTHROPIC_MODEL,
+                    messages=[
+                        {"role": "system", "content": persona_system_prompt("You are a Shopee affiliate marketing analyst. Respond only with JSON conforming to the requested schema. Use Thai language for content fields.", tone=tone)},
+                        {"role": "user", "content": prompt}
+                    ]
+                )
+                data = json.loads(response.choices[0].message.content)
+                return _normalize_analysis(data, score)
+            except Exception as e:
+                last_err = e
+                logger.warning(f"Anthropic key {client.api_key[:8]}... failed: {e} — ลอง key ถัดไป")
+        logger.error(f"Anthropic API analysis failed with all keys: {last_err}. Falling back to mock data.")
+
     # Fallback to mock data if no keys configured or API calls failed
     return get_mock_analysis(name, price, rating, sales_count, commission, score)

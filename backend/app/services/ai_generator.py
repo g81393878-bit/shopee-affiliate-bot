@@ -131,6 +131,32 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
                 logger.warning(f"Groq key {client.api_key[:8]}... failed: {e} — ลอง key ถัดไป")
         logger.error(f"Groq script generation failed with all keys: {last_err}. Falling back to default script.")
 
+    elif provider == "anthropic" and settings.ANTHROPIC_API_KEY and "mock" not in settings.ANTHROPIC_API_KEY.lower():
+        from app.services.llm_clients import anthropic_clients
+        clients = anthropic_clients()
+        prompt = f"""
+        Write a TikTok script in Thai for {product_name} ({category}) priced at {price} Baht.
+        Style: {style} ({style_desc})
+        Respond with ONLY the raw JSON object (no markdown fences, no extra text)
+        matching the fields: hook, problem, solution, cta, caption, hashtags, title, thumbnail_prompt.
+        """
+        last_err = None
+        for client in clients:
+            try:
+                # Anthropic OpenAI-compat: response_format ถูก ignore → สั่ง JSON ใน prompt เอง
+                response = client.chat.completions.create(
+                    model=settings.ANTHROPIC_MODEL,
+                    messages=[
+                        {"role": "system", "content": persona_system_prompt("Respond only in JSON format with Thai texts.", tone=tone)},
+                        {"role": "user", "content": prompt}
+                    ]
+                )
+                return _require_script_keys(json.loads(response.choices[0].message.content))
+            except Exception as e:
+                last_err = e
+                logger.warning(f"Anthropic key {client.api_key[:8]}... failed: {e} — ลอง key ถัดไป")
+        logger.error(f"Anthropic script generation failed with all keys: {last_err}. Falling back to default script.")
+
     # Mock script generation fallback (เสียงป้าเข็ม)
     return {
         "hook": f"หยุดก่อนจ๊ะ! ป้าเพิ่งเจอ {product_name} ของดี ราคาไม่แพงแต่ใช้ดีจริง ต้องมาบอกต่อ",
