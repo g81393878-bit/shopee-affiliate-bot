@@ -14,6 +14,8 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- `9b35347` docs: เพิ่มชุดโพสต์ Facebook แนะนำบอทป้าเข็ม (`docs/facebook-content.md` — 3 caption + เนื้อ + image prompt)
+- `d6ab88f` docs(skills): align facebook-app-config SKILL กับตัวจริง (FACEBOOK_VERIFY_TOKEN + /api/webhooks/facebook)
 - `dce3c82` feat(facebook): เปลี่ยน reply จาก ack เป็นแนะนำบอทป้าเข็ม (`BOT_INTRO`) — ไม่ค้น/ไม่โพสต์สินค้า
   (ใครทักแชทเพจ Facebook → ตอบแนะนำบอท + วิธีคุยต่อที่ LINE)
 - `965bdb9` feat(facebook): เพิ่ม webhook `/api/webhooks/facebook` — GET verify (challenge) + POST ตรวจ X-Hub-Signature-256
@@ -30,13 +32,12 @@
 
 ## 3. ขั้นตอนต่อไป
 
-- ⚠️ **push 7 commits ขึ้น GitHub** (`git push origin main`) — local นำ origin/main อยู่ 7 commits (orchestrator + facebook webhook + docs)
+- ⚠️ **push 10 commits ขึ้น GitHub** (`git push origin main`) — local นำ origin/main อยู่ 10 commits (orchestrator + facebook webhook + docs/skills)
 - **trigger deploy บน Render** → production ยังไม่มีฟีเจอร์ orchestrator + facebook webhook
-- ⏳ ไฟล์ `.agents/skills/facebook-app-config/SKILL.md` มีการแก้จากคนอื่น (section webhook ใช้ `FB_VERIFY_TOKEN` + `/webhook`) — ยังไม่ commit รอเจ้าของ/รอ align กับตัวจริง (`FACEBOOK_VERIFY_TOKEN` + `/api/webhooks/facebook`)
 
 ## 4. ไฟล์ที่ถืออยู่ / โดนแก้
 
-- `.agents/skills/facebook-app-config/SKILL.md` — แก้โดยคนอื่น (ไม่ใช่ AI session นี้) ยังไม่ stage
+<!-- ว่าง -->
 
 ## 5. หมายเหตุ
 
