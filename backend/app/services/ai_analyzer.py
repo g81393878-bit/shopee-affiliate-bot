@@ -2,6 +2,7 @@ import json
 import logging
 import math
 from app.config import settings
+from app.services.llm_clients import call_with_backoff
 from app.schemas import AIAnalysisResult, ScriptGeneratorResponse
 from app.services.persona import persona_system_prompt
 
@@ -150,9 +151,11 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
                 }}
             }}
             """
-            response = model.generate_content(
-                prompt,
-                generation_config={"response_mime_type": "application/json"}
+            response = call_with_backoff(
+                lambda: model.generate_content(
+                    prompt,
+                    generation_config={"response_mime_type": "application/json"}
+                )
             )
             data = json.loads(response.text)
             return _normalize_analysis(data, score)
@@ -178,13 +181,15 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
             {{"product_score": {score}, "recommendation": "string", "reasons": ["string"], "content_ideas": ["string"], "script": {{"hook": "string", "problem": "string", "solution": "string", "cta": "string", "caption": "string", "hashtags": ["string"], "title": "string", "thumbnail_prompt": "string"}}}}
             """
 
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": persona_system_prompt("You are a Shopee affiliate marketing analyst. Respond only with JSON conforming to the requested schema. Use Thai language for content fields.", tone=tone)},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"}
+            response = call_with_backoff(
+                lambda: client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": persona_system_prompt("You are a Shopee affiliate marketing analyst. Respond only with JSON conforming to the requested schema. Use Thai language for content fields.", tone=tone)},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={"type": "json_object"}
+                )
             )
             data = json.loads(response.choices[0].message.content)
             return _normalize_analysis(data, score)
@@ -210,13 +215,15 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
         last_err = None
         for client in clients:
             try:
-                response = client.chat.completions.create(
-                    model=settings.GROQ_MODEL,
-                    messages=[
-                        {"role": "system", "content": persona_system_prompt("You are a Shopee affiliate marketing analyst. Respond only with JSON conforming to the requested schema. Use Thai language for content fields.", tone=tone)},
-                        {"role": "user", "content": prompt}
-                    ],
-                    response_format={"type": "json_object"}
+                response = call_with_backoff(
+                    lambda: client.chat.completions.create(
+                        model=settings.GROQ_MODEL,
+                        messages=[
+                            {"role": "system", "content": persona_system_prompt("You are a Shopee affiliate marketing analyst. Respond only with JSON conforming to the requested schema. Use Thai language for content fields.", tone=tone)},
+                            {"role": "user", "content": prompt}
+                        ],
+                        response_format={"type": "json_object"}
+                    )
                 )
                 data = json.loads(response.choices[0].message.content)
                 return _normalize_analysis(data, score)
@@ -246,12 +253,14 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
         for client in clients:
             try:
                 # Anthropic OpenAI-compat: response_format ถูก ignore → สั่ง JSON ใน prompt เอง
-                response = client.chat.completions.create(
-                    model=settings.ANTHROPIC_MODEL,
-                    messages=[
-                        {"role": "system", "content": persona_system_prompt("You are a Shopee affiliate marketing analyst. Respond only with JSON conforming to the requested schema. Use Thai language for content fields.", tone=tone)},
-                        {"role": "user", "content": prompt}
-                    ]
+                response = call_with_backoff(
+                    lambda: client.chat.completions.create(
+                        model=settings.ANTHROPIC_MODEL,
+                        messages=[
+                            {"role": "system", "content": persona_system_prompt("You are a Shopee affiliate marketing analyst. Respond only with JSON conforming to the requested schema. Use Thai language for content fields.", tone=tone)},
+                            {"role": "user", "content": prompt}
+                        ]
+                    )
                 )
                 data = json.loads(response.choices[0].message.content)
                 return _normalize_analysis(data, score)

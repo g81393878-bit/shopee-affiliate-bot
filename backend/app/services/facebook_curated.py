@@ -136,7 +136,7 @@ def item_key(item: dict) -> str:
 
 def _groq_caption(item: dict) -> str:
     """Groq เขียนโพสต์เสียงป้าเข็ม 2-3 ประโยคจากข่าว (คืนข้อความล้วน ไม่ใช่ JSON)"""
-    from app.services.llm_clients import groq_clients
+    from app.services.llm_clients import call_with_backoff, groq_clients
     clients = groq_clients()
     if not clients:
         raise RuntimeError("ไม่มี Groq key")
@@ -151,13 +151,15 @@ def _groq_caption(item: dict) -> str:
     last_err = None
     for client in clients:
         try:
-            resp = client.chat.completions.create(
-                model=settings.GROQ_MODEL,
-                messages=[
-                    {"role": "system",
-                     "content": persona_system_prompt("เขียนโพสต์ Facebook ภาษาไทยสั้น ๆ")},
-                    {"role": "user", "content": prompt},
-                ],
+            resp = call_with_backoff(
+                lambda: client.chat.completions.create(
+                    model=settings.GROQ_MODEL,
+                    messages=[
+                        {"role": "system",
+                         "content": persona_system_prompt("เขียนโพสต์ Facebook ภาษาไทยสั้น ๆ")},
+                        {"role": "user", "content": prompt},
+                    ],
+                )
             )
             return (resp.choices[0].message.content or "").strip()
         except Exception as e:

@@ -27,7 +27,7 @@ import logging
 import re
 
 from app.config import settings
-from app.services.llm_clients import anthropic_clients, groq_clients
+from app.services.llm_clients import anthropic_clients, call_with_backoff, groq_clients
 
 logger = logging.getLogger(__name__)
 
@@ -82,13 +82,15 @@ def _claude_generate(prompt: str, system: str = BOSS_SYSTEM) -> str:
     last_err = None
     for client in clients:
         try:
-            resp = client.chat.completions.create(
-                model=settings.ANTHROPIC_MODEL,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": prompt},
-                ],
-                timeout=CLAUDE_TIMEOUT,
+            resp = call_with_backoff(
+                lambda: client.chat.completions.create(
+                    model=settings.ANTHROPIC_MODEL,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": prompt},
+                    ],
+                    timeout=CLAUDE_TIMEOUT,
+                )
             )
             out = (resp.choices[0].message.content or "").strip()
             if out:
@@ -117,14 +119,16 @@ def _groq_generate(prompt: str) -> str:
         return ""
     for client in clients:
         try:
-            resp = client.chat.completions.create(
-                model=settings.GROQ_MODEL,
-                messages=[
-                    {"role": "system", "content": "คุณคือผู้ช่วยแม่ค้าออนไลน์ป้าเข็ม ตอบภาษาไทย ตรงประเด็น"},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.3,
-                timeout=WORKER_TIMEOUT,
+            resp = call_with_backoff(
+                lambda: client.chat.completions.create(
+                    model=settings.GROQ_MODEL,
+                    messages=[
+                        {"role": "system", "content": "คุณคือผู้ช่วยแม่ค้าออนไลน์ป้าเข็ม ตอบภาษาไทย ตรงประเด็น"},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.3,
+                    timeout=WORKER_TIMEOUT,
+                )
             )
             out = (resp.choices[0].message.content or "").strip()
             if out:

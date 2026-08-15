@@ -260,7 +260,7 @@ def _summarize_with_groq(query: str, results: list) -> str:
         return ""
     try:
         from app.config import settings
-        from app.services.llm_clients import groq_clients
+        from app.services.llm_clients import call_with_backoff, groq_clients
         clients = groq_clients()
         if not clients:
             return ""
@@ -272,14 +272,16 @@ def _summarize_with_groq(query: str, results: list) -> str:
         )
         for client in clients:
             try:
-                resp = client.chat.completions.create(
-                    model=settings.GROQ_MODEL,
-                    messages=[
-                        {"role": "system",
-                         "content": "คุณคือป้าเข็ม แม่ค้าออนไลน์ผู้ช่วยช้อปปิ้ง ตอบสั้น ตรงประเด็น เป็นภาษาไทย"},
-                        {"role": "user", "content": prompt},
-                    ],
-                    temperature=0.3,
+                resp = call_with_backoff(
+                    lambda: client.chat.completions.create(
+                        model=settings.GROQ_MODEL,
+                        messages=[
+                            {"role": "system",
+                             "content": "คุณคือป้าเข็ม แม่ค้าออนไลน์ผู้ช่วยช้อปปิ้ง ตอบสั้น ตรงประเด็น เป็นภาษาไทย"},
+                            {"role": "user", "content": prompt},
+                        ],
+                        temperature=0.3,
+                    )
                 )
                 ans = (resp.choices[0].message.content or "").strip()
                 if ans:

@@ -1,6 +1,7 @@
 import json
 import logging
 from app.config import settings
+from app.services.llm_clients import call_with_backoff
 from app.schemas import ScriptGeneratorResponse
 from app.services.persona import persona_system_prompt
 
@@ -98,9 +99,11 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
                 "thumbnail_prompt": "string (detailed image prompt for generating video cover/thumbnail)"
             }}
             """
-            response = model.generate_content(
-                prompt,
-                generation_config={"response_mime_type": "application/json"}
+            response = call_with_backoff(
+                lambda: model.generate_content(
+                    prompt,
+                    generation_config={"response_mime_type": "application/json"}
+                )
             )
             return _require_script_keys(json.loads(response.text))
         except Exception as e:
@@ -116,13 +119,15 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
             Style: {style} ({style_desc})
             Format the response exactly as JSON matching the fields: hook, problem, solution, cta, caption, hashtags, title, thumbnail_prompt.
             """
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": persona_system_prompt("Respond only in JSON format with Thai texts.", tone=tone, market_tone=market_tone)},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"}
+            response = call_with_backoff(
+                lambda: client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": persona_system_prompt("Respond only in JSON format with Thai texts.", tone=tone, market_tone=market_tone)},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={"type": "json_object"}
+                )
             )
             return _require_script_keys(json.loads(response.choices[0].message.content))
         except Exception as e:
@@ -139,13 +144,15 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
         last_err = None
         for client in clients:
             try:
-                response = client.chat.completions.create(
-                    model=settings.GROQ_MODEL,
-                    messages=[
-                        {"role": "system", "content": persona_system_prompt("Respond only in JSON format with Thai texts.", tone=tone, market_tone=market_tone)},
-                        {"role": "user", "content": prompt}
-                    ],
-                    response_format={"type": "json_object"}
+                response = call_with_backoff(
+                    lambda: client.chat.completions.create(
+                        model=settings.GROQ_MODEL,
+                        messages=[
+                            {"role": "system", "content": persona_system_prompt("Respond only in JSON format with Thai texts.", tone=tone, market_tone=market_tone)},
+                            {"role": "user", "content": prompt}
+                        ],
+                        response_format={"type": "json_object"}
+                    )
                 )
                 return _require_script_keys(json.loads(response.choices[0].message.content))
             except Exception as e:
@@ -166,12 +173,14 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
         for client in clients:
             try:
                 # Anthropic OpenAI-compat: response_format ถูก ignore → สั่ง JSON ใน prompt เอง
-                response = client.chat.completions.create(
-                    model=settings.ANTHROPIC_MODEL,
-                    messages=[
-                        {"role": "system", "content": persona_system_prompt("Respond only in JSON format with Thai texts.", tone=tone, market_tone=market_tone)},
-                        {"role": "user", "content": prompt}
-                    ]
+                response = call_with_backoff(
+                    lambda: client.chat.completions.create(
+                        model=settings.ANTHROPIC_MODEL,
+                        messages=[
+                            {"role": "system", "content": persona_system_prompt("Respond only in JSON format with Thai texts.", tone=tone, market_tone=market_tone)},
+                            {"role": "user", "content": prompt}
+                        ]
+                    )
                 )
                 return _require_script_keys(json.loads(response.choices[0].message.content))
             except Exception as e:

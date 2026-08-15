@@ -17,7 +17,9 @@ description: >-
 - **กัน 429**: `call_with_backoff(fn)` retry แบบ exponential backoff (เคารพ Retry-After แต่ cap
   ด้วย max_delay) + `throttle_llm_request()` จำกัด RPM process-wide — env `LLM_RATE_LIMIT_RPM`
   (default 20, 0=ปิด), `LLM_RETRY_MAX_ATTEMPTS` (3), `LLM_RETRY_BASE_DELAY` (1s), `LLM_RETRY_MAX_DELAY` (30s)
-  → ใช้แล้วใน `demand_radar_ai.py` ทุก provider branch (เรดาร์วิเคราะห์โพสต์เยอะ ๆ ไม่พังด้วย 429)
+  → ใช้แล้ว**ครบทุกจุดที่ยิง LLM**: `demand_radar_ai`, `hermes_brain`, `ai_generator`,
+    `ai_analyzer`, `web_search`, `facebook_curated`, `facebook_local`, `orchestrator`
+    (ห้ามเขียน `chat.completions.create`/`generate_content` นอก `call_with_backoff` อีก)
 
 ## กับดัก (เจอจริง)
 1. **Groq ห้ามยิงด้วย raw urllib** — Cloudflare 1010 บล็อก; ใช้ `openai` library เสมอ
@@ -31,8 +33,8 @@ description: >-
 
 ## ไฟล์
 `backend/app/services/llm_clients.py` (helpers `call_with_backoff` / `throttle_llm_request`);
-ผู้ใช้: `demand_radar_ai.py` (rate-limit path), `ai_generator.py`, `ai_analyzer.py`,
-`facebook_curated.py`, `facebook_local.py`, `web_search.py`, `hermes_brain.py`
+ผู้ใช้: `demand_radar_ai.py`, `hermes_brain.py`, `ai_generator.py`, `ai_analyzer.py`,
+`facebook_curated.py`, `facebook_local.py`, `web_search.py`, `orchestrator.py` — ทุกจุดห่อ `call_with_backoff` แล้ว
 
 ## เทสต์
 `backend/tests/test_llm_providers.py` (mock `_FakeClient` คืน JSON ตายตัว — เดิน anthropic branch
