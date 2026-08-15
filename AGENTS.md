@@ -44,6 +44,11 @@
 - **บอท LINE ตอบเฉพาะ `link_status == 'ok'`** (`line_bot.py` filter ทั้ง search และ หมุนเวียน) — ลิงก์เสีย/ยังไม่ตรวจ ไม่เด้งขึ้นหน้าลูกค้าเด็ดขาด
 - API `POST/PUT /products` ตรวจลิงก์ก่อนบันทึก (ไม่ OK → 400) และ `tools/product_pipeline.py import-csv` ตรวจก่อน insert (ข้ามตัวไม่ผ่าน) — `check-links` อัปเดตสถานะลงตาราง (รันเป็นระยะ; `--delete` ลบตัว DEAD)
 
+## คอนเทนต์สินค้า (contents)
+
+- "ยังไม่มีคอนเทนต์" ในแดชบอร์ด = สินค้าที่ไม่มีแถวในตาราง `contents` (สคริปต์ hook/problem/solution/cta/caption) — เติมโดย cron `analyze` (Groq, ทีละ 30 ตัว/2 ชม., เรียง ai_score สูงก่อน). โพสต์ FB **ไม่อ่าน** `contents` (gen caption สดผ่าน Groq + template fallback); `contents.hook` ใช้ทำการ์ดสินค้า LINE เท่านั้น
+- เติมแบบไม่ใช้ LLM (เจ้าของสั่ง "ไม่ต้องใช้ Groq"): `build_template_script()` ใน `app/services/ai_generator.py` (template เสียงป้าเข็ม) + `tools/_backfill_content_template.py` ต่อ Supabase ตรงเขียน template ลง contents
+
 ## Facebook Automation & Social Demand Radar (ป้าเข็ม)
 
 - **ข้อกำหนดความปลอดภัยการเข้าถึงกลุ่ม:** ระบบส่องกลุ่ม Facebook หรือโซเชียลมีเดียอื่น ๆ ต้องไม่รับประกันความปลอดภัย 100% หรือการันตีว่าจะทำงานได้โดยไม่ต้อง Login ให้ยึดหลักเกณฑ์ "Read-only monitoring โดยใช้วิธีการเข้าถึงที่ได้รับอนุญาตและสอดคล้องกับข้อกำหนดของแพลตฟอร์ม" เสมอ และสคริปต์สแกน (เช่น `tools/fb_group_monitor_local.py`) ควรแยกไปรันบน IP บ้านจริง (Local/VPS) เพื่อเลี่ยงการถูกจำกัดของเซิร์ฟเวอร์คลาวด์
@@ -52,6 +57,11 @@
 - **วงจรเรียนรู้ Data Flywheel:** ข้อมูลเหตุการณ์ต้องแยกตารางชัดเจนระหว่างโพสต์ดิบ (`facebook_detected_leads`), ข้อมูลการวิเคราะห์ความต้องการ (`facebook_demand_events`) และการตัดสินใจส่งข้อมูลของแอดมิน (`lead_actions`) เพื่อบันทึกประวัติ Conversions (การกดตอบ, การคลิก, และยอดการซื้อจริง) สำหรับนำไปใช้เทรนหรือปรับปรุงโมเดล AI แนะนำดีลในอนาคต
 - **`notification_status='failed'` มักแปลว่า "จับคู่สินค้าในคลังไม่ได้"** (`matched_product_id=None`) ไม่ใช่บั๊กโค้ด — เทสต์โพสต์จริงต้องเลือกคีย์เวิร์ดที่มีของในคลัง เช่น "ชุดคลุมท้อง" = 0 ตัว vs "หูฟัง" = 123 ตัว (`SELECT count(*) FROM products WHERE link_status='ok' AND name ILIKE '%…%'`)
 - **`tools/fb_group_monitor_local.py` ต้องส่ง `--once` เสมอ** — ไม่งั้นวน loop (default interval 300s) ดูเหมือน hang. HTTP timeout ฝังตาย 15s (`DEFAULT_TIMEOUT_SECONDS`, ไม่มี flag) → เรียก production (Groq + FB post >15s) จะ TimeoutError ทั้งที่ server ทำงานเสร็จ; ส่งเองด้วยสคริปต์ timeout 60s
+
+## MCP / Dev Tools
+
+- `tools/pkh_mcp_server.py` = MCP server (Python SDK) expose admin API 10 tools (สินค้า/สถิติ/เรดาร์ feed) — auth ผ่าน cookie: `POST /admin/login` เอา `pkh_admin` แล้วแนบทุก request (`require_admin` ฝั่ง dashboard รับเฉพาะ cookie, `require_admin_auth` ฝั่ง radar รับ token ด้วย). `mcp` dep ติดตั้งเฉพาะ venv ท้องถิ่น ไม่เข้า requirements.txt
+- **MCP SDK v2 ≠ FastMCP เก่า**: `pip install mcp` ให้ v2 — `from mcp.server.mcpserver import MCPServer` (ไม่มี `mcp.server.fastmcp`). Single Pydantic model param ถูก wrap เป็น nested key (ไม่ flatten) → ใช้ flat params `Annotated[str, Field(description=...)]` ให้ input schema สะอาด
 
 ## Git & Repo Hygiene
 
