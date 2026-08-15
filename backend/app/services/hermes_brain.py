@@ -113,7 +113,7 @@ def market_emphasis(db) -> str:
 
 
 def gather_market_data(db, hours: int = 48) -> dict:
-    """รวมข้อมูลตลาดย้อนหลัง N ชม. → report dict (aggregation ล้วน ไม่แตะ LLM)."""
+    """รวมข้อมูลตลาดย้อนหลัง N ชม. และประวัติสถิติ Reels Insights -> report dict."""
     cutoff = _now() - datetime.timedelta(hours=hours)
 
     chats = db.query(models.ChatLog).filter(models.ChatLog.created_at >= cutoff).all()
@@ -134,22 +134,28 @@ def gather_market_data(db, hours: int = 48) -> dict:
         if (d.urgency or "").lower() == "high":
             high_urgency += 1
 
+    # ดึงประวัติสถิติ Reels/Post Insights ล่าสุด
+    insights_history = []
+    try:
+        pref = db.query(models.SystemPreference).filter(models.SystemPreference.key == "facebook_insights_history").first()
+        if pref and isinstance(pref.value, list):
+            # เอาเฉพาะข้อมูลวิเคราะห์หลักของอันล่าสุด
+            insights_history = [item.get("parsed_metrics", {}) for item in pref.value if item][:3]
+    except Exception:
+        pass
+
     return {
         "chat_count": len(chats),
         "chat_categories_requested": chat_categories,
         "facebook_demand_count": len(demands),
         "facebook_demand_keywords": demand_keywords,
         "high_urgency_demands": high_urgency,
+        "latest_facebook_insights": insights_history,
     }
 
 
 def merge_skills(current: dict, llm_result: dict) -> dict:
-    """ผสานผล LLM เข้ากับ skills ปัจจุบัน — clamp radar_min_demand_score ให้ [50, 90].
-
-    LLM ปรับแค่ 3 ฟิลด์ (trending_categories / radar_min_demand_score /
-    pa_khem_tone); radar_daily_post_limit คงค่าจาก current ไว้ (LLM ไม่แตะ —
-    และถ้าไม่เคยตั้ง = ไม่มีคีย์นี้ ให้ radar ใช้ env RADAR_MAX_DAILY_POSTS).
-    """
+    """ผสานผล LLM เข้ากับ skills ปัจจุบัน — clamp radar_min_demand_score ให้ [50, 90]."""
     merged = dict(current or DEFAULT_SKILLS)
 
     cats = llm_result.get("trending_categories")
@@ -177,10 +183,12 @@ def _build_prompt(report: dict, current: dict) -> dict:
         "instruction": (
             "You are Hermes AI, the brain behind 'Pa Khem' (an expert Thai e-commerce "
             "affiliate bot). Analyze the market_data. Identify the top 3 trending_categories. "
+            "If 'latest_facebook_insights' contains demographics like main_age_group (e.g. 45-54 or older), "
+            "please adjust 'pa_khem_tone' to suit their preference (e.g., use highly polite, respectful, and "
+            "caring Thai language). If there is a drop_off_seconds (e.g. 3s), write recommendations about "
+            "how to hook viewers in the first 3 seconds of the next video. "
             "Decide radar_min_demand_score (usually 70, lower to 60 if demand is very low, "
-            "max 85 if too much spam). Decide pa_khem_tone (suggest a Thai persona/tone string "
-            "based on the urgency and categories, e.g. 'เน้นความคุ้มค่า ของถูก' or "
-            "'ใจดี ให้คำปรึกษา'). Return ONLY valid JSON with keys: trending_categories "
+            "max 85 if too much spam). Return ONLY valid JSON with keys: trending_categories "
             "(list of str), radar_min_demand_score (int), pa_khem_tone (str), and reason (str)."
         ),
     }

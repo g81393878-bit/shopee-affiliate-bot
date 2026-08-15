@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from app.config import settings
 from app.services.category import CATEGORY_KEYWORDS, guess_category, normalize_query
+from app.services.llm_clients import call_with_backoff
 from app.services.persona import persona_system_prompt
 
 logger = logging.getLogger(__name__)
@@ -363,14 +364,16 @@ def analyze_lead_intent_and_demand(post_text: str, author_name: Optional[str] = 
             clients = groq_clients()
             for client in clients:
                 try:
-                    response = client.chat.completions.create(
-                        model=settings.GROQ_MODEL,
-                        messages=[
-                            {"role": "system", "content": DEMAND_ANALYSIS_SYSTEM_PROMPT},
-                            {"role": "user", "content": prompt},
-                        ],
-                        response_format={"type": "json_object"},
-                        temperature=0.2,
+                    response = call_with_backoff(
+                        lambda: client.chat.completions.create(
+                            model=settings.GROQ_MODEL,
+                            messages=[
+                                {"role": "system", "content": DEMAND_ANALYSIS_SYSTEM_PROMPT},
+                                {"role": "user", "content": prompt},
+                            ],
+                            response_format={"type": "json_object"},
+                            temperature=0.2,
+                        )
                     )
                     content = response.choices[0].message.content
                     data = json.loads(content)
@@ -389,13 +392,15 @@ def analyze_lead_intent_and_demand(post_text: str, author_name: Optional[str] = 
             clients = anthropic_clients()
             for client in clients:
                 try:
-                    response = client.chat.completions.create(
-                        model=settings.ANTHROPIC_MODEL,
-                        messages=[
-                            {"role": "system", "content": DEMAND_ANALYSIS_SYSTEM_PROMPT},
-                            {"role": "user", "content": prompt},
-                        ],
-                        temperature=0.2,
+                    response = call_with_backoff(
+                        lambda: client.chat.completions.create(
+                            model=settings.ANTHROPIC_MODEL,
+                            messages=[
+                                {"role": "system", "content": DEMAND_ANALYSIS_SYSTEM_PROMPT},
+                                {"role": "user", "content": prompt},
+                            ],
+                            temperature=0.2,
+                        )
                     )
                     content = response.choices[0].message.content.strip()
                     if content.startswith("```json"):
@@ -420,9 +425,11 @@ def analyze_lead_intent_and_demand(post_text: str, author_name: Optional[str] = 
                 "gemini-1.5-flash",
                 system_instruction=DEMAND_ANALYSIS_SYSTEM_PROMPT,
             )
-            response = model.generate_content(
-                prompt,
-                generation_config={"response_mime_type": "application/json"},
+            response = call_with_backoff(
+                lambda: model.generate_content(
+                    prompt,
+                    generation_config={"response_mime_type": "application/json"},
+                )
             )
             data = json.loads(response.text)
             if isinstance(data, dict) and "demand_score" in data:
@@ -436,14 +443,16 @@ def analyze_lead_intent_and_demand(post_text: str, author_name: Optional[str] = 
         try:
             from openai import OpenAI
             client = OpenAI(api_key=settings.OPENAI_API_KEY)
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": DEMAND_ANALYSIS_SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.2,
+            response = call_with_backoff(
+                lambda: client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": DEMAND_ANALYSIS_SYSTEM_PROMPT},
+                        {"role": "user", "content": prompt},
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.2,
+                )
             )
             data = json.loads(response.choices[0].message.content)
             if isinstance(data, dict) and "demand_score" in data:
@@ -555,13 +564,15 @@ def generate_auntie_khem_deal_comment(
             clients = groq_clients()
             for client in clients:
                 try:
-                    response = client.chat.completions.create(
-                        model=settings.GROQ_MODEL,
-                        messages=[
-                            {"role": "system", "content": AUNTIE_KHEM_COPY_SYSTEM_PROMPT},
-                            {"role": "user", "content": prompt},
-                        ],
-                        temperature=0.7,
+                    response = call_with_backoff(
+                        lambda: client.chat.completions.create(
+                            model=settings.GROQ_MODEL,
+                            messages=[
+                                {"role": "system", "content": AUNTIE_KHEM_COPY_SYSTEM_PROMPT},
+                                {"role": "user", "content": prompt},
+                            ],
+                            temperature=0.7,
+                        )
                     )
                     comment = response.choices[0].message.content.strip()
                     if affiliate_url not in comment:
@@ -579,13 +590,15 @@ def generate_auntie_khem_deal_comment(
             clients = anthropic_clients()
             for client in clients:
                 try:
-                    response = client.chat.completions.create(
-                        model=settings.ANTHROPIC_MODEL,
-                        messages=[
-                            {"role": "system", "content": AUNTIE_KHEM_COPY_SYSTEM_PROMPT},
-                            {"role": "user", "content": prompt},
-                        ],
-                        temperature=0.7,
+                    response = call_with_backoff(
+                        lambda: client.chat.completions.create(
+                            model=settings.ANTHROPIC_MODEL,
+                            messages=[
+                                {"role": "system", "content": AUNTIE_KHEM_COPY_SYSTEM_PROMPT},
+                                {"role": "user", "content": prompt},
+                            ],
+                            temperature=0.7,
+                        )
                     )
                     comment = response.choices[0].message.content.strip()
                     if affiliate_url not in comment:
@@ -606,3 +619,96 @@ def generate_auntie_khem_deal_comment(
         affiliate_url=affiliate_url,
         suggested_reasons=suggested_reasons,
     )
+
+
+INSIGHTS_ANALYSIS_SYSTEM_PROMPT = """
+You are an expert social media analyst. Your task is to analyze Facebook Reels/Post Insights text block copied by the user and extract key metrics into a structured JSON object.
+
+Extract these keys:
+- "views": integer (number of views/reach)
+- "watch_time_sec": integer or null (total watch time in seconds)
+- "avg_watch_time_sec": float or null (average watch time in seconds)
+- "watch_percentage": float or null (average watch percentage, e.g. 37.0)
+- "drop_off_seconds": float or null (the timestamp where most viewers drop off, e.g. 3.0)
+- "main_age_group": string or null (e.g. "45-54" or "35-44")
+- "main_gender": string or null (e.g. "female" or "male" or "unknown")
+- "traffic_sources": list of dicts with {"source": string, "pct": float}
+- "recommendations": list of strings (actionable suggestions for the creator to optimize next videos/posts based on dropoff and demographics in Thai language)
+
+Return ONLY a valid JSON object.
+"""
+
+def analyze_facebook_insights(insights_text: str) -> Dict[str, Any]:
+    """วิเคราะห์ข้อความรายงานสถิติ Reels/Post Insights ของ Facebook ด้วย AI"""
+    if not insights_text or not insights_text.strip():
+        return {
+            "views": 0,
+            "watch_time_sec": None,
+            "avg_watch_time_sec": None,
+            "watch_percentage": None,
+            "drop_off_seconds": None,
+            "main_age_group": None,
+            "main_gender": None,
+            "traffic_sources": [],
+            "recommendations": ["ไม่พบข้อความวิเคราะห์"]
+        }
+
+    provider = (settings.LLM_PROVIDER or "groq").lower()
+    prompt = f"Analyze these Facebook Insights metrics:\n\n{insights_text}"
+
+    # 1. Try Groq
+    if provider == "groq" or (settings.GROQ_API_KEY and "mock" not in settings.GROQ_API_KEY.lower()):
+        try:
+            from app.services.llm_clients import groq_clients
+            clients = groq_clients()
+            for client in clients:
+                try:
+                    response = call_with_backoff(
+                        lambda: client.chat.completions.create(
+                            model=settings.GROQ_MODEL,
+                            messages=[
+                                {"role": "system", "content": INSIGHTS_ANALYSIS_SYSTEM_PROMPT},
+                                {"role": "user", "content": prompt},
+                            ],
+                            response_format={"type": "json_object"},
+                            temperature=0.2,
+                        )
+                    )
+                    return json.loads(response.choices[0].message.content)
+                except Exception as ex:
+                    logger.warning(f"Groq insights analysis failed for one key: {ex}")
+        except Exception as e:
+            logger.warning(f"Groq provider error in insights: {e}")
+
+    # 2. Try Gemini
+    if settings.GEMINI_API_KEY and "mock" not in settings.GEMINI_API_KEY.lower():
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=settings.GEMINI_API_KEY)
+            model = genai.GenerativeModel(
+                "gemini-1.5-flash",
+                system_instruction=INSIGHTS_ANALYSIS_SYSTEM_PROMPT,
+            )
+            response = call_with_backoff(
+                lambda: model.generate_content(
+                    prompt,
+                    generation_config={"response_mime_type": "application/json"},
+                )
+            )
+            return json.loads(response.text)
+        except Exception as e:
+            logger.warning(f"Gemini insights analysis failed: {e}")
+
+    # Heuristic fallback (basic dictionary)
+    return {
+        "views": 0,
+        "watch_time_sec": None,
+        "avg_watch_time_sec": None,
+        "watch_percentage": None,
+        "drop_off_seconds": None,
+        "main_age_group": None,
+        "main_gender": None,
+        "traffic_sources": [],
+        "recommendations": ["กรุณาตั้งค่า API Key เพื่อใช้การวิเคราะห์ขั้นสูง"]
+    }
+

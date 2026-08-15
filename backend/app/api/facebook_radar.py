@@ -30,6 +30,7 @@ from app.services.demand_radar_ai import (
     analyze_lead_intent_and_demand,
     generate_auntie_khem_deal_comment,
     is_high_demand,
+    analyze_facebook_insights,
 )
 from app.services.facebook_poster import log_post_async, post_feed
 from app.services.line_quota import push_guard
@@ -719,4 +720,58 @@ def add_new_group(
     db.commit()
     db.refresh(new_group)
     return new_group
+
+
+from pydantic import BaseModel
+
+class InsightsPayload(BaseModel):
+    insights_text: str
+
+@router.post("/insights/analyze")
+def analyze_fb_page_insights(
+    payload: InsightsPayload,
+    db: Session = Depends(get_db),
+    authorized: bool = Depends(require_admin_auth),
+):
+    """วิเคราะห์ข้อความสถิติ Facebook Reels/Post Insights ดิบด้วย AI และบันทึกประวัติการพัฒนา"""
+    # 1. วิเคราะห์ด้วย AI
+    analysis_res = analyze_facebook_insights(payload.insights_text)
+    
+    # 2. บันทึกลงใน SystemPreference
+    pref = db.query(models.SystemPreference).filter(models.SystemPreference.key == "facebook_insights_history").first()
+    history = []
+    if pref and isinstance(pref.value, list):
+        history = pref.value
+    
+    # เพิ่มรายการใหม่
+    new_record = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "raw_text": payload.insights_text,
+        "parsed_metrics": analysis_res
+    }
+    history.insert(0, new_record)
+    
+    # จำกัดประวัติไว้สูงสุด 20 รายการเพื่อประหยัดพื้นที่
+    history = history[:20]
+    
+    if pref:
+        pref.value = history
+        pref.updated_at = datetime.now(timezone.utc)
+    else:
+        db.add(models.SystemPreference(key="facebook_insights_history", value=history))
+        
+    db.commit()
+    
+    # 3. สั่งรันอัปเดตสมองกลร่วม (Hermes AI) ทันที
+    try:
+        from app.services.hermes_brain import analyze_market
+        analyze_market(db)
+    except Exception as e:
+        logger.warning(f"Failed to auto-trigger Hermes AI market analysis: {e}")
+        
+    return {
+        "status": "success",
+        "parsed_metrics": analysis_res
+    }
+
 
