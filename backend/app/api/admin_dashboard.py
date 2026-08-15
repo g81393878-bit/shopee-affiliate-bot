@@ -526,7 +526,7 @@ def admin_radar_feed(
                 } if product else None,
                 "source_lead": {
                     "fb_post_id": lead.fb_post_id if lead else None,
-                    "fb_post_url": lead.fb_post_url if lead else None,
+                    "fb_post_url": lead.post_url if lead else None,
                     "author_name": lead.author_name if lead else None,
                     "post_text_snippet": (lead.post_text or "")[:120] if lead else None,
                 } if lead else None,
