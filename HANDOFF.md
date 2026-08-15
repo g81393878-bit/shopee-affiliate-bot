@@ -14,6 +14,9 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- `2bad44e` docs: เพิ่ม Facebook & Shopee Affiliate Bot Architecture Guide
+  (ไฟล์ใหม่ `docs/facebook-architecture-guide.md` — แผนผัง + บทบาทส่วนประกอบ + ขั้นเชื่อมต่อ + 2 ไอเดียต่อยอด)
+- `465dfc2` docs: อัปเดต HANDOFF.md — บันทึก commit orchestrator + ขั้นตอน push/deploy
 - `65a8476` feat(orchestrator): เพิ่ม Claude "บอสใหญ่" คุมวง plan/dispatch/review + worker groq/firecrawl/claude + fallback Groq
   (ฟีเจอร์ใหม่ `app/services/orchestrator.py` + 8 เทสต์ mock ใน `tests/test_orchestrator.py`)
 
@@ -23,7 +26,7 @@
 
 ## 3. ขั้นตอนต่อไป
 
-- ⚠️ **push 1 commit ขึ้น GitHub** (`git push origin main`) — local นำ origin/main อยู่ 1 commit (orchestrator)
+- ⚠️ **push 3 commits ขึ้น GitHub** (`git push origin main`) — local นำ origin/main อยู่ 3 commits (orchestrator + docs)
 - **trigger deploy บน Render** → production ยังไม่มีฟีเจอร์ orchestrator
 
 ## 4. ไฟล์ที่ถืออยู่ / โดนแก้
