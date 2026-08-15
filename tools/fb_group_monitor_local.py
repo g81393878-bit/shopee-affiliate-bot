@@ -50,7 +50,7 @@ logger = logging.getLogger("fb_group_monitor")
 
 DEFAULT_API_URL = os.getenv("FASTAPI_URL") or os.getenv("BACKEND_URL") or "http://127.0.0.1:8000"
 DEFAULT_INTERVAL_SECONDS = 300
-DEFAULT_TIMEOUT_SECONDS = 15
+DEFAULT_TIMEOUT_SECONDS = 60
 DEFAULT_STATE_FILE = ".fb_monitor_seen.json"
 
 # ===========================================================================
@@ -276,6 +276,119 @@ def get_sample_posts(
     return posts
 
 
+def scrape_real_facebook_posts(
+    group_id: Optional[str] = None,
+    group_name: Optional[str] = None,
+    group_url: Optional[str] = None,
+    limit: Optional[int] = 5,
+) -> List[Dict[str, Any]]:
+    """Scrapes recent posts from a Facebook group using undetected_chromedriver."""
+    import undetected_chromedriver as uc
+    from selenium.webdriver.common.by import By
+    import os
+    import json
+    import time
+    
+    posts: List[Dict[str, Any]] = []
+    url = group_url or f"https://www.facebook.com/groups/{group_id}"
+    
+    print("   ↳ 🕵️  [Stealth] Starting Undetected Chrome Browser...")
+    options = uc.ChromeOptions()
+    options.headless = False
+    
+    # Launch browser using undetected_chromedriver with version matching the host Chrome
+    driver = uc.Chrome(options=options, version_main=151)
+    
+    try:
+        # Navigate to domain first to set cookies
+        print(f"   ↳ 🌐 Accessing Facebook domain to inject session cookies...")
+        driver.get("https://www.facebook.com/")
+        time.sleep(2)
+        
+        # Load and inject cookies
+        cookie_path = os.path.join(os.path.dirname(__file__), '..', 'fb_cookies.json')
+        if os.path.exists(cookie_path):
+            try:
+                with open(cookie_path, 'r', encoding='utf-8') as f:
+                    cookies = json.load(f)
+                    for cookie in cookies:
+                        driver.add_cookie({
+                            'name': cookie['name'],
+                            'value': cookie['value'],
+                            'domain': cookie.get('domain', '.facebook.com'),
+                            'path': cookie.get('path', '/')
+                        })
+                print(f"   ↳ 🍪 Injected Facebook session cookies successfully.")
+            except Exception as e:
+                print(f"   ↳ ⚠️ Cookie Injection Error: {e}")
+                
+        # Now navigate to target group URL
+        print(f"   ↳ 🌐 Navigating to Group: {url}")
+        driver.get(url)
+        time.sleep(5)
+        
+        print(f"   ↳ 📄 Page Title: {driver.title}")
+        
+        # Wait a moment for dynamic load
+        time.sleep(3)
+        
+        # Scroll to load posts
+        driver.execute_script("window.scrollBy(0, 1000);")
+        time.sleep(2)
+        
+        # Try to find post elements. Facebook posts usually have role="article" or live in feed container
+        articles = driver.find_elements(By.XPATH, '//div[@role="article"]')
+        if not articles:
+            articles = driver.find_elements(By.XPATH, '//div[@role="feed"]/div')
+            
+        print(f"   ↳ 📋 Found {len(articles)} potential posts on page")
+        
+        for i, el in enumerate(articles):
+            if limit and len(posts) >= limit:
+                break
+            try:
+                text_content = el.text
+                if not text_content or len(text_content) < 20:
+                    continue
+                
+                lines = [line.strip() for line in text_content.split('\n') if line.strip()]
+                if len(lines) >= 2:
+                    author = lines[0]
+                    # Filter out buttons and interactive elements
+                    content_lines = []
+                    for line in lines[1:]:
+                        if line in ["Like", "Comment", "Share", "Send", "ถูกใจ", "แสดงความคิดเห็น", "แชร์", "ส่ง"]:
+                            break
+                        content_lines.append(line)
+                    
+                    post_text = " ".join(content_lines[:10])
+                    
+                    if len(post_text) > 10:
+                        posts.append({
+                            "fb_post_id": f"{group_id}_{i}_{hash(post_text[:20])}",
+                            "group_id": group_id,
+                            "group_name": group_name or "Facebook Group",
+                            "group_url": url,
+                            "author_name": author,
+                            "post_text": post_text,
+                            "post_url": url,
+                            "post_time": datetime.now(timezone.utc).isoformat(),
+                            "raw_data": {"extracted_lines": len(lines)}
+                        })
+            except Exception:
+                pass
+                
+    except Exception as e:
+        print(f"   ↳ ❌ Error scraping Facebook: {e}")
+    finally:
+        try:
+            driver.quit()
+        except:
+            pass
+            
+    return posts
+
+
 def build_lead_payload(posts: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Formats raw post dictionaries into standard `LeadIngestPayload`."""
     leads: List[Dict[str, Any]] = []
@@ -301,6 +414,32 @@ def build_lead_payload(posts: List[Dict[str, Any]]) -> Dict[str, Any]:
         })
 
     return {"leads": leads}
+
+
+def fetch_active_groups_from_api(api_url: str, token: str) -> List[Dict[str, Any]]:
+    """Fetch active Facebook groups to monitor from the backend database."""
+    clean_url = api_url.rstrip("/")
+    endpoint = f"{clean_url}/api/admin/facebook-radar/groups"
+    
+    headers = {
+        "User-Agent": "PKH-FacebookRadarMonitor/1.0",
+    }
+    if token:
+        headers["X-Admin-Token"] = token
+        
+    request_url = endpoint
+    if token and "?" not in request_url:
+        request_url = f"{endpoint}?token={token}"
+        
+    import urllib.request
+    req = urllib.request.Request(request_url, headers=headers, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            resp_body = resp.read().decode("utf-8")
+            return json.loads(resp_body) if resp_body else []
+    except Exception as e:
+        print(f"   ↳ ⚠️ Failed to fetch target groups from API: {e}")
+        return []
 
 
 # ===========================================================================
@@ -451,8 +590,8 @@ def run_monitor_iteration(
             limit=limit,
         )
     else:
-        # Default mock/read-only monitor behavior
-        raw_posts = get_sample_posts(
+        # Use Real Playwright Scraper
+        raw_posts = scrape_real_facebook_posts(
             group_id=group_id or "grp_public_monitor",
             group_name=group_name or "กลุ่มสาธารณะเป้าหมาย",
             group_url=group_url or "https://facebook.com/groups/public_monitor",
@@ -680,17 +819,39 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     try:
         while True:
-            run_monitor_iteration(
-                api_url=args.api_url,
-                token=token,
-                tracker=tracker,
-                sample_mode=args.sample,
-                group_id=args.group_id,
-                group_name=args.group_name,
-                group_url=args.group_url,
-                dry_run=args.dry_run,
-                limit=args.limit,
-            )
+            # If not in sample mode and no specific group URL was hardcoded via CLI
+            if not args.sample and not args.group_url:
+                print("   ↳ 📡 Fetching active groups from backend...")
+                active_groups = fetch_active_groups_from_api(args.api_url, token)
+                if not active_groups:
+                    print("   ↳ ⚠️ No active Facebook groups found in database. Will retry next loop.")
+                else:
+                    print(f"   ↳ 👥 Loaded {len(active_groups)} active groups from backend.")
+                    for g in active_groups:
+                        run_monitor_iteration(
+                            api_url=args.api_url,
+                            token=token,
+                            tracker=tracker,
+                            sample_mode=False,
+                            group_id=g.get("group_id"),
+                            group_name=g.get("group_name"),
+                            group_url=g.get("group_url"),
+                            dry_run=args.dry_run,
+                            limit=args.limit,
+                        )
+            else:
+                # Fallback to single group CLI or sample mode
+                run_monitor_iteration(
+                    api_url=args.api_url,
+                    token=token,
+                    tracker=tracker,
+                    sample_mode=args.sample,
+                    group_id=args.group_id,
+                    group_name=args.group_name,
+                    group_url=args.group_url,
+                    dry_run=args.dry_run,
+                    limit=args.limit,
+                )
 
             if args.once:
                 break

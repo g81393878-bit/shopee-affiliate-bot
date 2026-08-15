@@ -670,3 +670,51 @@ def list_radar_leads(
         "total": len(output),
         "leads": output,
     }
+
+
+@router.get("/groups", response_model=List[schemas.FacebookGroupMonitorOut])
+def list_active_groups(
+    db: Session = Depends(get_db),
+    authorized: bool = Depends(require_admin_auth),
+):
+    """ดึงรายการกลุ่ม Facebook ทั้งหมดที่มีสถานะ Active"""
+    groups = (
+        db.query(models.FacebookGroupMonitor)
+        .filter(models.FacebookGroupMonitor.is_active == True)
+        .all()
+    )
+    return groups
+
+
+@router.post("/groups", response_model=schemas.FacebookGroupMonitorOut)
+def add_new_group(
+    payload: schemas.FacebookGroupMonitorCreate,
+    db: Session = Depends(get_db),
+    authorized: bool = Depends(require_admin_auth),
+):
+    """เพิ่มกลุ่ม Facebook เป้าหมายใหม่เข้าระบบเพื่อเฝ้าส่อง"""
+    # Check duplicate
+    existing = (
+        db.query(models.FacebookGroupMonitor)
+        .filter(models.FacebookGroupMonitor.group_id == payload.group_id)
+        .first()
+    )
+    if existing:
+        existing.is_active = True
+        existing.group_name = payload.group_name
+        existing.group_url = payload.group_url
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    new_group = models.FacebookGroupMonitor(
+        group_id=payload.group_id,
+        group_name=payload.group_name,
+        group_url=payload.group_url,
+        is_active=True,
+    )
+    db.add(new_group)
+    db.commit()
+    db.refresh(new_group)
+    return new_group
+
