@@ -14,6 +14,7 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- `a29aec7` feat(facebook): รองรับ `LINE_OA_URL` — ใส่ลิงก์ LINE OA ใน `BOT_INTRO` + ชุดโพสต์ (fallback บอกชื่อร้าน)
 - `9b35347` docs: เพิ่มชุดโพสต์ Facebook แนะนำบอทป้าเข็ม (`docs/facebook-content.md` — 3 caption + เนื้อ + image prompt)
 - `d6ab88f` docs(skills): align facebook-app-config SKILL กับตัวจริง (FACEBOOK_VERIFY_TOKEN + /api/webhooks/facebook)
 - `dce3c82` feat(facebook): เปลี่ยน reply จาก ack เป็นแนะนำบอทป้าเข็ม (`BOT_INTRO`) — ไม่ค้น/ไม่โพสต์สินค้า
@@ -32,12 +33,13 @@
 
 ## 3. ขั้นตอนต่อไป
 
-- ⚠️ **push 10 commits ขึ้น GitHub** (`git push origin main`) — local นำ origin/main อยู่ 10 commits (orchestrator + facebook webhook + docs/skills)
+- ⚠️ **push 12 commits ขึ้น GitHub** (`git push origin main`) — local นำ origin/main อยู่ 12 commits (orchestrator + facebook webhook + docs/skills)
 - **trigger deploy บน Render** → production ยังไม่มีฟีเจอร์ orchestrator + facebook webhook
+- 🔗 ยังไม่มีลิงก์ LINE OA จริง — รอเจ้าของร้านให้ URL (`https://line.me/R/ti/p/@xxxxx`) แล้ว set env `LINE_OA_URL`
 
 ## 4. ไฟล์ที่ถืออยู่ / โดนแก้
 
-<!-- ว่าง -->
+- `backend/app/services/persona.py` — แก้โดยคนอื่น (เปลี่ยนคาแรกเตอร์ "ป้าเข็ม" จากแม่ค้าออนไลน์ → AI คู่คิดพัฒนาชุมชน/OTOP ตาม RCAO/RAG) ยังไม่ stage รอเจ้าของตัดสินใจ
 
 ## 5. หมายเหตุ
 
@@ -46,6 +48,7 @@
 - ฟีเจอร์ orchestrator ยังเป็นโมดูลเดี่ยว — ยังไม่ถูกเรียกจาก `line_bot.py` (ยังไม่มีผลกับลูกค้าจริง)
 - facebook webhook: หน้าที่ตอนนี้ = แนะนำบอทป้าเข็ม (ไม่ค้นสินค้า/ไม่โพสต์สินค้า ตามเจ้าของร้านสั่ง)
   — ไอเดีย A/B ใน architecture guide (ค้นสินค้า/โพสต์อัตโนมัติ) ถูกพักไว้
+- ⚠️ มีการแก้ `persona.py` คู่ขนาน — เนื้อ Facebook/ขายของที่เขียนไว้ยังอิงคาแรกเตอร์เดิม (แม่ค้า) ต้องเช็คทิศทางกับเจ้าของร้าน
 - Push + Deploy รอบก่อนหน้า (`49fb55e`) เรียบร้อยแล้ว — บอทจริงได้โค้ดล่าสุดของงานก่อนหน้า
 - repo สะอาด ไม่มี untracked junk สำหรับงานใหม่
 
