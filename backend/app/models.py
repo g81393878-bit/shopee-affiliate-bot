@@ -81,6 +81,7 @@ class Product(Base):
     sales_count = Column(Integer, default=0, nullable=True)
     commission = Column(Numeric(10, 2), default=0.00, nullable=True)
     affiliate_url = Column(Text, nullable=True)
+    image_url = Column(Text, nullable=True)  # รูปสินค้า (og:image) — ใช้โพสต์ Facebook แบบแนบรูป
     link_status = Column(String(20), default="unknown", nullable=False)  # ok | dead | suspect | unknown | none
     ai_score = Column(Integer, default=0, nullable=True)
     price_checked_at = Column(DateTime(timezone=True), nullable=True)  # ครั้งสุดท้ายที่อัปเดตราคาจริง

@@ -33,6 +33,7 @@ from app.services.facebook_poster import post_feed, log_post_async
 from app.services.facebook_intro import intro_posts, short_bg_posts
 from app.services.facebook_curated import fetch_news_items, item_key, curate_caption
 from app.services.facebook_local import fetch_local_items, item_key as local_item_key, curate_local_caption
+from app.services.product_image import fetch_product_image
 from linebot import LineBotApi
 from linebot.models import TextSendMessage
 
@@ -403,12 +404,26 @@ def _post_next_product(db, limit: int = 1) -> Optional[dict]:
         return None
     results = []
     for p in prods:
-        res = post_feed(_build_fb_caption(p), link=p.affiliate_url or "")
+        # รูปสินค้า: ใช้ที่ cache ไว้ (p.image_url) ถ้ายังไม่มี → ดึง og:image ครั้งเดียวแล้วจำไว้
+        image = (p.image_url or "").strip()
+        if not image:
+            image = fetch_product_image(p.affiliate_url or "")
+            if image:
+                p.image_url = image
+                db.commit()
+        caption = _build_fb_caption(p)  # สร้างครั้งเดียว (เดิมเรียกซ้ำ 2 รอบ → เผา Groq เปล่า)
+        if image:
+            # โพสต์แนบรูปจริง (ไม่พึ่ง Facebook crawl การ์ดลิงก์) — ลิงก์ affiliate ไปอยู่ในแคปชั่น
+            caption = f"{caption}\n\n🛒 {p.affiliate_url or ''}".strip()
+            res = post_feed(caption, image_url=image)
+        else:
+            # หารูปไม่ได้ → fallback การ์ดลิงก์เดิม (Facebook crawl เอาเอง)
+            res = post_feed(caption, link=p.affiliate_url or "")
         if res["ok"]:
             db.add(models.CampaignLog(category=str(p.id), recipients=1, status="fbpost"))
             db.commit()
             log_post_async(_post_sheet_row("product", p.name[:45],
-                                           _build_fb_caption(p), p.affiliate_url or "",
+                                           caption, p.affiliate_url or "",
                                            res["post_id"]))
             results.append({"id": p.id, "name": p.name[:45], "posted": True,
                             "post_id": res["post_id"]})

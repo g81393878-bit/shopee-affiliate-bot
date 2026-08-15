@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS products (
     sales_count INTEGER DEFAULT 0,
     commission DECIMAL(10, 2) DEFAULT 0.00,
     affiliate_url TEXT,
+    image_url TEXT, -- รูปสินค้า (og:image) — ใช้โพสต์ Facebook แบบแนบรูป
     link_status VARCHAR(20) NOT NULL DEFAULT 'unknown', -- ok | dead | suspect | unknown | none (บอทตอบเฉพาะ ok)
     ai_score INTEGER DEFAULT 0,
     price_checked_at TIMESTAMPTZ,

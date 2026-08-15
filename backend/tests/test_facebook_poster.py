@@ -218,6 +218,7 @@ def test_cron_facebook_post_dedup(monkeypatch):
     monkeypatch.setattr(cron, "intro_posts", lambda: [])  # ไม่มีโพสต์แนะนำในเทสต์นี้
     monkeypatch.setattr(cron, "short_bg_posts", lambda: [])  # ไม่มีโพสต์พื้นสีในเทสต์นี้
     monkeypatch.setattr(cron, "fetch_news_items", lambda max_items=20: [])  # ไม่มี RSS ในเทสต์นี้
+    monkeypatch.setattr(cron, "fetch_product_image", lambda url: "")  # กันเน็ตจริงในเทสต์
     posted = []
     sheet_rows = []
     monkeypatch.setattr(cron, "log_post_async", sheet_rows.append)
@@ -395,6 +396,100 @@ def test_post_next_local_returns_none_when_all_fail(monkeypatch, db):
                         lambda msg, link="", **k: {"ok": False, "post_id": None,
                                                     "error": "HTTP 400"})
     assert cron._post_next_local(db) is None
+
+
+def _reset_products(db):
+    """ล้างเฉพาะสินค้าเทสต์ (commission ≥ 900 = marker) — ไม่แตะ seed ของ conftest
+    (seed มี commission ≤ 25; ถ้าลบทั้งหมด test_line_bot ที่รันทีหลังจะพัง)"""
+    from app import models
+    db.query(models.Product).filter(models.Product.commission >= 900) \
+        .delete(synchronize_session=False)
+    db.commit()
+
+
+def _add_test_product(db, **kw):
+    from app import models
+    base = dict(name="หูฟังบลูทูธ", category="หูฟัง", price=250, sales_count=5000,
+                rating=4.5, commission=999, affiliate_url="https://s.shopee.co.th/abc",
+                link_status="ok", ai_score=90)
+    base.update(kw)
+    p = models.Product(**base)
+    db.add(p)
+    db.commit()
+    return p
+
+
+def test_post_next_product_photo_with_image(monkeypatch, db):
+    """มี image_url → โพสต์แนบรูป (photo) + ลิงก์ affiliate อยู่ในแคปชั่น"""
+    monkeypatch.setenv("FB_POST_PRODUCTS", "1")
+    _reset_products(db)
+    _add_test_product(db, image_url="https://img.example.com/h.png")
+    monkeypatch.setattr(cron, "generate_script_for_product",
+                        lambda *a, **k: {"caption": "ป้าป้ายยา", "hashtags": ["ของดี"]})
+    captured = {}
+
+    def fake_post_feed(msg, link="", image_url="", background_preset_id=""):
+        captured["msg"] = msg
+        captured["link"] = link
+        captured["image_url"] = image_url
+        return {"ok": True, "post_id": "post_1", "error": None}
+
+    monkeypatch.setattr(cron, "post_feed", fake_post_feed)
+    # ไม่ควรเรียก fetch (มีรูป cache อยู่แล้ว)
+    monkeypatch.setattr(cron, "fetch_product_image",
+                        lambda url: (_ for _ in ()).throw(AssertionError("should not fetch")))
+
+    res = cron._post_next_product(db)
+    assert res["posted"][0]["posted"] is True
+    assert captured["image_url"] == "https://img.example.com/h.png"
+    assert captured["link"] == ""  # photo → ไม่ส่ง link param
+    assert "s.shopee.co.th/abc" in captured["msg"]  # ลิงก์อยู่ในแคปชั่น
+
+
+def test_post_next_product_link_card_when_no_image(monkeypatch, db):
+    """หา og:image ไม่ได้ → fallback การ์ดลิงก์เดิม (link param แยกจากข้อความ)"""
+    monkeypatch.setenv("FB_POST_PRODUCTS", "1")
+    _reset_products(db)
+    _add_test_product(db)  # ไม่มี image_url
+    monkeypatch.setattr(cron, "generate_script_for_product",
+                        lambda *a, **k: {"caption": "ป้าป้ายยา", "hashtags": ["ของดี"]})
+    monkeypatch.setattr(cron, "fetch_product_image", lambda url: "")  # หาไม่ได้
+    captured = {}
+
+    def fake_post_feed(msg, link="", image_url="", background_preset_id=""):
+        captured["msg"] = msg
+        captured["link"] = link
+        captured["image_url"] = image_url
+        return {"ok": True, "post_id": "post_2", "error": None}
+
+    monkeypatch.setattr(cron, "post_feed", fake_post_feed)
+    res = cron._post_next_product(db)
+    assert res["posted"][0]["posted"] is True
+    assert captured["link"] == "https://s.shopee.co.th/abc"
+    assert captured["image_url"] == ""
+    assert "s.shopee.co.th" not in captured["msg"]  # ลิงก์แยกเป็น link param
+
+
+def test_post_next_product_fetches_and_caches_image(monkeypatch, db):
+    """ยังไม่มี image_url → ดึง og:image ครั้งเดียวแล้วจำไว้ใน DB"""
+    monkeypatch.setenv("FB_POST_PRODUCTS", "1")
+    _reset_products(db)
+    p = _add_test_product(db)  # ไม่มี image_url
+    calls = []
+    monkeypatch.setattr(cron, "generate_script_for_product",
+                        lambda *a, **k: {"caption": "ป้า", "hashtags": ["ดี"]})
+    monkeypatch.setattr(cron, "fetch_product_image",
+                        lambda url: calls.append(url) or "https://img.example.com/fetched.png")
+
+    def fake_post_feed(msg, link="", image_url="", background_preset_id=""):
+        return {"ok": True, "post_id": "post_3", "error": None}
+
+    monkeypatch.setattr(cron, "post_feed", fake_post_feed)
+    res = cron._post_next_product(db)
+    assert res["posted"][0]["posted"] is True
+    assert calls == ["https://s.shopee.co.th/abc"]
+    db.refresh(p)
+    assert p.image_url == "https://img.example.com/fetched.png"  # cache ลง DB
 
 
 def test_intro_posts_have_badge_and_image_url(monkeypatch):
