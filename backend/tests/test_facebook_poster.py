@@ -36,6 +36,36 @@ def test_build_fb_caption_with_tags(monkeypatch):
     assert "shope.ee" not in out
 
 
+def test_push_post_to_sheet_sends_row(monkeypatch):
+    """POSTS_SHEET_WEBHOOK_URL ตั้ง → push แถวโพสต์ไป Google ชีท (Apps Script)"""
+    monkeypatch.setenv("POSTS_SHEET_WEBHOOK_URL", "https://script.google.com/macros/s/x/exec")
+    captured = {}
+
+    class Resp:
+        status_code = 200
+
+    def fake_post(url, json=None, timeout=None, follow_redirects=None):
+        captured["url"] = url
+        captured["json"] = json
+        captured["follow_redirects"] = follow_redirects
+        return Resp()
+
+    monkeypatch.setattr(fp.httpx, "post", fake_post)
+    fp._push_post_to_sheet({"kind": "intro", "title": "แนะนำตัว", "post_id": "p1"})
+    assert captured["url"] == "https://script.google.com/macros/s/x/exec"
+    assert captured["follow_redirects"] is True  # Apps Script ตอบ 302 — ต้องตาม redirect
+    assert captured["json"]["kind"] == "intro" and captured["json"]["post_id"] == "p1"
+
+
+def test_push_post_to_sheet_noop_without_url(monkeypatch):
+    """ไม่ตั้ง POSTS_SHEET_WEBHOOK_URL → ไม่ push (โค้ดเดิมทำงานปกติ)"""
+    monkeypatch.delenv("POSTS_SHEET_WEBHOOK_URL", raising=False)
+    called = []
+    monkeypatch.setattr(fp.httpx, "post", lambda *a, **k: called.append(a))
+    fp._push_post_to_sheet({"kind": "product"})
+    assert called == []
+
+
 def test_post_feed_passes_link(monkeypatch):
     monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
     captured = {}
@@ -66,6 +96,8 @@ def test_cron_facebook_post_dedup(monkeypatch):
     monkeypatch.setenv("FB_POST_PRODUCTS", "1")  # ข้าม Phase แนะนำตัว → ตรงไปขายสินค้า
     monkeypatch.setattr(cron, "intro_posts", lambda: [])  # ไม่มีโพสต์แนะนำในเทสต์นี้
     posted = []
+    sheet_rows = []
+    monkeypatch.setattr(cron, "log_post_async", sheet_rows.append)
     monkeypatch.setattr(cron, "post_feed",
                         lambda msg, link="": posted.append((msg, link)) or
                         {"ok": True, "post_id": f"post_{len(posted)}", "error": None})
@@ -83,6 +115,10 @@ def test_cron_facebook_post_dedup(monkeypatch):
     assert b1[0]["id"] != b2[0]["id"]
     assert len(posted) == 2
     assert posted[0][1]  # link affiliate ถูกส่งไปด้วย
+    assert len(sheet_rows) == 2  # ทุกโพสต์ที่สำเร็จถูกบันทึกชีท
+    assert all(r["kind"] == "product" for r in sheet_rows)
+    assert sheet_rows[0]["post_id"] == b1[0]["post_id"]
+    assert sheet_rows[0]["link"]  # ลิงก์ affiliate อยู่ในแถวชีท
 
 
 def test_cron_facebook_post_requires_token(monkeypatch):
@@ -146,6 +182,8 @@ def test_cron_facebook_post_intro_first(monkeypatch):
         {"title": "ฟีเจอร์เด่น", "caption": "โพสต์แนะนำ 2"},
     ])
     posted = []
+    sheet_rows = []
+    monkeypatch.setattr(cron, "log_post_async", sheet_rows.append)
     monkeypatch.setattr(cron, "post_feed",
                         lambda msg, link="": posted.append(msg) or
                         {"ok": True, "post_id": f"post_{len(posted)}", "error": None})
@@ -164,3 +202,7 @@ def test_cron_facebook_post_intro_first(monkeypatch):
     assert r3.json()["posted"] == []
     assert "FB_POST_PRODUCTS" in r3.json()["note"]
     assert len(posted) == 2  # โพสต์แค่ intro 2 ตัว ไม่มีสินค้า
+    assert len(sheet_rows) == 2  # intro ทั้ง 2 ตัวถูกบันทึกชีท
+    assert all(r["kind"] == "intro" for r in sheet_rows)
+    assert sheet_rows[0]["post_id"] == "post_1"
+    assert sheet_rows[0]["post_url"] == "https://www.facebook.com/post_1"

@@ -15,6 +15,7 @@ Cron endpoints — ให้บอทดูแลตัวเองเป็น�
 """
 import os
 import logging
+import datetime
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -28,7 +29,7 @@ from app.services.ai_generator import format_hashtags_text, generate_script_for_
 from app.services.price_refresh import refresh_price
 from app.services.line_quota import push_guard
 from app.services.product_cards import product_cards_message
-from app.services.facebook_poster import post_feed
+from app.services.facebook_poster import post_feed, log_post_async
 from app.services.facebook_intro import intro_posts
 from linebot import LineBotApi
 from linebot.models import TextSendMessage
@@ -295,6 +296,19 @@ def _build_fb_caption(p) -> str:
     return "\n\n".join(lines)
 
 
+def _post_sheet_row(kind: str, title: str, message: str, link: str, post_id: str) -> dict:
+    """แถวข้อมูลโพสต์สำหรับบันทึก Google ชีท (tools/sheet_posts_apps_script.gs)"""
+    return {
+        "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "kind": kind,
+        "title": title,
+        "message": (message or "")[:1000],
+        "link": link,
+        "post_id": post_id,
+        "post_url": f"https://www.facebook.com/{post_id}" if post_id else "",
+    }
+
+
 def _post_next_intro(db) -> Optional[dict]:
     """โพสต์แนะนำตัวป้าเข็มถัดไป (Phase 1 — ให้คนรู้จักก่อน)
 
@@ -312,6 +326,7 @@ def _post_next_intro(db) -> Optional[dict]:
         if res["ok"]:
             db.add(models.CampaignLog(category=str(i), recipients=1, status="fbintro"))
             db.commit()
+            log_post_async(_post_sheet_row("intro", p["title"], p["caption"], "", res["post_id"]))
             return {"posted": [{"kind": "intro", "index": i, "title": p["title"],
                                 "posted": True, "post_id": res["post_id"]}]}
         return {"posted": [{"kind": "intro", "index": i, "title": p["title"],
@@ -357,6 +372,9 @@ def run_facebook_auto_post(limit: int = 1) -> dict:
                 db.add(models.CampaignLog(category=str(p.id), recipients=1,
                                           status="fbpost"))
                 db.commit()
+                log_post_async(_post_sheet_row("product", p.name[:45],
+                                               _build_fb_caption(p), p.affiliate_url or "",
+                                               res["post_id"]))
                 results.append({"id": p.id, "name": p.name[:45], "posted": True,
                                 "post_id": res["post_id"]})
             else:

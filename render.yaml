@@ -50,3 +50,5 @@ services:
         value: 240  # นาทีระหว่างโพสต์ Facebook อัตโนมัติ (0 = ปิด) — Phase แนะนำตัวตั้ง 240 (ทุก 4 ชม.)
       - key: FB_POST_PRODUCTS
         value: ""  # ตั้งเป็น 1 เพื่อเปิด Phase 2 โพสต์ขายสินค้า (หลังโพสต์แนะนำตัวครบ) — ตอนนี้ปิดไว้
+      - key: POSTS_SHEET_WEBHOOK_URL
+        sync: false  # URL Apps Script บันทึกโพสต์ลง Google ชีท (tools/sheet_posts_apps_script.gs) — ไม่ตั้ง = ไม่บันทึก

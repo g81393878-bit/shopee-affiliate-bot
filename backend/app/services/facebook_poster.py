@@ -17,6 +17,32 @@ logger = logging.getLogger(__name__)
 PAGE_ID = os.getenv("FACEBOOK_PAGE_ID", "1307380735783361")
 GRAPH_URL = "https://graph.facebook.com/v21.0"
 
+# เขียนโพสต์ลง Google ชีทอัตโนมัติ (ผ่าน Apps Script Web App — ดู tools/sheet_posts_apps_script.gs)
+# ตั้ง env POSTS_SHEET_WEBHOOK_URL = URL web app ที่ deploy — ไม่ตั้ง = ไม่บันทึก (โค้ดทำงานปกติ)
+
+
+def _push_post_to_sheet(row: dict) -> None:
+    """push 1 แถวโพสต์ไป Google ชีท — fire-and-forget (background) กันไม่หน่วงการโพสต์
+    Apps Script web app ตอบ 302 (redirect ไป script.googleusercontent.com/macros/echo)
+    — ต้อง follow_redirects=True (httpx ปิดไว้โดยค่าเริ่มต้น ไม่งั้นแถวไม่ถึงชีท)
+    (อ่าน env ตอนเรียก ไม่ใช่ตอน import — ทดสอบได้ + เปลี่ยนได้โดยไม่ต้อง restart)"""
+    url = os.getenv("POSTS_SHEET_WEBHOOK_URL", "")
+    if not url:
+        return
+    try:
+        httpx.post(url, json=row, timeout=5, follow_redirects=True)
+    except Exception as e:
+        logger.debug(f"posts sheet push failed: {e}")
+
+
+def log_post_async(row: dict) -> None:
+    """บันทึกโพสต์ลง Google ชีท (daemon thread) — ตอบ/โพสต์ทันที ไม่รอ Google"""
+    try:
+        import threading
+        threading.Thread(target=_push_post_to_sheet, args=(row,), daemon=True).start()
+    except Exception:
+        pass
+
 
 def post_feed(message: str, link: str = "") -> dict:
     """โพสต์ลง feed เพจ — คืน {ok, post_id, error}
