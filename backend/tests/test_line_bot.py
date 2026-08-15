@@ -66,6 +66,29 @@ def test_install_related_customer_questions(sim, text):
     assert "เตรียม 4 อย่าง" not in r["preview"]
 
 
+# ---------- FAQ ไม่สัญญาว่ามีคน/เจ้าของมาตอบ (NUANOSE: ป้าเข็มตอบเอง) ----------
+FAQ_NO_HUMAN = [
+    ("บอทไม่ตอบ", "ป้าเข็มตอบให้เอง"),
+    ("ใครขาย", "ป้าเข็มตอบให้เอง"),
+    ("รับประกันกี่วัน", "ติดต่อร้านค้าเอง"),
+]
+
+# วลีที่เคยสัญญาว่ามีคนมาตอบ/ส่งต่อเคส — ต้องไม่เหลือในคำตอบ FAQ
+HUMAN_ESCALATION_WORDS = (
+    "คุยกับคนจริง", "คุยคนจริง", "แจ้งเจ้าของ", "เจ้าของร้านจะ",
+    "ส่งต่อเคส", "เจ้าของตอบ", "เจ้าของร้านให้",
+)
+
+
+@pytest.mark.parametrize("text,expect", FAQ_NO_HUMAN)
+def test_faq_does_not_promise_human_reply(sim, text, expect):
+    r = sim.send("U_cust_1", text)
+    assert r["intent"] == "manual", f"{text!r} → intent={r['intent']}"
+    assert expect in r["preview"], f"{text!r} ตอบไม่ตรง: {r['preview'][:120]}"
+    for bad in HUMAN_ESCALATION_WORDS:
+        assert bad not in r["preview"], f"{text!r} ยังมี '{bad}' ในคำตอบ"
+
+
 # ---------- ขยะ/อิโมจิ/พิมพ์ผิด ไม่ปลุกเจ้าของ ----------
 NOISE = ["zzzzzz", "asdfghjkl", "555555", "🙂", "!!!"]
 
