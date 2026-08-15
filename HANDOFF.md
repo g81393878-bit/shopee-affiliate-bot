@@ -14,7 +14,8 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
-- ✅ feat(facebook): `post_feed` รองรับ `image_url` — โพสต์รูปผ่าน `POST /{page-id}/photos` (ใช้ post_id กลับ, message เป็น caption, image_url กับ link ใช้ร่วมกันได้น้อย → มี image_url จะไม่ส่ง link) + 3 เทสต์ (รวม 406 passed) — **ยังไม่ deploy** (รอรวมกับงานแนบรูปมาสคอตกับโพสต์แนะนำตัว deploy ครั้งเดียว กันรีเซ็ต scheduler)
+- ✅ feat(facebook): `post_feed` รองรับ `image_url` — โพสต์รูปผ่าน `POST /{page-id}/photos` (ใช้ post_id กลับ, message เป็น caption, image_url กับ link ใช้ร่วมกันได้น้อย → มี image_url จะไม่ส่ง link) + 3 เทสต์ (รวม 406 passed) — **deploy แล้ว** (`dep-da01fkjl550s73cchujg` → live 07:40 UTC)
+- ✅ chore(render): ลด `FB_AUTO_POST_INTERVAL` 240 → **60 นาที** (ชั่วคราวเพื่อทดสอบ — render.yaml + Render env; ถ้าทดสอบเสร็จให้กลับเป็น 240)
 - ✅ feat(facebook): **โพสต์สินค้าตัวแรกขึ้นเพจแล้ว** — trigger `/api/cron/facebook-post` 1 ครั้ง → สินค้า #937 "[3Pcs] Za Facial Mask Niacinamide Brightening" (`...531533443245`, 07:23 UTC); dedup `fbpost` บันทึกแล้ว → scheduler จะโพสต์ตัวถัดไปทุก 4 ชม.
 - ✅ feat(orchestrator): เพิ่ม **log ตรวจสอบการทำงาน** — log แต่ละขั้น dispatch ใช้ worker ไหน (firecrawl/groq) + token usage ของ Claude ต่อ call + สรุป `claude_calls` (plan+review) / steps / workers ต่อคำตอบ (return dict มี `claude_calls` แล้ว)
 - ✅ feat(orchestrator): Claude สงวนเป็น**บอส plan/review เท่านั้น** ไม่เป็น worker — งานกลาง/เฉพาะกิจทั้งหมดให้ groq + firecrawl (ลบ worker "claude" + MAX_CLAUDE_STEPS; worker=claude ในแผน → normalize เป็น groq)
@@ -66,7 +67,7 @@
 
 - ✅ **push + deploy เรียบร้อย** — deploy `dep-da00oalg1s2s73c2npe0` → `live` (commit `3f88206`); โพสต์แนะนำใหม่ Character-first 3 ตัวขึ้นเพจแล้ว (ลบโพสต์เก่า + reset dedup แล้ว)
 - ✅ ตั้ง env บน Render: `POSTS_SHEET_WEBHOOK_URL` = URL Apps Script (ทดสอบ webhook แล้ว `{"ok":true}`)
-- ✅ ตั้ง env บน Render: `FB_AUTO_POST_INTERVAL=240` + `FB_POST_PRODUCTS=1` → โพสต์สินค้าตัวแรกขึ้นแล้ว (manual 07:23) · scheduler จะโพสต์สินค้าตัวถัดไปเองทุก 4 ชม. (⚠️ deploy แต่ละครั้งรีเซ็ต timer 240 นาที)
+- ✅ ตั้ง env บน Render: `FB_AUTO_POST_INTERVAL=60` (ทดสอบ 1 ชม.) + `FB_POST_PRODUCTS=1` → โพสต์สินค้าตัวแรกขึ้นแล้ว (manual 07:23) · scheduler โพสต์สินค้าตัวถัดไปทุก **1 ชม.** (tick ถัดไป ~08:40 UTC = 15:40 ไทย หลัง deploy 07:40; ⚠️ deploy แต่ละครั้งรีเซ็ต timer)
 - ✅ ตั้ง env บน Render ครบ: FACEBOOK_APP_ID / APP_SECRET / VERIFY_TOKEN / PAGE_ACCESS_TOKEN + LINE_OA_URL (รวม 17 ตัวแล้ว)
 - ⏳ **ตั้ง Webhook บน Facebook** (เจ้าของทำเอง — ตาม `docs/facebook-webhook-live-setup.md`): Callback URL `https://shopee-affiliate-bot-9e9n.onrender.com/api/webhooks/facebook` + Verify Token (ค่าใน `tools/render_env.local.json`) → Verify and Save → Add Subscriptions ติ๊ก `messages`
 - ⏳ **เปิดแอปเป็น Live** (เจ้าของทำเอง — ตาม `docs/facebook-webhook-live-setup.md`): Basic Settings → App Domains + Privacy Policy URL → สลับ Development → Live (ตอนนี้ยัง Development → ลูกค้าทั่วไปทักเพจไม่ได้)
