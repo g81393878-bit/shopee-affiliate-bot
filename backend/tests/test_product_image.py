@@ -78,6 +78,26 @@ def test_facebook_og_image_returns_url(monkeypatch):
     assert captured["params"]["access_token"] == "tok123"
 
 
+def test_facebook_og_image_retries_on_empty_image(monkeypatch):
+    """Facebook scrape ตอบ image ว่างรอบแรก (transient) → retry แล้วได้รูป"""
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    calls = {"n": 0}
+
+    def fake_post(url, params=None, timeout=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return type("R", (), {"json": lambda self: {"image": []}})()
+        return type("R", (), {"json": lambda self: {
+            "image": [{"url": "https://img.example.com/retry.jpg"}],
+        }})()
+
+    monkeypatch.setattr(pi.requests, "post", fake_post)
+    monkeypatch.setattr(pi.time, "sleep", lambda s: None)
+    assert pi._facebook_og_image("https://s.shopee.co.th/x") == \
+        "https://img.example.com/retry.jpg"
+    assert calls["n"] == 2
+
+
 def test_fetch_product_image_uses_facebook_scrape_before_firecrawl(monkeypatch):
     """requests หา og:image ไม่ได้ → Facebook scrape ต้องถูกใช้ (ไม่เผา firecrawl)"""
     def boom(*a, **k):

@@ -11,6 +11,7 @@ best-effort: หาไม่เจอ/โดนบล็อก → คืน "" 
 import logging
 import os
 import re
+import time
 
 import requests
 
@@ -43,28 +44,36 @@ def extract_og_image(html: str) -> str:
     return ""
 
 
-def _facebook_og_image(url: str, timeout: int = 20) -> str:
+def _facebook_og_image(url: str, timeout: int = 20, attempts: int = 3,
+                      retry_delay: float = 1.0) -> str:
     """ให้ Facebook crawl ลิงก์เอง (scrape=true) แล้วอ่าน og:image กลับ.
 
     เหตุผล: Shopee เป็น SPA + กันบอท — requests/firecrawl ไม่เห็น <meta og:image>
     แต่ crawler ของ Facebook (ที่มี infra ถูกต้อง) ดึงได้ → ใช้ลิงก์ที่ Facebook scrape
     มาเป็นรูปโพสต์ (ยืนยันแล้วกับลิงก์จริง: คืน down-th.img.susercontent.com/...)
+
+    Facebook scrape ตอบ image ว่างเป็นบางรอบ (crawl ยังไม่ทัน/ติด ๆ ขัด ๆ) →
+    retry อีก 2-3 รอบกัน transient หลุดจนโพสต์ตกไป fallback การ์ดลิงก์
     """
     token = (os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or "").strip()
     if not token:
         return ""
-    try:
-        r = requests.post("https://graph.facebook.com/v21.0/",
-                          params={"id": url, "scrape": "true", "access_token": token},
-                          timeout=timeout)
-        data = r.json()
-        images = data.get("image") or []
-        for it in images:
-            u = (it.get("url") if isinstance(it, dict) else it) or ""
-            if u.startswith(("http://", "https://")):
-                return u
-    except Exception as e:
-        logger.warning(f"[product_image] facebook og scrape ล้ม {url[:45]}: {e}")
+    for attempt in range(1, attempts + 1):
+        try:
+            r = requests.post("https://graph.facebook.com/v21.0/",
+                              params={"id": url, "scrape": "true", "access_token": token},
+                              timeout=timeout)
+            data = r.json()
+            images = data.get("image") or []
+            for it in images:
+                u = (it.get("url") if isinstance(it, dict) else it) or ""
+                if u.startswith(("http://", "https://")):
+                    return u
+        except Exception as e:
+            logger.warning(f"[product_image] facebook og scrape ล้ม "
+                           f"(attempt {attempt}/{attempts}) {url[:45]}: {e}")
+        if attempt < attempts:
+            time.sleep(retry_delay)
     return ""
 
 
