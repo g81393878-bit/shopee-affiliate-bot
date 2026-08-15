@@ -14,6 +14,8 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- ✅ feat(facebook): **คลังโพสต์ท้องถิ่น (ร้านอร่อย/ของฝาก/ของกิน)** — ไฟล์ใหม่ `app/services/facebook_local.py`: Firecrawl search หมุน 77 จังหวัด × 3 หัวข้อ → Groq เขียนเสียงป้าเข็ม + **ลิงก์ LINE OA ทุกตัว** → dedup `status='fblocal'` (sha1(url)); `web_search.py` เพิ่ม `firecrawl_search_results()` (ผลดิบ best-effort); `cron.py` เพิ่ม `_post_next_local` + `run_facebook_auto_post` เปลี่ยนเป็น **หมุนเวียน 4 คลัง: แบรนด์ → สินค้า → คอนเทนต์โลก → ท้องถิ่น** (slot % 4) — 434 passed; **ยังไม่ commit/deploy** (รอเจ้าของสั่ง)
+- ✅ feat(facebook): **ตัวกรองอักษรต่างภาษา** — ไฟล์ใหม่ `app/services/text_cleaner.py` (`sanitize_post_text` ตัด script ที่ไม่ใช่ไทย/Latin/ตัวเลข/เครื่องหมาย/สัญลักษณ์/emoji — ครอบคลุมอาหรับ/เปอร์เซีย/ซีริลลิก/CJK...) + เรียกใน `post_feed` ก่อนโพสต์ทุกตัว (chokepoint เดียวครอบทั้ง 4 คลัง: แบรนด์/สินค้า/RSS/ท้องถิ่น) — 427 passed; **ยังไม่ commit/deploy** (รอเจ้าของสั่ง)
 - ✅ feat(facebook): **RSS curated engine (คอนเทนต์โลก)** — ไฟล์ใหม่ `app/services/facebook_curated.py`: ดึง feed ข่าวไทย (Beartai/Techhub/The Standard, override ได้ด้วย env `RSS_SOURCES_JSON`) → parse RSS2/Atom (stdlib, ไม่มี dependency ใหม่) → Groq เขียนเสียงป้าเข็ม + ลิงก์ LINE OA → dedup ด้วย sha1(guid|link) เก็บ `status='fbrss'`; `run_facebook_auto_post` เปลี่ยนเป็น **หมุนเวียน 3 คลัง: แบรนด์ → สินค้า → คอนเทนต์โลก** (slot = จำนวนโพสต์ทั้งหมด % 3) — 418 passed — deploy `dep-da04535bedkc739s1j00` → live, commit `8ef185a`; เทสต์จริงบนเพจครบ 3 แบบ (intro #6 / สินค้า #939 / RSS DENZA Z9GT จาก Beartai)
 - ✅ fix(facebook): **แคปชั่นสั้นพื้นสีชัดขึ้น + ใส่ลิงก์ LINE OA ทุกตัว** — เขียน 8 แคปชั่นใหม่ (สื่อสารประโยชน์ชัด + ลงท้าย CTA "แอดไลน์ป้า" + `https://lin.ee/o9Kjp1N`); `short_bg_posts()` แทน `{LINE}` ด้วย `LINE_OA_URL` env — 410 passed — deploy `dep-da03qlojo6nc73dlvhd0` → live, commit `ca2cfd4`; เทสต์จริงบนเพจ 2 ตัว (intro #4 + bg #0 พร้อมลิงก์) — ตรวจ Graph API แล้ว message มี `lin.ee` ครบ
 - ✅ feat(facebook): **ชุดโพสต์สั้นพื้นสี (≤130 ตัว) หมุนเวียนสี + ต่อเข้ากับ scheduler** — `facebook_intro.py` เพิ่ม `short_bg_posts()` (8 แคปชั่นสั้น + สีหมุนเวียน 8 สีจาก `_BG_PRESETS`); `cron.py` เพิ่ม `_post_next_short_bg` (dedup `status='fbbg'`) + `run_facebook_auto_post` **สลับ tick คู่→แนะนำตัว(มาสคอต) / คี่→ข้อความสั้นพื้นสี** — 410 passed — deploy `dep-da03o8ojo6nc73dlqj80` → live, commit `f13a3f5`; ลำดับถัดไป: intro #4 (อ่านรีวิว 1 ดาว) → bg #0 (ของดีไม่ต้องแพง/แดง) → intro #5 → bg #1 …
@@ -85,18 +87,19 @@
 ## 5. หมายเหตุ
 
 - CI: `.github/workflows/test.yml` รัน `pytest` + coverage gate 85% ทุก push/PR
-- เทสต์ทั้งชุด: 418 passed
+- เทสต์ทั้งชุด: 434 passed
 - บอทจริง healthy: `/health` → 200, `llm_provider=groq`, `database_url_configured=true` (URL: `https://shopee-affiliate-bot-9e9n.onrender.com`)
 - Render env vars ตอนนี้มี 19 ตัว: DATABASE_URL, CRON_TOKEN, GROQ_API_KEY, LINE_CHANNEL_ACCESS_TOKEN/SECRET, LLM_PROVIDER, TAVILY_API_KEY, FIRECRAWL_API_KEY, SHEET_WEBHOOK_URL, FACEBOOK_APP_ID/SECRET/VERIFY_TOKEN/PAGE_ACCESS_TOKEN, LINE_OA_URL, FB_AUTO_POST_INTERVAL, FB_POST_PRODUCTS, POSTS_SHEET_WEBHOOK_URL, ANTHROPIC_API_KEY, ANTHROPIC_MODEL
 - ฟีเจอร์ orchestrator ยังเป็นโมดูลเดี่ยว — ยังไม่ถูกเรียกจาก `line_bot.py` (ยังไม่มีผลกับลูกค้าจริง); บอสใหญ่ใช้ Claude จริง (ANTHROPIC_API_KEY ตั้งบน Render) + `BOSS_SYSTEM` บริบทเต็ม; Claude สงวนเป็นบอส plan/review เท่านั้น งานกลาง/เฉพาะกิจให้ groq + firecrawl (ไม่เผาโควตา Claude)
-- facebook webhook: หน้าที่ตอนนี้ = แนะนำบอทป้าเข็ม (แชท) — ไอเดีย A (ค้นสินค้าในแชท) ถูกพักไว้- facebook auto-post: scheduler ในตัว (ไม่พึ่ง cron-job.org) — **หมุนเวียน 3 คลัง (slot = จำนวนโพสต์ fb* ทั้งหมด % 3)**:
+- facebook webhook: หน้าที่ตอนนี้ = แนะนำบอทป้าเข็ม (แชท) — ไอเดีย A (ค้นสินค้าในแชท) ถูกพักไว้- facebook auto-post: scheduler ในตัว (ไม่พึ่ง cron-job.org) — **หมุนเวียน 4 คลัง (slot = จำนวนโพสต์ fb* ทั้งหมด % 4)**:
   (0) แบรนด์ status=fbintro/fbbg = แนะนำตัว(มาสคอต 12 ตัว, ป้าย 🏷️ + รูป) ↔ ข้อความสั้นพื้นสี(8 ตัว, ≤130 ตัว, 8 สี) — สลับคู่/คี่; ทุกตัวลงท้ายลิงก์ `LINE_OA_URL`
   (1) สินค้า status=fbpost — เปิดเมื่อ FB_POST_PRODUCTS=1 (ลิงก์ affiliate เป็น link param)
   (2) คอนเทนต์โลก status=fbrss — ข่าว RSS → Groq เขียนเสียงป้าเข็ม + ลิงก์ LINE (feed: Beartai/Techhub/The Standard; override `RSS_SOURCES_JSON`; dedup sha1(guid))
-  → โพสต์สำเร็จทุกตัว → Google ชีท (POSTS_SHEET_WEBHOOK_URL); kind = intro / bg / product / rss
+  (3) ท้องถิ่น status=fblocal — ร้านอร่อย/ของฝาก/ของกิน Firecrawl search หมุน 77 จังหวัด × 3 หัวข้อ → Groq + ลิงก์ LINE (dedup sha1(url); Firecrawl ล้ม → ข้ามไม่พัง)
+  → โพสต์สำเร็จทุกตัว → Google ชีท (POSTS_SHEET_WEBHOOK_URL); kind = intro / bg / product / rss / local
 - ⚠️ **หมายเหตุ ownership:** `assets/` มีงานของคุณเจ้าของเอง (ลบ SVG มาสคอตเดิม + เพิ่ม PNG ใหม่ 2 ไฟล์ `1e8c7fdf-*.png` / `pa-khem-avatar.png`) — **ยังไม่ commit** ปล่อยไว้ให้เจ้าของ/ไม่ทับงานนี้
 - Google ชีท: SHEET_WEBHOOK_URL (แชท) และ POSTS_SHEET_WEBHOOK_URL (โพสต์) ชี้ URL เดียวกัน = สคริปต์รวม 1 ตัว
   จัดการ 2 แท็บ (คำถามลูกค้า / FB Posts) — ตั้งใจให้เป็นแบบนี้ ไม่ใช่ bug; เทสต์ทั้ง 2 ทางผ่านแล้ว
 - repo สะอาด ไม่มี untracked junk (ยกเว้นงานของคุณเจ้าของใน `assets/` — ดูหมายเหตุ ownership); commit ล่าสุด `8ef185a` (RSS curated engine) push แล้ว — deploy โค้ดจริงตัวล่าสุดคือ `dep-da04535bedkc739s1j00` (live)
-- ⚠️ Groq (llama) เขียนข่าวบางครั้งมีตัวอักษรต่างภาษาหลุด (เจอคำ "دیزاین" ครั้งเดียว) — ยังไม่ทำ sanitizer; ถ้าเจอบ่อยควรเพิ่มตัวกรอง script ที่ไม่ใช่ไทย/Latin/emoji
+- ✅ ตัวกรองอักษรต่างภาษา (เคยค้าง): `app/services/text_cleaner.py` + เรียกใน `post_feed` — เจอคำ "دیزاین" จาก Groq แล้วตัดทิ้งก่อนโพสต์ (427 passed)
 - ⚠️ **token Facebook:** `backend/.env` (local) หมดอายุแล้ว (Session expired 14 ส.ค.) แต่ **Render ยังใช้ token valid ตัวอื่น** (`EAAR9k...PCbT`) — production โพสต์ได้ปกติ; ถ้าจะตรวจเพจ/เทสต์จาก local ต้องดึง token จาก Render (Management API GET env-vars) มาใส่ชั่วคราว (ยังไม่ได้ sync ลง `.env` — รอเจ้าของยืนยัน)

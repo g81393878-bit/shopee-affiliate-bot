@@ -12,6 +12,8 @@ import os
 
 import httpx
 
+from app.services.text_cleaner import sanitize_post_text
+
 logger = logging.getLogger(__name__)
 
 PAGE_ID = os.getenv("FACEBOOK_PAGE_ID", "1307380735783361")
@@ -60,9 +62,11 @@ def post_feed(message: str, link: str = "", image_url: str = "",
     token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or ""
     if not token:
         return {"ok": False, "post_id": None, "error": "FACEBOOK_PAGE_ACCESS_TOKEN ไม่ได้ตั้ง"}
+    # กรองอักษรต่างภาษาที่ LLM หลุด (เปอร์เซีย/ซีริลลิก/CJK...) ก่อนโพสต์ขึ้นเพจ
+    message = sanitize_post_text(message or "")
     image_url = (image_url or "").strip()
     background_preset_id = (background_preset_id or "").strip()
-    if not (message or "").strip() and not image_url and not background_preset_id:
+    if not message and not image_url and not background_preset_id:
         return {"ok": False, "post_id": None,
                 "error": "ต้องมี message หรือ image_url อย่างใดอย่างหนึ่ง"}
 

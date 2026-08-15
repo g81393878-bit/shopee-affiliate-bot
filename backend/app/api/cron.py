@@ -32,6 +32,7 @@ from app.services.product_cards import product_cards_message
 from app.services.facebook_poster import post_feed, log_post_async
 from app.services.facebook_intro import intro_posts, short_bg_posts
 from app.services.facebook_curated import fetch_news_items, item_key, curate_caption
+from app.services.facebook_local import fetch_local_items, item_key as local_item_key, curate_local_caption
 from linebot import LineBotApi
 from linebot.models import TextSendMessage
 
@@ -417,6 +418,33 @@ def _post_next_product(db, limit: int = 1) -> Optional[dict]:
     return {"posted": results}
 
 
+def _post_next_local(db) -> Optional[dict]:
+    """โพสต์ท้องถิ่น (ร้านอร่อย/ของฝาก/ของกิน) — Firecrawl ค้นตามจังหวัด กันซ้ำ status='fblocal'.
+
+    index = จำนวนโพสต์ fblocal ที่สำเร็จแล้ว → หมุนเวียน 77 จังหวัด × 3 หัวข้อ
+    (โพสต์ล้มไม่ commit → index เดิม คราวหน้า retry จังหวัด/หัวข้อเดิม)
+    """
+    posted = {c.category for c in db.query(models.CampaignLog)
+              .filter(models.CampaignLog.status == "fblocal").all()}
+    for it in fetch_local_items(len(posted)):
+        key = local_item_key(it)
+        if key in posted:
+            continue
+        caption = curate_local_caption(it)
+        res = post_feed(caption, link=it["link"])
+        if res["ok"]:
+            db.add(models.CampaignLog(category=key, recipients=1, status="fblocal"))
+            db.commit()
+            log_post_async(_post_sheet_row("local", (it["title"] or "")[:45],
+                                           caption, it["link"], res["post_id"]))
+            return {"posted": [{"kind": "local", "title": (it["title"] or "")[:45],
+                                "posted": True, "post_id": res["post_id"],
+                                "source": it.get("topic", "")}]}
+        return {"posted": [{"kind": "local", "title": (it["title"] or "")[:45],
+                            "posted": False, "error": res["error"]}]}
+    return None
+
+
 def _post_next_curated(db) -> Optional[dict]:
     """โพสต์คอนเทนต์โลก (RSS) — กันซ้ำด้วย status='fbrss', category=sha1(guid|link)"""
     posted = {c.category for c in db.query(models.CampaignLog)
@@ -441,11 +469,12 @@ def _post_next_curated(db) -> Optional[dict]:
 
 
 def run_facebook_auto_post(limit: int = 1) -> dict:
-    """โพสต์ลงเพจ Facebook อัตโนมัติ — หมุนเวียน 3 คลัง: แบรนด์ → สินค้า → คอนเทนต์โลก (วนซ้ำ)
+    """โพสต์ลงเพจ Facebook อัตโนมัติ — หมุนเวียน 4 คลัง: แบรนด์ → สินค้า → คอนเทนต์โลก → ท้องถิ่น (วนซ้ำ)
 
     - แบรนด์ (status=fbintro/fbbg): แนะนำตัว(มาสคอต) ↔ ข้อความสั้นพื้นสี
     - สินค้า (status=fbpost): เปิดเมื่อตั้ง FB_POST_PRODUCTS=1 เท่านั้น
     - คอนเทนต์โลก (status=fbrss): ข่าว/เทรนด์จาก RSS เขียนเสียงป้าเข็ม (Groq)
+    - ท้องถิ่น (status=fblocal): ร้านอร่อย/ของฝาก/ของกินจาก Firecrawl ตามจังหวัด
     กันโพสต์ซ้ำด้วย CampaignLog — เรียกได้ทั้ง HTTP endpoint และ scheduler ในตัว
     """
     db = SessionLocal()
@@ -456,19 +485,23 @@ def run_facebook_auto_post(limit: int = 1) -> dict:
                      .filter(models.CampaignLog.status == "fbpost").count())
         rss_n = (db.query(models.CampaignLog)
                      .filter(models.CampaignLog.status == "fbrss").count())
-        slot = (brand_n + prod_n + rss_n) % 3  # 0=แบรนด์, 1=สินค้า, 2=คอนเทนต์โลก
-        for s in (slot, (slot + 1) % 3, (slot + 2) % 3):
+        local_n = (db.query(models.CampaignLog)
+                     .filter(models.CampaignLog.status == "fblocal").count())
+        slot = (brand_n + prod_n + rss_n + local_n) % 4  # 0=แบรนด์, 1=สินค้า, 2=คอนเทนต์โลก, 3=ท้องถิ่น
+        for s in (slot, (slot + 1) % 4, (slot + 2) % 4, (slot + 3) % 4):
             if s == 0:
                 res = _post_next_brand(db)
             elif s == 1:
                 res = _post_next_product(db, limit)
-            else:
+            elif s == 2:
                 res = _post_next_curated(db)
+            else:
+                res = _post_next_local(db)
             if res is not None:
                 return res
         if os.getenv("FB_POST_PRODUCTS", "").lower() not in ("1", "true", "yes"):
             return {"posted": [], "note": "โพสต์แบรนด์ครบแล้ว — ตั้ง FB_POST_PRODUCTS=1 เพื่อโพสต์สินค้า"}
-        return {"posted": [], "note": "ไม่มีคอนเทนต์ใหม่ (สินค้าครบ / รอ RSS feed)"}
+        return {"posted": [], "note": "ไม่มีคอนเทนต์ใหม่ (สินค้าครบ / รอ RSS feed / รอ Firecrawl)"}
     finally:
         db.close()
 

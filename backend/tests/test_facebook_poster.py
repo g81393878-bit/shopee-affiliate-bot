@@ -186,6 +186,28 @@ def test_post_feed_rejects_empty_message_and_no_image(monkeypatch):
     assert "message" in res["error"] or "image_url" in res["error"]
 
 
+def test_post_feed_sanitizes_foreign_chars(monkeypatch):
+    """อักษรต่างภาษาที่ LLM หลุด (เปอร์เซีย) ต้องถูกกรองก่อนส่งไป Facebook"""
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    captured = {}
+
+    class Resp:
+        status_code = 200
+        def json(self):
+            return {"id": "post_sanitized"}
+
+    def fake_post(url, params=None, data=None, timeout=None):
+        captured["data"] = data
+        return Resp()
+
+    monkeypatch.setattr(fp.httpx, "post", fake_post)
+    res = fp.post_feed("ป้าเห็นข่าวนี้แล้ว دیزاین มาฝาก 😊", link="https://news.example/1")
+    assert res["ok"] is True
+    assert "دیزاین" not in captured["data"]["message"]
+    assert "ป้าเห็นข่าวนี้แล้ว" in captured["data"]["message"]
+    assert captured["data"]["link"] == "https://news.example/1"  # ลิงก์ไม่โดนกรอง
+
+
 def test_cron_facebook_post_dedup(monkeypatch):
     from fastapi.testclient import TestClient
     from app.main import app
@@ -272,7 +294,7 @@ def test_facebook_auto_post_loop_calls_runner(monkeypatch):
 
 
 def test_cron_facebook_post_rotation(monkeypatch):
-    """หมุนเวียน 3 คลัง: แบรนด์ → (สินค้า ยังไม่เปิด) → คอนเทนต์โลก(RSS) → ครบแล้วหยุด"""
+    """หมุนเวียน 4 คลัง: แบรนด์ → (สินค้า ยังไม่เปิด) → คอนเทนต์โลก(RSS) → ท้องถิ่น → ครบแล้วหยุด"""
     from fastapi.testclient import TestClient
     from app.main import app
 
@@ -288,6 +310,12 @@ def test_cron_facebook_post_rotation(monkeypatch):
     ])
     monkeypatch.setattr(cron, "curate_caption",
                         lambda it, line_oa="": f"ป้าเล่าข่าว: {it['title']}\n\n👉 https://lin.ee/o9Kjp1N")
+    monkeypatch.setattr(cron, "fetch_local_items", lambda index=0, max_items=5: [
+        {"guid": "lg1", "title": "ร้านเด็ดเมือง", "link": "https://food.example/1",
+         "summary": "...", "source": "firecrawl", "topic": "ของกิน · จ.เชียงใหม่"},
+    ])
+    monkeypatch.setattr(cron, "curate_local_caption",
+                        lambda it, line_oa="": f"ป้าแนะนำ: {it['title']}\n\n👉 https://lin.ee/o9Kjp1N")
     posted = []
     sheet_rows = []
     monkeypatch.setattr(cron, "log_post_async", sheet_rows.append)
@@ -308,13 +336,18 @@ def test_cron_facebook_post_rotation(monkeypatch):
     assert b2[0]["kind"] == "rss" and b2[0]["title"] == "ข่าวน่าสนใจ"
     assert posted[-1][1] == "https://news.example/1"  # ลิงก์ข่าวเป็น link param (preview)
 
-    # tick 3 → ทุกคลังหมด (RSS กันซ้ำ + แบรนด์ครบ + สินค้ายังไม่เปิด) → หยุด
-    r3 = client.post("/api/cron/facebook-post")
-    assert r3.json()["posted"] == []
-    assert "FB_POST_PRODUCTS" in r3.json()["note"]
+    # tick 3 → slot 2 (RSS กันซ้ำ) → slot 3 (ท้องถิ่น) → โพสต์ร้าน/ของกิน + ลิงก์
+    b3 = client.post("/api/cron/facebook-post").json()["posted"]
+    assert b3[0]["kind"] == "local" and b3[0]["title"] == "ร้านเด็ดเมือง"
+    assert posted[-1][1] == "https://food.example/1"
 
-    assert len(posted) == 2
-    assert [r["kind"] for r in sheet_rows] == ["intro", "rss"]
+    # tick 4 → ทุกคลังหมด (RSS/local กันซ้ำ + แบรนด์ครบ + สินค้ายังไม่เปิด) → หยุด
+    r4 = client.post("/api/cron/facebook-post")
+    assert r4.json()["posted"] == []
+    assert "FB_POST_PRODUCTS" in r4.json()["note"]
+
+    assert len(posted) == 3
+    assert [r["kind"] for r in sheet_rows] == ["intro", "rss", "local"]
 
 
 def test_intro_posts_have_badge_and_image_url(monkeypatch):

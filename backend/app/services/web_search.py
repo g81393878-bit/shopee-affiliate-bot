@@ -349,6 +349,19 @@ def _firecrawl_search(query: str, max_results: int) -> dict:
     return {"answer": answer, "results": d["results"], "images": d["images"]}
 
 
+def firecrawl_search_results(query: str, max_results: int = 5) -> list:
+    """ค้น Firecrawl อย่างเดียว → list ของ {title, url, content} (ผลดิบ ไม่สรุป).
+
+    ใช้กับคลังโพสต์ท้องถิ่น (facebook_local) — อยากได้ลิงก์+ข้อความจริงไปให้ Groq
+    เขียนโพสต์ต่อ ไม่ใช้ answer ที่สรุปแล้ว; ล้ม (ไม่มี key/วงจรเปิด/provider พัง)
+    → คืน [] ให้ผู้เรียก fallback เอง (best-effort ไม่ throw)"""
+    try:
+        return (_firecrawl_fetch(query, max_results).get("results") or [])
+    except Exception as e:
+        logger.warning(f"firecrawl_search_results failed: {e}")
+        return []
+
+
 def firecrawl_scrape(url: str, timeout: int = 30) -> str:
     """เปิดหน้าเว็บ 1 URL ผ่าน Firecrawl (render JS กัน anti-bot) → คืน HTML ทั้งหน้า
 
