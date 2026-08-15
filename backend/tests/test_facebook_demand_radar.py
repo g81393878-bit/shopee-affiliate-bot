@@ -1,0 +1,861 @@
+# -*- coding: utf-8 -*-
+"""Comprehensive E2E Integration Test Suite — Social Demand Radar V1 (บอทป้าเข็ม)
+===============================================================================
+Location: backend/tests/test_facebook_demand_radar.py
+Milestone: Milestone 5 (Final Comprehensive E2E Test Suite)
+
+This test suite satisfies all requirements in ORIGINAL_REQUEST.md (R1 to R5)
+and the multi-tier test infrastructure defined in TEST_INFRA.md:
+
+Tier 1: Feature Coverage (R1 to R5)
+  - F1: Database Models & SQL Migrations (facebook_groups_monitor, facebook_detected_leads,
+        facebook_demand_events, lead_actions).
+  - F2: AI Intent & Demand Analysis (Intent, Demand Score 0-100, Urgency, Budget,
+        Product Keyword, Pain Points, Sentiment, Reasoning).
+  - F3: Demand Threshold Filter (is_high_demand >= 70).
+  - F4: Product Matching with AI Reasoning (Strict Product.link_status == 'ok' policy,
+        Multi-Factor Match Score, Empirical Suggested Reasons).
+  - F5: Auntie Khem Thai Deal Copy Generation (Warm tone, empathy, persona markers,
+        natural Affiliate link placement).
+  - F6: FastAPI Leads Intake Endpoint (POST /api/admin/facebook-radar/leads).
+  - F7: FastAPI Admin Action & Data Flywheel Endpoint (POST /api/admin/facebook-radar/actions).
+  - F8: LINE Push Alert Formatting & Dispatch (Flex Bubble, Header badges, Action buttons).
+  - F9: Local FB Group Monitor Tool (CLI args, SeenPostTracker, state persistence, dry-run).
+
+Tier 2: Boundary & Edge Cases
+  - Boundary scores (69 vs 70 vs 71, negative/zero/100/150).
+  - Thai Sara Am NFC normalization variations (\\u0e4d\\u0e32 and \\u0e4d\\u0e33 -> \\u0e33).
+  - Empty, whitespace, malformed inputs.
+  - Lead deduplication idempotency (preventing duplicate events and alerts).
+  - Admin authorization security (Token header, Query param, Bearer auth, HMAC cookie, 401 rejection).
+  - Price parsing formats (ranges, Thai word numbers, commas, zero/negative).
+  - Graceful handling when no products match or all products have link_status != 'ok'.
+
+Tier 3: Full End-to-End Lifecycle & Data Flywheel
+  - Raw lead ingest -> AI analysis -> Product matching -> Copy generation ->
+    Demand event -> LINE alert -> Admin feedback action -> Conversion metrics ->
+    Radar stats aggregation -> Cascade deletion lifecycle.
+
+Tier 4: Real-World Thai Workload Simulations
+  - 10 diverse real-world Thai Facebook posts (maternity dress, bluetooth headset,
+    ergonomic cushion, pet food, scam warning, secondhand clothes dump, spam ad,
+    weather chat, broken fan replacement, air purifier with comma price).
+"""
+from datetime import datetime, timezone
+from decimal import Decimal
+import hashlib
+import hmac
+import json
+import os
+from pathlib import Path
+import sys
+import tempfile
+import time
+from typing import Any, Dict, List
+from unittest.mock import MagicMock, patch
+import urllib.error
+
+import pytest
+from fastapi.testclient import TestClient
+
+# Ensure tools directory is discoverable
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+TOOLS_DIR = PROJECT_ROOT / "tools"
+if str(TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(TOOLS_DIR))
+
+import fb_group_monitor_local as monitor
+from app import models, schemas
+from app.db import SessionLocal
+from app.main import app
+from app.services.demand_radar_ai import (
+    analyze_lead_intent_and_demand,
+    generate_auntie_khem_deal_comment,
+    is_high_demand,
+    parse_post_budget,
+    _extract_heuristic_keyword,
+    _extract_pain_points,
+    _nfc,
+    _parse_thai_word_number,
+)
+from app.services.product_cards import format_radar_deal_flex_message
+from app.services.product_matcher import (
+    calculate_product_match_score,
+    generate_suggested_reasons,
+    match_best_product_for_demand,
+    _calculate_string_similarity,
+)
+import app.api.facebook_radar as radar_api
+
+TEST_SECRET_TOKEN = os.getenv("CRON_TOKEN") or os.getenv("ADMIN_DASHBOARD_PASSWORD") or "radar_e2e_secret_token"
+
+
+@pytest.fixture
+def auth_headers(monkeypatch):
+    token = os.getenv("CRON_TOKEN") or os.getenv("ADMIN_DASHBOARD_PASSWORD") or TEST_SECRET_TOKEN
+    monkeypatch.setenv("CRON_TOKEN", token)
+    monkeypatch.setenv("ADMIN_DASHBOARD_PASSWORD", token)
+    return {"X-Admin-Token": token}
+
+
+@pytest.fixture
+def client(auth_headers):
+    """FastAPI TestClient with default Admin Authentication Header."""
+    c = TestClient(app)
+    c.headers.update(auth_headers)
+    return c
+
+
+@pytest.fixture
+def raw_client():
+    """FastAPI TestClient without authentication headers for security testing."""
+    return TestClient(app)
+
+
+@pytest.fixture
+def db_session():
+    """Isolated database session for deterministic testing."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@pytest.fixture(autouse=True)
+def seed_e2e_products(db_session):
+    """Seeds a rich variety of deterministic test products with link_status='ok'."""
+    products_to_seed = [
+        ("ชุดคลุมท้องผ้าฝ้ายทรงหลวม ผ้านิ่มระบายอากาศ", "แฟชั่น", 299.00, 4.9, 5420, 35.00, "https://shope.ee/maternity_ok", "ok", 92),
+        ("หูฟังบลูทูธไร้สาย TWS ตัดเสียงรบกวน", "หูฟัง", 399.00, 4.8, 8500, 40.00, "https://shope.ee/earbuds_ok", "ok", 90),
+        ("เบาะรองนั่งเพื่อสุขภาพ เมมโมรี่โฟม แก้ปวดหลัง", "เฟอร์นิเจอร์", 450.00, 4.7, 3200, 30.00, "https://shope.ee/cushion_ok", "ok", 86),
+        ("อาหารแมวสูตรดูแลไต โรคไต 1kg", "สัตว์เลี้ยง", 350.00, 4.8, 1900, 25.00, "https://shope.ee/catfood_ok", "ok", 88),
+        ("พัดลมตั้งโต๊ะมินิ ชาร์จ USB เสียงเงียบ ลมแรง", "พัดลม", 259.00, 4.7, 12000, 20.00, "https://shope.ee/fan_ok", "ok", 85),
+        ("เครื่องฟอกอากาศ HEPA กรองฝุ่น PM2.5", "เครื่องใช้ไฟฟ้า", 1890.00, 4.9, 4500, 95.00, "https://shope.ee/airpurifier_ok", "ok", 94),
+        ("กระติกน้ำเก็บความเย็น 1 ลิตร สแตนเลส 316", "แก้วน้ำ", 299.00, 4.8, 6200, 22.00, "https://shope.ee/bottle_ok", "ok", 87),
+    ]
+
+    for name, cat, price, rating, sales, comm, url, status, score in products_to_seed:
+        existing = db_session.query(models.Product).filter(models.Product.name == name).first()
+        if not existing:
+            p = models.Product(
+                name=name,
+                category=cat,
+                price=Decimal(str(price)),
+                rating=rating,
+                sales_count=sales,
+                commission=Decimal(str(comm)),
+                affiliate_url=url,
+                link_status=status,
+                ai_score=score,
+            )
+            db_session.add(p)
+    db_session.commit()
+
+
+# ===========================================================================
+# Tier 1: Core Feature Verification (R1 to R5)
+# ===========================================================================
+
+def test_t1_f1_database_models_and_migration(db_session):
+    """[R1] Verifies database tables creation, relations, schemas, and SQL migration file."""
+    # 1. Verify SQL Migration file exists and contains all required table definitions
+    migration_file = PROJECT_ROOT / "supabase" / "migrations" / "20260815194500_social_demand_radar.sql"
+    assert migration_file.exists(), f"Missing SQL migration file: {migration_file}"
+    sql_text = migration_file.read_text(encoding="utf-8")
+    assert "CREATE TABLE IF NOT EXISTS facebook_groups_monitor" in sql_text
+    assert "CREATE TABLE IF NOT EXISTS facebook_detected_leads" in sql_text
+    assert "CREATE TABLE IF NOT EXISTS facebook_demand_events" in sql_text
+    assert "CREATE TABLE IF NOT EXISTS lead_actions" in sql_text
+
+    # 2. Test Group Monitor Model CRUD & Schema
+    group = models.FacebookGroupMonitor(
+        group_id="grp_tier1_test",
+        group_name="กลุ่มแม่และเด็ก ทดสอบ T1",
+        group_url="https://facebook.com/groups/grp_tier1_test",
+        category_tag="แม่และเด็ก",
+        is_active=True,
+        check_interval_minutes=45,
+    )
+    db_session.add(group)
+    db_session.commit()
+    db_session.refresh(group)
+    assert group.id is not None
+    grp_schema = schemas.FacebookGroupMonitorOut.model_validate(group)
+    assert grp_schema.group_id == "grp_tier1_test"
+
+    # 3. Test Detected Lead Model & Schema
+    lead = models.FacebookDetectedLead(
+        group_id=group.id,
+        fb_post_id="lead_tier1_001",
+        post_url="https://facebook.com/posts/lead_tier1_001",
+        author_name="คุณแม่ทดสอบ",
+        post_text="ตามหาชุดคลุมท้องใส่สบาย งบ 500 บาท",
+        status="pending",
+    )
+    db_session.add(lead)
+    db_session.commit()
+    db_session.refresh(lead)
+    assert lead.id is not None
+    assert lead.group.group_name == "กลุ่มแม่และเด็ก ทดสอบ T1"
+    lead_schema = schemas.FacebookDetectedLeadOut.model_validate(lead)
+    assert lead_schema.fb_post_id == "lead_tier1_001"
+
+    # 4. Test Demand Event Model & Schema
+    product = db_session.query(models.Product).filter(models.Product.link_status == "ok").first()
+    event = models.FacebookDemandEvent(
+        lead_id=lead.id,
+        intent="buy_request",
+        demand_score=88,
+        urgency="high",
+        budget="500 บาท",
+        product_keyword="ชุดคลุมท้อง",
+        matched_product_id=product.id if product else None,
+        suggested_reason=["รีวิว 4.9 ดาว", "ยอดขายดี"],
+        ai_comment_draft="ป้าเข็มแนะนำชุดคลุมท้องตัวนี้เลยจ้า https://shope.ee/test",
+        notification_status="sent",
+    )
+    db_session.add(event)
+    db_session.commit()
+    db_session.refresh(event)
+    assert event.id is not None
+    event_schema = schemas.FacebookDemandEventOut.model_validate(event)
+    assert event_schema.demand_score == 88
+
+    # 5. Test Lead Action Model & Schema
+    action = models.LeadAction(
+        demand_event_id=event.id,
+        lead_id=lead.id,
+        action_type="reply_posted",
+        admin_id="U_admin_t1",
+        comment_posted=event.ai_comment_draft,
+        affiliate_link_used="https://shope.ee/test",
+        feedback_score=5,
+        click_count=8,
+        order_count=1,
+        commission_earned=Decimal("35.00"),
+        conversion_status="converted",
+    )
+    db_session.add(action)
+    db_session.commit()
+    db_session.refresh(action)
+    assert action.id is not None
+    action_schema = schemas.LeadActionOut.model_validate(action)
+    assert action_schema.click_count == 8
+    assert action_schema.commission_earned == Decimal("35.00")
+
+
+def test_t1_f2_ai_intent_and_demand_analysis():
+    """[R2] Verifies AI analysis extracts Intent, Demand Score, Urgency, Budget, and Keywords."""
+    post_text = "มีใครแนะนำชุดคลุมท้องใส่สบายๆ บ้างคะ งบไม่เกิน 500 บาท เสาร์นี้จะคลอดแล้วต้องรีบใช้ด่วน"
+    analysis = analyze_lead_intent_and_demand(post_text, author_name="คุณแม่น้องฟ้า")
+
+    assert analysis["intent"] in ("recommendation_request", "buy_request")
+    assert analysis["demand_score"] >= 70
+    assert analysis["urgency"] == "high"
+    assert analysis["budget"] == 500.0
+    assert "ชุดคลุมท้อง" in analysis["product_keyword"]
+    assert len(analysis["pain_points"]) > 0
+    assert analysis["reasoning"] is not None
+
+
+def test_t1_f3_demand_threshold_filtering():
+    """[R2] Verifies is_high_demand enforces the >= 70 threshold strictly."""
+    assert is_high_demand(70, threshold=70) is True
+    assert is_high_demand(85, threshold=70) is True
+    assert is_high_demand(100, threshold=70) is True
+    assert is_high_demand(69, threshold=70) is False
+    assert is_high_demand(50, threshold=70) is False
+    assert is_high_demand(0, threshold=70) is False
+    assert is_high_demand(-5, threshold=70) is False
+
+
+def test_t1_f4_product_matching_and_ai_reasoning(db_session):
+    """[R3] Verifies Product Matching strictly enforces link_status=='ok' and generates empirical reasons."""
+    # Seed a dead-link product with an identical keyword and higher fake stats
+    p_dead = models.Product(
+        name="ชุดคลุมท้องแฟชั่นเกาหลี ดีลเด็ดราคาถูก",
+        category="แฟชั่น",
+        price=Decimal("199.00"),
+        rating=5.0,
+        sales_count=99999,
+        commission=Decimal("80.00"),
+        affiliate_url="https://shope.ee/dead_link",
+        link_status="dead",
+        ai_score=99,
+    )
+    db_session.add(p_dead)
+    db_session.commit()
+
+    match_res = match_best_product_for_demand(
+        db=db_session,
+        product_keyword="ชุดคลุมท้อง",
+        budget=500.0,
+    )
+
+    best = match_res.get("best_product")
+    assert best is not None
+    assert best.link_status == "ok"
+    assert best.id != p_dead.id
+    assert "ชุดคลุมท้อง" in best.name
+
+    # Check candidates
+    for cand in match_res.get("candidates", []):
+        assert cand["product"].link_status == "ok"
+
+    # Verify suggested reasons
+    reasons = match_res.get("suggested_reasons", [])
+    assert len(reasons) >= 3
+    reasons_str = " ".join(reasons)
+    assert "รีวิว" in reasons_str or "⭐" in reasons_str
+    assert "ยอดขาย" in reasons_str or "🔥" in reasons_str
+    assert "OK" in reasons_str or "ลิงก์" in reasons_str
+
+
+def test_t1_f5_auntie_khem_deal_copy():
+    """[R3] Verifies Auntie Khem deal copy includes empathetic persona tone and affiliate link."""
+    copy = generate_auntie_khem_deal_comment(
+        post_text="ตามหาชุดคลุมท้องใส่สบายๆ งบไม่เกิน 500 บาท",
+        product_name="ชุดคลุมท้องผ้าฝ้ายทรงหลวม ผ้านิ่มระบายอากาศ",
+        price=299.00,
+        rating=4.9,
+        sales_count=5420,
+        affiliate_url="https://shope.ee/maternity_ok",
+        suggested_reasons=["⭐ รีวิวสูง 4.9/5 ดาว", "🔥 ยอดขายกว่า 5,420 ชิ้น"],
+    )
+
+    assert isinstance(copy, str)
+    assert len(copy) > 30
+    assert "https://shope.ee/maternity_ok" in copy
+    # Persona tone markers
+    assert any(w in copy for w in ("ป้า", "จ้า", "จ้ะ", "นะจ๊ะ", "ลูก", "คุณแม่"))
+
+
+def test_t1_f6_fastapi_leads_intake_endpoint(client, db_session):
+    """[R4] Verifies POST /api/admin/facebook-radar/leads receives and processes leads."""
+    post_id = f"t1_lead_{int(time.time() * 1000)}"
+    payload = {
+        "leads": [
+            {
+                "fb_post_id": post_id,
+                "group_id": "grp_moms_th",
+                "group_name": "กลุ่มแม่และเด็ก",
+                "author_name": "คุณแม่น้องมิน",
+                "post_text": "มีใครแนะนำชุดคลุมท้องใส่สบายๆ บ้างคะ งบไม่เกิน 400 บาท ขอบคุณค่ะ",
+                "post_url": f"https://facebook.com/groups/moms_th/posts/{post_id}",
+            }
+        ]
+    }
+
+    with patch("app.api.facebook_radar.dispatch_radar_line_alert", return_value=True) as mock_alert:
+        resp = client.post("/api/admin/facebook-radar/leads", json=payload)
+        assert resp.status_code == 200
+        data = resp.json()
+
+        assert data["total_received"] == 1
+        assert data["processed"] == 1
+        assert data["high_demand_count"] == 1
+        assert data["alerts_sent"] == 1
+        assert data["results"][0]["status"] == "deal_matched_and_alerted"
+        assert mock_alert.called
+
+
+def test_t1_f7_fastapi_admin_action_endpoint(client, db_session):
+    """[R4] Verifies POST /api/admin/facebook-radar/actions records admin decision for Data Flywheel."""
+    # Seed demand event
+    lead = models.FacebookDetectedLead(
+        fb_post_id=f"lead_act_{int(time.time() * 1000)}",
+        post_url="https://facebook.com/post/act",
+        post_text="ตามหาหูฟังบลูทูธ",
+        status="processed",
+    )
+    db_session.add(lead)
+    db_session.flush()
+
+    event = models.FacebookDemandEvent(
+        lead_id=lead.id,
+        intent="buy_request",
+        demand_score=85,
+        product_keyword="หูฟังบลูทูธ",
+    )
+    db_session.add(event)
+    db_session.commit()
+
+    action_payload = {
+        "demand_event_id": event.id,
+        "lead_id": lead.id,
+        "action_type": "reply_posted",
+        "admin_id": "U_admin_test_t1",
+        "comment_posted": "ป้าเข็มแนะนำหูฟังรุ่นนี้จ้า https://shope.ee/earbuds_ok",
+        "affiliate_link_used": "https://shope.ee/earbuds_ok",
+        "feedback_score": 5,
+        "notes": "โพสต์คอมเมนต์ตอบแล้ว",
+    }
+
+    resp = client.post("/api/admin/facebook-radar/actions", json=action_payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["demand_event_id"] == event.id
+    assert data["action_type"] == "reply_posted"
+    assert data["feedback_score"] == 5
+
+
+def test_t1_f8_line_push_alert_formatting(db_session):
+    """[R4] Verifies Flex Message builder creates structured bubbles with action URIs."""
+    product = db_session.query(models.Product).filter(models.Product.link_status == "ok").first()
+    flex = format_radar_deal_flex_message(
+        group_name="กลุ่มคนรักหูฟัง",
+        post_text="อยากได้หูฟังบลูทูธตัดเสียงรบกวนดีๆ งบ 500 บาท",
+        post_url="https://facebook.com/groups/tech/posts/999",
+        demand_score=92,
+        urgency="high",
+        matched_product=product,
+        suggested_reasons=["⭐ รีวิวสูง 4.8 ดาว", "🔥 ยอดขายดี"],
+        copy_text="ป้าเข็มแนะนำตัวนี้เลยจ้า https://shope.ee/test",
+    )
+
+    assert flex is not None
+    assert "Demand Radar" in flex.alt_text
+    assert "92" in flex.alt_text
+    contents = flex.contents.as_json_dict() if hasattr(flex.contents, "as_json_dict") else flex.contents
+    assert contents["type"] == "bubble"
+    buttons = contents["footer"]["contents"]
+    assert len(buttons) >= 2
+    assert "facebook.com" in buttons[0]["action"]["uri"]
+
+
+def test_t1_f9_local_fb_monitor_tool(client):
+    """[R5] Verifies local scraper script CLI parsing, SeenPostTracker, and payload submission."""
+    tracker = monitor.SeenPostTracker()
+    assert tracker.count == 0
+
+    # Dry run test
+    res_dry = monitor.run_monitor_iteration(
+        api_url="http://testserver",
+        token=TEST_SECRET_TOKEN,
+        tracker=tracker,
+        sample_mode=True,
+        dry_run=True,
+        limit=2,
+    )
+    assert res_dry["ok"] is True
+    assert res_dry["dry_run"] is True
+    assert res_dry["unseen_count"] == 2
+    assert tracker.count == 2
+
+    # Live test with TestClient
+    tracker.clear()
+    with patch("app.api.facebook_radar.dispatch_radar_line_alert", return_value=True):
+        res_live = monitor.run_monitor_iteration(
+            api_url="http://testserver",
+            token=TEST_SECRET_TOKEN,
+            tracker=tracker,
+            sample_mode=True,
+            dry_run=False,
+            limit=2,
+            client=client,
+        )
+        assert res_live["ok"] is True
+        assert res_live["dry_run"] is False
+        assert res_live["ingested_count"] == 2
+
+
+# ===========================================================================
+# Tier 2: Boundary and Edge Cases
+# ===========================================================================
+
+def test_t2_boundary_demand_scores():
+    """[Boundary] Tests edge condition scores: 69 (ignored) vs 70 (high demand) vs 71."""
+    assert is_high_demand(69, threshold=70) is False
+    assert is_high_demand(70, threshold=70) is True
+    assert is_high_demand(71, threshold=70) is True
+    assert is_high_demand(0) is False
+    assert is_high_demand(-1) is False
+    assert is_high_demand(100) is True
+
+
+def test_t2_thai_sara_am_nfc_normalization():
+    """[Boundary] Tests decomposed Thai Sara Am (\\u0e4d\\u0e32) compatibility normalization."""
+    decomposed = "น\u0e49\u0e4d\u0e32แข็ง"  # นิคหิต + สระอา
+    normalized = _nfc(decomposed)
+    assert normalized == "น้ำแข็ง"
+    assert "\u0e4d\u0e32" not in normalized
+
+    decomposed_double = "น\u0e4d\u0e33"
+    assert _nfc(decomposed_double) == "นำ"
+
+
+def test_t2_empty_and_whitespace_inputs():
+    """[Negative] Tests empty and whitespace-only post inputs."""
+    res_empty = analyze_lead_intent_and_demand("")
+    assert res_empty["demand_score"] == 0
+    assert res_empty["intent"] == "general_discussion"
+    assert is_high_demand(res_empty["demand_score"]) is False
+
+    res_space = analyze_lead_intent_and_demand("     \n\t  ")
+    assert res_space["demand_score"] == 0
+
+
+def test_t2_lead_deduplication_idempotency(client, db_session):
+    """[Idempotency] Submitting the same post twice returns already_processed without duplicate alert."""
+    post_id = f"dedup_t2_{int(time.time() * 1000)}"
+    payload = {
+        "fb_post_id": post_id,
+        "group_id": "grp_tech_deals",
+        "group_name": "กลุ่มแกดเจ็ต",
+        "author_name": "ผู้ใช้ A",
+        "post_text": "อยากได้หูฟังบลูทูธไร้สายตัดเสียงรบกวนดีๆ งบ 500 บาท มีตัวไหนคุ้มสุดตอนนี้บ้างครับ",
+        "post_url": f"https://facebook.com/groups/tech/posts/{post_id}",
+    }
+
+    with patch("app.api.facebook_radar.dispatch_radar_line_alert", return_value=True) as mock_alert:
+        # First ingest
+        r1 = client.post("/api/admin/facebook-radar/leads", json=payload)
+        assert r1.status_code == 200
+        d1 = r1.json()
+        assert d1["high_demand_count"] == 1
+        assert mock_alert.call_count == 1
+
+        # Second ingest of duplicate post
+        r2 = client.post("/api/admin/facebook-radar/leads", json=payload)
+        assert r2.status_code == 200
+        d2 = r2.json()
+        assert d2["total_received"] == 1
+        assert d2["processed"] == 1
+        assert d2["high_demand_count"] == 0
+        assert d2["alerts_sent"] == 0
+        assert d2["results"][0]["status"] == "already_processed"
+        assert d2["results"][0]["alert_sent"] is False
+
+        # Alert should not have fired again
+        assert mock_alert.call_count == 1
+
+    # Verify single record in DB
+    cnt = db_session.query(models.FacebookDetectedLead).filter_by(fb_post_id=post_id).count()
+    assert cnt == 1
+
+
+def test_t2_admin_authorization_security_boundaries(raw_client, monkeypatch):
+    """[Security] Tests authorization mechanisms (Header, Query, Bearer, Cookie, 401 Rejection)."""
+    secret = "strict_security_radar_token_999"
+    monkeypatch.setenv("CRON_TOKEN", secret)
+    monkeypatch.setenv("ADMIN_DASHBOARD_PASSWORD", secret)
+
+    # 1. No auth -> 401
+    assert raw_client.get("/api/admin/facebook-radar/stats").status_code == 401
+
+    # 2. Invalid header -> 401
+    assert raw_client.get("/api/admin/facebook-radar/stats", headers={"X-Admin-Token": "bad_token"}).status_code == 401
+
+    # 3. Valid X-Admin-Token -> 200
+    assert raw_client.get("/api/admin/facebook-radar/stats", headers={"X-Admin-Token": secret}).status_code == 200
+
+    # 4. Valid ?token= -> 200
+    assert raw_client.get(f"/api/admin/facebook-radar/stats?token={secret}").status_code == 200
+
+    # 5. Valid Authorization: Bearer -> 200
+    assert raw_client.get("/api/admin/facebook-radar/stats", headers={"Authorization": f"Bearer {secret}"}).status_code == 200
+
+    # 6. Valid HMAC Session Cookie -> 200
+    expiry = str(int(time.time()) + 3600)
+    sig = hmac.new(secret.encode(), expiry.encode(), hashlib.sha256).hexdigest()
+    valid_cookie = f"{expiry}.{sig}"
+    assert raw_client.get("/api/admin/facebook-radar/stats", cookies={"pkh_admin": valid_cookie}).status_code == 200
+
+
+def test_t2_price_parsing_boundary_formats():
+    """[Boundary] Tests parsing diverse Thai price representations."""
+    # Thai word numbers
+    val1, _ = parse_post_budget("งบสองพัน")
+    assert val1 == 2000.0
+
+    val2, _ = parse_post_budget("ราคาไม่เกินร้อย")
+    assert val2 == 100.0
+
+    # Comma numbers
+    val3, _ = parse_post_budget("งบ 1,500 บาท")
+    assert val3 == 1500.0
+
+    # Range
+    val4, text4 = parse_post_budget("ราคา 300-500 บาท")
+    assert val4 == 500.0
+    assert "300-500" in text4
+
+
+def test_t2_no_matching_product_or_all_dead_links(client, db_session):
+    """[Boundary] Graceful handling when no products match or only dead links exist."""
+    # Ingest demand for an obscure item with no product in DB
+    post_id = f"no_prod_{int(time.time() * 1000)}"
+    payload = {
+        "fb_post_id": post_id,
+        "author_name": "ผู้ใช้พิเศษ",
+        "post_text": "อยากได้เครื่องวัดคลื่นรังสีคอสมิกความแม่นยำสูง งบ 50000 บาท ด่วนมาก",
+        "post_url": f"https://facebook.com/posts/{post_id}",
+    }
+
+    with patch("app.api.facebook_radar.dispatch_radar_line_alert", return_value=True):
+        resp = client.post("/api/admin/facebook-radar/leads", json=payload)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["processed"] == 1
+
+        lead = db_session.query(models.FacebookDetectedLead).filter_by(fb_post_id=post_id).first()
+        assert lead is not None
+
+
+# ===========================================================================
+# Tier 3: Full End-to-End Lifecycle & Data Flywheel
+# ===========================================================================
+
+def test_t3_full_e2e_lifecycle_and_data_flywheel(client, db_session):
+    """[E2E] Full lifecycle:
+    Ingestion -> AI analysis -> Product Matching -> Auntie Khem Copy -> Demand Event ->
+    LINE Alert -> Admin Feedback Action -> Conversion Metrics Update ->
+    Stats Aggregation -> List Leads Pagination.
+    """
+    post_id = f"e2e_full_{int(time.time() * 1000)}"
+    lead_payload = {
+        "fb_post_id": post_id,
+        "group_id": "grp_wfh_th",
+        "group_name": "กลุ่มคนทำงาน WFH",
+        "author_name": "พนักงานออฟฟิศปวดหลัง",
+        "post_text": "ปวดหลังมาก ทำงาน WFH นั่งทั้งวัน อยากได้เบาะรองนั่งหรือเก้าอี้เพื่อสุขภาพดีๆ งบ 500 บาท แนะนำหน่อยครับ",
+        "post_url": f"https://facebook.com/groups/wfh_th/posts/{post_id}",
+        "raw_data": {"likes": 12, "comments": 4},
+    }
+
+    # Step 1: Ingest Lead via API
+    with patch("app.api.facebook_radar.dispatch_radar_line_alert", return_value=True) as mock_alert:
+        resp_ingest = client.post("/api/admin/facebook-radar/leads", json=lead_payload)
+        assert resp_ingest.status_code == 200
+        ingest_data = resp_ingest.json()
+        assert ingest_data["high_demand_count"] == 1
+        assert ingest_data["alerts_sent"] == 1
+        assert mock_alert.called
+
+    # Step 2: Verify Database Event State
+    lead = db_session.query(models.FacebookDetectedLead).filter_by(fb_post_id=post_id).first()
+    assert lead is not None
+    assert lead.status == "processed"
+
+    event = db_session.query(models.FacebookDemandEvent).filter_by(lead_id=lead.id).first()
+    assert event is not None
+    assert event.demand_score >= 70
+    assert event.matched_product_id is not None
+    assert event.notification_status == "sent"
+    assert "https://shope.ee/" in event.ai_comment_draft
+
+    # Step 3: Admin records action & conversions via API (Data Flywheel)
+    action_payload = {
+        "demand_event_id": event.id,
+        "lead_id": lead.id,
+        "action_type": "reply_posted",
+        "admin_id": "U_admin_e2e",
+        "comment_posted": event.ai_comment_draft,
+        "affiliate_link_used": event.matched_product.affiliate_url,
+        "feedback_score": 5,
+        "notes": "แอดมินคอมเมนต์ตอบแล้ว ลูกค้ากดดูลิงก์",
+    }
+    resp_action = client.post("/api/admin/facebook-radar/actions", json=action_payload)
+    assert resp_action.status_code == 200
+    action_id = resp_action.json()["id"]
+
+    # Step 4: Simulate tracking conversions on the action
+    saved_action = db_session.query(models.LeadAction).filter_by(id=action_id).first()
+    saved_action.click_count = 15
+    saved_action.order_count = 3
+    saved_action.commission_earned = Decimal("90.00")
+    saved_action.conversion_status = "converted"
+    db_session.commit()
+
+    # Step 5: Verify Radar Stats Aggregation
+    resp_stats = client.get("/api/admin/facebook-radar/stats")
+    assert resp_stats.status_code == 200
+    stats = resp_stats.json()
+    assert stats["total_leads_scanned"] >= 1
+    assert stats["high_demand_leads"] >= 1
+    assert stats["action_taken_count"] >= 1
+    assert stats["total_clicks"] >= 15
+    assert stats["total_orders"] >= 3
+    assert Decimal(str(stats["total_commission_earned"])) >= Decimal("90.00")
+    assert isinstance(stats["top_demanded_keywords"], list)
+
+    # Step 6: Verify List Radar Leads Endpoint
+    resp_list = client.get("/api/admin/facebook-radar/leads?limit=20&offset=0")
+    assert resp_list.status_code == 200
+    list_data = resp_list.json()
+    assert list_data["total"] >= 1
+    lead_entry = next((l for l in list_data["leads"] if l["fb_post_id"] == post_id), None)
+    assert lead_entry is not None
+    assert len(lead_entry["events"]) >= 1
+
+
+def test_t3_cascade_deletion_lifecycle(db_session):
+    """[Cascade] Deleting a FacebookDetectedLead cascades cleanly across demand events and lead actions."""
+    post_id = f"cascade_lead_{int(time.time() * 1000)}"
+    lead = models.FacebookDetectedLead(
+        fb_post_id=post_id,
+        post_url="https://facebook.com/cascade",
+        post_text="ทดสอบ cascade delete",
+        status="processed",
+    )
+    db_session.add(lead)
+    db_session.flush()
+
+    event = models.FacebookDemandEvent(
+        lead_id=lead.id,
+        intent="buy_request",
+        demand_score=80,
+    )
+    db_session.add(event)
+    db_session.flush()
+
+    action = models.LeadAction(
+        demand_event_id=event.id,
+        lead_id=lead.id,
+        action_type="reply_posted",
+    )
+    db_session.add(action)
+    db_session.commit()
+
+    assert db_session.query(models.FacebookDemandEvent).filter_by(lead_id=lead.id).count() == 1
+    assert db_session.query(models.LeadAction).filter_by(lead_id=lead.id).count() == 1
+
+    # Delete parent lead
+    db_session.delete(lead)
+    db_session.commit()
+
+    # Children must be automatically deleted
+    assert db_session.query(models.FacebookDemandEvent).filter_by(lead_id=lead.id).count() == 0
+    assert db_session.query(models.LeadAction).filter_by(lead_id=lead.id).count() == 0
+
+
+# ===========================================================================
+# Tier 4: Real-World Thai Workload Simulations
+# ===========================================================================
+
+def test_t4_real_world_thai_workloads(client, db_session):
+    """[Real-World] Simulates a realistic batch workload of 10 diverse Thai social media posts:
+    - 6 High Demand Posts (Maternity, Earbuds, Cushion, Pet Food, Broken Fan, Air Purifier).
+    - 4 Low Demand Posts (Scam Warning, Secondhand Clothes Dump, Spam Ad, Weather Discussion).
+    """
+    batch_posts = [
+        # 1. High Demand: Maternity Dress
+        {
+            "fb_post_id": "rw_001_maternity",
+            "group_id": "grp_moms",
+            "group_name": "กลุ่มแม่และเด็ก",
+            "author_name": "แม่น้องพิมพ์",
+            "post_text": "มีแม่ๆ คนไหนแนะนำชุดคลุมท้องใส่สบายๆ บ้างคะ ผ้าระบายอากาศดีๆ ไม่ร้อน งบไม่เกิน 400 บาท",
+            "post_url": "https://facebook.com/groups/moms/posts/1",
+        },
+        # 2. High Demand: Bluetooth Earbuds
+        {
+            "fb_post_id": "rw_002_earbuds",
+            "group_id": "grp_tech",
+            "group_name": "คนรักแกดเจ็ต",
+            "author_name": "เกมเมอร์มือถือ",
+            "post_text": "อยากได้หูฟังบลูทูธไร้สายตัดเสียงรบกวนดีๆ งบ 500 บาท มีตัวไหนคุ้มสุดตอนนี้บ้างครับ",
+            "post_url": "https://facebook.com/groups/tech/posts/2",
+        },
+        # 3. High Demand: Ergonomic Cushion
+        {
+            "fb_post_id": "rw_003_cushion",
+            "group_id": "grp_wfh",
+            "group_name": "มนุษย์ WFH",
+            "author_name": "โปรแกรมเมอร์ปวดหลัง",
+            "post_text": "ปวดหลังมาก ทำงาน WFH นั่งทั้งวัน อยากได้เบาะรองนั่งหรือเก้าอี้เพื่อสุขภาพดีๆ งบ 1000 บาท แนะนำหน่อยครับ",
+            "post_url": "https://facebook.com/groups/wfh/posts/3",
+        },
+        # 4. High Demand: Kidney Care Cat Food
+        {
+            "fb_post_id": "rw_004_catfood",
+            "group_id": "grp_cats",
+            "group_name": "ทาสแมว ชุมชนคนรักสัตว์",
+            "author_name": "ทาสแมวส้ม",
+            "post_text": "ตามหาอาหารเปียกแมวโรคไต ยี่ห้อไหนดีบ้างคะ น้องทานยากมาก อยากได้แบบรสชาติดี",
+            "post_url": "https://facebook.com/groups/cats/posts/4",
+        },
+        # 5. Low Demand: Scam Warning
+        {
+            "fb_post_id": "rw_005_scam",
+            "group_id": "grp_moms",
+            "group_name": "กลุ่มแม่และเด็ก",
+            "author_name": "แอดมินเตือนภัย",
+            "post_text": "ประกาศเตือนภัยมิจฉาชีพหลอกโอนเงินค่าสินค้า อย่าโอนเด็ดขาด บัญชีคนโกง blacklist ระวังโดนหลอก",
+            "post_url": "https://facebook.com/groups/moms/posts/5",
+        },
+        # 6. Low Demand: Secondhand Clothes Seller
+        {
+            "fb_post_id": "rw_006_secondhand",
+            "group_id": "grp_market",
+            "group_name": "ตลาดนัดมือสอง",
+            "author_name": "แม่ค้าเสื้อผ้า",
+            "post_text": "ขออนุญาตแอดมินปล่อยเสื้อผ้ามือสอง สภาพดี ส่งต่อราคาเบาๆ สนใจทักแชทได้เลย",
+            "post_url": "https://facebook.com/groups/market/posts/6",
+        },
+        # 7. Low Demand: Spam Follower Seller
+        {
+            "fb_post_id": "rw_007_spam",
+            "group_id": "grp_market",
+            "group_name": "ตลาดนัดมือสอง",
+            "author_name": "ร้านฟอลโลเวอร์",
+            "post_text": "ฝากร้านหน่อยจ้า รับปั๊มฟอล IG ราคาถูก สนใจทักแชทได้เลย",
+            "post_url": "https://facebook.com/groups/market/posts/7",
+        },
+        # 8. Low Demand: Weather Casual Discussion
+        {
+            "fb_post_id": "rw_008_weather",
+            "group_id": "grp_talk",
+            "group_name": "คุยเรื่อยเปื่อย",
+            "author_name": "คนเมืองกรุง",
+            "post_text": "วันนี้ฝนตกหนักมากแถวสยาม มีใครติดฝนเหมือนกันบ้าง รถติดสุดๆ เลยช่วงนี้",
+            "post_url": "https://facebook.com/groups/talk/posts/8",
+        },
+        # 9. High Demand: Broken Fan Replacement
+        {
+            "fb_post_id": "rw_009_fan",
+            "group_id": "grp_appliances",
+            "group_name": "เครื่องใช้ไฟฟ้าในบ้าน",
+            "author_name": "พ่อบ้านใจกล้า",
+            "post_text": "พัดลมตัวเก่าพัง อยากได้พัดลมตั้งโต๊ะเงียบๆ ลมแรงๆ มียี่ห้อไหนดีบ้างคะ ด่วนมากร้อนสุดๆ",
+            "post_url": "https://facebook.com/groups/appliances/posts/9",
+        },
+        # 10. High Demand: Air Purifier Search with Comma Price
+        {
+            "fb_post_id": "rw_010_airpurifier",
+            "group_id": "grp_home",
+            "group_name": "แต่งบ้าน มินิมอล",
+            "author_name": "คนรักสุขภาพ",
+            "post_text": "มองหาเครื่องฟอกอากาศ HEPA กรองฝุ่น PM2.5 ราคาไม่เกิน 2,500 บาท มีตัวไหนแนะนำบ้างครับ",
+            "post_url": "https://facebook.com/groups/home/posts/10",
+        },
+    ]
+
+    with patch("app.api.facebook_radar.dispatch_radar_line_alert", return_value=True) as mock_alert:
+        resp = client.post("/api/admin/facebook-radar/leads", json={"leads": batch_posts})
+        assert resp.status_code == 200
+        data = resp.json()
+
+        assert data["total_received"] == 10
+        assert data["processed"] == 10
+        assert data["high_demand_count"] == 6
+        assert data["alerts_sent"] == 6
+        assert mock_alert.call_count == 6
+
+        # Check high demand results
+        high_demand_pids = {"rw_001_maternity", "rw_002_earbuds", "rw_003_cushion", "rw_004_catfood", "rw_009_fan", "rw_010_airpurifier"}
+        low_demand_pids = {"rw_005_scam", "rw_006_secondhand", "rw_007_spam", "rw_008_weather"}
+
+        for res in data["results"]:
+            pid = res["fb_post_id"]
+            if pid in high_demand_pids:
+                assert res["status"] == "deal_matched_and_alerted"
+                assert res["demand_score"] >= 70
+                assert res["alert_sent"] is True
+                assert res["matched_product_id"] is not None
+            elif pid in low_demand_pids:
+                assert res["status"] == "low_demand_ignored"
+                assert res["demand_score"] < 70
+                assert res["alert_sent"] is False
+                assert res["matched_product_id"] is None

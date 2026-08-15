@@ -74,7 +74,7 @@ def db():
     """session สด + ล้างสถานะในหน่วยความจำ/ตารางลูกค้าระหว่างแต่ละเทสต์"""
     lb._pending_question.clear()
     s = SessionLocal()
-    for m in (models.ChatLog, models.UserPreference, models.User, models.CampaignLog):
+    for m in (models.LeadAction, models.FacebookDemandEvent, models.FacebookDetectedLead, models.FacebookGroupMonitor, models.ChatLog, models.UserPreference, models.User, models.CampaignLog):
         s.query(m).delete(synchronize_session=False)
     s.commit()
     yield s

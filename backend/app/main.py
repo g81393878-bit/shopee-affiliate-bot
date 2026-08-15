@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 import httpx
 
 from app.db import engine, Base
-from app.api import users, products, performance, line_bot, cron, admin_dashboard, facebook_bot
+from app.api import users, products, performance, line_bot, cron, admin_dashboard, facebook_bot, facebook_radar
 from app.api.cron import run_facebook_auto_post
 from app.config import settings
 
@@ -99,6 +99,7 @@ app.include_router(products.router, prefix="/api")
 app.include_router(performance.router, prefix="/api")
 app.include_router(line_bot.router, prefix="/api")
 app.include_router(facebook_bot.router, prefix="/api")
+app.include_router(facebook_radar.router, prefix="/api")
 app.include_router(cron.router, prefix="/api")
 app.include_router(admin_dashboard.router)  # แดชบอร์ดแอดมิน (/admin + /api/admin/*)
 

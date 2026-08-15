@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, Integer, BigInteger, String, Numeric, Text, Date, DateTime, ForeignKey, Float, JSON
+from sqlalchemy import Column, Integer, BigInteger, String, Numeric, Text, Date, DateTime, ForeignKey, Float, JSON, Boolean
 from sqlalchemy.orm import relationship
 from app.db import Base
 
@@ -179,3 +179,98 @@ class PerformanceLog(Base):
 
     # Relationships
     content = relationship("Content", back_populates="performance_logs")
+
+
+# ===========================================================================
+# Social Demand Radar V1 Models
+# ===========================================================================
+
+class FacebookGroupMonitor(Base):
+    """กลุ่ม Facebook เป้าหมายที่ระบบเฝ้าส่องความต้องการซื้อสินค้า"""
+    __tablename__ = "facebook_groups_monitor"
+
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    group_id = Column(String(100), unique=True, index=True, nullable=False)
+    group_name = Column(String(255), nullable=False)
+    group_url = Column(Text, nullable=False)
+    category_tag = Column(String(100), nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    check_interval_minutes = Column(Integer, default=60, nullable=False)
+    last_scanned_at = Column(DateTime(timezone=True), nullable=True)
+    post_count_detected = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=True)
+
+    # Relationships
+    leads = relationship("FacebookDetectedLead", back_populates="group")
+
+
+class FacebookDetectedLead(Base):
+    """โพสต์ดิบที่ตรวจพบจากกลุ่ม Facebook ก่อน/หลังการวิเคราะห์ Demand"""
+    __tablename__ = "facebook_detected_leads"
+
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    group_id = Column(BigInteger().with_variant(Integer, "sqlite"), ForeignKey("facebook_groups_monitor.id", ondelete="SET NULL"), nullable=True, index=True)
+    fb_post_id = Column(String(100), unique=True, index=True, nullable=False)
+    post_url = Column(Text, nullable=False)
+    author_name = Column(String(255), nullable=True)
+    post_text = Column(Text, nullable=False)
+    post_time = Column(DateTime(timezone=True), nullable=True)
+    status = Column(String(30), default="pending", nullable=False, index=True)  # pending | analyzed | ignored | error
+    raw_data = Column(JSON, nullable=True)
+    detected_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, nullable=False, index=True)
+
+    # Relationships
+    group = relationship("FacebookGroupMonitor", back_populates="leads")
+    demand_events = relationship("FacebookDemandEvent", back_populates="lead", cascade="all, delete-orphan")
+    actions = relationship("LeadAction", back_populates="lead", cascade="all, delete-orphan")
+
+
+class FacebookDemandEvent(Base):
+    """เหตุการณ์ Demand / ดีลที่ AI วิเคราะห์ได้ พร้อมสินค้าแนะนำ เหตุผล และข้อความป้ายยา"""
+    __tablename__ = "facebook_demand_events"
+
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    lead_id = Column(BigInteger().with_variant(Integer, "sqlite"), ForeignKey("facebook_detected_leads.id", ondelete="CASCADE"), nullable=False, index=True)
+    intent = Column(String(50), default="unknown", nullable=False)  # buy_request | product_inquiry | general_discussion | spam
+    demand_score = Column(Integer, default=0, nullable=False, index=True)  # 0 - 100
+    urgency = Column(String(20), default="low", nullable=False)  # high | medium | low
+    budget = Column(String(100), nullable=True)
+    product_keyword = Column(String(255), nullable=True)
+    matched_product_id = Column(Integer, ForeignKey("products.id", ondelete="SET NULL"), nullable=True, index=True)
+    suggested_reason = Column(JSON, nullable=True)  # dict/list of reason criteria
+    ai_comment_draft = Column(Text, nullable=True)  # ข้อความร่างสไตล์ป้าเข็ม
+    notification_status = Column(String(30), default="pending", nullable=False, index=True)  # pending | sent | failed | skipped_low_score
+    notification_sent_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, nullable=False, index=True)
+
+    # Relationships
+    lead = relationship("FacebookDetectedLead", back_populates="demand_events")
+    matched_product = relationship("Product", foreign_keys=[matched_product_id])
+    actions = relationship("LeadAction", back_populates="demand_event", cascade="all, delete-orphan")
+
+
+class LeadAction(Base):
+    """พฤติกรรมและการตัดสินใจของแอดมินในการจัดการดีลเพื่อสร้าง Data Flywheel"""
+    __tablename__ = "lead_actions"
+
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    demand_event_id = Column(BigInteger().with_variant(Integer, "sqlite"), ForeignKey("facebook_demand_events.id", ondelete="CASCADE"), nullable=False, index=True)
+    lead_id = Column(BigInteger().with_variant(Integer, "sqlite"), ForeignKey("facebook_detected_leads.id", ondelete="CASCADE"), nullable=True, index=True)
+    action_type = Column(String(50), nullable=False)  # reply_posted | manual_reply | ignored | product_swapped
+    admin_id = Column(String(100), nullable=True)
+    comment_posted = Column(Text, nullable=True)
+    affiliate_link_used = Column(Text, nullable=True)
+    feedback_score = Column(Integer, nullable=True)  # 1-5 rating on AI suggestion
+    click_count = Column(Integer, default=0, nullable=False)
+    order_count = Column(Integer, default=0, nullable=False)
+    commission_earned = Column(Numeric(10, 2), default=0.00, nullable=False)
+    conversion_status = Column(String(30), default="pending", nullable=False)  # pending | clicked | converted | no_sale
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, nullable=False, index=True)
+    updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=True)
+
+    # Relationships
+    demand_event = relationship("FacebookDemandEvent", back_populates="actions")
+    lead = relationship("FacebookDetectedLead", back_populates="actions")
+

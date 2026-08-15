@@ -38,6 +38,13 @@
 - **บอท LINE ตอบเฉพาะ `link_status == 'ok'`** (`line_bot.py` filter ทั้ง search และ หมุนเวียน) — ลิงก์เสีย/ยังไม่ตรวจ ไม่เด้งขึ้นหน้าลูกค้าเด็ดขาด
 - API `POST/PUT /products` ตรวจลิงก์ก่อนบันทึก (ไม่ OK → 400) และ `tools/product_pipeline.py import-csv` ตรวจก่อน insert (ข้ามตัวไม่ผ่าน) — `check-links` อัปเดตสถานะลงตาราง (รันเป็นระยะ; `--delete` ลบตัว DEAD)
 
+## Facebook Automation & Social Demand Radar (ป้าเข็ม)
+
+- **ข้อกำหนดความปลอดภัยการเข้าถึงกลุ่ม:** ระบบส่องกลุ่ม Facebook หรือโซเชียลมีเดียอื่น ๆ ต้องไม่รับประกันความปลอดภัย 100% หรือการันตีว่าจะทำงานได้โดยไม่ต้อง Login ให้ยึดหลักเกณฑ์ "Read-only monitoring โดยใช้วิธีการเข้าถึงที่ได้รับอนุญาตและสอดคล้องกับข้อกำหนดของแพลตฟอร์ม" เสมอ และสคริปต์สแกน (เช่น `tools/fb_group_monitor_local.py`) ควรแยกไปรันบน IP บ้านจริง (Local/VPS) เพื่อเลี่ยงการถูกจำกัดของเซิร์ฟเวอร์คลาวด์
+- **การวิเคราะห์ Intent และจับคู่สินค้า:** ห้ามสร้างเพียงบอทตรวจจับคีย์เวิร์ด (Keyword Bot) เฝ้าดูคำตายตัว การตรวจจับความต้องการซื้อ (Demand) ต้องใช้ AI วิเคราะห์เจตนา (Intent), คะแนนความสนใจซื้อ (Demand Score 0-100), ความเร่งด่วน (Urgency) และงบประมาณ จากนั้นคัดกรองเฉพาะโพสต์ที่มี Demand Score >= 70
+- **ข้อมูลประกอบการแจ้งเตือน:** การส่ง LINE Alert ไปหาแอดมิน ต้องแสดงเหตุผลการเลือกสินค้า (Suggested Reason) เช่น ยอดขาย คะแนนรีวิว หรือค่าคอมมิชชั่น พร้อมแคปชั่นป้ายยาตัวอย่างสไตล์ป้าเข็มและลิงก์ Affiliate นายหน้าเสมอ เพื่อให้แอดมินใช้ตัดสินใจตอบโพสต์ภายในไม่กี่วินาที
+- **วงจรเรียนรู้ Data Flywheel:** ข้อมูลเหตุการณ์ต้องแยกตารางชัดเจนระหว่างโพสต์ดิบ (`facebook_detected_leads`), ข้อมูลการวิเคราะห์ความต้องการ (`facebook_demand_events`) และการตัดสินใจส่งข้อมูลของแอดมิน (`lead_actions`) เพื่อบันทึกประวัติ Conversions (การกดตอบ, การคลิก, และยอดการซื้อจริง) สำหรับนำไปใช้เทรนหรือปรับปรุงโมเดล AI แนะนำดีลในอนาคต
+
 ## Git & Repo Hygiene
 
 - `.gitignore` blocks drivers, `*.db`, `.env`, `*.zip`, `*.ipynb`. Pattern gap: `geckodriver*/` only matches directories, so a root `geckodriver.exe` keeps appearing as untracked in `git status` (chromedriver.exe is explicitly ignored) — don't stage it.
