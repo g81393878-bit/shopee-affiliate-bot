@@ -500,24 +500,26 @@ def test_leave_message_saves_and_notifies_owner(sim):
 
 
 def test_chat_button_enters_ai_flow(sim):
-    # "คุยกับป้าเข็ม" ต้องเข้าแชท AI (ไม่ใช่คู่มือตายตัว) — NUANOSE: AI ตอบเอง
+    # "คุยกับป้าเข็ม" ต้องแนะนำตัวบอท + เข้าเรื่องราคา/แพ็กเกจ แล้วรอรับคำถามถัดไป
     r1 = sim.send("U_cust_1", "คุยกับป้าเข็ม")
     assert r1["intent"] == "human"
-    assert "5 ขั้นตอน" in r1["preview"]
-    assert "ต้อนรับอย่างอบอุ่น" in r1["preview"]
+    assert "ป้าเข็มเป็นบอทไลน์" in r1["preview"]
+    assert "490฿/เดือน" in r1["preview"]
+    assert "ราคาบอท/แพ็กเกจ" in r1["preview"]
     assert "พิมพ์ชื่อสินค้า" in r1["preview"]
     r2 = sim.send("U_cust_1", "หูฟัง")
     assert r2["intent"] == "search"
 
 
-def test_chat_button_shows_clean_five_steps(sim):
-    # กด "คุยกับป้าเข็ม" → ตอบชัด/ไม่อ่านรก: แค่ 5 หัวข้อ ไม่ใช่ข้อความยืดยาวหรือข้อย่อย
+def test_chat_button_guides_to_pricing_not_five_steps(sim):
+    # กด "คุยกับป้าเข็ม" → คำแนะนำตัวบอท + ชี้ไปราคา/แพ็กเกจ (ไม่ซ้ำ 5 ขั้นตอนที่โชว์ตอนสวัสดี)
     r1 = sim.send("U_cust_1", "คุยกับป้าเข็ม")
     assert r1["intent"] == "human"
-    assert "1️⃣ ต้อนรับอย่างอบอุ่น" in r1["preview"]
-    assert "5️⃣ ติดตามผลและขอบคุณ" in r1["preview"]
-    # ยังไม่ยิงข้อย่อยเต็ม (อันนั้นสำหรับพิมพ์ "บริการ"/"มาตรฐานการบริการ")
-    assert "ทักทายด้วยรอยยิ้ม" not in r1["preview"]
+    assert "5 แพ็กเกจ" in r1["preview"]
+    assert "490฿/เดือน" in r1["preview"]
+    # ไม่โชว์ 5 ขั้นตอนซ้ำที่นี่ (โชว์แล้วตอน "สวัสดี"/แอดเพื่อน)
+    assert "ต้อนรับอย่างอบอุ่น" not in r1["preview"]
+    assert "ติดตามผลและขอบคุณ" not in r1["preview"]
 
 
 def test_how_to_buy_uses_faq_not_web(sim):
