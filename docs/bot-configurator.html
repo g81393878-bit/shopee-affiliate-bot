@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ออกแบบบอทของคุณ — Pakhem Bot</title>
+<style>
+  :root {
+    --navy: #143D60;
+    --teal: #2CA8A8;
+    --gold: #F0B849;
+    --orange: #F58A38;
+    --red: #E85D4E;
+    --ink: #1f2937;
+    --muted: #64748b;
+    --line: #e2e8f0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Prompt", "Sarabun", -apple-system, sans-serif;
+    background: linear-gradient(180deg, #e8f4fb 0%, #f7fbfe 100%);
+    color: var(--ink);
+    line-height: 1.6;
+    padding: 24px 12px 80px;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { color: var(--navy); font-size: 1.7rem; text-align: center; margin-bottom: 4px; }
+  .sub { text-align: center; color: var(--muted); margin-bottom: 24px; }
+  .card {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 22px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 10px rgba(20,61,96,.06);
+  }
+  .card h2 { font-size: 1.05rem; color: var(--navy); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .step { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: var(--navy); color: #fff; font-size: .85rem; flex-shrink: 0; }
+  label.fld { display: block; margin-bottom: 12px; font-size: .92rem; color: var(--ink); }
+  label.fld > span { display: block; font-weight: 600; margin-bottom: 4px; }
+  input[type=text], select {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
+    font-size: .95rem; font-family: inherit;
+  }
+  input[type=text]:focus, select:focus { outline: 2px solid var(--teal); border-color: transparent; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }
+
+  /* แพ็กเกจ */
+  .pkgs { display: grid; gap: 12px; }
+  .pkg {
+    border: 2px solid var(--line); border-radius: 14px; padding: 14px 16px; cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .pkg:hover { border-color: #cbd5e1; }
+  .pkg.selected { border-color: var(--navy); background: #f0f6fb; }
+  .pkg input { margin-right: 8px; }
+  .pkg .name { font-weight: 700; }
+  .pkg .price { font-weight: 700; color: var(--navy); }
+  .pkg .desc { font-size: .85rem; color: var(--muted); margin-top: 2px; }
+  .badge { display: inline-block; font-size: .72rem; padding: 1px 8px; border-radius: 999px; background: var(--gold); color: #4a3300; font-weight: 700; margin-left: 6px; vertical-align: middle; }
+
+  /* add-ons */
+  .addon { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; margin-bottom: 8px; }
+  .addon.disabled { opacity: .45; background: #f8fafc; }
+  .addon input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--teal); flex-shrink: 0; }
+  .addon .info { flex: 1; }
+  .addon .info b { font-size: .93rem; }
+  .addon .info small { display: block; color: var(--muted); font-size: .8rem; }
+  .addon .amt { font-weight: 700; color: var(--navy); white-space: nowrap; }
+  .qty { width: 56px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; text-align: center; }
+  .roadmap { background: #f8fafc; border-style: dashed; }
+
+  /* summary */
+  .sum { position: sticky; bottom: 12px; background: #fff; border: 2px solid var(--navy); border-radius: 16px; padding: 18px 20px; box-shadow: 0 6px 20px rgba(20,61,96,.18); }
+  .row { display: flex; justify-content: space-between; padding: 4px 0; font-size: .92rem; }
+  .row.total { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 10px; font-size: 1.1rem; font-weight: 700; color: var(--navy); }
+  .sum .note { font-size: .78rem; color: var(--muted); margin-top: 6px; }
+  button.send {
+    width: 100%; margin-top: 12px; padding: 13px; border: 0; border-radius: 12px;
+    background: var(--navy); color: #fff; font-size: 1rem; font-weight: 700; cursor: pointer; font-family: inherit;
+  }
+  button.send:hover { background: #0f3048; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎛️ ออกแบบบอทของคุณ</h1>
+  <p class="sub">เลือกตัวตนบอท + แพ็กเกจ + ฟีเจอร์เสริม แล้วดูราคาอัตโนมัติได้เลย</p>
+
+  <!-- ส่วน 1: ข้อมูลร้าน -->
+  <div class="card">
+    <h2><span class="step">1</span> ข้อมูลร้าน</h2>
+    <label class="fld"><span>ชื่อร้าน</span><input type="text" id="shopName" placeholder="เช่น ร้านหนูขายของ"></label>
+    <div class="grid2">
+      <label class="fld"><span>หมวดสินค้าหลัก</span>
+        <select id="shopCat">
+          <option>ความงาม</option><option>แฟชั่น</option><option>อุปกรณ์เสริม</option>
+          <option>เครื่องใช้ไฟฟ้า</option><option>สุขภาพ</option><option>สัตว์เลี้ยง</option>
+          <option>แม่และเด็ก</option><option>ของใช้ในบ้าน</option><option>อื่น ๆ</option>
+        </select>
+      </label>
+      <label class="fld"><span>ช่องทางขาย</span>
+        <select id="shopChannel">
+          <option>LINE</option><option>LINE + Facebook</option><option>LINE + Facebook + Shopee</option>
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <!-- ส่วน 2: ตัวตนบอท -->
+  <div class="card">
+    <h2><span class="step">2</span> ตัวตนบอท (อยากให้บอทเป็นยังไง)</h2>
+    <label class="fld"><span>ชื่อบอท</span><input type="text" id="botName" placeholder="เช่น ป้าเข็ม / แม่นก / ร้านหนู" value="ป้าเข็ม"></label>
+    <div class="grid2">
+      <label class="fld"><span>บุคลิก / โทนเสียง</span>
+        <select id="botTone">
+          <option>💛 อบอุ่นเป็นกันเอง (สไตล์ป้าเข็ม)</option>
+          <option>😎 วัยรุ่น กระชับ</option>
+          <option>🎩 ทางการ สุภาพ</option>
+          <option>😂 ตลก เฮฮา</option>
+        </select>
+      </label>
+      <label class="fld"><span>สโลแกน</span><input type="text" id="botSlogan" value="ความพึงพอใจของคุณคือความสำเร็จของเรา"></label>
+    </div>
+  </div>
+
+  <!-- ส่วน 3: แพ็กเกจ -->
+  <div class="card">
+    <h2><span class="step">3</span> เลือกแพ็กเกจหลัก</h2>
+    <div class="pkgs" id="pkgs">
+      <label class="pkg" data-pkg="starter" data-price="990">
+        <input type="radio" name="pkg" value="starter" checked>
+        <span class="name">🟢 Starter</span> <span class="price">990/เดือน</span>
+        <div class="desc">บอทตอบแชท: ค้นหา/แนะนำสินค้า + ลิงก์สั่งซื้อ · สินค้า ≤300 ตัว · แชท 5,000/เดือน</div>
+      </label>
+      <label class="pkg" data-pkg="business" data-price="1990">
+        <input type="radio" name="pkg" value="business">
+        <span class="name">🔵 Business</span> <span class="price">1,990/เดือน</span>
+        <div class="desc">บอทรันเองทั้งวงจร: + Facebook auto-post + หาคนอยากซื้อ + แจ้งราคาตก + แดชบอร์ด · สินค้า/แชทไม่จำกัด</div>
+      </label>
+      <label class="pkg" data-pkg="whitelabel" data-price="4990">
+        <input type="radio" name="pkg" value="whitelabel">
+        <span class="name">🟣 White-Label</span> <span class="price">4,990/เดือน</span>
+        <div class="desc">Business + เปลี่ยนชื่อ/เสียง/โลโก้ + แยกฐานข้อมูล + custom domain + support เร็วสุด</div>
+      </label>
+    </div>
+  </div>
+
+  <!-- ส่วน 4: ฟีเจอร์เสริม -->
+  <div class="card">
+    <h2><span class="step">4</span> ฟีเจอร์เสริม (ติ๊กเพิ่มได้)</h2>
+    <div id="addons">
+      <label class="addon" data-addon="rebrand" data-price="2500">
+        <input type="checkbox"> <span class="info"><b>🔄 เปลี่ยนแบรนด์ (ชื่อ/โลโก้)</b><small>สำหรับ Starter/Business ที่อยากใช้แบรนด์ตัวเอง</small></span>
+        <span class="amt">+2,500/ด.</span>
+      </label>
+      <label class="addon" data-addon="db" data-price="1500">
+        <input type="checkbox"> <span class="info"><b>🗄️ แยกฐานข้อมูล</b><small>ความเป็นส่วนตัวสูงสุด (แยก DB ต่อร้าน)</small></span>
+        <span class="amt">+1,500/ด.</span>
+      </label>
+      <label class="addon" data-addon="lineoa" data-price="1000">
+        <input type="checkbox"> <span class="info"><b>👥 LINE OA เพิ่ม</b><small>หลายไลน์ร้านในบัญชีเดียว</small></span>
+        <span class="amt">+1,000/ด.</span> <input type="number" class="qty" min="1" value="1" disabled>
+      </label>
+      <label class="addon" data-addon="fbpage" data-price="500">
+        <input type="checkbox"> <span class="info"><b>📄 เพจ Facebook เพิ่ม</b><small>โพสต์หลายเพจ (Business+ มี 1 เพจแล้ว)</small></span>
+        <span class="amt">+500/ด.</span> <input type="number" class="qty" min="1" value="1" disabled>
+      </label>
+      <label class="addon" data-addon="ai" data-price="500">
+        <input type="checkbox"> <span class="info"><b>✍️ สร้างคอนเทนต์ AI เพิ่ม</b><small>เกินโควตา hook/caption</small></span>
+        <span class="amt">+500/ด.</span>
+      </label>
+      <label class="addon" data-addon="support" data-price="500">
+        <input type="checkbox"> <span class="info"><b>⚡ Support ตอบเร็ว</b><small>ตอบภายใน 2 ชม.</small></span>
+        <span class="amt">+500/ด.</span>
+      </label>
+      <label class="addon roadmap" data-addon="crm" data-price="1000">
+        <input type="checkbox" disabled> <span class="info"><b>📊 รายงานยอดขาย/CRM เชิงลึก</b><small>เร็ว ๆ นี้</small></span>
+        <span class="amt">+1,000/ด.</span>
+      </label>
+      <label class="addon roadmap" data-addon="order" data-price="1500">
+        <input type="checkbox" disabled> <span class="info"><b>🛒 ระบบรับออเดอร์ + สต็อก</b><small>เร็ว ๆ นี้</small></span>
+        <span class="amt">+1,500/ด.</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- ส่วน 5: สรุป -->
+  <div class="sum">
+    <div class="row"><span>แพ็กเกจหลัก</span><b id="sumPkg">990</b></div>
+    <div class="row"><span>ฟีเจอร์เสริม</span><b id="sumAdd">0</b></div>
+    <div class="row"><span>ค่าติดตั้งครั้งแรก (ครั้งเดียว)</span><b id="sumSetup">1,500</b></div>
+    <div class="row total"><span>รวมรายเดือน</span><span id="sumMonthly">990 บาท</span></div>
+    <div class="row"><span>ค่าดูแลรายปี (เริ่มปีที่ 2)</span><b id="sumMA">2,500/ปี</b></div>
+    <div class="note">⚠️ ยังไม่รวม LINE OA (555/เดือน จ่ายตรง LINE) · Render/Supabase (ลูกค้าแยกบัญชี ฟรี) · VAT 7%</div>
+    <button class="send" onclick="sendOrder()">📨 ส่งใบสั่งซื้อ</button>
+  </div>
+</div>
+
+<script>
+const PKGS = { starter: {price: 990, ma: 2500}, business: {price: 1990, ma: 3500}, whitelabel: {price: 4990, ma: 5000} };
+const SETUP_FEE = 1500;
+const INCLUDED_WHITELABEL = ["rebrand", "db", "support"]; // มีใน White-Label แล้ว ไม่คิดซ้ำ
+
+const $ = id => document.getElementById(id);
+
+function selectedPkg() {
+  const el = document.querySelector('input[name=pkg]:checked');
+  return el ? el.value : 'starter';
+}
+
+function recalc() {
+  const pkg = selectedPkg();
+  const base = PKGS[pkg].price;
+  let add = 0;
+  document.querySelectorAll('#addons .addon').forEach(a => {
+    const cb = a.querySelector('input[type=checkbox]');
+    const qty = a.querySelector('.qty');
+    if (cb && cb.checked && !cb.disabled) {
+      const n = qty ? Math.max(1, parseInt(qty.value || '1', 10)) : 1;
+      add += (parseInt(a.dataset.price, 10) || 0) * n;
+    }
+  });
+  const setup = pkg === 'whitelabel' ? 0 : SETUP_FEE;
+  $('sumPkg').textContent = base.toLocaleString();
+  $('sumAdd').textContent = add.toLocaleString();
+  $('sumSetup').textContent = setup === 0 ? 'ฟรี' : setup.toLocaleString();
+  $('sumMonthly').textContent = (base + add).toLocaleString() + ' บาท';
+  $('sumMA').textContent = PKGS[pkg].ma.toLocaleString() + '/ปี';
+}
+
+// ไฮไลต์แพ็กเกจที่เลือก + ปิด add-on ที่รวมใน White-Label
+document.querySelectorAll('input[name=pkg]').forEach(r => {
+  r.addEventListener('change', () => {
+    document.querySelectorAll('.pkg').forEach(p => p.classList.toggle('selected', p.querySelector('input').checked));
+    const isWL = selectedPkg() === 'whitelabel';
+    INCLUDED_WHITELABEL.forEach(id => {
+      const a = document.querySelector(`.addon[data-addon=${id}]`);
+      if (!a) return;
+      const cb = a.querySelector('input[type=checkbox]');
+      cb.disabled = isWL;
+      cb.checked = false;
+      a.classList.toggle('disabled', isWL);
+      const b = a.querySelector('.info b');
+      if (b) b.textContent = b.textContent.replace(/\s*\(รวมในแพ็กเกจ\)/, '') + (isWL ? ' (รวมในแพ็กเกจ)' : '');
+    });
+    recalc();
+  });
+});
+
+// เปิด/ปิดช่องจำนวนเมื่อติ๊ก
+document.querySelectorAll('#addons .addon').forEach(a => {
+  const cb = a.querySelector('input[type=checkbox]');
+  const qty = a.querySelector('.qty');
+  if (cb && qty) {
+    cb.addEventListener('change', () => { qty.disabled = !cb.checked; recalc(); });
+    qty.addEventListener('input', recalc);
+  } else if (cb) {
+    cb.addEventListener('change', recalc);
+  }
+});
+
+function sendOrder() {
+  const lines = [
+    '📨 ใบสั่งทำบอท',
+    'ร้าน: ' + ($('shopName').value || '-'),
+    'หมวด: ' + $('shopCat').value,
+    'ช่องทาง: ' + $('shopChannel').value,
+    'ชื่อบอท: ' + ($('botName').value || '-'),
+    'บุคลิก: ' + $('botTone').value,
+    'สโลแกน: ' + ($('botSlogan').value || '-'),
+    'แพ็กเกจ: ' + selectedPkg().toUpperCase(),
+    'รวมรายเดือน: ' + $('sumMonthly').textContent,
+    'ค่าติดตั้ง: ' + $('sumSetup').textContent,
+    'ค่าดูแล/ปี: ' + $('sumMA').textContent,
+  ];
+  prompt('ก๊อปข้อความนี้ส่งให้เจ้าของร้าน (LINE/อีเมล) ได้เลย:', lines.join('\n'));
+}
+
+document.querySelectorAll('input[name=pkg]')[0].dispatchEvent(new Event('change'));
+recalc();
+</script>
+</body>
+</html>
