@@ -203,7 +203,7 @@ def test_quick_reply_includes_bot_price_button():
     # แตะปุ่มราคาบอท → การ์ด Flex แพ็กเกจ (intent manual) ไม่ใช่ค้นสินค้า
     assert lb.is_package_request("ราคาบอท") is True
     # แตะปุ่มวิธีจ่ายเงิน → ตอบวิธีจ่าย (BOT_PAYMENT_REPLY) ไม่ใช่ค้นสินค้า
-    assert lb.bot_manual_reply("วิธีจ่ายค่าบอท") == lb.BOT_PAYMENT_REPLY
+    assert lb.bot_manual_reply("วิธีจ่ายค่าบอท") == lb.payment_reply_text()
 
 
 # ---------- ขายขาด / ซื้อครั้งเดียว (แม่ค้าไม่อยากผูกเดือน) ----------
@@ -290,7 +290,7 @@ def test_payment_reply_attaches_promptpay_qr_image(sim, monkeypatch):
     # _manual_reply_messages คืน [ข้อความ, รูป] พร้อม URL ถูกต้อง
     msgs = lb._manual_reply_messages("วิธีจ่ายค่าบอท")
     assert len(msgs) == 2
-    assert msgs[0].text == lb.BOT_PAYMENT_REPLY
+    assert msgs[0].text == lb.payment_reply_text()
     assert msgs[1].original_content_url == "https://example.com/qr-promptpay.png"
     assert msgs[1].preview_image_url == "https://example.com/qr-promptpay.png"
 
@@ -300,7 +300,24 @@ def test_payment_reply_no_qr_url_returns_text_only(sim):
     assert not lb.BOT_PAYMENT_QR_URL
     msgs = lb._manual_reply_messages("วิธีจ่ายค่าบอท")
     assert not isinstance(msgs, list)
-    assert msgs.text == lb.BOT_PAYMENT_REPLY
+    assert msgs.text == lb.payment_reply_text()
+
+
+def test_payment_reply_shows_account_numbers_as_text(sim, monkeypatch):
+    # ตั้งเลขพร้อมเพย์ + บัญชีธนาคาร → ข้อความโชว์เลขให้ลูกค้าจดได้ (นอกเหนือจาก QR)
+    monkeypatch.setattr(lb, "OWNER_PROMPTPAY", "089-999-8888")
+    monkeypatch.setattr(lb, "OWNER_BANK_NAME", "กสิกรไทย")
+    monkeypatch.setattr(lb, "OWNER_BANK_ACCOUNT", "123-4-56789-0")
+    monkeypatch.setattr(lb, "OWNER_BANK_HOLDER", "นายสมชาย ใจดี")
+    text = lb.payment_reply_text()
+    assert "089-999-8888" in text
+    assert "กสิกรไทย" in text
+    assert "123-4-56789-0" in text
+    assert "นายสมชาย ใจดี" in text
+    # ผ่านบอทจริงด้วย
+    r = sim.send("U_cust_1", "วิธีจ่ายค่าบอท")
+    assert "089-999-8888" in r["preview"]
+    assert "123-4-56789-0" in r["preview"]
 
 
 def test_bot_payment_does_not_hijack_product_payment(sim):

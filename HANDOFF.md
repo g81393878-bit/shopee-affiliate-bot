@@ -8,12 +8,13 @@
 > - **เมื่องานเสร็จและ commit ครบ:** ให้ล้างเนื้อหาในส่วน 1–5 กลับเป็นสถานะว่าง แล้ว commit
 >   ไฟล์นี้ — เพื่อไม่ให้ AI ตัวถัดไปเข้าใจผิดว่างานยังค้าง
 
-## สถานะ: 🟢 ว่าง — งานล่าสุด (บอทแนบ QR PromptPay ในคำตอบวิธีจ่าย) เสร็จ+commit — ยังไม่ push/deploy
+## สถานะ: 🟢 ว่าง — งานล่าสุด (คำตอบวิธีจ่ายโชว์เลขพร้อมเพย์/บัญชี) เสร็จ+commit — ยังไม่ push/deploy
 
 ---
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- ✅ feat(line-bot): **คำตอบวิธีจ่ายเงินโชว์เลขพร้อมเพย์/บัญชีธนาคารเป็นข้อความ** — เปลี่ยน `BOT_PAYMENT_REPLY` (ค่าคงที่) เป็น `payment_reply_text()` อ่าน env `OWNER_PROMPTPAY` + `OWNER_BANK_NAME/ACCOUNT/HOLDER` แล้วโชว์ "โอนพร้อมเพย์: xxx" / "โอนธนาคาร: ธนาคาร เลข ชื่อ" (ตั้งไม่ครบก็ fallback ข้อความเดิม); ใช้ทั้งใน `bot_manual_reply` และ `_manual_reply_messages`; ลง `.env.example`; เทสต์ใหม่ `test_payment_reply_shows_account_numbers_as_text` → รวม **1025 passed**
 - ✅ feat(line-bot): **บอทแนบ QR PromptPay รูปภาพในคำตอบวิธีจ่ายเงิน** — อ่านจาก env `OWNER_PROMPTPAY_QR_URL` (ถ้าไม่ตั้ง = ตอบข้อความอย่างเดียวเดิม); เพิ่ม `is_bot_payment_request()` + `_manual_reply_messages()` (คืน [ข้อความ, ImageSendMessage]) ใช้แทนใน 2 จุด handler; รองรับปุ่มติดตั้ง (code buttons) ที่ reply เป็น list; ลง `.env.example`; เทสต์ใหม่ 2 ตัว (มี QR → แนบรูป/ไม่มี QR → ข้อความเดียว) → รวม **1024 passed**
 - ✅ feat(line-bot): **เพิ่มปุ่ม Quick Reply "💰 วิธีจ่ายเงิน" ในชุดปุ่มลัดสากล** — `quick_reply_items()` จาก 3 ปุ่มเป็น **4 ปุ่ม** (🔍 ค้นหาสินค้า · 💬 ฝากคำถาม · 💰 ราคาบอท/แพ็กเกจ · 💰 วิธีจ่ายเงิน) แตะปุ่มใหม่ → ส่ง "วิธีจ่ายค่าบอท" → route ตรง `BOT_PAYMENT_REPLY`; อัปเดต `test_quick_reply_includes_bot_price_button` → รวม **1022 passed**
 - ✅ feat(line-bot): **ป้าเข็มตอบ "วิธีจ่ายเงินค่าบอท/มัดจำ" จบในแชท** — เพิ่ม `BOT_PAYMENT_KWS` + `BOT_PAYMENT_REPLY` (โอน PromptPay/โอนธนาคาร + บัตรเครดิต/เดบิตตัดอัตโนมัติเป็น roadmap ระยะถัดไป ตาม BRD) + flow 5 ขั้น (เลือกแพ็กเกจ → จ่ายมัดจำ 50% → เริ่มทำ → จ่ายคงเหลือ → รับบอท); แยกเป็น **early check ก่อน loop** ใน `bot_manual_reply` (เพราะ "มัดจำ" โดน section "จำไว้" แย่ง); keyword เฉพาะ 0 ชนชื่อสินค้า (เลี่ยง "จ่ายเงิน/โอนเงิน/ชำระเงิน" เดี่ยวที่ตอบสั่งซื้อ Shopee); guard test ยืนยัน "จ่ายเงินยังไง/โอนเงิน/ชำระเงิน" ยังตอบจ่ายที่ Shopee; เทสต์ใหม่ 8 ตัว → รวม **1022 passed**

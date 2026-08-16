@@ -424,7 +424,7 @@ def quick_reply_items() -> QuickReply:
     ส่วนที่เหลือลูกค้าพิมพ์เองได้ หรือกดจาก Rich Menu แถบติดหน้าจอ — ปุ่มทุกตัว
     ส่งข้อความที่ dispatch route ตรง intent ไม่หลุด "ค้นไม่เจอ"
     ปุ่ม "ราคาบอท" = ขายบอทต่อ (ป้าเข็มขายทั้งสินค้าและบอทเอง) → การ์ด 5 ทางเลือก
-    ปุ่ม "วิธีจ่ายเงิน" = โอน PromptPay/บัตร (จบในแชท) → BOT_PAYMENT_REPLY"""
+    ปุ่ม "วิธีจ่ายเงิน" = โอน PromptPay/บัตร (จบในแชท) → payment_reply_text()"""
     return QuickReply(items=[
         QuickReplyButton(action=MessageAction(label="🔍 ค้นหาสินค้า", text="ค้นสินค้า")),
         QuickReplyButton(action=MessageAction(label="💬 ฝากคำถาม", text="ฝากคำถาม")),
@@ -646,19 +646,35 @@ BOT_PAYMENT_KWS = (
     "โอนมัดจำ", "จ่ายค่าดูแล", "ชำระค่ามัดจำ", "โอนค่ามัดจำ",
 )
 
-# ตอบวิธีจ่ายเงินค่าบอท (แยก check ก่อน loop — กัน "มัดจำ" โดน section "จำไว้" แย่ง)
-BOT_PAYMENT_REPLY = (
-    "💳 วิธีจ่ายเงินค่าบอท/มัดจำ จ๊ะ:\n"
-    "• โอน PromptPay / โอนธนาคาร — เจ้าของร้านส่ง QR/เลขบัญชีให้ กดจ่ายแล้วส่งสลิปในแชทได้เลย\n"
-    "• บัตรเครดิต/เดบิต (ตัดอัตโนมัติ) — ยังไม่เปิดตอนนี้ อยู่ในแผนระยะถัดไป\n\n"
-    "จบในแชทได้เลย 5 ขั้น:\n"
-    "1) เลือกแพ็กเกจ → 2) จ่ายมัดจำ 50% → 3) เจ้าของเริ่มทำบอท\n"
-    "4) งานเสร็จ จ่ายยอดคงเหลือ → 5) รับบอท + คู่มือใช้เลย\n\n"
-    "ถาม \"แพ็กเกจ\" ดูราคา/ระยะเวลาได้เลยจ๊ะ 💕"
-)
-
+# วิธีจ่ายเงินค่าบอท (แยก check ก่อน loop — กัน "มัดจำ" โดน section "จำไว้" แย่ง)
 # QR PromptPay ของเจ้าของร้าน (URL รูปภาพ) — ถ้าตั้ง OWNER_PROMPTPAY_QR_URL → บอทแนบรูปให้ลูกค้าแสกนโอนได้เลย
 BOT_PAYMENT_QR_URL = os.getenv("OWNER_PROMPTPAY_QR_URL", "").strip()
+# เลขพร้อมเพย์/บัญชีธนาคารของเจ้าของร้าน (โชว์เป็นข้อความให้ลูกค้าจดเลขได้ นอกเหนือจาก QR)
+OWNER_PROMPTPAY = os.getenv("OWNER_PROMPTPAY", "").strip()
+OWNER_BANK_NAME = os.getenv("OWNER_BANK_NAME", "").strip()
+OWNER_BANK_ACCOUNT = os.getenv("OWNER_BANK_ACCOUNT", "").strip()
+OWNER_BANK_HOLDER = os.getenv("OWNER_BANK_HOLDER", "").strip()
+
+
+def payment_reply_text() -> str:
+    """ข้อความวิธีจ่ายเงินค่าบอท/มัดจำ — แนบเลขพร้อมเพย์/บัญชีเมื่อตั้ง env (ลูกค้าจดเลขได้ ไม่ต้องพึ่ง QR อย่างเดียว)"""
+    pay_lines = []
+    if OWNER_PROMPTPAY:
+        pay_lines.append(f"• โอนพร้อมเพย์: {OWNER_PROMPTPAY}")
+    bank = " ".join(p for p in (OWNER_BANK_NAME, OWNER_BANK_ACCOUNT, OWNER_BANK_HOLDER) if p)
+    if bank:
+        pay_lines.append(f"• โอนธนาคาร: {bank}")
+    if not pay_lines:
+        pay_lines.append("• โอน PromptPay / โอนธนาคาร — เจ้าของร้านส่ง QR/เลขบัญชีให้ กดจ่ายแล้วส่งสลิปในแชทได้เลย")
+    pay_lines.append("• บัตรเครดิต/เดบิต (ตัดอัตโนมัติ) — ยังไม่เปิดตอนนี้ อยู่ในแผนระยะถัดไป")
+    return (
+        "💳 วิธีจ่ายเงินค่าบอท/มัดจำ จ๊ะ:\n"
+        + "\n".join(pay_lines)
+        + "\n\nจบในแชทได้เลย 5 ขั้น:\n"
+        "1) เลือกแพ็กเกจ → 2) จ่ายมัดจำ 50% → 3) เจ้าของเริ่มทำบอท\n"
+        "4) งานเสร็จ จ่ายยอดคงเหลือ → 5) รับบอท + คู่มือใช้เลย\n\n"
+        'ถาม "แพ็กเกจ" ดูราคา/ระยะเวลาได้เลยจ๊ะ 💕'
+    )
 
 # ทำไม 490/รายเดือน (แม่ค้าถามความคุ้ม/เหตุผลราคา) — คำเฉพาะมีคำถามนำหน้า 0 ชนชื่อสินค้า
 # (ห้ามใช้ "490" เดี่ยว/"490บาท" — ชนคำค้นสินค้างบ 490 เช่น "หูฟัง490")
@@ -1057,7 +1073,7 @@ def bot_manual_reply(text: str, is_owner: bool = False) -> str:
     if any(k in t for k in INSTALL_KWS) or _wants_code_buttons(t):
         return INSTALL_REPLY_OWNER if is_owner else INSTALL_REPLY_CUSTOMER
     if any(k in t for k in BOT_PAYMENT_KWS):
-        return BOT_PAYMENT_REPLY
+        return payment_reply_text()
     for kws, section in BOT_MANUAL_SECTIONS:
         if any(k in t for k in kws):
             if not is_owner and any(k in t for k in OWNER_ONLY_KWS):
@@ -1075,7 +1091,7 @@ def is_bot_payment_request(text: str) -> bool:
 def _manual_reply_messages(text: str, is_owner: bool = False):
     """ตอบคู่มือ — ปกติข้อความเดียว; ถ้าถามวิธีจ่าย + ตั้ง OWNER_PROMPTPAY_QR_URL → แนบ QR PromptPay รูปภาพ"""
     if is_bot_payment_request(text) and BOT_PAYMENT_QR_URL:
-        return [TextSendMessage(text=BOT_PAYMENT_REPLY),
+        return [TextSendMessage(text=payment_reply_text()),
                 ImageSendMessage(original_content_url=BOT_PAYMENT_QR_URL,
                                  preview_image_url=BOT_PAYMENT_QR_URL)]
     return TextSendMessage(text=bot_manual_reply(text, is_owner))
