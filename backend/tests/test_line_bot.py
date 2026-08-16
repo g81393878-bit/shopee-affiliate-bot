@@ -267,7 +267,23 @@ SALES_FAQ_CASES = [
     ("เสร็จเมื่อไหร่", "ระยะเวลาทำบอท"),
     ("ส่งมอบบอท", "1 วัน"),
     ("บอทแพ็กเกจ Business ใช้เวลากี่วัน", "5 วัน"),
+    ("จ่ายค่าบอท", "PromptPay"),
+    ("จ่ายมัดจำ", "PromptPay"),
+    ("จ่ายมัดจำยังไง", "PromptPay"),
+    ("วิธีจ่ายค่าบอท", "PromptPay"),
+    ("promptpay", "PromptPay"),
+    ("บัตรเครดิต", "ตัดอัตโนมัติ"),
+    ("โอนค่าบอท", "PromptPay"),
 ]
+
+
+def test_bot_payment_does_not_hijack_product_payment(sim):
+    # "จ่ายเงินยังไง"/"โอนเงิน"/"ชำระเงิน" (ทั่วไป) = จ่ายค่าสินค้า → ตอบ "จ่ายที่ Shopee" ไม่ใช่ค่าบอท
+    for q in ("จ่ายเงินยังไง", "โอนเงิน", "ชำระเงิน"):
+        r = sim.send("U_cust_1", q)
+        assert r["intent"] == "manual"
+        assert "Shopee" in r["preview"], f"'{q}' ควรตอบจ่ายที่ Shopee: {r['preview'][:120]}"
+        assert "PromptPay" not in r["preview"], f"'{q}' หลุดไปตอบวิธีจ่ายค่าบอท"
 
 
 def test_package_card_has_realistic_leadtime():
