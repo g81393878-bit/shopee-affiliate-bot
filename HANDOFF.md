@@ -8,12 +8,13 @@
 > - **เมื่องานเสร็จและ commit ครบ:** ให้ล้างเนื้อหาในส่วน 1–5 กลับเป็นสถานะว่าง แล้ว commit
 >   ไฟล์นี้ — เพื่อไม่ให้ AI ตัวถัดไปเข้าใจผิดว่างานยังค้าง
 
-## สถานะ: 🟢 ว่าง — งานล่าสุด (เพิ่ม post_video + tools/post_fb_video.py โพสต์ MP4 ลงเพจ FB) เสร็จ+commit — ยังไม่รันโพสต์วิดีโอจริง (รอเจ้าของสั่ง)
+## สถานะ: 🟢 ว่าง — งานล่าสุด (แก้ auto-post FB ตรวจทุก 1 นาที + catch-up หลัง deploy/รีสตาร์ท) เสร็จ+commit — ยังไม่ deploy (ต้อง deploy ถึงจะแก้ตารางโพสต์ 4 ชม. จริง)
 
 ---
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- ✅ fix(facebook): **ตารางโพสต์อัตโนมัติ 4 ชม. เลื่อน/หายเพราะ timer ใน memory** — สาเหตุ: `facebook_auto_post_loop` เดิม `sleep(240 นาที)` รวดเดียว → Render free tier spin-down / deploy ใหม่ = process ถูก kill = sleep ค้างหาย → โพสต์เลื่อนออกทุกครั้ง; แก้เป็น `_auto_post_due()` (นับจาก `created_at` ของโพสต์สำเร็จล่าสุดใน `CampaignLog` — status fbintro/fbbg/fbpost/fbrss/fblocal) + loop ตรวจทุก `FB_AUTO_POST_CHECK_SECONDS=60` วิ → หลัง deploy/รีสตาร์ทถ้าเลย 4 ชม. แล้วจะ catch-up โพสต์ทันที; guard naive/aware tz สำหรับ SQLite/Postgres; เทสต์ใหม่ 3 ตัว (`_auto_post_due` no-posts/recent/old) + mock ใน loop test → รวม **1002 passed**
 - ✅ feat(facebook): **โพสต์วิดีโอ MP4 ลงเพจ Facebook** — เพิ่ม `post_video()` ใน `facebook_poster.py` (POST `/{page_id}/videos`; รองรับ `file_url` ให้ FB ดาวน์โหลดเอง ใช้ได้จาก Render/local + `file_path` multipart upload `source` จากไฟล์ในเครื่อง; `description` แคปชัน + `title`; sanitize อักษรต่างภาษาก่อนส่ง; คืน `{ok, video_id, error}`) + สคริปต์ `tools/post_fb_video.py` รันครั้งเดียวจากเครื่อง (`--file`/`--url`/`--caption`/`--title`/`--dry-run`, โหลด backend/.env อัตโนมัติ); permission ที่ token ต้องมี = pages_manage_posts + pages_read_engagement + pages_show_list (ถ้าขาดจะได้ error 200 Permissions error); เทสต์ใหม่ 8 ตัวใน `test_facebook_poster.py` → รวม **999 passed**
 - ✅ feat(line-bot)+docs: **อธิบาย "M/A = ค่าซ่อม/อัปเดตเมื่อ FB/LINE เปลี่ยนระบบ" ลงครบ 3 ที่** — การ์ดขายขาด (feature "M/A หลังปีแรก = ค่าซ่อม/อัปเดตเมื่อ FB/LINE เปลี่ยน") + ฟอร์ม `bot-configurator.html` (บรรทัด 🔧 M/A อธิบาย + ตัวเลข 2,500–5,000/ปี หลังปีแรก) + ตาราง `bot-order-form-design.md`; เทสต์ 992 passed
 - ✅ feat(line-bot): **ปรับคอนเทนต์การ์ดแพ็กเกจ (PACKAGES) เป็น "สิ่งที่แม่ค้าได้" ตามคำขายตลาดไทย** — ค้นตลาดจริง (LINE OA Chat Package 555฿ / CherCode / ACRM 990฿ / BOTNOI 999฿) แล้วตัดของเทคนิค/โควตา/ค่าบริการออก: Lean "ตั้งค่า 3 จุดไฟล์เดียว"→"ตอบแชท 24 ชม. + แก้คำตอบเองได้", Starter ตัด "สินค้า≤300/แชท5,000"→"AI เข้าใจไทย + จำความชอบ + เก็บประวัติแชท", Business tagline→"โพสต์อัตโนมัติ + หาคนซื้อให้", White-Label "custom domain"→"หน้าเว็บ/โดเมนของคุณเอง", ขายขาด "M/A 2,500–5,000/ปี"→"อัปเดตระบบต่อเนื่อง (M/A หลังปีแรก)" (ตัวเลขยังอยู่ใน FAQ); ราคา/สี/ปุ่ม ไม่เปลี่ยน → 992 passed

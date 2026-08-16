@@ -290,10 +290,41 @@ def test_facebook_auto_post_loop_calls_runner(monkeypatch):
     monkeypatch.setattr(main_mod.asyncio, "sleep", fake_sleep)
     monkeypatch.setattr(main_mod.asyncio, "to_thread", fake_to_thread)
     monkeypatch.setattr(main_mod, "run_facebook_auto_post", fake_runner)
+    monkeypatch.setattr(main_mod, "_auto_post_due", lambda: True)  # แยกเทสต์ catch-up ไว้ต่างหาก
 
     with pytest.raises(_Stop):
         asyncio.run(main_mod.facebook_auto_post_loop())
     assert calls == [1]
+
+
+def test_auto_post_due_no_posts_yet(monkeypatch, db):
+    """ยังไม่เคยโพสต์เลย → due=True (โพสต์แรกทันที)"""
+    from app import main as main_mod
+    monkeypatch.setattr(main_mod, "FB_AUTO_POST_INTERVAL", 240)
+    assert main_mod._auto_post_due() is True
+
+
+def test_auto_post_due_recent_post_not_due(monkeypatch, db):
+    """เพิ่งโพสต์เมื่อกี้ → due=False (รอให้ครบ interval ก่อน)"""
+    from app import main as main_mod
+    from app import models
+    monkeypatch.setattr(main_mod, "FB_AUTO_POST_INTERVAL", 240)
+    db.add(models.CampaignLog(category="0", recipients=1, status="fbintro"))
+    db.commit()
+    assert main_mod._auto_post_due() is False
+
+
+def test_auto_post_due_old_post_is_due(monkeypatch, db):
+    """โพสต์ล่าสุดเลย interval ไปแล้ว → due=True (catch-up หลัง deploy/รีสตาร์ท)"""
+    import datetime as dt
+    from app import main as main_mod
+    from app import models
+    monkeypatch.setattr(main_mod, "FB_AUTO_POST_INTERVAL", 240)
+    c = models.CampaignLog(category="0", recipients=1, status="fbintro")
+    c.created_at = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=300)
+    db.add(c)
+    db.commit()
+    assert main_mod._auto_post_due() is True
 
 
 def test_cron_facebook_post_rotation(monkeypatch):
