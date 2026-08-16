@@ -8,12 +8,16 @@
 > - **เมื่องานเสร็จและ commit ครบ:** ให้ล้างเนื้อหาในส่วน 1–5 กลับเป็นสถานะว่าง แล้ว commit
 >   ไฟล์นี้ — เพื่อไม่ให้ AI ตัวถัดไปเข้าใจผิดว่างานยังค้าง
 
-## สถานะ: 🟢 ว่าง — งานล่าสุด (หาต้นตอแถว 'posted' หลอก 102 แถว + guard กัน test lead เข้า production) เสร็จสมบูรณ์ + deploy live (commit 667b97e, /health 200)
+## สถานะ: 🟢 ว่าง — งานล่าสุด (เครื่องมือค้นกลุ่ม buyer-demand อัตโนมัติ + บันทึกกลุ่มลงชีท + โพสต์เรดาร์ตัวแรกขึ้นเพจ) เสร็จครบ — ยังไม่ deploy โค้ดใหม่ (เป็น tool ฝั่ง local ไม่กระทบ production)
 
 ---
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- ✅ feat(radar-tools): **เครื่องมือค้นกลุ่ม buyer-demand อัตโนมัติ** (`tools/fb_group_search_local.py`) — stealth Chrome + fb_cookies.json ค้นกลุ่มตามคีย์เวิร์ด "อยากได้/งบ/แนะนำ" → นับ buyer/seller signals จากโพสต์ล่าสุด → `--auto-add` เพิ่มกลุ่ม public+scannable+buyer เข้า radar อัตโนมัติ + `--loop` วนต่อเนื่อง + `log_group_to_sheet()` ดันผู้สมัครลง Google ชีทแท็บ "กลุ่มผู้สมัคร" (คอลัมน์ ชื่อ/ลิงก์/สิ่งที่ต้องการ/buyer/seller/สแกนได้); เทสต์ `tests/test_fb_group_search_local.py` 20 ตัว → รวม 589 passed
+- ✅ data(prod): **ล้างข้อมูลปลอม + เพิ่มกลุ่มจริง** — ลบกลุ่ม FB ปลอม 7 กลุ่ม (grp_moms_th/grp_tech_deals/... ผ่าน DB production, FK ON DELETE SET NULL) + ลบ lead สังเคราะห์ 131 ตัว (fb_sample_*/fb_mock_bulk_*/grp_public_monitor_*) cascade ลบ demand events 104 ตัว → เหลือ leads จริง 155 ตัว; เพิ่มกลุ่ม buyer-demand 6 กลุ่ม (headphoneclub "หูฟังคลับ" + สมาร์ทโฮม + แม่และเด็ก + สัตว์เลี้ยง + อาร์ตทอย) → เรดาร์ตอนนี้ 14 กลุ่ม
+- ✅ feat(sheet): **Apps Script เพิ่มแท็บ "กลุ่มผู้สมัคร"** (`tools/sheet_posts_apps_script.gs`) — รับ `kind='group_candidate'` เขียนชื่อกลุ่ม/ลิงก์/สิ่งที่ต้องการลงชีท (deploy แล้ว ใช้ URL เดิม POSTS_SHEET_WEBHOOK_URL)
+- ✅ verify: **โพสต์เรดาร์จริงตัวแรกขึ้นเพจป้าเข็มแล้ว** — สแกนกลุ่ม headphoneclub → lead "แนะนำหูฟังงบ 1000" demand 80 → จับคู่ REMAX TWS-19 → post_feed สำเร็จ (permalink 122099133381443245); FB token production ใช้ได้, daily quota ว่าง
 - ✅ fix(radar): **guard กัน test/mock lead เข้า production** (commit `667b97e`) — `_looks_like_test_lead()` + skip `fb_sample_`/`fb_mock_`/`demo_` ใน ingest endpoint ตอน DATABASE_URL เป็น postgres (production); ต้นตอ 102 แถว 'posted' หลอก = lead สังเคราะห์ `fb_mock_bulk_*` (author User_0..User_N) ที่ถูก insert ตรงเข้า prod DB 17:06 UTC 15/08 (sent_at คงที่ก่อน created_at = หลักฐานว่า insert ตรง ไม่ผ่าน ingest loop) — โค้ดนี้ไม่อยู่ใน repo (สคริปต์ temp ถูกลบ)
 - ✅ fix(radar): **hard หา daily post limit + ล้าง mojibake** (commit `de394e7`) — `RADAR_MAX_DAILY_POSTS` เป็นของแอดมินเท่านั้น clamp [1,25] (Hermes/system_preferences ห้าม override โควต้าโพสต์ — ต้นเหตุโพสต์ระเบิด 102 ตัวใน 7 วิ), `merge_skills` strip `radar_daily_post_limit` ไม่ให้ persist, `_strip_garbled`/`_clean_llm_data` ล้าง lone surrogates + U+FFFD จาก product_keyword กัน mojibake + เทสต์ 567 ผ่าน; **unblock production: reset 102 แถว facebook_demand_events posted→ignored** (daily limit window เหลือ 0) + deploy live `de394e7`
 - ✅ feat(llm): **rate-limit + retry กัน HTTP 429** — `call_with_backoff()` (retry 429/5xx แบบ exponential + เคารพ Retry-After แต่ cap max_delay) + `throttle_llm_request()` (จำกัด RPM process-wide, env `LLM_RATE_LIMIT_RPM` / `LLM_RETRY_*`) ใน `llm_clients.py`; ครอบครบทุก LLM call site (demand_radar_ai, hermes_brain, ai_generator, ai_analyzer, web_search, facebook_curated, facebook_local, orchestrator) + regression guard ใน `test_llm_providers.py` → เทสต์ 563 ผ่าน; **deploy live บน production (commit `9b3b98f`) + env 4 ตัวตั้งบน Render ครบ** → /health 200
