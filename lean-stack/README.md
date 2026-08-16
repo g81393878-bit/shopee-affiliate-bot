@@ -12,6 +12,7 @@
 | ไฟล์ | หน้าที่ |
 |---|---|
 | `bot.gs` | โค้ดทั้งหมด (webhook + กติกาคีย์เวิร์ด + เขียนชีท) — วางลง Apps Script ไฟล์เดียว |
+| `template.xlsx` | ชีทเทมเพลต (แท็บ "คำตอบ" + "ข้อความ" พร้อมตัวอย่าง) — อัปโหลดไป Google Sheets ได้เลย |
 | `README.md` | คู่มือนี้ |
 
 ---
@@ -19,8 +20,12 @@
 ## วิธีติดตั้ง (5 ขั้น ~10 นาที)
 
 ### ขั้น 1 — สร้าง Google Sheet
-1. เปิด [sheets.google.com](https://sheets.google.com) → สร้างชีทใหม่
+
+**ทางลัด (แนะนำ):** ใช้เทมเพลต `template.xlsx` ที่แถมมาในโฟลเดอร์นี้ — มีแท็บ **"คำตอบ"** (ตัวอย่างกติกา 6 ข้อ) + **"ข้อความ"** (log) พร้อมแล้ว
+1. อัปโหลด `template.xlsx` ไป [Google Drive](https://drive.google.com) → คลิกขวาไฟล์ → **Open with → Google Sheets**
 2. ก๊อป **Spreadsheet ID** จาก URL: `https://docs.google.com/spreadsheets/d/<ID ตรงนี้>/edit`
+
+> หรือสร้างชีทว่างเองก็ได้ — `setup()` จะสร้างทั้ง 2 แท็บ + ตัวอย่างให้เอง
 
 ### ขั้น 2 — สร้าง LINE OA + เอา Token/Secret
 1. เปิด [LINE Developers Console](https://developers.line.biz/console/) → สร้าง Provider + Channel แบบ **Messaging API**

@@ -35,6 +35,8 @@ docs/cron-setup.md
 # Generated exports / imports (CSV/XLSX from tools/ — run locally, never commit)
 *.csv
 *.xlsx
+# ยกเว้น: เทมเพลตชีทสำหรับ lean-stack (ของที่ต้องส่งให้ลูกค้าโหลด)
+!lean-stack/template.xlsx
 
 # IDE
 .vscode/
