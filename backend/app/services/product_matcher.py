@@ -27,6 +27,15 @@ from app.services.category import CATEGORY_KEYWORDS, guess_category, normalize_q
 
 logger = logging.getLogger(__name__)
 
+# ลิงก์ affiliate Shopee จริงต้องเป็นลิงก์สั้น s.shopee.co.th เท่านั้น
+# (https://shope.ee/... = ลิงก์ปลอม/ของ mock — กดแล้ว 404 ห้ามโพสต์)
+SHOPEE_SHORT_PREFIXES = ("https://s.shopee.co.th/", "http://s.shopee.co.th/")
+
+
+def is_valid_shopee_affiliate_url(url: Optional[str]) -> bool:
+    """True เมื่อ url เป็นลิงก์สั้น Shopee จริง (s.shopee.co.th) — กันลิงก์ mock หลุดขึ้นโพสต์."""
+    return bool(url) and (url or "").strip().lower().startswith(SHOPEE_SHORT_PREFIXES)
+
 
 def _nfc(s: str) -> str:
     """รวมอักขระภาษาไทยเป็นรูปแบบเดียว NFC และแปลงสระอำรูปผสมให้เป็นสระอำเดี่ยว"""
@@ -220,8 +229,15 @@ def match_best_product_for_demand(
     )
     all_ok_products = candidates_query.all()
 
+    # กฎเหล็ก: เฉพาะลิงก์สั้น Shopee จริง (s.shopee.co.th) เท่านั้น — กันสินค้า mock/เทสต์
+    # (affiliate_url = https://shope.ee/... ปลอม → กดแล้ว 404) หลุดขึ้นโพสต์บนเพจ
+    all_ok_products = [
+        p for p in all_ok_products
+        if is_valid_shopee_affiliate_url(p.affiliate_url)
+    ]
+
     if not all_ok_products:
-        logger.warning("No products with link_status == 'ok' found in database.")
+        logger.warning("No products with link_status == 'ok' and valid s.shopee.co.th affiliate_url found in database.")
         return {
             "best_product": None,
             "match_score": 0.0,

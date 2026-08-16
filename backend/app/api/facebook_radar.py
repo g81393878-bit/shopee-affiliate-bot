@@ -35,7 +35,7 @@ from app.services.demand_radar_ai import (
 from app.services.facebook_poster import log_post_async, post_feed
 from app.services.line_quota import push_guard
 from app.services.product_cards import format_radar_deal_flex_message
-from app.services.product_matcher import match_best_product_for_demand
+from app.services.product_matcher import match_best_product_for_demand, is_valid_shopee_affiliate_url
 from app.services.hermes_brain import load_skills_safe
 
 logger = logging.getLogger(__name__)
@@ -450,6 +450,16 @@ def ingest_facebook_leads(
             )
             matched_product = match_res.get("best_product")
             suggested_reasons = match_res.get("suggested_reasons", [])
+
+            # Guard: กันลิงก์ปลอม/ของ mock (https://shope.ee/...) หลุดขึ้นโพสต์ — กดแล้ว 404
+            # (matcher กรองไว้ชั้นหนึ่งแล้ว แต่นี่กันซ้ำเป็นชั้นที่สอง defense-in-depth)
+            if matched_product and not is_valid_shopee_affiliate_url(matched_product.affiliate_url):
+                logger.warning(
+                    f"Radar skip: product {matched_product.id} has non-Shopee affiliate_url "
+                    f"{matched_product.affiliate_url!r} (mock/ปลอม) — treat as no-match"
+                )
+                matched_product = None
+                suggested_reasons = []
 
             # 5.2 ร่างข้อความสไตล์ป้าเข็ม
             copy_text = None

@@ -8,11 +8,13 @@
 > - **เมื่องานเสร็จและ commit ครบ:** ให้ล้างเนื้อหาในส่วน 1–5 กลับเป็นสถานะว่าง แล้ว commit
 >   ไฟล์นี้ — เพื่อไม่ให้ AI ตัวถัดไปเข้าใจผิดว่างานยังค้าง
 
-## สถานะ: 🟢 ว่าง — งานล่าสุด (ล็อกโมเดลเก็บเงิน: รายเดือนจ่ายเต็มเดือนแรก · ขายขาดมัดจำ 50%) เสร็จ+commit — ยังไม่ push/deploy
+## สถานะ: 🟢 ว่าง — งานล่าสุด (แก้ 3 ชั้นกันลิงก์ปลอม/mock หลุดขึ้นโพสต์ FB) เสร็จ+commit — ยังไม่ push/deploy
 
 ---
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
+
+- ✅ fix(radar): **กันลิงก์ปลอม/สินค้า mock หลุดขึ้นโพสต์ FB (3 ชั้น)** — เจอโพสต์จริงบนเพจใช้ลิงก์ `https://shope.ee/earbuds_ok` (ปลอม → 404) ตรงเป๊ะกับ fixture เทสต์ `seed_e2e_products` (สินค้า mock หลุดเข้า prod จากการรันเทสต์ด้วย DATABASE_URL=postgres); แก้: (1) `product_matcher.py` เพิ่ม `is_valid_shopee_affiliate_url()` + `match_best_product_for_demand` กรอง affiliate_url ที่ไม่ใช่ `s.shopee.co.th` ทิ้ง; (2) `facebook_radar.py` guard หน้า `post_feed` (ลิงก์ไม่ valid → no-match ไม่โพสต์, defense-in-depth); (3) fixture `seed_e2e_products` ข้ามเมื่อ DB เป็น postgres + เปลี่ยน URL mock เป็น `s.shopee.co.th/...`; เทสต์ใหม่ 3 ตัว (helper / matcher กันลิงก์ปลอม / guard หน้าโพสต์) + แก้ assert 3 ที่ → รวม **1029 passed**
 
 - ✅ fix(line-bot+docs): **ล็อกโมเดลเก็บเงินให้ชัด — รายเดือนจ่ายเต็มเดือนแรกก่อนเริ่ม (ไม่มีมัดจำ/ค่าติดตั้งแยก) · ขายขาดเก็บมัดจำ 50%** — เจ้าของตั้งคำถาม "ทำไมต้อง 50%" → สืบพบ 50% ไม่เคยอยู่ใน BRD (AI เดาเอง) + หลักฐานฟอรั่ม: มัดจำ 50% เป็นธรรมเนียมงานโปรเจกต์ ไม่ใช่ subscription → แก้ `payment_reply_text()` (รายเดือนจ่ายเต็มเดือนแรก · ขายขาดมัดจำ 50% + ที่เหลือตอนส่งมอบ), `PACKAGE_PAYMENTS`/`package_payment_reply()` (แยก first/monthly vs deposit/delivery/total), FAQ ระยะเวลา (เริ่มนับวันเมื่อจ่ายเดือนแรกครบ · ขายขาด=มัดจำ 50%); ฟอร์ม `bot-configurator.html` (สรุป = รวมรายเดือน + จ่ายเดือนแรกก่อนเริ่ม, ลบ sumDeposit/sumBalance), `bot-order-form-design.md` (ตารางชำระเงิน + สูตร); **ล็อก "กำหนดการเก็บเงิน" ลง BRD 9.5 + 11** (แหล่งความจริง); เทสต์อัปเดต 3 ตัว → รวม **1026 passed**
 

@@ -27,6 +27,7 @@ from app.services.demand_radar_ai import (
 from app.services.product_matcher import (
     calculate_product_match_score,
     generate_suggested_reasons,
+    is_valid_shopee_affiliate_url,
     match_best_product_for_demand,
 )
 
@@ -161,7 +162,7 @@ def test_product_matcher_strict_link_status_filter(db):
         rating=4.8,
         sales_count=2000,
         commission=Decimal("35.00"),
-        affiliate_url="https://shope.ee/ok-link",
+        affiliate_url="https://s.shopee.co.th/ok-link",
         link_status="ok",
         ai_score=85,
     )
@@ -201,6 +202,54 @@ def test_product_matcher_strict_link_status_filter(db):
         assert cand["product"].link_status == "ok"
         assert cand["product"].id != p_dead.id
         assert cand["product"].id != p_unknown.id
+
+
+def test_product_matcher_excludes_non_shopee_affiliate_urls(db):
+    """สินค้า link_status=ok แต่ affiliate_url ไม่ใช่ s.shopee.co.th (ลิงก์ mock) ต้องไม่ถูกจับคู่
+
+    กันเหตุการณ์จริง: เทสต์ seed สินค้า mock ลง DB แล้วเรดาร์เอาไปโพสต์ขึ้นเพจ
+    (ลิงก์ https://shope.ee/... ปลอม → กดแล้ว 404).
+    """
+    kw = "ลิงก์ปลอมเฉพาะเทสต์รุ่นนี้"
+    p_fake = models.Product(
+        name=f"{kw} ตัวปลอม",
+        category="หมวดทดสอบ",
+        price=Decimal("399.00"),
+        rating=4.8,
+        sales_count=8500,
+        commission=Decimal("40.00"),
+        affiliate_url="https://shope.ee/earbuds_ok",
+        link_status="ok",
+        ai_score=90,
+    )
+    p_valid = models.Product(
+        name=f"{kw} ตัวจริง",
+        category="หมวดทดสอบ",
+        price=Decimal("399.00"),
+        rating=4.8,
+        sales_count=8500,
+        commission=Decimal("40.00"),
+        affiliate_url="https://s.shopee.co.th/earbuds_ok",
+        link_status="ok",
+        ai_score=90,
+    )
+    db.add_all([p_fake, p_valid])
+    db.commit()
+
+    match_result = match_best_product_for_demand(db, product_keyword=kw, budget=500.0)
+    assert match_result["best_product"] is not None
+    assert match_result["best_product"].id == p_valid.id
+    # candidates ต้องไม่มีสินค้าลิงก์ปลอมเลย
+    assert all(is_valid_shopee_affiliate_url(c["product"].affiliate_url) for c in match_result["candidates"])
+
+
+def test_is_valid_shopee_affiliate_url():
+    assert is_valid_shopee_affiliate_url("https://s.shopee.co.th/abc123") is True
+    assert is_valid_shopee_affiliate_url("http://s.shopee.co.th/abc") is True
+    assert is_valid_shopee_affiliate_url("https://shope.ee/earbuds_ok") is False
+    assert is_valid_shopee_affiliate_url("https://shopee.co.th/product/1") is False
+    assert is_valid_shopee_affiliate_url("") is False
+    assert is_valid_shopee_affiliate_url(None) is False
 
 
 def test_product_matcher_budget_alignment(db):

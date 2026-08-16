@@ -124,15 +124,22 @@ def db_session():
 
 @pytest.fixture(autouse=True)
 def seed_e2e_products(db_session):
-    """Seeds a rich variety of deterministic test products with link_status='ok'."""
+    """Seeds a rich variety of deterministic test products with link_status='ok'.
+
+    Safety: ข้ามเมื่อ DATABASE_URL เป็น postgres (production) — กันสินค้า mock
+    หลุดเข้า DB จริงแล้วไปโผล่บนเพจ Facebook (เจอจริง: หูฟัง shope.ee/earbuds_ok).
+    """
+    if (os.getenv("DATABASE_URL") or "").strip().lower().startswith(("postgres", "postgresql")):
+        pytest.skip("ไม่ seed สินค้า mock ลง DB production (DATABASE_URL เป็น postgres)")
+
     products_to_seed = [
-        ("ชุดคลุมท้องผ้าฝ้ายทรงหลวม ผ้านิ่มระบายอากาศ", "แฟชั่น", 299.00, 4.9, 5420, 35.00, "https://shope.ee/maternity_ok", "ok", 92),
-        ("หูฟังบลูทูธไร้สาย TWS ตัดเสียงรบกวน", "หูฟัง", 399.00, 4.8, 8500, 40.00, "https://shope.ee/earbuds_ok", "ok", 90),
-        ("เบาะรองนั่งเพื่อสุขภาพ เมมโมรี่โฟม แก้ปวดหลัง", "เฟอร์นิเจอร์", 450.00, 4.7, 3200, 30.00, "https://shope.ee/cushion_ok", "ok", 86),
-        ("อาหารแมวสูตรดูแลไต โรคไต 1kg", "สัตว์เลี้ยง", 350.00, 4.8, 1900, 25.00, "https://shope.ee/catfood_ok", "ok", 88),
-        ("พัดลมตั้งโต๊ะมินิ ชาร์จ USB เสียงเงียบ ลมแรง", "พัดลม", 259.00, 4.7, 12000, 20.00, "https://shope.ee/fan_ok", "ok", 85),
-        ("เครื่องฟอกอากาศ HEPA กรองฝุ่น PM2.5", "เครื่องใช้ไฟฟ้า", 1890.00, 4.9, 4500, 95.00, "https://shope.ee/airpurifier_ok", "ok", 94),
-        ("กระติกน้ำเก็บความเย็น 1 ลิตร สแตนเลส 316", "แก้วน้ำ", 299.00, 4.8, 6200, 22.00, "https://shope.ee/bottle_ok", "ok", 87),
+        ("ชุดคลุมท้องผ้าฝ้ายทรงหลวม ผ้านิ่มระบายอากาศ", "แฟชั่น", 299.00, 4.9, 5420, 35.00, "https://s.shopee.co.th/maternity_ok", "ok", 92),
+        ("หูฟังบลูทูธไร้สาย TWS ตัดเสียงรบกวน", "หูฟัง", 399.00, 4.8, 8500, 40.00, "https://s.shopee.co.th/earbuds_ok", "ok", 90),
+        ("เบาะรองนั่งเพื่อสุขภาพ เมมโมรี่โฟม แก้ปวดหลัง", "เฟอร์นิเจอร์", 450.00, 4.7, 3200, 30.00, "https://s.shopee.co.th/cushion_ok", "ok", 86),
+        ("อาหารแมวสูตรดูแลไต โรคไต 1kg", "สัตว์เลี้ยง", 350.00, 4.8, 1900, 25.00, "https://s.shopee.co.th/catfood_ok", "ok", 88),
+        ("พัดลมตั้งโต๊ะมินิ ชาร์จ USB เสียงเงียบ ลมแรง", "พัดลม", 259.00, 4.7, 12000, 20.00, "https://s.shopee.co.th/fan_ok", "ok", 85),
+        ("เครื่องฟอกอากาศ HEPA กรองฝุ่น PM2.5", "เครื่องใช้ไฟฟ้า", 1890.00, 4.9, 4500, 95.00, "https://s.shopee.co.th/airpurifier_ok", "ok", 94),
+        ("กระติกน้ำเก็บความเย็น 1 ลิตร สแตนเลส 316", "แก้วน้ำ", 299.00, 4.8, 6200, 22.00, "https://s.shopee.co.th/bottle_ok", "ok", 87),
     ]
 
     for name, cat, price, rating, sales, comm, url, status, score in products_to_seed:
@@ -379,7 +386,7 @@ def test_t1_f6_fastapi_leads_intake_endpoint(client, db_session):
         sheet_payload = mock_sheets.call_args[0][0]
         assert sheet_payload["kind"] == "radar"
         assert sheet_payload["post_id"] == "page_post_t1_001"
-        assert "https://shope.ee/" in sheet_payload["link"]
+        assert "https://s.shopee.co.th/" in sheet_payload["link"]
         mock_line_alert.assert_not_called()
 
 
@@ -704,7 +711,7 @@ def test_t3_full_e2e_lifecycle_and_data_flywheel(client, db_session):
     assert event.demand_score >= 70
     assert event.matched_product_id is not None
     assert event.notification_status == "posted"
-    assert "https://shope.ee/" in event.ai_comment_draft
+    assert "https://s.shopee.co.th/" in event.ai_comment_draft
 
     # Step 3: Admin records action & conversions via API (Data Flywheel)
     action_payload = {
@@ -1291,7 +1298,7 @@ def test_radar_google_sheets_logging_payload(client, db_session):
         assert sheet_payload["kind"] == "radar"
         assert "ชุดคลุมท้อง" in sheet_payload["title"]
         assert len(sheet_payload["message"]) > 10
-        assert "https://shope.ee/" in sheet_payload["link"]
+        assert "https://s.shopee.co.th/" in sheet_payload["link"]
         assert sheet_payload["post_id"] == "page_post_8888"
         assert sheet_payload["post_url"] == "https://www.facebook.com/page_post_8888"
         assert "created_at" in sheet_payload
@@ -1393,3 +1400,61 @@ def test_cooldown_and_daily_limit_count_pending_events(db_session):
 
     assert radar_api.check_category_cooldown_allowed(db_session, "หูฟัง") is False
     assert radar_api.check_daily_post_limit_allowed(db_session, max_posts=1) is False
+
+
+def test_radar_guard_blocks_non_shopee_affiliate_url(client, db_session):
+    """Guard หน้าตาโพสต์: แม้ matcher จะคืนสินค้ามา แต่ affiliate_url ไม่ใช่ s.shopee.co.th
+    (ลิงก์ mock https://shope.ee/... → 404) ต้องไม่โพสต์ — defense-in-depth ชั้นที่ 2."""
+    post_id = f"guard_fake_url_{int(time.time() * 1000)}"
+    fake_product = models.Product(
+        name="หูฟังบลูทูธไร้สาย TWS ตัดเสียงรบกวน",
+        category="หูฟัง",
+        price=Decimal("399.00"),
+        rating=4.8,
+        sales_count=8500,
+        commission=Decimal("40.00"),
+        affiliate_url="https://shope.ee/earbuds_ok",
+        link_status="ok",
+        ai_score=90,
+    )
+    mock_ai = {
+        "intent": "recommendation_request",
+        "demand_score": 90,
+        "urgency": "medium",
+        "budget": 500.0,
+        "budget_text": "500 บาท",
+        "product_keyword": "หูฟัง",
+        "detected_category": "หูฟัง",
+        "pain_points": ["หูฟังพัง"],
+        "sentiment": "positive",
+        "reasoning": "ต้องการหูฟังใหม่",
+    }
+    payload = {
+        "fb_post_id": post_id,
+        "group_id": "grp_guard_test",
+        "group_name": "กลุ่มทดสอบ",
+        "author_name": "ผู้ใช้ทดสอบ",
+        "post_text": "หูฟังพัง อยากได้หูฟังใหม่ งบ 500",
+        "post_url": f"https://facebook.com/groups/test/posts/{post_id}",
+    }
+    with patch.object(radar_api, "analyze_lead_intent_and_demand", return_value=mock_ai), \
+         patch.object(radar_api, "match_best_product_for_demand", return_value={
+             "best_product": fake_product,
+             "match_score": 90.0,
+             "suggested_reasons": ["ลิงก์ปลอม"],
+             "candidates": [],
+         }), \
+         patch.object(radar_api, "post_feed") as mock_post, \
+         patch.object(radar_api, "log_post_async"):
+        resp = client.post("/api/admin/facebook-radar/leads", json=payload)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["results"][0]["status"] == "deal_matched_post_failed"
+        mock_post.assert_not_called()
+
+    lead = db_session.query(models.FacebookDetectedLead).filter_by(fb_post_id=post_id).first()
+    assert lead is not None
+    event = db_session.query(models.FacebookDemandEvent).filter_by(lead_id=lead.id).first()
+    assert event is not None
+    assert event.notification_status == "failed"
+    assert event.matched_product_id is None
