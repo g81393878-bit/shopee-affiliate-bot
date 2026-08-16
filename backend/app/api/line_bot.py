@@ -748,6 +748,153 @@ def package_payment_quick_reply() -> QuickReply:
     ])
 
 
+# --- ติดตามสถานะซื้อบอท: สนใจ → จ่ายแล้วรอยืนยัน → ยืนยัน/ยกเลิก (เก็บใน bot_purchases) ---
+PURCHASE_ACTIVE_STATUSES = ("interested", "paid_pending")
+# ลูกค้าแจ้งว่าโอนเงินแล้ว (ต้องมีสถานะซื้อค้างอยู่ ถึงจะตอบรับ + แจ้งเจ้าของ)
+PAID_PHRASES = (
+    "จ่ายแล้ว", "โอนแล้ว", "ส่งสลิป", "โอนให้แล้ว", "จ่ายเงินแล้ว",
+    "โอนเงินแล้ว", "จ่ายเรียบร้อย", "โอนเรียบร้อย", "โอนไปแล้ว",
+)
+# ลูกค้ายกเลิกซื้อบอท (ต้องมีสถานะซื้อค้างอยู่)
+CANCEL_PURCHASE_PHRASES = (
+    "ยกเลิกการสั่ง", "ยกเลิกบอท", "ยกเลิกแพ็กเกจ", "ไม่เอาบอทแล้ว",
+    "ขอยกเลิก", "ยกเลิกออเดอร์", "ยกเลิกคำสั่งซื้อ", "ยกเลิก",
+)
+PAID_DECLARATION_REPLY = (
+    "💚 รับทราบจ๊ะ ว่าโอนแล้ว! ป้าเข็มแจ้งเจ้าของร้านให้แล้ว\n"
+    "พอเจ้าของยืนยันยอดแล้ว จะแจ้งให้คุณทราบทันทีจ๊ะ (ปกติไม่เกิน 24 ชม.)"
+)
+CANCEL_PURCHASE_REPLY = (
+    "🙏 รับทราบจ๊ะ ยกเลิกคำสั่งซื้อบอทแล้ว\n"
+    "ป้าเข็มแจ้งเจ้าของร้านให้แล้ว — ถ้าเปลี่ยนใจกลับมาใหม่ได้ตลอดนะคะ 😊"
+)
+# เจ้าของยืนยันรับเงินลูกค้า: /ยืนยัน <userId>
+OWNER_CONFIRM_PREFIX = "/ยืนยัน"
+OWNER_CONFIRM_HELP = (
+    "วิธียืนยันรับเงินลูกค้าจ๊ะ:\n"
+    "/ยืนยัน <userId>\n\n"
+    "userId อยู่ในข้อความแจ้งเตือนตอนลูกค้าแจ้งว่าโอนเงินแล้ว"
+)
+
+
+def _purchase_package_name(key: str) -> str:
+    for p in PACKAGE_PAYMENTS:
+        if p["key"] == key:
+            return p["name"]
+    return key
+
+
+def _get_purchase(db, line_user_id: str):
+    return (db.query(models.BotPurchase)
+              .filter(models.BotPurchase.line_user_id == line_user_id).first())
+
+
+def _active_purchase(db, line_user_id: str):
+    """คำสั่งซื้อที่ยังค้างอยู่ (สนใจ/จ่ายแล้วรอยืนยัน) — คืน None ถ้าไม่มี"""
+    p = _get_purchase(db, line_user_id)
+    if p and p.status in PURCHASE_ACTIVE_STATUSES:
+        return p
+    return None
+
+
+def _is_paid_declaration(text: str) -> bool:
+    t = (text or "").strip()
+    return any(p in t for p in PAID_PHRASES)
+
+
+def _is_cancel_purchase(text: str) -> bool:
+    t = (text or "").strip()
+    return any(p in t for p in CANCEL_PURCHASE_PHRASES)
+
+
+def _track_bot_purchase(db, line_user_id: str, text: str) -> None:
+    """ลูกค้ากด 'สนใจแพ็กเกจนี้'/'ยอด <key>' → บันทึกสถานะสนใจ (ไม่ลดระดับถ้าจ่ายแล้ว/ยืนยันแล้ว)"""
+    key = package_payment_key(text)
+    if not key:
+        return
+    purchase = _get_purchase(db, line_user_id)
+    if purchase and purchase.status in ("paid_pending", "confirmed"):
+        return  # ไปไกลกว่าแล้ว ไม่ย้อนกลับ
+    if not purchase:
+        purchase = models.BotPurchase(line_user_id=line_user_id, package_key=key, status="interested")
+        db.add(purchase)
+    else:
+        purchase.package_key = key
+        purchase.status = "interested"
+    db.commit()
+
+
+def _notify_owner_purchase(user, package_key: str, status: str) -> None:
+    """แจ้งเจ้าของร้านเรื่องสถานะซื้อ (จ่ายแล้ว/ยกเลิก) — เจ้าของยืนยันด้วย /ยืนยัน <userId>"""
+    if "mock" in LINE_ACCESS_TOKEN.lower():
+        return
+    try:
+        uid = user.line_user_id
+        name = user.name or uid
+        pkg = _purchase_package_name(package_key)
+        if status == "paid_pending":
+            text = (f"💰 ลูกค้า {name} ({uid}) แจ้งว่าโอนเงินแล้ว (แพ็กเกจ {pkg})!\n"
+                    f"เช็คยอดแล้วยืนยัน: /ยืนยัน {uid}")
+        elif status == "cancelled":
+            text = f"❌ ลูกค้า {name} ({uid}) ยกเลิกคำสั่งซื้อบอท (แพ็กเกจ {pkg}) แล้ว"
+        else:
+            text = f"📦 ลูกค้า {name} ({uid}) สถานะซื้อ: {status} (แพ็กเกจ {pkg})"
+        line_bot_api.push_message(ADMIN_LINE_USER_ID, TextSendMessage(text=text))
+    except Exception as e:
+        logger.warning(f"owner purchase notify failed: {e}")
+
+
+def _mark_paid(db, user) -> None:
+    """ลูกค้าแจ้งว่าโอนแล้ว → สถานะรอยืนยัน + แจ้งเจ้าของ"""
+    purchase = _get_purchase(db, user.line_user_id)
+    if not purchase:
+        return
+    purchase.status = "paid_pending"
+    db.commit()
+    _notify_owner_purchase(user, purchase.package_key, "paid_pending")
+
+
+def _cancel_purchase(db, user) -> None:
+    """ลูกค้ายกเลิกซื้อบอท → สถานะยกเลิก + แจ้งเจ้าของ"""
+    purchase = _get_purchase(db, user.line_user_id)
+    if not purchase:
+        return
+    purchase.status = "cancelled"
+    db.commit()
+    _notify_owner_purchase(user, purchase.package_key, "cancelled")
+
+
+def handle_owner_confirm(raw: str):
+    """เจ้าของยืนยันรับเงิน: /ยืนยัน <userId> → สถานะ confirmed + push แจ้งลูกค้า"""
+    rest = (raw or "").strip()
+    if rest.startswith(OWNER_CONFIRM_PREFIX):
+        rest = rest[len(OWNER_CONFIRM_PREFIX):].strip()
+    target_uid = rest.split(" ", 1)[0].strip()
+    if not target_uid.startswith("U"):
+        return TextSendMessage(text=OWNER_CONFIRM_HELP)
+    db = SessionLocal()
+    try:
+        purchase = _get_purchase(db, target_uid)
+        if not purchase or purchase.status != "paid_pending":
+            return TextSendMessage(text=f"ไม่พบคำสั่งซื้อที่รอการยืนยันของ {target_uid} จ๊ะ")
+        purchase.status = "confirmed"
+        db.commit()
+        pkg = _purchase_package_name(purchase.package_key)
+        if "mock" in LINE_ACCESS_TOKEN.lower():
+            return TextSendMessage(text=f"✅ ยืนยันรับเงิน {target_uid} แล้ว (แพ็กเกจ {pkg}) — โหมดทดสอบ ไม่ push")
+        try:
+            line_bot_api.push_message(target_uid, TextSendMessage(text=(
+                f"🎉 เจ้าของร้านยืนยันรับเงินแล้วจ๊ะ! เริ่มทำบอทแพ็กเกจ {pkg} ให้เลย\n"
+                "ตามเวลาที่สัญญาไว้ — ถ้าอยากคุยรายละเอียด พิมพ์ \"ติดต่อเจ้าของร้าน\" ได้เลยจ๊ะ"
+            )))
+            return TextSendMessage(text=f"✅ ยืนยันรับเงิน {target_uid} แล้ว (แพ็กเกจ {pkg}) — แจ้งลูกค้าแล้ว")
+        except Exception as e:
+            logger.warning(f"owner confirm push fail: {e}")
+            return TextSendMessage(text=f"✅ ยืนยัน {target_uid} แล้ว แต่ push ถึงลูกค้าล้ม ({e})")
+    finally:
+        db.close()
+
+
 # ทำไม 490/รายเดือน (แม่ค้าถามความคุ้ม/เหตุผลราคา) — คำเฉพาะมีคำถามนำหน้า 0 ชนชื่อสินค้า
 # (ห้ามใช้ "490" เดี่ยว/"490บาท" — ชนคำค้นสินค้างบ 490 เช่น "หูฟัง490")
 WHY_490_KWS = (
@@ -2683,6 +2830,7 @@ def message_text(event):
             elif is_bot_manual_request(normalized_text):
                 # คำถามคู่มือ (ติดตั้ง/คืนเงิน/ค่าคอม/โค้ด...) → ตอบจากคู่มือเฉพาะส่วน
                 # ไม่ปล่อยไป web search (เคยตอบขยะยาวนอกเรื่องตอนถามผ่านเมนูฝากคำถาม)
+                _track_bot_purchase(db, line_user_id, normalized_text)
                 reply = _manual_reply_messages(normalized_text, is_owner)
                 intent = 'manual'
                 if _wants_code_buttons(normalized_text):
@@ -2749,6 +2897,16 @@ def message_text(event):
             # Account Memory (Amazon-style): ลูกค้าบอก "จำไว้ ชอบหูฟัง" / ถาม "ป้าเข็มจำได้ไหม"
             reply = handle_remember(db, normalized_text, line_user_id, user)
             intent = 'remember'
+        elif _is_paid_declaration(normalized_text) and _active_purchase(db, line_user_id):
+            # ลูกค้าแจ้งว่าโอนเงินแล้ว → สถานะรอยืนยัน + แจ้งเจ้าของ (เช็คยอด /ยืนยัน <userId>)
+            _mark_paid(db, user)
+            reply = TextSendMessage(text=PAID_DECLARATION_REPLY)
+            intent = 'purchase'
+        elif _is_cancel_purchase(normalized_text) and _active_purchase(db, line_user_id):
+            # ลูกค้ายกเลิกซื้อบอท → สถานะยกเลิก + แจ้งเจ้าของ
+            _cancel_purchase(db, user)
+            reply = TextSendMessage(text=CANCEL_PURCHASE_REPLY)
+            intent = 'purchase'
         elif is_owner and normalized_text.startswith("แคมเปญ"):
             # เอเจนต์ทำแคมเปญ (เฉพาะเจ้าของ) — dry-run ก่อนส่งจริง
             reply = handle_campaign(db, normalized_text, is_owner)
@@ -2756,6 +2914,10 @@ def message_text(event):
         elif is_owner and normalized_text.startswith(OWNER_REPLY_PREFIX):
             # เจ้าของตอบลูกค้าทีหลัง: /ตอบ <userId> <ข้อความ> → push ถึงลูกค้า
             reply = handle_owner_reply(normalized_text)
+            intent = 'admin'
+        elif is_owner and normalized_text.startswith(OWNER_CONFIRM_PREFIX):
+            # เจ้าของยืนยันรับเงินลูกค้า: /ยืนยัน <userId> → สถานะ confirmed + แจ้งลูกค้า
+            reply = handle_owner_confirm(normalized_text)
             intent = 'admin'
         elif is_greeting(normalized_text):
             # แนวสากล: ทักทาย + ปุ่มทางเลือก — ไม่ยิงสินค้าจนกว่าลูกค้าจะบอกความต้องการ
@@ -2806,6 +2968,7 @@ def message_text(event):
             intent = 'manual'
         elif is_bot_manual_request(normalized_text):
             # คำถามคู่มือ (ค้น/เทียบ/จำ/พัสดุ/ติดตั้ง...) = ตอบจากคู่มือเท่านั้น ไม่ AI เดา
+            _track_bot_purchase(db, line_user_id, normalized_text)
             reply = _manual_reply_messages(normalized_text, is_owner)
             intent = 'manual'
             # ถามติดตั้ง/โค้ด → แนบปุ่มเปิด GitHub + คู่มือ (แตะได้ ไม่ต้องก๊อปลิงก์)

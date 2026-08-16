@@ -361,6 +361,61 @@ def test_tap_pay_button_reopens_payment_page(sim):
     assert "โอน" in r["preview"]
 
 
+# ---------- ติดตามสถานะซื้อบอท: สนใจ → จ่ายแล้ว → เจ้าของยืนยัน → ยกเลิก ----------
+def _purchase(db, uid):
+    return (db.query(models.BotPurchase)
+              .filter(models.BotPurchase.line_user_id == uid).first())
+
+
+def test_interest_tracks_bot_purchase(sim, db):
+    # กด "สนใจแพ็กเกจนี้" (ส่ง "ยอด lean") → บันทึกสถานะสนใจแพ็กเกจนั้น
+    r = sim.send("U_cust_1", "ยอด lean")
+    assert r["intent"] == "manual"
+    p = _purchase(db, "U_cust_1")
+    assert p is not None
+    assert p.package_key == "lean"
+    assert p.status == "interested"
+
+
+def test_paid_declaration_sets_pending_and_notifies_owner(sim, db):
+    sim.send("U_cust_1", "ยอด lean")
+    r = sim.send("U_cust_1", "จ่ายแล้ว")
+    assert r["intent"] == "purchase"
+    assert "รับทราบ" in r["preview"] and "แจ้งเจ้าของ" in r["preview"]
+    p = _purchase(db, "U_cust_1")
+    assert p.status == "paid_pending"
+    assert len(r["owner_pushes"]) == 1  # แจ้งเจ้าของให้เช็คยอด + ยืนยัน
+
+
+def test_owner_confirm_marks_confirmed_and_pushes_customer(sim, db):
+    sim.send("U_cust_1", "ยอด lean")
+    sim.send("U_cust_1", "จ่ายแล้ว")
+    r = sim.send(sim.owner_uid, "/ยืนยัน U_cust_1")
+    assert r["intent"] == "admin"
+    assert "ยืนยันรับเงิน U_cust_1" in r["preview"]
+    p = _purchase(db, "U_cust_1")
+    assert p.status == "confirmed"
+    assert any("ยืนยันรับเงิน" in x for x in r["owner_pushes"])  # push แจ้งลูกค้า
+
+
+def test_cancel_purchase_marks_cancelled_and_notifies_owner(sim, db):
+    sim.send("U_cust_1", "ยอด lean")
+    r = sim.send("U_cust_1", "ยกเลิก")
+    assert r["intent"] == "purchase"
+    assert "ยกเลิก" in r["preview"]
+    p = _purchase(db, "U_cust_1")
+    assert p.status == "cancelled"
+    assert len(r["owner_pushes"]) == 1  # แจ้งเจ้าของว่าลูกค้ายกเลิก
+
+
+def test_paid_declaration_without_purchase_ignored(sim, db):
+    # ไม่มีคำสั่งซื้อค้าง → "จ่ายแล้ว" ไม่เข้าติดตาม ไม่แจ้งเจ้าของ ไม่ crash
+    r = sim.send("U_cust_1", "จ่ายแล้ว")
+    assert r["intent"] != "purchase"
+    assert _purchase(db, "U_cust_1") is None
+    assert r["owner_pushes"] == []
+
+
 def test_payment_reply_shows_account_numbers_as_text(sim, monkeypatch):
     # ตั้งเลขพร้อมเพย์ + บัญชีธนาคาร → ข้อความโชว์เลขให้ลูกค้าจดได้ (นอกเหนือจาก QR)
     monkeypatch.setattr(lb, "OWNER_PROMPTPAY", "089-999-8888")

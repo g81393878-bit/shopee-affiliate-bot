@@ -88,7 +88,7 @@ def db():
     lb._pending_question.clear()
     lb._pending_leave.clear()
     s = SessionLocal()
-    for m in (models.LeadAction, models.FacebookDemandEvent, models.FacebookDetectedLead, models.FacebookGroupMonitor, models.ChatLog, models.UserPreference, models.User, models.CampaignLog):
+    for m in (models.LeadAction, models.FacebookDemandEvent, models.FacebookDetectedLead, models.FacebookGroupMonitor, models.ChatLog, models.UserPreference, models.User, models.CampaignLog, models.BotPurchase):
         s.query(m).delete(synchronize_session=False)
     s.commit()
     yield s

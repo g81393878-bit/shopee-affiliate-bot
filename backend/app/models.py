@@ -39,6 +39,21 @@ class UserPreference(Base):
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 
 
+class BotPurchase(Base):
+    """สถานะซื้อบอท (ขายบอท) — สนใจ → จ่ายแล้วรอยืนยัน → ยืนยัน/ยกเลิก
+    ตารางแยกใหม่ (create_all สร้างให้อัตโนมัติทั้ง dev/prod ไม่ต้อง migrate)
+    status: interested | paid_pending | confirmed | cancelled
+    """
+    __tablename__ = "bot_purchases"
+
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    line_user_id = Column(String(100), unique=True, index=True, nullable=False)
+    package_key = Column(String(20), nullable=False)  # lean | starter | business | whitelabel | ขายขาด
+    status = Column(String(20), nullable=False, default="interested")
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+
 class ShopeeProduct(Base):
     """Raw products pulled from Shopee Affiliate Open API (productOfferV2) — staging table.
     Bulk-fetched catalog; curated picks get promoted into `products` for the LINE bot.
