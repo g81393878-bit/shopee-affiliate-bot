@@ -289,7 +289,7 @@ def test_build_time_counts_from_confirmation_and_deposit(sim):
     # บอกชัดว่าเริ่มนับวันเมื่อยืนยันสั่งทำ + จ่ายมัดจำครบ (กันลูกค้าถามซ้ำว่าวันไหนเริ่ม)
     r = sim.send("U_cust_1", "ใช้เวลานานแค่ไหน")
     assert r["intent"] == "manual"
-    assert "มัดจำ" in r["preview"], f"ไม่แจ้งเรื่องมัดจำ: {r['preview'][:180]}"
+    assert "มัดจำ 50%" in r["preview"], f"ไม่แจ้งมัดจำ 50%: {r['preview'][:180]}"
     assert "เริ่มนับวัน" in r["preview"], f"ไม่บอกว่าเริ่มนับวันเมื่อไหร่: {r['preview'][:180]}"
     assert "นับจากวันนั้น" in r["preview"], f"ไม่ชี้แจงว่านับจากวันที่จ่ายครบ: {r['preview'][:180]}"
 
