@@ -359,6 +359,17 @@ def test_bot_payment_does_not_hijack_product_payment(sim):
         assert "PromptPay" not in r["preview"], f"'{q}' หลุดไปตอบวิธีจ่ายค่าบอท"
 
 
+def test_ma_values_match_brd_range(sim):
+    # BRD ล็อก M/A = 2,500–5,000/ปี — ทุกแพ็กเกจต้องอยู่ในช่วงนี้ (Lean เดิม 1,500 ต่ำกว่าเกณฑ์)
+    r = sim.send("U_cust_1", "ค่าดูแลรายปี")
+    assert r["intent"] == "manual"
+    assert "Lean 2,500" in r["preview"]
+    assert "Starter 2,500" in r["preview"]
+    assert "Business 3,500" in r["preview"]
+    assert "White-Label 5,000" in r["preview"]
+    assert "Lean 1,500" not in r["preview"]
+
+
 def test_package_card_has_realistic_leadtime():
     # การ์ดแพ็กเกจแต่ละใบมีระยะเวลาสร้างจริง (Lean 1 วัน / Business 5 วัน) ตรงกับ FAQ
     by_name = {p["name"]: p.get("leadtime", "") for p in lb.PACKAGES}
