@@ -37,6 +37,7 @@ docs/cron-setup.md
 *.xlsx
 # ยกเว้น: เทมเพลตชีทสำหรับ lean-stack (ของที่ต้องส่งให้ลูกค้าโหลด)
 !lean-stack/template.xlsx
+!docs/sample-products.csv
 
 # IDE
 .vscode/
