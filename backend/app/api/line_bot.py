@@ -23,6 +23,7 @@ from app.services.category import guess_category, CATEGORY_KEYWORDS, normalize_q
 from app.services.web_search import web_search_answer
 from app.services.hermes_brain import load_skills_safe, market_emphasis
 from app.config import settings
+from app.services.bot_profile import BOT_NAME, BOT_SLOGAN
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +34,8 @@ LINE_SECRET = os.getenv('LINE_CHANNEL_SECRET') or "mock_line_channel_secret"
 line_bot_api = LineBotApi(LINE_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_SECRET)
 
-# ชื่อร้าน/บอทที่แสดงบนข้อความตอบกลับ (ชื่อหัวแชทตั้งที่ LINE Official Account Manager)
-BOT_NAME = "ป้าเข็ม ขายของ"
+# ชื่อร้าน/บอทที่แสดงบนข้อความตอบกลับ — อ่านจาก Bot Profile (env BOT_NAME; default "ป้าเข็ม ขายของ")
+# (ชื่อหัวแชทจริงตั้งที่ LINE Official Account Manager)
 BOT_ICON_URL = "https://profile.line-scdn.net/0hERy_y3n3Gn1EJgY083hlKnhjFBAzCBw1PEVTE2UuR01sRAh-e0FdS2YmQEw-EF5_LBBcG2UiREg7"
 
 # ยอดขายขั้นต่ำ (จากคอลัมน์ "ขาย" ตอน import) — สินค้าขายน้อยกว่าเกณฑ์ไม่โผล่หน้าลูกค้า
@@ -672,7 +673,7 @@ BOT_MANUAL_SECTIONS = [
      "3️⃣ การนำเสนอทางเลือกที่เหมาะสม — แนะนำสินค้าที่ตรงจุด ให้ข้อมูลชัดเจนครบถ้วน ตอบอย่างจริงใจ\n"
      "4️⃣ การดำเนินการที่รวดเร็วและมีประสิทธิภาพ — ลดขั้นตอนยุ่งยาก แจ้งสถานะ แก้ปัญหาให้ทันที\n"
      "5️⃣ การติดตามผลและขอบคุณ — ถามความพึงพอใจ รับฟังความคิดเห็น กล่าวขอบคุณจากใจ\n\n"
-     "ความพึงพอใจของคุณคือความสำเร็จของป้าเข็มนะคะ 💕"),
+     f"{BOT_SLOGAN} นะคะ 💕"),
 ]
 
 

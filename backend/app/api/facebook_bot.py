@@ -20,6 +20,8 @@ from fastapi import APIRouter, HTTPException, Request, Response
 
 logger = logging.getLogger(__name__)
 
+from app.services.bot_profile import BOT_NAME
+
 # Fallback mock เมื่อ env ไม่ได้ตั้ง (dev/test เปิด app ได้ไม่ crash — เหมือน LINE bot)
 FACEBOOK_APP_SECRET = os.getenv("FACEBOOK_APP_SECRET") or "mock_facebook_app_secret"
 FACEBOOK_VERIFY_TOKEN = os.getenv("FACEBOOK_VERIFY_TOKEN") or "mock_facebook_verify_token"
@@ -27,8 +29,7 @@ FACEBOOK_PAGE_ACCESS_TOKEN = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or ""
 
 router = APIRouter(prefix="/webhooks", tags=["facebook"])
 
-# ชื่อร้าน/บอทป้าเข็ม — ข้อความแนะนำให้ลูกค้าเพจไปคุยต่อที่ LINE
-BOT_NAME = "ป้าเข็ม ขายของ"
+# ชื่อร้าน/บอท — อ่านจาก Bot Profile (env BOT_NAME; default "ป้าเข็ม ขายของ")
 
 # ลิงก์ LINE OA จริง (ตั้ง env LINE_OA_URL เช่น https://line.me/R/ti/p/@xxxxx) —
 # ถ้ายังไม่ตั้ง fallback เป็นข้อความบอกชื่อร้านให้ลูกค้าแอดไลน์เอง

@@ -8,12 +8,15 @@
 > - **เมื่องานเสร็จและ commit ครบ:** ให้ล้างเนื้อหาในส่วน 1–5 กลับเป็นสถานะว่าง แล้ว commit
 >   ไฟล์นี้ — เพื่อไม่ให้ AI ตัวถัดไปเข้าใจผิดว่างานยังค้าง
 
-## สถานะ: 🟢 ว่าง — งานล่าสุด (เครื่องมือค้นกลุ่ม buyer-demand อัตโนมัติ + บันทึกกลุ่มลงชีท + โพสต์เรดาร์ตัวแรกขึ้นเพจ) เสร็จครบ — ยังไม่ deploy โค้ดใหม่ (เป็น tool ฝั่ง local ไม่กระทบ production)
+## สถานะ: 🟢 ว่าง — งานล่าสุด (Phase 1 White-Label: bot_profile ตัวตนร้าน config ได้ + backup_config.py) เสร็จ+commit — ยังไม่ deploy โค้ดใหม่ (มีกระทบ production: line_bot/facebook_bot/persona ต้อง deploy ก่อนลูกค้าเห็น)
 
 ---
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- ✅ feat(white-label): **Bot Profile — รวมศูนย์ตัวตนร้านไว้จุดเดียว** (`app/services/bot_profile.py`) — อ่าน `BOT_NAME`/`PERSONA_NAME`/`BOT_SLOGAN` จาก env (default "ป้าเข็ม ขายของ"/"ป้าเข็ม"/"ความพึงพอใจของคุณคือความสำเร็จของเรา") → เปลี่ยนชื่อบอท/เสียง/สโลแกนได้โดยไม่แตะโค้ด; wire เข้า `persona.py` (PERSONA_PROMPT เป็น f-string ใช้ชื่อจริง), `line_bot.py` (BOT_NAME + สโลแกนท้าย 5 ขั้นตอน), `facebook_bot.py` (BOT_NAME) — 4 ไฟล์; เทสต์ `tests/test_bot_profile.py` 4 ตัว → รวม 598 passed
+- ✅ feat(ops): **`tools/backup_config.py`** — ก๊อป `.env`/`fb_cookies.json`/`affiliate_db.db`/`db-password.txt`/`render cli.yaml` ไป `backups/<timestamp>/` (เพิ่ม `backups/` ใน `.gitignore` กัน secret หลุด commit); กู้คืนเมื่อโค้ด/ค่าพัง = ก๊อปกลับจากโฟลเดอร์ล่าสุด
+- ✅ docs: **BRD v1.0 ล็อกแล้ว** (`docs/brd-sell-line-oa-bot.md`) + **SRS** (`docs/srs-white-label-bot.md`) — ตัดสินใจครบ: ลูกค้าทั้งคู่ (ร้านค้า + affiliate), ราคา 990/1,990/4,990 + M/A, ลูกค้าออกค่า LINE OA, ตั้งค่าทั้งแอดมิน+ลูกค้าเอง; RLS/Stripe = Model C roadmap (Phase 2+)
 - ✅ feat(radar-tools): **เครื่องมือค้นกลุ่ม buyer-demand อัตโนมัติ** (`tools/fb_group_search_local.py`) — stealth Chrome + fb_cookies.json ค้นกลุ่มตามคีย์เวิร์ด "อยากได้/งบ/แนะนำ" → นับ buyer/seller signals จากโพสต์ล่าสุด → `--auto-add` เพิ่มกลุ่ม public+scannable+buyer เข้า radar อัตโนมัติ + `--loop` วนต่อเนื่อง + `log_group_to_sheet()` ดันผู้สมัครลง Google ชีทแท็บ "กลุ่มผู้สมัคร" (คอลัมน์ ชื่อ/ลิงก์/สิ่งที่ต้องการ/buyer/seller/สแกนได้); เทสต์ `tests/test_fb_group_search_local.py` 20 ตัว → รวม 589 passed
 - ✅ data(prod): **ล้างข้อมูลปลอม + เพิ่มกลุ่มจริง** — ลบกลุ่ม FB ปลอม 7 กลุ่ม (grp_moms_th/grp_tech_deals/... ผ่าน DB production, FK ON DELETE SET NULL) + ลบ lead สังเคราะห์ 131 ตัว (fb_sample_*/fb_mock_bulk_*/grp_public_monitor_*) cascade ลบ demand events 104 ตัว → เหลือ leads จริง 155 ตัว; เพิ่มกลุ่ม buyer-demand 6 กลุ่ม (headphoneclub "หูฟังคลับ" + สมาร์ทโฮม + แม่และเด็ก + สัตว์เลี้ยง + อาร์ตทอย) → เรดาร์ตอนนี้ 14 กลุ่ม
 - ✅ feat(sheet): **Apps Script เพิ่มแท็บ "กลุ่มผู้สมัคร"** (`tools/sheet_posts_apps_script.gs`) — รับ `kind='group_candidate'` เขียนชื่อกลุ่ม/ลิงก์/สิ่งที่ต้องการลงชีท (deploy แล้ว ใช้ URL เดิม POSTS_SHEET_WEBHOOK_URL)
