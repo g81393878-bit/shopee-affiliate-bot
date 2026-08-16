@@ -191,16 +191,19 @@ def test_is_package_request_excludes_line_oa_fee():
 
 
 def test_quick_reply_includes_bot_price_button():
-    # ปุ่มลัดสากลมีปุ่ม "ราคาบอท/แพ็กเกจ" → แตะแล้วไปการ์ด 5 ทางเลือก (ขายบอทต่อ)
+    # ปุ่มลัดสากลมีปุ่ม "ราคาบอท/แพ็กเกจ" + "วิธีจ่ายเงิน" → แตะแล้วไปการ์ด/วิธีจ่าย (ขายบอทต่อ)
     # ไม่มี "คุยกับป้าเข็ม" (ซ้ำซ้อน — บอทตอบเองทุกข้อความอยู่แล้ว)
     qr = lb.quick_reply_items()
     labels = [item.action.label for item in qr.items]
     texts = [item.action.text for item in qr.items]
-    assert labels == ["🔍 ค้นหาสินค้า", "💬 ฝากคำถาม", "💰 ราคาบอท/แพ็กเกจ"], labels
-    assert texts[-1] == "ราคาบอท"
+    assert labels == ["🔍 ค้นหาสินค้า", "💬 ฝากคำถาม", "💰 ราคาบอท/แพ็กเกจ", "💰 วิธีจ่ายเงิน"], labels
+    assert texts[-2] == "ราคาบอท"
+    assert texts[-1] == "วิธีจ่ายค่าบอท"
     assert "คุยกับป้าเข็ม" not in texts
     # แตะปุ่มราคาบอท → การ์ด Flex แพ็กเกจ (intent manual) ไม่ใช่ค้นสินค้า
     assert lb.is_package_request("ราคาบอท") is True
+    # แตะปุ่มวิธีจ่ายเงิน → ตอบวิธีจ่าย (BOT_PAYMENT_REPLY) ไม่ใช่ค้นสินค้า
+    assert lb.bot_manual_reply("วิธีจ่ายค่าบอท") == lb.BOT_PAYMENT_REPLY
 
 
 # ---------- ขายขาด / ซื้อครั้งเดียว (แม่ค้าไม่อยากผูกเดือน) ----------

@@ -419,15 +419,17 @@ def nosearch_new_text(user_text: str, category: str, tone: str = "neutral") -> s
 
 def quick_reply_items() -> QuickReply:
     """ปุ่มลัดแบบสากล (Quick Reply) — ลูกค้าแตะแทนพิมพ์
-    3 ปุ่ม: 🔍 ค้นหาสินค้า · 💬 ฝากคำถาม · 💰 ราคาบอท/แพ็กเกจ
+    4 ปุ่ม: 🔍 ค้นหาสินค้า · 💬 ฝากคำถาม · 💰 ราคาบอท/แพ็กเกจ · 💰 วิธีจ่ายเงิน
     (ไม่มี "คุยกับป้าเข็ม" — ซ้ำซ้อน เพราะบอทตอบเองทุกข้อความอยู่แล้ว)
     ส่วนที่เหลือลูกค้าพิมพ์เองได้ หรือกดจาก Rich Menu แถบติดหน้าจอ — ปุ่มทุกตัว
     ส่งข้อความที่ dispatch route ตรง intent ไม่หลุด "ค้นไม่เจอ"
-    ปุ่ม "ราคาบอท" = ขายบอทต่อ (ป้าเข็มขายทั้งสินค้าและบอทเอง) → การ์ด 5 ทางเลือก"""
+    ปุ่ม "ราคาบอท" = ขายบอทต่อ (ป้าเข็มขายทั้งสินค้าและบอทเอง) → การ์ด 5 ทางเลือก
+    ปุ่ม "วิธีจ่ายเงิน" = โอน PromptPay/บัตร (จบในแชท) → BOT_PAYMENT_REPLY"""
     return QuickReply(items=[
         QuickReplyButton(action=MessageAction(label="🔍 ค้นหาสินค้า", text="ค้นสินค้า")),
         QuickReplyButton(action=MessageAction(label="💬 ฝากคำถาม", text="ฝากคำถาม")),
         QuickReplyButton(action=MessageAction(label="💰 ราคาบอท/แพ็กเกจ", text="ราคาบอท")),
+        QuickReplyButton(action=MessageAction(label="💰 วิธีจ่ายเงิน", text="วิธีจ่ายค่าบอท")),
     ])
 
 
