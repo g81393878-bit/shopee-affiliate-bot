@@ -108,6 +108,12 @@ def test_service_standard_five_steps(sim, text):
     assert r["intent"] == "manual", f"{text!r} → intent={r['intent']}"
     assert "5 ขั้นตอน" in r["preview"], f"{text!r} ไม่ได้โชว์ 5 ขั้นตอน: {r['preview'][:120]}"
     assert "ความพึงพอใจของคุณคือความสำเร็จ" in r["preview"]
+    # ต้องมีข้อย่อยแบบเต็มตามอินโฟกราฟิก (ไม่ใช่แค่หัวข้อ)
+    assert "ทักทายด้วยรอยยิ้ม" in r["preview"]
+    assert "เข้าใจความต้องการของคุณ" in r["preview"]
+    assert "ตอบข้อสงสัยอย่างจริงใจ" in r["preview"]
+    assert "ลดขั้นตอนที่ยุ่งยาก" in r["preview"]
+    assert "สอบถามความพึงพอใจ" in r["preview"]
 
 
 def test_service_standard_does_not_shadow_product_search(sim):
