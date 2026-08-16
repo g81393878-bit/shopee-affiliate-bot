@@ -648,7 +648,7 @@ def test_contact_owner_shows_direct_contact(sim):
     # "ติดต่อเจ้าของร้าน" → ตอบช่องทางติดต่อตรง (LINE ID + ลิงก์) ไม่เข้า flow ฝากคำถามแล้ว
     r = sim.send("U_cust_1", "ติดต่อเจ้าของร้าน")
     assert r["intent"] == "human"
-    assert "ติดต่อเจ้าของร้านได้โดยตรง" in r["preview"]
+    assert "ติดต่อป้าเข็มได้โดยตรง" in r["preview"]
     assert "👉 LINE:" in r["preview"]
     assert "🔗" in r["preview"]  # ลิงก์แอดไลน์
     assert "ฝากคำถามได้เลย" not in r["preview"]  # ไม่ชวนฝากคำถามแล้ว
@@ -661,7 +661,7 @@ def test_ask_phone_shows_owner_contact(sim):
     # "เบอร์โทร..." → ช่องทางติดต่อตรงเหมือนกัน (ไม่ตกไป FAQ/ค้นสินค้า)
     r = sim.send("U_cust_1", "เบอร์โทรป้าเข็ม")
     assert r["intent"] == "human"
-    assert "ติดต่อเจ้าของร้านได้โดยตรง" in r["preview"]
+    assert "ติดต่อป้าเข็มได้โดยตรง" in r["preview"]
 
 
 def test_chat_button_enters_ai_flow(sim):

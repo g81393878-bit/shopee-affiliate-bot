@@ -37,9 +37,6 @@ BOT_SLOGAN = _env("BOT_SLOGAN", "ความพึงพอใจของค�
 LINE_OA_ID = _env("LINE_OA_ID", "@137gsref")
 LINE_OA_URL = _env("LINE_OA_URL", "https://lin.ee/o9Kjp1N")
 
-# เบอร์โทรเจ้าของร้าน (โชว์ในคำตอบ "ติดต่อเจ้าของร้าน" — ว่าง = ไม่โชว์บรรทัดเบอร์)
-OWNER_PHONE = _env("OWNER_PHONE", "")
-
 
 def line_cta_footer(line_url: str = "") -> str:
     """ท้ายโพสต์ Facebook — ชวนแอดไลน์ร้าน (LINE ID + ลิงก์กดแอดได้ทันที).
@@ -54,16 +51,13 @@ def line_cta_footer(line_url: str = "") -> str:
 
 
 def owner_contact_text() -> str:
-    """ช่องทางติดต่อเจ้าของร้านตรง ๆ — LINE ID + ลิงก์ + เบอร์โทร (ถ้าตั้ง).
+    """ช่องทางติดต่อป้าเข็มตรง ๆ — LINE ID + ลิงก์เท่านั้น (ไม่มีเบอร์โทร).
 
-    ใช้ในคำตอบ "ติดต่อเจ้าของร้าน" ของบอท LINE — ลูกค้าที่สนใจซื้อบอทติดต่อปิดดีลได้ทันที
-    (ไม่ต้องฝากคำถามรอเจ้าของตอบทีหลัง).
+    ใช้ในคำตอบ "ติดต่อเจ้าของร้าน" ของบอท LINE — ลูกค้าที่สนใจซื้อบอทแอดไลน์ป้าเข็มปิดดีลได้ทันที.
     """
-    parts = ["📞 ติดต่อเจ้าของร้านได้โดยตรงเลยจ๊ะ:"]
+    parts = ["📞 ติดต่อป้าเข็มได้โดยตรงเลยจ๊ะ:"]
     parts.append(f"👉 LINE: {LINE_OA_ID}")
     if LINE_OA_URL:
         parts.append(f"🔗 {LINE_OA_URL}")
-    if OWNER_PHONE:
-        parts.append(f"📱 เบอร์โทร: {OWNER_PHONE}")
     parts.append("\nทักมาแจ้งแพ็กเกจที่สนใจได้เลย แล้วป้าจะดูแลต่อเองจ๊ะ 😊")
     return "\n".join(parts)

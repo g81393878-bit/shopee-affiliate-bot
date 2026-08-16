@@ -42,8 +42,9 @@ def test_line_cta_footer_override_url():
 
 
 def test_owner_contact_text_has_line_and_link():
-    # คำตอบ "ติดต่อเจ้าของร้าน" ต้องมี LINE ID + ลิงก์ (เบอร์โทรเฉพาะเมื่อตั้ง OWNER_PHONE)
+    # คำตอบ "ติดต่อเจ้าของร้าน" ต้องมี LINE ID + ลิงก์ (ไม่มีเบอร์โทร — ติดต่อป้าเข็มอย่างเดียว)
     text = bot_profile.owner_contact_text()
     assert bot_profile.LINE_OA_ID in text
     assert bot_profile.LINE_OA_URL in text
-    assert "ติดต่อเจ้าของร้านได้โดยตรง" in text
+    assert "ติดต่อป้าเข็มได้โดยตรง" in text
+    assert "เบอร์โทร" not in text
