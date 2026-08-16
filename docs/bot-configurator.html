@@ -196,7 +196,6 @@
   <div class="sum">
     <div class="row"><span>แพ็กเกจหลัก</span><b id="sumPkg">990</b></div>
     <div class="row"><span>ฟีเจอร์เสริม</span><b id="sumAdd">0</b></div>
-    <div class="row"><span>ค่าติดตั้งครั้งแรก (ครั้งเดียว)</span><b id="sumSetup">1,500</b></div>
     <div class="row"><span>เงินมัดจำเริ่มทำ (50%)</span><b id="sumDeposit">495 บาท</b></div>
     <div class="row"><span>ยอดคงเหลือหลังหักมัดจำ (จ่ายเมื่อส่งมอบ)</span><b id="sumBalance">1,995 บาท</b></div>
     <div class="row total"><span>รวมรายเดือน</span><span id="sumMonthly">990 บาท</span></div>
@@ -208,7 +207,6 @@
 
 <script>
 const PKGS = { lean: {price: 490, ma: 1500}, starter: {price: 990, ma: 2500}, business: {price: 1990, ma: 3500}, whitelabel: {price: 4990, ma: 5000} };
-const SETUP_FEE = 1500;
 
 const $ = id => document.getElementById(id);
 
@@ -229,15 +227,13 @@ function recalc() {
       add += (parseInt(a.dataset.price, 10) || 0) * n;
     }
   });
-  const setup = pkg === 'whitelabel' ? 0 : SETUP_FEE;
   $('sumPkg').textContent = base.toLocaleString();
   $('sumAdd').textContent = add.toLocaleString();
-  $('sumSetup').textContent = setup === 0 ? 'ฟรี' : setup.toLocaleString();
   const monthly = base + add;
   const deposit = Math.round(monthly * 0.5);
   $('sumMonthly').textContent = monthly.toLocaleString() + ' บาท';
   $('sumDeposit').textContent = deposit.toLocaleString() + ' บาท';
-  $('sumBalance').textContent = (monthly - deposit + setup).toLocaleString() + ' บาท';
+  $('sumBalance').textContent = (monthly - deposit).toLocaleString() + ' บาท';
   $('sumMA').textContent = PKGS[pkg].ma.toLocaleString() + '/ปี';
 }
 
@@ -303,7 +299,6 @@ function sendOrder() {
     'สโลแกน: ' + ($('botSlogan').value || '-'),
     'แพ็กเกจ: ' + selectedPkg().toUpperCase(),
     'รวมรายเดือน: ' + $('sumMonthly').textContent,
-    'ค่าติดตั้ง: ' + $('sumSetup').textContent,
     'เงินมัดจำ 50%: ' + $('sumDeposit').textContent,
     'ยอดคงเหลือเมื่อส่งมอบ: ' + $('sumBalance').textContent,
     'ค่าดูแล/ปี: ' + $('sumMA').textContent,
