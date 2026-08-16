@@ -285,6 +285,15 @@ def test_package_card_has_realistic_leadtime():
         assert any("⏱️ เสร็จภายใน" in t for t in texts), f"การ์ด {b['header']['contents'][0]['text']} ไม่มีระยะเวลา"
 
 
+def test_build_time_counts_from_confirmation_and_deposit(sim):
+    # บอกชัดว่าเริ่มนับวันเมื่อยืนยันสั่งทำ + จ่ายมัดจำครบ (กันลูกค้าถามซ้ำว่าวันไหนเริ่ม)
+    r = sim.send("U_cust_1", "ใช้เวลานานแค่ไหน")
+    assert r["intent"] == "manual"
+    assert "มัดจำ" in r["preview"], f"ไม่แจ้งเรื่องมัดจำ: {r['preview'][:180]}"
+    assert "เริ่มนับวัน" in r["preview"], f"ไม่บอกว่าเริ่มนับวันเมื่อไหร่: {r['preview'][:180]}"
+    assert "นับจากวันนั้น" in r["preview"], f"ไม่ชี้แจงว่านับจากวันที่จ่ายครบ: {r['preview'][:180]}"
+
+
 def test_build_time_does_not_hijack_shipping_question(sim):
     # "ส่งของกี่วัน" = ถามจัดส่งสินค้า → ตอบ shipping (section ก่อนหน้า) ไม่ใช่ระยะเวลาสร้างบอท
     r = sim.send("U_cust_1", "ส่งของกี่วัน")
