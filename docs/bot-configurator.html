@@ -198,6 +198,7 @@
     <div class="row"><span>ฟีเจอร์เสริม</span><b id="sumAdd">0</b></div>
     <div class="row"><span>ค่าติดตั้งครั้งแรก (ครั้งเดียว)</span><b id="sumSetup">1,500</b></div>
     <div class="row"><span>เงินมัดจำเริ่มทำ (50%)</span><b id="sumDeposit">495 บาท</b></div>
+    <div class="row"><span>ยอดคงเหลือหลังหักมัดจำ (จ่ายเมื่อส่งมอบ)</span><b id="sumBalance">1,995 บาท</b></div>
     <div class="row total"><span>รวมรายเดือน</span><span id="sumMonthly">990 บาท</span></div>
     <div class="row"><span>ค่าดูแลรายปี (เริ่มปีที่ 2)</span><b id="sumMA">2,500/ปี</b></div>
     <div class="note">🔒 เงินมัดจำ 50% จ่ายก่อนเริ่มทำ · เริ่มนับวันส่งมอบเมื่อยืนยัน + จ่ายมัดจำครบ<br>⚠️ ยังไม่รวม LINE OA (555/เดือน จ่ายตรง LINE) · Render/Supabase (ลูกค้าแยกบัญชี ฟรี) · VAT 7%</div>
@@ -232,8 +233,11 @@ function recalc() {
   $('sumPkg').textContent = base.toLocaleString();
   $('sumAdd').textContent = add.toLocaleString();
   $('sumSetup').textContent = setup === 0 ? 'ฟรี' : setup.toLocaleString();
-  $('sumMonthly').textContent = (base + add).toLocaleString() + ' บาท';
-  $('sumDeposit').textContent = Math.round((base + add) * 0.5).toLocaleString() + ' บาท';
+  const monthly = base + add;
+  const deposit = Math.round(monthly * 0.5);
+  $('sumMonthly').textContent = monthly.toLocaleString() + ' บาท';
+  $('sumDeposit').textContent = deposit.toLocaleString() + ' บาท';
+  $('sumBalance').textContent = (monthly - deposit + setup).toLocaleString() + ' บาท';
   $('sumMA').textContent = PKGS[pkg].ma.toLocaleString() + '/ปี';
 }
 
@@ -301,6 +305,7 @@ function sendOrder() {
     'รวมรายเดือน: ' + $('sumMonthly').textContent,
     'ค่าติดตั้ง: ' + $('sumSetup').textContent,
     'เงินมัดจำ 50%: ' + $('sumDeposit').textContent,
+    'ยอดคงเหลือเมื่อส่งมอบ: ' + $('sumBalance').textContent,
     'ค่าดูแล/ปี: ' + $('sumMA').textContent,
   ];
   prompt('ก๊อปข้อความนี้ส่งให้เจ้าของร้าน (LINE/อีเมล) ได้เลย:', lines.join('\n'));
