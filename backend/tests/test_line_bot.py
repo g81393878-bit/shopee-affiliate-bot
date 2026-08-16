@@ -202,6 +202,31 @@ def test_perpetual_faq(sim, text):
     assert "จ่ายครั้งเดียว" in r["preview"], f"{text!r} ไม่บอกว่าจ่ายครั้งเดียว"
 
 
+# ---------- ทำไม 490฿/เดือน (แม่ค้าถามความคุ้ม/เหตุผลราคา) ----------
+WHY_490_PHRASES = [
+    "ทำไม490", "ทำไมต้อง 490", "ทำไมจ่าย 490", "490 ทำไมแพง",
+    "490 แพงไหม", "490 คุ้มไหม", "490 ถูกไหม", "490/เดือน", "จ่าย 490",
+    "ทำไมรายเดือน", "จ่ายรายเดือน", "จ่ายทุกเดือน", "ทำไมต้องจ่าย",
+    "รายเดือนแพงไหม", "รายเดือนคุ้มไหม",
+]
+
+
+@pytest.mark.parametrize("text", WHY_490_PHRASES)
+def test_why_490_monthly_faq(sim, text):
+    r = sim.send("U_cust_1", text)
+    assert r["intent"] == "manual", f"{text!r} → intent={r['intent']}"
+    assert "490฿/เดือน" in r["preview"], f"{text!r} ไม่ตอบเรื่อง 490: {r['preview'][:140]}"
+    assert "รายเดือน" in r["preview"], f"{text!r} ไม่อธิบายเหตุผลรายเดือน"
+
+
+def test_why_490_does_not_hijack_price_search(sim):
+    # "หูฟัง 490" = ค้นสินค้างบ 490 → ต้องไป search ไม่ใช่ FAQ "ทำไม 490"
+    r = sim.send("U_cust_1", "หูฟัง 490")
+    assert r["intent"] == "search", f"คำค้น 'หูฟัง 490' โดนดัก: intent={r['intent']}"
+    r2 = sim.send("U_cust_1", "หูฟัง 490 บาท")
+    assert r2["intent"] == "search", f"คำค้น 'หูฟัง 490 บาท' โดนดัก: intent={r2['intent']}"
+
+
 # ---------- Lean Stack / Shopee Affiliate / ไฟล์สินค้า / ฟีเจอร์เสริม / ค่าดูแล (ขายบอท) ----------
 SALES_FAQ_CASES = [
     ("บอทง่าย", "Lean 490"),
