@@ -281,13 +281,13 @@ SALES_FAQ_CASES = [
 
 
 def test_payment_reply_precalculates_amounts():
-    # บอทคำนวณมัดจำ/ส่งมอบให้เสร็จ — ลูกค้าไม่ต้องคิดเลขเอง
+    # บอทคำนวณมัดจำ/ส่งมอบ/รวมให้เสร็จ — ลูกค้าไม่ต้องคิดเลขเอง
     text = lb.payment_reply_text()
-    assert "มัดจำ 245" in text and "ส่งมอบ 1,745" in text  # Lean
-    assert "มัดจำ 495" in text and "ส่งมอบ 1,995" in text  # Starter
-    assert "มัดจำ 995" in text and "ส่งมอบ 2,495" in text  # Business
-    assert "มัดจำ 2,495" in text  # White-Label
-    assert "7,500–12,500" in text  # ขายขาด
+    assert "มัดจำ 245" in text and "ส่งมอบ 1,745" in text and "รวม 1,990" in text  # Lean
+    assert "มัดจำ 495" in text and "ส่งมอบ 1,995" in text and "รวม 2,490" in text  # Starter
+    assert "มัดจำ 995" in text and "ส่งมอบ 2,495" in text and "รวม 3,490" in text  # Business
+    assert "มัดจำ 2,495" in text and "รวม 4,990" in text  # White-Label
+    assert "7,500–12,500" in text and "รวม 15,000–25,000" in text  # ขายขาด
 
 
 def test_payment_reply_is_text_only_no_qr(sim):
