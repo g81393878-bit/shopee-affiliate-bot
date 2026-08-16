@@ -54,9 +54,9 @@
 
 ## 3. ขั้นตอนต่อไป
 
-- โพสต์คลิป MP4 ที่เจ้าของทำไว้ (assets/202608161242.mp4, ~17.8MB) ขึ้นเพจจริงเมื่อสั่ง:
-  `backend/.venv/Scripts/python.exe tools/post_fb_video.py --file assets/202608161242.mp4 --caption "..."`
-  (token เครื่อง sync แล้ว — สิทธิ์ครบ 10 scope; 17.8MB < 1GB / <20นาที simple upload ได้ ไม่ต้อง chunked)
+- **โพสต์คลิปใหม่ (คนไม่เทคนิค)**: ดับเบิลคลิก `post_video.bat` → กรอกชื่อไฟล์ + แคปชั่น → Enter โพสต์ (พิมพ์ `d` = ดูตัวอย่างก่อน); หรือลากไฟล์ MP4 มาวางที่ไอคอน .bat เลย
+- **โพสต์คลิปด้วยคำสั่ง**: `backend/.venv/Scripts/python.exe tools/post_fb_video.py --file assets/xxx.mp4 --caption "..."` (token เครื่อง sync แล้ว สิทธิ์ครบ 10 scope; ≤1GB/≤20นาที simple upload ได้)
+- **คลิปหลุดขึ้นเพจแล้ว 1 ตัว (รอตัดสินใจ)**: วิดีโอ id `1332135398687653` (2026-08-16 ~14:40 ไทย) โพสต์จริงแบบไม่มีแคปชั่น — เกิดจากเทสต์ .bat ด้วย pipe input ที่เพี้ยน; รอเจ้าของเลือก: เติม description ผ่าน `POST /{video_id}` หรือ `DELETE /{video_id}`
 - ทางเลือกจาก production: อัปโหลด MP4 ไป URL สาธารณะ → `--url` ใช้ได้จาก Render ด้วย
 
 ## 4. ไฟล์ที่ถืออยู่ / โดนแก้

@@ -26,6 +26,11 @@ import argparse
 import os
 import sys
 
+# กัน UnicodeEncodeError (emoji ✅/❌) บน console ฝั่ง Windows ที่ใช้ cp874/850 —
+# บังคับ stdout เป็น UTF-8 เสมอ (ถ้า print พังกลางทางจะดูไม่รู้ว่าโพสต์สำเร็จหรือไม่)
+if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 BACKEND = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "backend")
 sys.path.insert(0, BACKEND)
 
