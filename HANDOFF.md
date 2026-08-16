@@ -8,12 +8,13 @@
 > - **เมื่องานเสร็จและ commit ครบ:** ให้ล้างเนื้อหาในส่วน 1–5 กลับเป็นสถานะว่าง แล้ว commit
 >   ไฟล์นี้ — เพื่อไม่ให้ AI ตัวถัดไปเข้าใจผิดว่างานยังค้าง
 
-## สถานะ: 🟢 ว่าง — งานล่าสุด (FAQ ระยะเวลาสร้างบอท) เสร็จ+commit — ยังไม่ push/deploy
+## สถานะ: 🟢 ว่าง — งานล่าสุด (ปรับระยะเวลาสร้างบอทให้สมจริงทั้งการ์ด/ฟอร์ม/เอกสาร) เสร็จ+commit — ยังไม่ push/deploy
 
 ---
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- ✅ feat(line-bot)+docs: **ปรับระยะเวลาสร้างบอทให้สมจริงทั้ง 3 ที่** — Lean 1-2 วัน→**1 วัน** · Starter 2-3 วัน (คง) · Business 3-7 วัน→**5 วัน** · White-Label 1-2 สัปดาห์ (คง) · ขายขาด 7-14 วัน→**2-3 สัปดาห์**; เพิ่ม `leadtime` ใน `PACKAGES` ทุกใบ + เรนเดอร์เป็นบรรทัด ⏱️ บนการ์ด Flex (สีตามแพ็กเกจ ใต้ tagline); sync ลงฟอร์ม `bot-configurator.html` (⏱️ เสร็จใน X ต่อท้าย desc ทุกแพ็กเกจ + ขายขาด) และตาราง `bot-order-form-design.md` (เพิ่มคอลัมน์ ระยะเวลาสร้าง); เทสต์ใหม่ `test_package_card_has_realistic_leadtime` + แก้ assert 5 เคส (1 วัน / 5 วัน) → รวม **1013 passed**
 - ✅ feat(line-bot): **ป้าเข็มตอบคำถาม "ใช้เวลาสร้างบอทนานแค่ไหน/กี่วันเสร็จ" ได้แล้ว** — เพิ่ม `BUILD_TIME_KWS` + section ใหม่ใน `BOT_MANUAL_SECTIONS` (ตอบตามแพ็กเกจ: Lean 1-2 วัน · Starter 2-3 วัน · Business 3-7 วัน · White-Label 1-2 สัปดาห์ · ขายขาด 7-14 วัน) + เติม phrases เข้า `BOT_MANUAL_PHRASES` ให้ route ตรง manual (0 ชนชื่อสินค้าใน Supabase); guard test ยืนยัน "ส่งของกี่วัน" ยังตอบเรื่องจัดส่ง (section ก่อนหน้า) ไม่โดน build-time แย่ง; เทสต์ใหม่ 8 ตัว → รวม **1012 passed**
 - ✅ fix(radar): **commit ก่อน post_feed ใน `ingest_facebook_leads` กันโพสต์ซ้ำ/record หาย** — เดิมลำดับ `flush → post_feed → commit` ถ้า post_feed สำเร็จแต่ commit ท้ายสุดพัง/ถูกฆ่า = โพสต์ขึ้น FB แล้ว lead+demand_event ถูก rollback → dedup/cooldown มองไม่เห็น → ยิงซ้ำได้ (ต้นเหตุโพสต์ "ใจเย็นๆ หูฟัง" ซ้ำ 4 ตัวที่ขึ้นทั้งที่ติด cooldown); แก้เป็น commit lead+demand_event('pending') **ก่อน** post_feed แล้ว commit สถานะ posted/failed **หลัง** โพสต์; เพิ่ม cooldown/daily-limit นับสถานะ 'pending' ด้วย (กัน in-flight ซ้ำหมวด/เกินโควต้า); เทสต์ใหม่ 2 ตัว (post crash แล้ว record ยังอยู่ + pending ถูกนับ) → รวม **1004 passed**
 - ✅ fix(facebook): **ตารางโพสต์อัตโนมัติ 4 ชม. เลื่อน/หายเพราะ timer ใน memory** — สาเหตุ: `facebook_auto_post_loop` เดิม `sleep(240 นาที)` รวดเดียว → Render free tier spin-down / deploy ใหม่ = process ถูก kill = sleep ค้างหาย → โพสต์เลื่อนออกทุกครั้ง; แก้เป็น `_auto_post_due()` (นับจาก `created_at` ของโพสต์สำเร็จล่าสุดใน `CampaignLog` — status fbintro/fbbg/fbpost/fbrss/fblocal) + loop ตรวจทุก `FB_AUTO_POST_CHECK_SECONDS=60` วิ → หลัง deploy/รีสตาร์ทถ้าเลย 4 ชม. แล้วจะ catch-up โพสต์ทันที; guard naive/aware tz สำหรับ SQLite/Postgres; เทสต์ใหม่ 3 ตัว (`_auto_post_due` no-posts/recent/old) + mock ใน loop test → รวม **1002 passed**

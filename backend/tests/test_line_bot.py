@@ -260,14 +260,29 @@ SALES_FAQ_CASES = [
     ("รายปีจ่ายเท่าไหร่", "ค่าดูแล"),
     ("ค่าบริการไลน์", "555"),
     ("ไลน์แพ็กเกจ", "555"),
-    ("ใช้เวลานานแค่ไหน", "1-2 วัน"),
+    ("ใช้เวลานานแค่ไหน", "1 วัน"),
     ("กี่วันเสร็จ", "ระยะเวลาทำบอท"),
-    ("ทำบอทกี่วัน", "1-2 วัน"),
-    ("สร้างบอทใช้เวลานานไหม", "1-2 วัน"),
+    ("ทำบอทกี่วัน", "1 วัน"),
+    ("สร้างบอทใช้เวลานานไหม", "1 วัน"),
     ("เสร็จเมื่อไหร่", "ระยะเวลาทำบอท"),
-    ("ส่งมอบบอท", "1-2 วัน"),
-    ("บอทแพ็กเกจ Business ใช้เวลากี่วัน", "3-7 วัน"),
+    ("ส่งมอบบอท", "1 วัน"),
+    ("บอทแพ็กเกจ Business ใช้เวลากี่วัน", "5 วัน"),
 ]
+
+
+def test_package_card_has_realistic_leadtime():
+    # การ์ดแพ็กเกจแต่ละใบมีระยะเวลาสร้างจริง (Lean 1 วัน / Business 5 วัน) ตรงกับ FAQ
+    by_name = {p["name"]: p.get("leadtime", "") for p in lb.PACKAGES}
+    assert "1 วัน" in by_name["🟡 Lean"]
+    assert "2-3 วัน" in by_name["🟢 Starter"]
+    assert "5 วัน" in by_name["🔵 Business"]
+    assert "1-2 สัปดาห์" in by_name["🟣 White-Label"]
+    assert "2-3 สัปดาห์" in by_name["🟠 ขายขาด"]
+    # และแสดงบนการ์ดจริง (มี element ⏱️)
+    d = _flex_dict(lb.package_flex_card())
+    for b in d["contents"]:
+        texts = [c.get("text", "") for c in b["body"]["contents"]]
+        assert any("⏱️ เสร็จภายใน" in t for t in texts), f"การ์ด {b['header']['contents'][0]['text']} ไม่มีระยะเวลา"
 
 
 def test_build_time_does_not_hijack_shipping_question(sim):
