@@ -141,6 +141,80 @@ def test_package_faq_does_not_hijack_product_search(sim):
         assert r["intent"] != "manual", f"คำค้น '{q}' โดนดักเป็นคู่มือผิด"
 
 
+def test_package_faq_shows_all_four_tiers(sim):
+    # เพิ่ม Lean 490/เดือน เป็นขั้นล่างสุด (ขายบอทแบบง่าย ไม่มี AI/DB)
+    r = sim.send("U_cust_1", "ค่าบริการ")
+    assert "Lean 490" in r["preview"], f"แพ็กเกจไม่มี Lean 490: {r['preview'][:160]}"
+    assert "990" in r["preview"]
+    assert "4,990" in r["preview"]
+
+
+# ---------- Lean Stack / Shopee Affiliate / ไฟล์สินค้า / ฟีเจอร์เสริม / ค่าดูแล (ขายบอท) ----------
+SALES_FAQ_CASES = [
+    ("บอทง่าย", "Lean 490"),
+    ("ตอบคีย์เวิร์ด", "Lean 490"),
+    ("ลีนสแต็ค", "Lean 490"),
+    ("googlesheets", "Lean 490"),
+    ("แอปสคริปต์", "Lean 490"),
+    ("แปลงลิงก์", "Shopee Affiliate"),
+    ("ทำลิงก์ค่าคอม", "Shopee Affiliate"),
+    ("แอฟฟิลิเอตคืออะไร", "Shopee Affiliate"),
+    ("ใช้เฉพาะ shopee ไหม", "Shopee Affiliate"),
+    ("ลาซาด้า", "Shopee Affiliate"),
+    ("ไฟล์สินค้า", "ลิงก์ข้อเสนอ"),
+    ("คอลัมน์ csv มีอะไรบ้าง", "ลิงก์ข้อเสนอ"),
+    ("ฟีเจอร์เสริม", "เปลี่ยนแบรนด์"),
+    ("addon มีอะไร", "เปลี่ยนแบรนด์"),
+    ("ค่าดูแล", "ค่าดูแล"),
+    ("รายปีจ่ายเท่าไหร่", "ค่าดูแล"),
+    ("ค่าบริการไลน์", "555"),
+    ("ไลน์แพ็กเกจ", "555"),
+]
+
+
+@pytest.mark.parametrize("text,expect", SALES_FAQ_CASES)
+def test_sales_faq_topics(sim, text, expect):
+    r = sim.send("U_cust_1", text)
+    assert r["intent"] == "manual", f"{text!r} → intent={r['intent']}"
+    assert expect in r["preview"], f"{text!r} ตอบไม่ตรง (หา {expect!r}): {r['preview'][:140]}"
+
+
+def test_keyword_lean_does_not_shadow_ai_key_faq(sim):
+    # "ตอบคีย์เวิร์ด" (Lean) ต้องไม่โดน "คีย์" (คีย์ AI) แย่งไป
+    r = sim.send("U_cust_1", "ตอบคีย์เวิร์ด")
+    assert "Lean" in r["preview"], f"ตอบคีย์เวิร์ดโดน section คีย์ AI: {r['preview'][:120]}"
+    r2 = sim.send("U_cust_1", "คีย์ api")
+    assert "Groq" in r2["preview"] or "คีย์ AI" in r2["preview"], f"คีย์ api ไม่ไป section คีย์ AI: {r2['preview'][:120]}"
+
+
+def test_make_commission_link_not_shadowed_by_commission_faq(sim):
+    # "ทำลิงก์ค่าคอม" (วิธีทำลิงก์) ต้องไม่โดน "ค่าคอม" (ความหมาย) แย่งไป
+    r = sim.send("U_cust_1", "ทำลิงก์ค่าคอม")
+    assert "Shopee Affiliate" in r["preview"], f"ทำลิงก์ค่าคอมโดน section ค่าคอม: {r['preview'][:120]}"
+    r2 = sim.send("U_cust_1", "ค่าคอมคืออะไร")
+    assert "ค่าคอม = เงิน" in r2["preview"], f"ค่าคอมไม่ไป section ค่าคอม: {r2['preview'][:120]}"
+
+
+# ---------- ความน่าเชื่อถือ/กันมิจฉาชีพ (ลูกค้าขี้สงสัย) ----------
+TRUST_PHRASES = ["เชื่อถือได้ไหม", "ไว้ใจได้ไหม", "โกงไหม", "มิจฉาชีพไหม", "หลอกลวงไหม", "เชื่อได้ไหม"]
+
+
+@pytest.mark.parametrize("text", TRUST_PHRASES)
+def test_trust_faq_reassures_not_scam(sim, text):
+    r = sim.send("U_cust_1", text)
+    assert r["intent"] == "manual", f"{text!r} → intent={r['intent']}"
+    assert "ไม่ใช่สแกม" in r["preview"], f"{text!r} ไม่ยืนยันว่าร้านจริง: {r['preview'][:140]}"
+    for bad in HUMAN_ESCALATION_WORDS:
+        assert bad not in r["preview"], f"{text!r} ยังมี '{bad}'"
+
+
+def test_trust_does_not_hijack_pacifier_search(sim):
+    # "หลอก" เดี่ยวชน "จุกหลอก" (จุกนมเด็ก) ในคลังจริง — ต้องใช้ "หลอกลวง" แทน
+    r = sim.send("U_cust_1", "จุกหลอก")
+    assert r["intent"] != "manual", "คำค้น 'จุกหลอก' โดนดักเป็น trust FAQ ผิด"
+
+
+
 # ---------- Bulk: ทุก reply ในคู่มือต้องไม่มีวลี escalation ----------
 # สแกนทุกข้อความที่ bot_manual_reply ส่งได้ (ทุก FAQ + fallback) — ไม่ใช่แค่ 3 FAQ ข้างบน
 MANUAL_REPLY_SOURCES = [
