@@ -454,6 +454,23 @@ def test_follow_event_welcome(sim):
     assert "ยินดีต้อนรับ" in sim.pushes[0]
 
 
+def test_greeting_opens_with_five_steps(sim):
+    # ป้าเข็มต้อง 5 ขั้นตอนเมื่อเจอลูกค้า — "สวัสดี" ต้องเปิดด้วยมาตรฐาน 5 ขั้นตอน
+    r = sim.send("U_cust_1", "สวัสดี")
+    assert r["intent"] == "greeting"
+    assert "5 ขั้นตอน" in r["preview"]
+    assert "ต้อนรับอย่างอบอุ่น" in r["preview"]
+    assert "ติดตามผลและขอบคุณ" in r["preview"]
+
+
+def test_follow_welcome_includes_five_steps(sim):
+    # แอดเพื่อนครั้งแรก (เจอลูกค้า) → welcome ต้องมีมาตรฐาน 5 ขั้นตอนด้วย
+    lb.follow_event(_FollowEv("U_cust_1"))
+    joined = " | ".join(sim.pushes)
+    assert "5 ขั้นตอน" in joined
+    assert "ต้อนรับอย่างอบอุ่น" in joined
+
+
 def test_sticker_reply(sim):
     ev = type("E", (), {"reply_token": "rt_sticker"})()
     lb.sticker_text(ev)
