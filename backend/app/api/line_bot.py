@@ -719,10 +719,9 @@ def package_payment_key(text: str):
 
 
 def package_payment_reply(key: str) -> str:
-    """หน้าชำระเงินของแพ็กเกจที่ลูกค้าแตะเลือก — ยอดจ่าย + วิธีโอน (เลขพร้อมเพย์/บัญชี) จบในแชท"""
+    """ยอดจ่ายของแพ็กเกจที่ลูกค้าแตะเลือก — รายเดือนจ่ายเดือนแรกเต็มก่อนเริ่ม · ขายขาดมัดจำ 50% + ที่เหลือตอนส่งมอบ"""
     for p in PACKAGE_PAYMENTS:
         if p["key"] == key:
-            pay = "\n".join(_payment_method_lines())
             if key == "ขายขาด":
                 return (
                     f"💰 {p['name']} จ่ายแบบนี้จ๊ะ:\n"
@@ -730,39 +729,23 @@ def package_payment_reply(key: str) -> str:
                     f"• จ่ายตอนส่งมอบ: {p['delivery']}\n"
                     f"• รวมจ่ายครั้งเดียว: {p['total']}\n\n"
                     "จ่ายครั้งเดียวจบ ไม่มีรายเดือน\n\n"
-                    "💳 ชำระเงินได้เลย:\n" + pay +
-                    "\n\nโอนแล้วส่งสลิปในแชทได้เลยจ๊ะ 💕"
+                    '💳 แตะปุ่ม "ชำระเงิน" ด้านล่างดูเลขบัญชี/วิธีโอนได้เลยจ๊ะ'
                 )
             return (
                 f"💰 {p['name']} จ่ายแบบนี้จ๊ะ:\n"
                 f"• จ่ายเดือนแรกก่อนเริ่มทำ: {p['first']}\n"
                 f"• หลังรับบอท จ่ายรายเดือน: {p['monthly']}\n\n"
                 "ไม่มีมัดจำ ไม่มีค่าติดตั้งแยก\n\n"
-                "💳 ชำระเงินได้เลย:\n" + pay +
-                "\n\nโอนแล้วส่งสลิปในแชทได้เลยจ๊ะ 💕"
+                '💳 แตะปุ่ม "ชำระเงิน" ด้านล่างดูเลขบัญชี/วิธีโอนได้เลยจ๊ะ'
             )
     return payment_reply_text()
 
 
-def _package_buttons() -> list:
-    """ปุ่ม Quick Reply 5 แพ็กเกจ (ยอด <แพ็กเกจ>)"""
-    return [
-        QuickReplyButton(action=MessageAction(label=p["label"], text=f"ยอด {p['key']}"))
-        for p in PACKAGE_PAYMENTS
-    ]
-
-
-def package_quick_reply() -> QuickReply:
-    """ปุ่ม Quick Reply 5 แพ็กเกจ — ลูกค้าแตะแล้วเห็นยอดจ่ายของแพ็กเกจนั้น"""
-    return QuickReply(items=_package_buttons())
-
-
 def package_payment_quick_reply() -> QuickReply:
-    """ปุ่มท้ายหน้าชำระรายแพ็กเกจ — 5 แพ็กเกจ + ปุ่ม 'ชำระเงิน' ดูเลขบัญชี/วิธีโอนซ้ำ"""
-    items = _package_buttons() + [
+    """ปุ่มท้ายหน้าชำระรายแพ็กเกจ — 'ชำระเงิน' ดูเลขบัญชี/วิธีโอน (ไม่วนไปวนมา)"""
+    return QuickReply(items=[
         QuickReplyButton(action=MessageAction(label="💳 ชำระเงิน", text="ชำระเงิน"))
-    ]
-    return QuickReply(items=items)
+    ])
 
 
 # ทำไม 490/รายเดือน (แม่ค้าถามความคุ้ม/เหตุผลราคา) — คำเฉพาะมีคำถามนำหน้า 0 ชนชื่อสินค้า
@@ -1181,10 +1164,10 @@ def is_bot_payment_request(text: str) -> bool:
 
 
 def _manual_reply_messages(text: str, is_owner: bool = False):
-    """ตอบคู่มือ — ถามวิธีจ่าย → ปุ่ม 5 แพ็กเกจ; แตะยอดแพ็กเกจ → ปุ่ม 5 แพ็กเกจ + 'ชำระเงิน'"""
+    """ตอบคู่มือ — วิธีจ่ายตอบหน้าเลขบัญชีล้วน; แตะยอดแพ็กเกจ → แนบปุ่ม 'ชำระเงิน' ดูเลขบัญชี (เส้นเดียว ไม่วน)"""
     reply_text = bot_manual_reply(text, is_owner)
     if is_bot_payment_request(text):
-        return TextSendMessage(text=reply_text, quick_reply=package_quick_reply())
+        return TextSendMessage(text=reply_text)
     if package_payment_key(text):
         return TextSendMessage(text=reply_text, quick_reply=package_payment_quick_reply())
     return TextSendMessage(text=reply_text)

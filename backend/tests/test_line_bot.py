@@ -311,20 +311,12 @@ def test_payment_reply_is_text_only_no_qr(sim):
     assert msgs.text == lb.payment_reply_text()
 
 
-def test_package_quick_reply_has_five_package_buttons():
-    qr = lb.package_quick_reply()
-    labels = [item.action.label for item in qr.items]
-    texts = [item.action.text for item in qr.items]
-    assert labels == ["🟡 Lean", "🟢 Starter", "🔵 Business", "🟣 White-Label", "🟠 ขายขาด"], labels
-    assert texts == ["ยอด lean", "ยอด starter", "ยอด business", "ยอด whitelabel", "ยอด ขายขาด"], texts
-
-
-def test_payment_reply_attaches_package_quick_reply():
-    # ถามวิธีจ่าย → ตอบข้อความ + แนบปุ่ม 5 แพ็กเกจให้แตะดูยอดเฉพาะตัว
+def test_payment_reply_has_no_quick_reply_no_loop(sim):
+    # หน้าเลขบัญชีตอบล้วน ไม่แนบปุ่มแพ็กเกจวนไปวนมา — เส้นทางเดียว: ดูเลขบัญชี → โอน
     msgs = lb._manual_reply_messages("วิธีจ่ายค่าบอท")
-    assert msgs.quick_reply is not None
-    labels = [i.action.label for i in msgs.quick_reply.items]
-    assert "🟢 Starter" in labels and "🟠 ขายขาด" in labels
+    assert not isinstance(msgs, list)
+    assert msgs.quick_reply is None
+    assert msgs.text == lb.payment_reply_text()
 
 
 def test_tap_package_quick_reply_shows_that_package_amount(sim):
@@ -333,7 +325,7 @@ def test_tap_package_quick_reply_shows_that_package_amount(sim):
     assert "🟢 Starter 990" in r["preview"]
     assert "จ่ายเดือนแรกก่อนเริ่มทำ: 990 บาท" in r["preview"]
     assert "หลังรับบอท จ่ายรายเดือน: 990 บาท/เดือน" in r["preview"]
-    assert "ชำระเงินได้เลย" in r["preview"]  # หน้าชำระรายแพ็กเกจต้องแนบวิธีโอนด้วย
+    assert "ชำระเงิน" in r["preview"]  # ชี้ไปปุ่มชำระเงินดูเลขบัญชี
     # แตะปุ่มขายขาด → มัดจำ 50% + ที่เหลือตอนส่งมอบ + รวมครั้งเดียว
     r2 = sim.send("U_cust_1", "ยอด ขายขาด")
     assert "มัดจำก่อนเริ่ม: 7,500–12,500 บาท" in r2["preview"]
@@ -346,19 +338,18 @@ def test_package_card_interest_button_goes_to_payment(sim):
     r = sim.send("U_cust_1", "ยอด business")
     assert r["intent"] == "manual"
     assert "🔵 Business 1,990" in r["preview"]
-    assert "ชำระเงินได้เลย" in r["preview"]
+    assert "ชำระเงิน" in r["preview"]  # ชี้ไปปุ่มชำระเงินดูเลขบัญชี
     assert "ติดต่อเจ้าของร้าน" not in r["preview"]
 
 
 def test_package_payment_reply_attaches_pay_button():
-    # หน้าชำระรายแพ็กเกจต้องมีปุ่ม "ชำระเงิน" ให้แตะดูเลขบัญชี/วิธีโอนซ้ำ
+    # หน้าชำระรายแพ็กเกจแนบปุ่ม "ชำระเงิน" ปุ่มเดียว (เส้นเดียว ดูเลขบัญชี ไม่วนแพ็กเกจ)
     msgs = lb._manual_reply_messages("ยอด lean")
     assert msgs.quick_reply is not None
     labels = [i.action.label for i in msgs.quick_reply.items]
     texts = [i.action.text for i in msgs.quick_reply.items]
-    assert len(labels) == 6  # 5 แพ็กเกจ + ชำระเงิน
-    assert labels[-1] == "💳 ชำระเงิน"
-    assert texts[-1] == "ชำระเงิน"
+    assert labels == ["💳 ชำระเงิน"]
+    assert texts == ["ชำระเงิน"]
 
 
 def test_tap_pay_button_reopens_payment_page(sim):
