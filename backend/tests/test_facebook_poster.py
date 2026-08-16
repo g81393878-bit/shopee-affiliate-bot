@@ -3,6 +3,8 @@
 
 ไม่แตะ Groq/Facebook จริง: mock generate_script_for_product + post_feed / httpx.post
 """
+import os
+
 import app.api.cron as cron  # noqa: E402
 import app.services.facebook_poster as fp  # noqa: E402
 
@@ -520,3 +522,122 @@ def test_short_bg_posts_short_text_and_rotating_presets(monkeypatch):
         preset_ids.append(p["preset_id"])
     # 8 สีต่างกันหมด (หมุนเวียนไม่ซ้ำ) — ไม่งั้นจะโพสต์พื้นสีเดิมซ้ำกัน
     assert len(set(preset_ids)) == 8
+
+
+def test_post_video_file_url(monkeypatch):
+    """file_url → POST /{page_id}/videos ให้ Facebook ดาวน์โหลดเอง (ใช้ได้จาก Render)"""
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    captured = {}
+
+    class Resp:
+        status_code = 200
+        def json(self):
+            return {"id": "video_123"}
+
+    def fake_post(url, params=None, data=None, files=None, timeout=None):
+        captured["url"] = url
+        captured["data"] = data
+        captured["files"] = files
+        return Resp()
+
+    monkeypatch.setattr(fp.httpx, "post", fake_post)
+    res = fp.post_video(description="แนะนำบอทป้าเข็ม", file_url="https://cdn.example.com/clip.mp4")
+    assert res["ok"] is True and res["video_id"] == "video_123"
+    assert captured["url"].endswith("/videos")
+    assert captured["data"]["file_url"] == "https://cdn.example.com/clip.mp4"
+    assert captured["data"]["description"] == "แนะนำบอทป้าเข็ม"
+    assert captured["data"]["published"] == "true"  # string ตัวเล็ก — Graph API ต้องการ true/false
+    assert captured["files"] is None
+
+
+def test_post_video_file_path_uploads_source(monkeypatch):
+    """file_path → multipart upload source (ไฟล์ในเครื่อง)"""
+    import tempfile
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    fd, path = tempfile.mkstemp(suffix=".mp4")
+    os.close(fd)
+    try:
+        with open(path, "wb") as fh:
+            fh.write(b"\x00\x00\x00\x18ftypmp42" * 100)
+        captured = {}
+
+        class Resp:
+            status_code = 200
+            def json(self):
+                return {"id": "video_456"}
+
+        def fake_post(url, params=None, data=None, files=None, timeout=None):
+            captured["url"] = url
+            captured["data"] = data
+            captured["files"] = files
+            return Resp()
+
+        monkeypatch.setattr(fp.httpx, "post", fake_post)
+        res = fp.post_video(description="คลิป", file_path=path)
+        assert res["ok"] is True and res["video_id"] == "video_456"
+        assert captured["url"].endswith("/videos")
+        assert "file_url" not in captured["data"]  # ใช้ source ไม่ใช่ file_url
+        name, fobj, ctype = captured["files"]["source"]
+        assert name == os.path.basename(path) and ctype == "video/mp4"
+        assert fobj.startswith(b"\x00\x00\x00\x18ftypmp42")  # ไบต์ไฟล์ถูกส่งจริง
+    finally:
+        os.remove(path)
+
+
+def test_post_video_requires_source(monkeypatch):
+    """ไม่ระบุทั้ง file_url และ file_path → ปฏิเสธ"""
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    res = fp.post_video()
+    assert res["ok"] is False
+    assert "file_url" in res["error"] or "file_path" in res["error"]
+
+
+def test_post_video_missing_file(monkeypatch):
+    """ไฟล์ในเครื่องไม่มี → ปฏิเสธก่อนเรียก API"""
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    res = fp.post_video(file_path="C:/nonexistent/clip.mp4")
+    assert res["ok"] is False
+    assert "ไม่พบ" in res["error"]
+
+
+def test_post_video_error_surfaces(monkeypatch):
+    """Graph API ตอบ error (เช่น Permissions error) → ส่งต่อข้อความให้เห็น"""
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+
+    class Resp:
+        status_code = 400
+        def json(self):
+            return {"error": {"message": "Permissions error"}}
+
+    monkeypatch.setattr(fp.httpx, "post", lambda *a, **k: Resp())
+    res = fp.post_video(file_url="https://cdn.example.com/c.mp4")
+    assert res["ok"] is False
+    assert "Permissions error" in res["error"]
+
+
+def test_post_video_sanitizes_description(monkeypatch):
+    """แคปชันที่มีอักษรต่างภาษา (LLM หลุด) ต้องถูกกรองก่อนส่ง"""
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    captured = {}
+
+    class Resp:
+        status_code = 200
+        def json(self):
+            return {"id": "video_san"}
+
+    def fake_post(url, params=None, data=None, files=None, timeout=None):
+        captured["data"] = data
+        return Resp()
+
+    monkeypatch.setattr(fp.httpx, "post", fake_post)
+    res = fp.post_video(description="แนะนำบอท دیزاین 😊", file_url="https://cdn.example.com/c.mp4")
+    assert res["ok"] is True
+    assert "دیزاین" not in captured["data"]["description"]
+    assert "แนะนำบอท" in captured["data"]["description"]
+
+
+def test_post_video_no_token(monkeypatch):
+    monkeypatch.delenv("FACEBOOK_PAGE_ACCESS_TOKEN", raising=False)
+    res = fp.post_video(file_url="https://cdn.example.com/c.mp4")
+    assert res["ok"] is False
+    assert "FACEBOOK_PAGE_ACCESS_TOKEN" in res["error"]

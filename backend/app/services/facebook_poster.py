@@ -2,10 +2,15 @@
 """Facebook Page poster — โพสต์คอนเทนต์ลง feed เพจผ่าน Graph API (ไอเดีย B).
 
 ต้องตั้ง env:
-  - FACEBOOK_PAGE_ACCESS_TOKEN (page token — ต้องมี scope pages_manage_posts)
+  - FACEBOOK_PAGE_ACCESS_TOKEN (page token)
+    · โพสต์ข้อความ/รูป/ลิงก์: scope pages_manage_posts
+    · โพสต์วิดีโอ: scope pages_manage_posts + pages_read_engagement + pages_show_list
   - FACEBOOK_PAGE_ID (default = เพจ "ป้าเข็ม ขายของ")
 
-Graph API: POST /{page-id}/feed — โพสต์ข้อความ (message) ลงหน้าเพจ
+Graph API:
+  - POST /{page-id}/feed — โพสต์ข้อความ (message) ลงหน้าเพจ
+  - POST /{page-id}/photos — โพสต์รูป (image_url + caption)
+  - POST /{page-id}/videos — โพสต์วิดีโอ MP4 (file_url หรือ multipart source)
 """
 import logging
 import os
@@ -108,3 +113,66 @@ def post_feed(message: str, link: str = "", image_url: str = "",
         return {"ok": True, "post_id": pid, "error": None}
     err = (body.get("error") or {}).get("message") or f"HTTP {r.status_code}"
     return {"ok": False, "post_id": None, "error": str(err)[:200]}
+
+
+def post_video(description: str = "", file_url: str = "", file_path: str = "",
+               title: str = "") -> dict:
+    """โพสต์วิดีโอ (MP4) ลงเพจ Facebook — POST /{page-id}/videos
+
+    ต้องเลือก source อย่างใดอย่างหนึ่ง:
+      file_url: URL สาธารณะที่ Facebook ดาวน์โหลดได้เอง (ใช้ได้ทุกที่ incl. Render)
+      file_path: ไฟล์ .mp4 บนเครื่อง (multipart upload source) — ใช้ได้เฉพาะเครื่องที่มีไฟล์
+
+    description: แคปชันใต้คลิป (รองรับ emoji) — กรองอักษรต่างภาษาก่อนส่ง
+    title: ชื่อวิดีโอ (ไม่บังคับ)
+
+    Permission ที่ page token ต้องมี: pages_manage_posts + pages_read_engagement
+    + pages_show_list (ถ้ามีแค่ pages_manage_posts จะได้ error 200 "Permissions error")
+
+    คืน {ok, video_id, error}
+    """
+    token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or ""
+    if not token:
+        return {"ok": False, "video_id": None, "error": "FACEBOOK_PAGE_ACCESS_TOKEN ไม่ได้ตั้ง"}
+    description = sanitize_post_text(description or "")
+    file_url = (file_url or "").strip()
+    file_path = (file_path or "").strip()
+    if not file_url and not file_path:
+        return {"ok": False, "video_id": None,
+                "error": "ต้องมี file_url หรือ file_path อย่างใดอย่างหนึ่ง"}
+
+    endpoint = f"{GRAPH_URL}/{PAGE_ID}/videos"
+    data = {"published": "true"}  # string ตัวเล็ก — Graph API ต้องการ true/false
+    if description:
+        data["description"] = description
+    if (title or "").strip():
+        data["title"] = (title or "").strip()
+
+    files = None
+    if file_path:
+        if not os.path.exists(file_path):
+            return {"ok": False, "video_id": None, "error": f"ไฟล์ไม่พบ: {file_path}"}
+        with open(file_path, "rb") as fh:
+            video_bytes = fh.read()
+        files = {"source": (os.path.basename(file_path), video_bytes, "video/mp4")}
+    else:
+        # Facebook ดาวน์โหลดเองจาก URL สาธารณะ — ใช้ได้จาก Render/local (ไฟล์ไม่ต้องอยู่เครื่องนี้)
+        data["file_url"] = file_url
+
+    try:
+        kwargs = {"params": {"access_token": token}, "data": data, "timeout": 120}
+        if files:
+            kwargs["files"] = files
+        r = httpx.post(endpoint, **kwargs)
+    except Exception as e:
+        logger.warning(f"[facebook_poster] video post failed: {e}")
+        return {"ok": False, "video_id": None, "error": str(e)[:200]}
+    try:
+        body = r.json()
+    except Exception:
+        body = {}
+    vid = body.get("id") or body.get("video_id")
+    if r.status_code == 200 and vid:
+        return {"ok": True, "video_id": str(vid), "error": None}
+    err = (body.get("error") or {}).get("message") or f"HTTP {r.status_code}"
+    return {"ok": False, "video_id": None, "error": str(err)[:200]}
