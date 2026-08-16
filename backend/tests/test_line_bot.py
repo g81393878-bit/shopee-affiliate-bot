@@ -350,6 +350,26 @@ def test_package_card_interest_button_goes_to_payment(sim):
     assert "ติดต่อเจ้าของร้าน" not in r["preview"]
 
 
+def test_package_payment_reply_attaches_pay_button():
+    # หน้าชำระรายแพ็กเกจต้องมีปุ่ม "ชำระเงิน" ให้แตะดูเลขบัญชี/วิธีโอนซ้ำ
+    msgs = lb._manual_reply_messages("ยอด lean")
+    assert msgs.quick_reply is not None
+    labels = [i.action.label for i in msgs.quick_reply.items]
+    texts = [i.action.text for i in msgs.quick_reply.items]
+    assert len(labels) == 6  # 5 แพ็กเกจ + ชำระเงิน
+    assert labels[-1] == "💳 ชำระเงิน"
+    assert texts[-1] == "ชำระเงิน"
+
+
+def test_tap_pay_button_reopens_payment_page(sim):
+    # แตะ "ชำระเงิน" → กลับมาเห็นวิธีจ่าย + เลขบัญชีอีกครั้ง (payment_reply_text)
+    sim.send("U_cust_1", "ยอด lean")
+    r = sim.send("U_cust_1", "ชำระเงิน")
+    assert r["intent"] == "manual"
+    assert "วิธีจ่ายเงินค่าบอท" in r["preview"]
+    assert "โอน" in r["preview"]
+
+
 def test_payment_reply_shows_account_numbers_as_text(sim, monkeypatch):
     # ตั้งเลขพร้อมเพย์ + บัญชีธนาคาร → ข้อความโชว์เลขให้ลูกค้าจดได้ (นอกเหนือจาก QR)
     monkeypatch.setattr(lb, "OWNER_PROMPTPAY", "089-999-8888")

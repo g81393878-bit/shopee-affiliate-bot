@@ -744,12 +744,25 @@ def package_payment_reply(key: str) -> str:
     return payment_reply_text()
 
 
-def package_quick_reply() -> QuickReply:
-    """ปุ่ม Quick Reply 5 แพ็กเกจ — ลูกค้าแตะแล้วเห็นยอดจ่ายของแพ็กเกจนั้น"""
-    return QuickReply(items=[
+def _package_buttons() -> list:
+    """ปุ่ม Quick Reply 5 แพ็กเกจ (ยอด <แพ็กเกจ>)"""
+    return [
         QuickReplyButton(action=MessageAction(label=p["label"], text=f"ยอด {p['key']}"))
         for p in PACKAGE_PAYMENTS
-    ])
+    ]
+
+
+def package_quick_reply() -> QuickReply:
+    """ปุ่ม Quick Reply 5 แพ็กเกจ — ลูกค้าแตะแล้วเห็นยอดจ่ายของแพ็กเกจนั้น"""
+    return QuickReply(items=_package_buttons())
+
+
+def package_payment_quick_reply() -> QuickReply:
+    """ปุ่มท้ายหน้าชำระรายแพ็กเกจ — 5 แพ็กเกจ + ปุ่ม 'ชำระเงิน' ดูเลขบัญชี/วิธีโอนซ้ำ"""
+    items = _package_buttons() + [
+        QuickReplyButton(action=MessageAction(label="💳 ชำระเงิน", text="ชำระเงิน"))
+    ]
+    return QuickReply(items=items)
 
 
 # ทำไม 490/รายเดือน (แม่ค้าถามความคุ้ม/เหตุผลราคา) — คำเฉพาะมีคำถามนำหน้า 0 ชนชื่อสินค้า
@@ -1168,10 +1181,12 @@ def is_bot_payment_request(text: str) -> bool:
 
 
 def _manual_reply_messages(text: str, is_owner: bool = False):
-    """ตอบคู่มือ — ถ้าถามวิธีจ่าย/ยอดแพ็กเกจ → แนบปุ่ม 5 แพ็กเกจให้แตะดูยอดเฉพาะตัว"""
+    """ตอบคู่มือ — ถามวิธีจ่าย → ปุ่ม 5 แพ็กเกจ; แตะยอดแพ็กเกจ → ปุ่ม 5 แพ็กเกจ + 'ชำระเงิน'"""
     reply_text = bot_manual_reply(text, is_owner)
-    if is_bot_payment_request(text) or package_payment_key(text):
+    if is_bot_payment_request(text):
         return TextSendMessage(text=reply_text, quick_reply=package_quick_reply())
+    if package_payment_key(text):
+        return TextSendMessage(text=reply_text, quick_reply=package_payment_quick_reply())
     return TextSendMessage(text=reply_text)
 
 
