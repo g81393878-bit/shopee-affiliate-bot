@@ -280,6 +280,29 @@ SALES_FAQ_CASES = [
 ]
 
 
+def test_payment_reply_attaches_promptpay_qr_image(sim, monkeypatch):
+    # ตั้ง OWNER_PROMPTPAY_QR_URL → ถามวิธีจ่าย → ตอบข้อความ + แนบรูป QR (ImageSendMessage)
+    monkeypatch.setattr(lb, "BOT_PAYMENT_QR_URL", "https://example.com/qr-promptpay.png")
+    r = sim.send("U_cust_1", "วิธีจ่ายค่าบอท")
+    assert r["intent"] == "manual"
+    assert "PromptPay" in r["preview"]
+    assert "<ImageSendMessage>" in r["preview"], f"ไม่แนบ QR รูป: {r['preview'][:160]}"
+    # _manual_reply_messages คืน [ข้อความ, รูป] พร้อม URL ถูกต้อง
+    msgs = lb._manual_reply_messages("วิธีจ่ายค่าบอท")
+    assert len(msgs) == 2
+    assert msgs[0].text == lb.BOT_PAYMENT_REPLY
+    assert msgs[1].original_content_url == "https://example.com/qr-promptpay.png"
+    assert msgs[1].preview_image_url == "https://example.com/qr-promptpay.png"
+
+
+def test_payment_reply_no_qr_url_returns_text_only(sim):
+    # ไม่ตั้ง OWNER_PROMPTPAY_QR_URL → ตอบข้อความอย่างเดียว ไม่มีรูป
+    assert not lb.BOT_PAYMENT_QR_URL
+    msgs = lb._manual_reply_messages("วิธีจ่ายค่าบอท")
+    assert not isinstance(msgs, list)
+    assert msgs.text == lb.BOT_PAYMENT_REPLY
+
+
 def test_bot_payment_does_not_hijack_product_payment(sim):
     # "จ่ายเงินยังไง"/"โอนเงิน"/"ชำระเงิน" (ทั่วไป) = จ่ายค่าสินค้า → ตอบ "จ่ายที่ Shopee" ไม่ใช่ค่าบอท
     for q in ("จ่ายเงินยังไง", "โอนเงิน", "ชำระเงิน"):

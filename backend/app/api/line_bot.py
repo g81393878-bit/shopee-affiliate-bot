@@ -657,6 +657,9 @@ BOT_PAYMENT_REPLY = (
     "ถาม \"แพ็กเกจ\" ดูราคา/ระยะเวลาได้เลยจ๊ะ 💕"
 )
 
+# QR PromptPay ของเจ้าของร้าน (URL รูปภาพ) — ถ้าตั้ง OWNER_PROMPTPAY_QR_URL → บอทแนบรูปให้ลูกค้าแสกนโอนได้เลย
+BOT_PAYMENT_QR_URL = os.getenv("OWNER_PROMPTPAY_QR_URL", "").strip()
+
 # ทำไม 490/รายเดือน (แม่ค้าถามความคุ้ม/เหตุผลราคา) — คำเฉพาะมีคำถามนำหน้า 0 ชนชื่อสินค้า
 # (ห้ามใช้ "490" เดี่ยว/"490บาท" — ชนคำค้นสินค้างบ 490 เช่น "หูฟัง490")
 WHY_490_KWS = (
@@ -1061,6 +1064,21 @@ def bot_manual_reply(text: str, is_owner: bool = False) -> str:
                 return OWNER_ONLY_CUSTOMER_REPLY
             return section
     return BOT_MANUAL
+
+
+def is_bot_payment_request(text: str) -> bool:
+    """ลูกค้าถามวิธีจ่ายเงินค่าบอท/มัดจำ? (ปุ่มลัด '💰 วิธีจ่ายเงิน' ส่ง 'วิธีจ่ายค่าบอท')"""
+    t = _mask_keyboard((text or "").strip().lower().replace(" ", ""))
+    return any(k in t for k in BOT_PAYMENT_KWS)
+
+
+def _manual_reply_messages(text: str, is_owner: bool = False):
+    """ตอบคู่มือ — ปกติข้อความเดียว; ถ้าถามวิธีจ่าย + ตั้ง OWNER_PROMPTPAY_QR_URL → แนบ QR PromptPay รูปภาพ"""
+    if is_bot_payment_request(text) and BOT_PAYMENT_QR_URL:
+        return [TextSendMessage(text=BOT_PAYMENT_REPLY),
+                ImageSendMessage(original_content_url=BOT_PAYMENT_QR_URL,
+                                 preview_image_url=BOT_PAYMENT_QR_URL)]
+    return TextSendMessage(text=bot_manual_reply(text, is_owner))
 
 
 # --- เทียบสินค้า A กับ B (แบบ Amazon "Compare with": ข้อมูลจริงในคลัง ไม่ AI เดา) ---
@@ -2567,10 +2585,10 @@ def message_text(event):
             elif is_bot_manual_request(normalized_text):
                 # คำถามคู่มือ (ติดตั้ง/คืนเงิน/ค่าคอม/โค้ด...) → ตอบจากคู่มือเฉพาะส่วน
                 # ไม่ปล่อยไป web search (เคยตอบขยะยาวนอกเรื่องตอนถามผ่านเมนูฝากคำถาม)
-                reply = TextSendMessage(text=bot_manual_reply(normalized_text, is_owner))
+                reply = _manual_reply_messages(normalized_text, is_owner)
                 intent = 'manual'
                 if _wants_code_buttons(normalized_text):
-                    reply = [reply, _github_button_card()]
+                    reply = reply + [_github_button_card()] if isinstance(reply, list) else [reply, _github_button_card()]
             elif any(m in normalized_text for m in STORE_QUESTION_MARKERS):
                 # เรื่องร้าน/สั่งซื้อ/ราคา/ชำระเงิน (ที่ไม่ใช่คำถามคู่มือตรงๆ) → ตอบวิธีจัดการเอง
                 reply = TextSendMessage(text=STORE_QUESTION_SELF_SERVICE)
@@ -2683,11 +2701,11 @@ def message_text(event):
             intent = 'manual'
         elif is_bot_manual_request(normalized_text):
             # คำถามคู่มือ (ค้น/เทียบ/จำ/พัสดุ/ติดตั้ง...) = ตอบจากคู่มือเท่านั้น ไม่ AI เดา
-            reply = TextSendMessage(text=bot_manual_reply(normalized_text, is_owner))
+            reply = _manual_reply_messages(normalized_text, is_owner)
             intent = 'manual'
             # ถามติดตั้ง/โค้ด → แนบปุ่มเปิด GitHub + คู่มือ (แตะได้ ไม่ต้องก๊อปลิงก์)
             if _wants_code_buttons(normalized_text):
-                reply = [reply, _github_button_card()]
+                reply = reply + [_github_button_card()] if isinstance(reply, list) else [reply, _github_button_card()]
         elif is_owner and normalized_text in ADMIN_STATS_CMDS:
             reply = TextSendMessage(text=admin_customer_stats(db))
             intent = 'admin'
