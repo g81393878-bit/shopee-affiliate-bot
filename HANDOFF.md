@@ -8,11 +8,13 @@
 > - **เมื่องานเสร็จและ commit ครบ:** ให้ล้างเนื้อหาในส่วน 1–5 กลับเป็นสถานะว่าง แล้ว commit
 >   ไฟล์นี้ — เพื่อไม่ให้ AI ตัวถัดไปเข้าใจผิดว่างานยังค้าง
 
-## สถานะ: 🟢 ว่าง — งานล่าสุด (แก้ 3 ชั้นกันลิงก์ปลอม/mock หลุดขึ้นโพสต์ FB) เสร็จ+commit — ยังไม่ push/deploy
+## สถานะ: 🟢 ว่าง — งานล่าสุด (ตั้งกฎ DB กันลิงก์ปลอมเข้าระบบ: affiliate_url ต้องเป็น s.shopee.co.th) เสร็จ+commit — ยังไม่ push/deploy
 
 ---
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
+
+- ✅ feat(products): **ตั้งกฎ DB กันลิงก์ปลอมเข้าระบบ (ลิงก์ปลอมเข้าไม่ได้แม้ insert ตรง DB)** — `Product.affiliate_url` ต้องเป็น `s.shopee.co.th` เท่านั้น: SQLAlchemy event `before_insert`/`before_update` ใน `models.py` raise `ValueError` กัน `https://shope.ee/...` (before_update ตรวจเฉพาะเมื่อ URL ถูกแก้จริง — update ราคา/รูป/status ของแถว legacy ยังผ่านได้); ย้าย helper `is_valid_shopee_affiliate_url()` ไป `link_checker.py` (แหล่งความจริงเดียว ใช้ทั้ง DB rule + matcher + guard post_feed); เขียนกฎลง AGENTS.md หัวข้อ Product link policy; เปลี่ยน fixtures ~8 ไฟล์เป็น URL รูปแบบ `s.shopee.co.th` + refactor เทสต์ matcher เป็น 3 เทสต์กฎ DB (insert ปลอม raise / update ปลอม raise / legacy update ฟิลด์อื่นผ่าน) → รวม **1031 passed**
 
 - ✅ fix(radar): **กันลิงก์ปลอม/สินค้า mock หลุดขึ้นโพสต์ FB (3 ชั้น)** — เจอโพสต์จริงบนเพจใช้ลิงก์ `https://shope.ee/earbuds_ok` (ปลอม → 404) ตรงเป๊ะกับ fixture เทสต์ `seed_e2e_products` (สินค้า mock หลุดเข้า prod จากการรันเทสต์ด้วย DATABASE_URL=postgres); แก้: (1) `product_matcher.py` เพิ่ม `is_valid_shopee_affiliate_url()` + `match_best_product_for_demand` กรอง affiliate_url ที่ไม่ใช่ `s.shopee.co.th` ทิ้ง; (2) `facebook_radar.py` guard หน้า `post_feed` (ลิงก์ไม่ valid → no-match ไม่โพสต์, defense-in-depth); (3) fixture `seed_e2e_products` ข้ามเมื่อ DB เป็น postgres + เปลี่ยน URL mock เป็น `s.shopee.co.th/...`; เทสต์ใหม่ 3 ตัว (helper / matcher กันลิงก์ปลอม / guard หน้าโพสต์) + แก้ assert 3 ที่ → รวม **1029 passed**
 

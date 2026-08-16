@@ -89,7 +89,7 @@ def test_facebook_demand_event_and_product_matching(db):
             rating=4.8,
             sales_count=1500,
             commission=Decimal("35.00"),
-            affiliate_url="https://shope.ee/test-cat-food",
+            affiliate_url="https://s.shopee.co.th/test-cat-food",
             link_status="ok",
             ai_score=88,
         )

@@ -857,7 +857,7 @@ def test_keyboard_query_routes_to_search(sim, db):
     """หาคีย์บอร์ดต้องได้สินค้า ไม่ใช่คำตอบเรื่องคีย์ AI (คำ 'คีย์' ชน 'คีย์บอร์ด')"""
     db.add(models.Product(
         name="คีย์บอร์ดไร้สาย Bluetooth", category="อุปกรณ์เสริม", price=500,
-        sales_count=5000, affiliate_url="https://shope.ee/test",
+        sales_count=5000, affiliate_url="https://s.shopee.co.th/test",
         link_status="ok", ai_score=70))
     db.commit()
     try:
@@ -920,11 +920,11 @@ def test_search_thai_word_price_filters_budget(sim, db):
     """ค้น "ถุงเท้าไม่เกินร้อย" → ได้เฉพาะถุงเท้าราคา ≤100 (ไม่ใช่ของหมวดมั่วมาแทน)"""
     db.add(models.Product(
         name="ถุงเท้ากีฬาระบายอากาศ 3 คู่", category="แฟชั่น", price=89,
-        sales_count=5000, affiliate_url="https://shope.ee/test",
+        sales_count=5000, affiliate_url="https://s.shopee.co.th/test",
         link_status="ok", ai_score=50))
     db.add(models.Product(
         name="ถุงเท้าแฟชั่นลายการ์ตูน 2 คู่", category="แฟชั่น", price=450,
-        sales_count=5000, affiliate_url="https://shope.ee/test",
+        sales_count=5000, affiliate_url="https://s.shopee.co.th/test",
         link_status="ok", ai_score=50))
     db.commit()
     try:
@@ -943,11 +943,11 @@ def test_nosearch_fallback_prefers_name_similar(sim, db):
     — เดิม sort ด้วย ai_score ทำลูกค้าถามถุงเท้าได้นาฬิกา/รองเท้า"""
     db.add(models.Product(
         name="ถุงเท้ากีฬา 3 คู่", category="แฟชั่น", price=89,
-        sales_count=5000, affiliate_url="https://shope.ee/test",
+        sales_count=5000, affiliate_url="https://s.shopee.co.th/test",
         link_status="ok", ai_score=50))
     db.add(models.Product(
         name="นาฬิกาอัจฉริยะ KENTO", category="แฟชั่น", price=900,
-        sales_count=5000, affiliate_url="https://shope.ee/test",
+        sales_count=5000, affiliate_url="https://s.shopee.co.th/test",
         link_status="ok", ai_score=99))
     db.commit()
     try:

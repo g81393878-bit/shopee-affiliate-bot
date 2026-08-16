@@ -24,6 +24,15 @@ BLOCK_MARKERS = ("เข้าสู่หน้าที่ต้องกา�
                  "แคปต์ชา", "page unavailable", "verify you are human")
 ITEM_URL_RE = re.compile(r"/product/|/opaanlp/|-[a-z0-9-]+-i\.\d+\.\d+", re.IGNORECASE)
 
+# ลิงก์ affiliate Shopee จริงต้องเป็นลิงก์สั้น s.shopee.co.th เท่านั้น
+# (https://shope.ee/... = ลิงก์ปลอม/ของ mock — กดแล้ว 404 ห้ามเข้าระบบ/โพสต์)
+SHOPEE_SHORT_PREFIXES = ("https://s.shopee.co.th/", "http://s.shopee.co.th/")
+
+
+def is_valid_shopee_affiliate_url(url) -> bool:
+    """True เมื่อ url เป็นลิงก์สั้น Shopee จริง (s.shopee.co.th) — นโยบายเด็ดขาด ใช้ทั้ง DB rule, matcher และหน้าโพสต์."""
+    return bool(url) and str(url).strip().lower().startswith(SHOPEE_SHORT_PREFIXES)
+
 
 def check_affiliate_link(url: str) -> Tuple[str, str]:
     """ตรวจลิงก์สั้น s.shopee.co.th → (status, detail)

@@ -173,7 +173,7 @@ def test_product_matcher_strict_link_status_filter(db):
         rating=4.9,
         sales_count=5000,
         commission=Decimal("40.00"),
-        affiliate_url="https://shope.ee/dead-link",
+        affiliate_url="https://s.shopee.co.th/dead-link",
         link_status="dead",
         ai_score=95,
     )
@@ -184,7 +184,7 @@ def test_product_matcher_strict_link_status_filter(db):
         rating=4.7,
         sales_count=1500,
         commission=Decimal("25.00"),
-        affiliate_url="https://shope.ee/unknown-link",
+        affiliate_url="https://s.shopee.co.th/unknown-link",
         link_status="unknown",
         ai_score=80,
     )
@@ -204,27 +204,28 @@ def test_product_matcher_strict_link_status_filter(db):
         assert cand["product"].id != p_unknown.id
 
 
-def test_product_matcher_excludes_non_shopee_affiliate_urls(db):
-    """สินค้า link_status=ok แต่ affiliate_url ไม่ใช่ s.shopee.co.th (ลิงก์ mock) ต้องไม่ถูกจับคู่
+def test_product_rejects_non_shopee_affiliate_url_on_insert(db):
+    """กฎเหล็ก DB: insert สินค้าที่ affiliate_url ไม่ใช่ s.shopee.co.th ต้อง raise — กันลิงก์ปลอมเข้าบอท."""
+    with pytest.raises(ValueError):
+        db.add(models.Product(
+            name="หูฟังลิงก์ปลอม",
+            category="หูฟัง",
+            price=Decimal("399.00"),
+            rating=4.8,
+            sales_count=8500,
+            commission=Decimal("40.00"),
+            affiliate_url="https://shope.ee/earbuds_ok",
+            link_status="ok",
+            ai_score=90,
+        ))
+        db.commit()
 
-    กันเหตุการณ์จริง: เทสต์ seed สินค้า mock ลง DB แล้วเรดาร์เอาไปโพสต์ขึ้นเพจ
-    (ลิงก์ https://shope.ee/... ปลอม → กดแล้ว 404).
-    """
-    kw = "ลิงก์ปลอมเฉพาะเทสต์รุ่นนี้"
-    p_fake = models.Product(
-        name=f"{kw} ตัวปลอม",
-        category="หมวดทดสอบ",
-        price=Decimal("399.00"),
-        rating=4.8,
-        sales_count=8500,
-        commission=Decimal("40.00"),
-        affiliate_url="https://shope.ee/earbuds_ok",
-        link_status="ok",
-        ai_score=90,
-    )
-    p_valid = models.Product(
-        name=f"{kw} ตัวจริง",
-        category="หมวดทดสอบ",
+
+def test_product_rejects_non_shopee_affiliate_url_on_update(db):
+    """กฎเหล็ก DB: แก้ affiliate_url เป็นลิงก์ปลอมต้อง raise (update path)."""
+    p = models.Product(
+        name="หูฟังลิงก์จริง",
+        category="หูฟัง",
         price=Decimal("399.00"),
         rating=4.8,
         sales_count=8500,
@@ -233,14 +234,28 @@ def test_product_matcher_excludes_non_shopee_affiliate_urls(db):
         link_status="ok",
         ai_score=90,
     )
-    db.add_all([p_fake, p_valid])
+    db.add(p)
     db.commit()
+    p.affiliate_url = "https://shope.ee/earbuds_ok"
+    with pytest.raises(ValueError):
+        db.commit()
 
-    match_result = match_best_product_for_demand(db, product_keyword=kw, budget=500.0)
-    assert match_result["best_product"] is not None
-    assert match_result["best_product"].id == p_valid.id
-    # candidates ต้องไม่มีสินค้าลิงก์ปลอมเลย
-    assert all(is_valid_shopee_affiliate_url(c["product"].affiliate_url) for c in match_result["candidates"])
+
+def test_legacy_invalid_url_product_can_update_other_fields(db):
+    """แถว legacy ที่มีลิงก์ปลอมค้างใน DB (ก่อนมีกฎ) — อัปเดตฟิลด์อื่น (ราคา) ต้องไม่โดนกฎ block.
+
+    สำคัญ: check-links / refresh-prices จะอัปเดต link_status/ราคาของแถวเก่า — ต้องไม่ crash.
+    """
+    from sqlalchemy import text
+    db.execute(text(
+        "INSERT INTO products (name, category, price, rating, sales_count, commission, affiliate_url, link_status, ai_score) "
+        "VALUES ('legacy ลิงก์ปลอม', 'หูฟัง', 100, 4.5, 100, 10, 'https://shope.ee/legacy', 'ok', 80)"
+    ))
+    db.commit()
+    p = db.query(models.Product).filter(models.Product.name == "legacy ลิงก์ปลอม").first()
+    assert p is not None
+    p.price = 120  # affiliate_url ไม่ได้แก้ → ผ่านได้
+    db.commit()
 
 
 def test_is_valid_shopee_affiliate_url():
@@ -261,7 +276,7 @@ def test_product_matcher_budget_alignment(db):
         rating=4.7,
         sales_count=3000,
         commission=Decimal("30.00"),
-        affiliate_url="https://shope.ee/earphone-budget",
+        affiliate_url="https://s.shopee.co.th/earphone-budget",
         link_status="ok",
         ai_score=80,
     )
@@ -272,7 +287,7 @@ def test_product_matcher_budget_alignment(db):
         rating=4.9,
         sales_count=3000,
         commission=Decimal("80.00"),
-        affiliate_url="https://shope.ee/earphone-expensive",
+        affiliate_url="https://s.shopee.co.th/earphone-expensive",
         link_status="ok",
         ai_score=90,
     )
@@ -294,7 +309,7 @@ def test_suggested_reasons_generation():
         rating=4.8,
         sales_count=15000,
         commission=Decimal("25.00"),
-        affiliate_url="https://shope.ee/fan-mini",
+        affiliate_url="https://s.shopee.co.th/fan-mini",
         link_status="ok",
     )
     reasons = generate_suggested_reasons(product, budget=400.0)

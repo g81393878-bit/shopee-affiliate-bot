@@ -36,7 +36,7 @@ def _extra_products(db):
     for name, cat, price in EXTRA_SEED:
         if name not in existing:
             db.add(models.Product(name=name, category=cat, price=price, rating=4.5,
-                                  sales_count=5000, affiliate_url="https://shope.ee/test",
+                                  sales_count=5000, affiliate_url="https://s.shopee.co.th/test",
                                   link_status="ok", ai_score=70))
             existing.add(name)
     db.commit()

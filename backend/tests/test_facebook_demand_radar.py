@@ -287,7 +287,7 @@ def test_t1_f4_product_matching_and_ai_reasoning(db_session):
         rating=5.0,
         sales_count=99999,
         commission=Decimal("80.00"),
-        affiliate_url="https://shope.ee/dead_link",
+        affiliate_url="https://s.shopee.co.th/dead_link",
         link_status="dead",
         ai_score=99,
     )
@@ -1385,7 +1385,7 @@ def test_radar_commit_before_post_keeps_record_when_post_crashes(client, db_sess
 def test_cooldown_and_daily_limit_count_pending_events(db_session):
     """สถานะ 'pending' (กำลังจะโพสต์) ต้องถูกนับเป็นโพสต์ด้วย — กัน concurrent ซ้ำหมวด/เกินโควต้า"""
     prod = models.Product(name="หูฟังเทสต์", category="หูฟัง", price=100, rating=4.5,
-                          sales_count=1000, commission=10, affiliate_url="https://shope.ee/t",
+                          sales_count=1000, commission=10, affiliate_url="https://s.shopee.co.th/t",
                           link_status="ok", ai_score=80)
     db_session.add(prod)
     db_session.flush()

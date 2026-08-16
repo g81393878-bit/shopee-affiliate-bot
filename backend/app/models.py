@@ -1,7 +1,8 @@
 import datetime
-from sqlalchemy import Column, Integer, BigInteger, String, Numeric, Text, Date, DateTime, ForeignKey, Float, JSON, Boolean
+from sqlalchemy import Column, Integer, BigInteger, String, Numeric, Text, Date, DateTime, ForeignKey, Float, JSON, Boolean, event, inspect
 from sqlalchemy.orm import relationship
 from app.db import Base
+from app.services.link_checker import is_valid_shopee_affiliate_url
 
 class User(Base):
     __tablename__ = "users"
@@ -94,6 +95,34 @@ class Product(Base):
     # Relationships
     analysis = relationship("ProductAnalysis", back_populates="product", uselist=False, cascade="all, delete-orphan")
     contents = relationship("Content", back_populates="product", cascade="all, delete-orphan")
+
+
+# ===========================================================================
+# กฎเหล็ก: affiliate_url ต้องเป็นลิงก์สั้น Shopee จริง (s.shopee.co.th) เท่านั้น
+# กันลิงก์ปลอม/ของ mock (https://shope.ee/... → กดแล้ว 404) หลุดเข้าระบบ
+# แม้ insert ตรง DB ก็ไม่ผ่าน (API/import ตรวจอยู่แล้ว ชั้นนี้เป็น backstop)
+# ===========================================================================
+
+def _reject_invalid_affiliate_url(target) -> None:
+    url = (target.affiliate_url or "").strip()
+    if url and not is_valid_shopee_affiliate_url(url):
+        raise ValueError(
+            f"affiliate_url ต้องเป็นลิงก์สั้น Shopee (s.shopee.co.th) เท่านั้น — "
+            f"ปฏิเสธลิงก์ปลอม: {url[:60]}"
+        )
+
+
+@event.listens_for(Product, "before_insert")
+def _product_reject_invalid_affiliate_url_on_insert(mapper, connection, target):
+    _reject_invalid_affiliate_url(target)
+
+
+@event.listens_for(Product, "before_update")
+def _product_reject_invalid_affiliate_url_on_update(mapper, connection, target):
+    # เฉพาะเมื่อ affiliate_url ถูกแก้จริง — update ราคา/รูป/สถานะของแถว legacy ที่ลิงก์ไม่ valid ยังผ่านได้
+    hist = inspect(target).attrs.affiliate_url.history
+    if hist.has_changes():
+        _reject_invalid_affiliate_url(target)
 
 
 class ProductAnalysis(Base):

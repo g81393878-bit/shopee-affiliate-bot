@@ -60,7 +60,7 @@ def _seed_products():
             db.add(models.Product(
                 name=name, category=cat, price=price, rating=4.5,
                 sales_count=sales, commission=commission,
-                affiliate_url="https://shope.ee/test",
+                affiliate_url="https://s.shopee.co.th/test",
                 link_status="ok", ai_score=score,
                 created_at=now - timedelta(days=days),
             ))

@@ -24,17 +24,9 @@ from sqlalchemy.orm import Session
 
 from app import models
 from app.services.category import CATEGORY_KEYWORDS, guess_category, normalize_query
+from app.services.link_checker import is_valid_shopee_affiliate_url  # noqa: F401  (re-export for callers)
 
 logger = logging.getLogger(__name__)
-
-# ลิงก์ affiliate Shopee จริงต้องเป็นลิงก์สั้น s.shopee.co.th เท่านั้น
-# (https://shope.ee/... = ลิงก์ปลอม/ของ mock — กดแล้ว 404 ห้ามโพสต์)
-SHOPEE_SHORT_PREFIXES = ("https://s.shopee.co.th/", "http://s.shopee.co.th/")
-
-
-def is_valid_shopee_affiliate_url(url: Optional[str]) -> bool:
-    """True เมื่อ url เป็นลิงก์สั้น Shopee จริง (s.shopee.co.th) — กันลิงก์ mock หลุดขึ้นโพสต์."""
-    return bool(url) and (url or "").strip().lower().startswith(SHOPEE_SHORT_PREFIXES)
 
 
 def _nfc(s: str) -> str:

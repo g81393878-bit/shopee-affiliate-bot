@@ -77,6 +77,7 @@
 - สินค้าทุกตัวที่เข้าระบบ**ต้องมีลิงก์ affiliate ที่ตรวจผ่านแล้วเท่านั้น**: `link_status` ในตาราง `products` (ok | dead | suspect | unknown | none) — ตรวจด้วย `backend/app/services/link_checker.py` (GET ลิงก์สั้น + ดูหน้า "ไม่พบสินค้า" + redirect ไปหน้า `/opaanlp/`/item = OK, HTTP 400/404/410 = DEAD)
 - **บอท LINE ตอบเฉพาะ `link_status == 'ok'`** (`line_bot.py` filter ทั้ง search และ หมุนเวียน) — ลิงก์เสีย/ยังไม่ตรวจ ไม่เด้งขึ้นหน้าลูกค้าเด็ดขาด
 - API `POST/PUT /products` ตรวจลิงก์ก่อนบันทึก (ไม่ OK → 400) และ `tools/product_pipeline.py import-csv` ตรวจก่อน insert (ข้ามตัวไม่ผ่าน) — `check-links` อัปเดตสถานะลงตาราง (รันเป็นระยะ; `--delete` ลบตัว DEAD)
+- **DB-level hard rule (ลิงก์ปลอมห้ามเข้าบอทเด็ดขาด)**: `Product.affiliate_url` ต้องเป็นลิงก์สั้น `s.shopee.co.th` เท่านั้น — SQLAlchemy event ใน `app/models.py` (`before_insert`/`before_update`) raise `ValueError` กันลิงก์ปลอมอย่าง `https://shope.ee/...` (กดแล้ว 404) แม้ insert ตรง DB/เทสต์ก็ไม่ผ่าน; `before_update` ตรวจเฉพาะเมื่อ `affiliate_url` ถูกแก้จริง (อัปเดตราคา/รูป/status ของแถว legacy ลิงก์ไม่ valid ยังผ่านได้); helper กลาง = `is_valid_shopee_affiliate_url()` ใน `app/services/link_checker.py` (ใช้ทั้ง DB rule, `product_matcher.py` และ guard หน้า `post_feed` ใน `facebook_radar.py`); เทสต์ fixture ที่ seed สินค้า mock ต้องใช้ URL รูปแบบ `s.shopee.co.th` + ข้ามเมื่อ `DATABASE_URL` เป็น postgres (กัน mock หลุดเข้า production)
 
 ## คอนเทนต์สินค้า (contents)
 
