@@ -295,6 +295,16 @@ def test_payment_reply_attaches_promptpay_qr_image(sim, monkeypatch):
     assert msgs[1].preview_image_url == "https://example.com/qr-promptpay.png"
 
 
+def test_payment_reply_precalculates_amounts():
+    # บอทคำนวณมัดจำ/ส่งมอบให้เสร็จ — ลูกค้าไม่ต้องคิดเลขเอง
+    text = lb.payment_reply_text()
+    assert "มัดจำ 245" in text and "ส่งมอบ 1,745" in text  # Lean
+    assert "มัดจำ 495" in text and "ส่งมอบ 1,995" in text  # Starter
+    assert "มัดจำ 995" in text and "ส่งมอบ 2,495" in text  # Business
+    assert "มัดจำ 2,495" in text  # White-Label
+    assert "7,500–12,500" in text  # ขายขาด
+
+
 def test_payment_reply_no_qr_url_returns_text_only(sim):
     # ไม่ตั้ง OWNER_PROMPTPAY_QR_URL → ตอบข้อความอย่างเดียว ไม่มีรูป
     assert not lb.BOT_PAYMENT_QR_URL
