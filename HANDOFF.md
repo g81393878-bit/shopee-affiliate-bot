@@ -8,12 +8,13 @@
 > - **เมื่องานเสร็จและ commit ครบ:** ให้ล้างเนื้อหาในส่วน 1–5 กลับเป็นสถานะว่าง แล้ว commit
 >   ไฟล์นี้ — เพื่อไม่ให้ AI ตัวถัดไปเข้าใจผิดว่างานยังค้าง
 
-## สถานะ: 🟢 ว่าง — งานล่าสุด (Phase 1 White-Label: bot_profile ตัวตนร้าน config ได้ + backup_config.py) เสร็จ+commit — ยังไม่ deploy โค้ดใหม่ (มีกระทบ production: line_bot/facebook_bot/persona ต้อง deploy ก่อนลูกค้าเห็น)
+## สถานะ: 🟢 ว่าง — งานล่าสุด (Phase 1 White-Label: bot_profile + backup_config + FAQ แพ็กเกจ/5 ขั้นตอนในบอท) เสร็จ+commit — ยังไม่ deploy โค้ดใหม่ (กระทบ production: line_bot/facebook_bot/persona ต้อง deploy ก่อนลูกค้าเห็น)
 
 ---
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- ✅ feat(line-bot): **FAQ แพ็กเกจ/ราคาบอทในคู่มือ** — พิมพ์ "ค่าบริการ"/"แพ็กเกจราคา"/"สมัครใช้บอท"/"ซื้อบอท"/"เปิดร้าน" → ตอบ 3 แพ็กเกจ (Starter 990 / Business 1,990 / White-Label 4,990); ใช้คำเฉพาะ ไม่ใช้ "แพ็กเกจ" เดี่ยว (ชนชื่อสินค้า 3 ตัว) + สลับ section ให้ "ค่าบริการ" ไปแพ็กเกจก่อน "บริการ" ไป 5 ขั้นตอน; guard test กัน "แพ็กเกจกล่อง/ผ้ามาตรฐาน" โดนดัก → 604 passed
 - ✅ feat(white-label): **Bot Profile — รวมศูนย์ตัวตนร้านไว้จุดเดียว** (`app/services/bot_profile.py`) — อ่าน `BOT_NAME`/`PERSONA_NAME`/`BOT_SLOGAN` จาก env (default "ป้าเข็ม ขายของ"/"ป้าเข็ม"/"ความพึงพอใจของคุณคือความสำเร็จของเรา") → เปลี่ยนชื่อบอท/เสียง/สโลแกนได้โดยไม่แตะโค้ด; wire เข้า `persona.py` (PERSONA_PROMPT เป็น f-string ใช้ชื่อจริง), `line_bot.py` (BOT_NAME + สโลแกนท้าย 5 ขั้นตอน), `facebook_bot.py` (BOT_NAME) — 4 ไฟล์; เทสต์ `tests/test_bot_profile.py` 4 ตัว → รวม 598 passed
 - ✅ feat(ops): **`tools/backup_config.py`** — ก๊อป `.env`/`fb_cookies.json`/`affiliate_db.db`/`db-password.txt`/`render cli.yaml` ไป `backups/<timestamp>/` (เพิ่ม `backups/` ใน `.gitignore` กัน secret หลุด commit); กู้คืนเมื่อโค้ด/ค่าพัง = ก๊อปกลับจากโฟลเดอร์ล่าสุด
 - ✅ docs: **BRD v1.0 ล็อกแล้ว** (`docs/brd-sell-line-oa-bot.md`) + **SRS** (`docs/srs-white-label-bot.md`) — ตัดสินใจครบ: ลูกค้าทั้งคู่ (ร้านค้า + affiliate), ราคา 990/1,990/4,990 + M/A, ลูกค้าออกค่า LINE OA, ตั้งค่าทั้งแอดมิน+ลูกค้าเอง; RLS/Stripe = Model C roadmap (Phase 2+)

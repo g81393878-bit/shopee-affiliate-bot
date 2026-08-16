@@ -107,6 +107,25 @@ def test_service_standard_does_not_shadow_product_search(sim):
     assert r["intent"] != "manual", "คำค้นสินค้า 'ผ้ามาตรฐาน' โดนดักเป็นคู่มือผิด"
 
 
+# ---------- แพ็กเกจ/ราคาบอท (ขายต่อ) ----------
+PACKAGE_PHRASES = ["ค่าบริการ", "แพ็กเกจราคา", "สมัครใช้บอท", "ซื้อบอท", "เปิดร้าน"]
+
+
+@pytest.mark.parametrize("text", PACKAGE_PHRASES)
+def test_package_faq(sim, text):
+    r = sim.send("U_cust_1", text)
+    assert r["intent"] == "manual", f"{text!r} → intent={r['intent']}"
+    assert "990" in r["preview"], f"{text!r} ไม่ได้โชว์ราคา 990: {r['preview'][:120]}"
+    assert "4,990" in r["preview"], f"{text!r} ไม่ได้โชว์ราคา 4,990"
+
+
+def test_package_faq_does_not_hijack_product_search(sim):
+    # "แพ็กเกจ"/"แพ็คเกจ" เป็นส่วนหนึ่งของชื่อสินค้าจริง (3+1 ตัว) — ต้องไม่โดนดักเป็นคู่มือ
+    for q in ("แพ็กเกจกล่องของขวัญ", "ชุดแพ็คเกจเซ็ต"):
+        r = sim.send("U_cust_1", q)
+        assert r["intent"] != "manual", f"คำค้น '{q}' โดนดักเป็นคู่มือผิด"
+
+
 # ---------- Bulk: ทุก reply ในคู่มือต้องไม่มีวลี escalation ----------
 # สแกนทุกข้อความที่ bot_manual_reply ส่งได้ (ทุก FAQ + fallback) — ไม่ใช่แค่ 3 FAQ ข้างบน
 MANUAL_REPLY_SOURCES = [
