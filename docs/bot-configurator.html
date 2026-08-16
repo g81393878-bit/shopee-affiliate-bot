@@ -129,10 +129,15 @@
   <div class="card">
     <h2><span class="step">3</span> เลือกแพ็กเกจหลัก</h2>
     <div class="pkgs" id="pkgs">
+      <label class="pkg" data-pkg="lean" data-price="490">
+        <input type="radio" name="pkg" value="lean">
+        <span class="name">🟡 Lean</span> <span class="price">490/เดือน</span>
+        <div class="desc">บอทง่าย: ตอบตามคีย์เวิร์ด + เก็บข้อมูลลง Google Sheets + Rich Menu (ไม่มี AI/ฐานข้อมูล)</div>
+      </label>
       <label class="pkg" data-pkg="starter" data-price="990">
         <input type="radio" name="pkg" value="starter" checked>
         <span class="name">🟢 Starter</span> <span class="price">990/เดือน</span>
-        <div class="desc">บอทตอบแชท: ค้นหา/แนะนำสินค้า + ลิงก์สั่งซื้อ · สินค้า ≤300 ตัว · แชท 5,000/เดือน</div>
+        <div class="desc">บอท AI ตอบแชท: ค้นหา/แนะนำสินค้า + ลิงก์สั่งซื้อ · สินค้า ≤300 ตัว · แชท 5,000/เดือน</div>
       </label>
       <label class="pkg" data-pkg="business" data-price="1990">
         <input type="radio" name="pkg" value="business">
@@ -199,9 +204,8 @@
 </div>
 
 <script>
-const PKGS = { starter: {price: 990, ma: 2500}, business: {price: 1990, ma: 3500}, whitelabel: {price: 4990, ma: 5000} };
+const PKGS = { lean: {price: 490, ma: 1500}, starter: {price: 990, ma: 2500}, business: {price: 1990, ma: 3500}, whitelabel: {price: 4990, ma: 5000} };
 const SETUP_FEE = 1500;
-const INCLUDED_WHITELABEL = ["rebrand", "db", "support"]; // มีใน White-Label แล้ว ไม่คิดซ้ำ
 
 const $ = id => document.getElementById(id);
 
@@ -230,21 +234,41 @@ function recalc() {
   $('sumMA').textContent = PKGS[pkg].ma.toLocaleString() + '/ปี';
 }
 
-// ไฮไลต์แพ็กเกจที่เลือก + ปิด add-on ที่รวมใน White-Label
+// ไฮไลต์แพ็กเกจที่เลือก + ปิด add-on ที่รวมใน White-Label / ใช้กับ Starter ขึ้นไป (Lean ไม่มี AI/DB)
+function applyPkgRules() {
+  const pkg = selectedPkg();
+  const isWL = pkg === 'whitelabel';
+  const isLean = pkg === 'lean';
+  const rules = {
+    rebrand: { disabled: isWL, note: ' (รวมในแพ็กเกจ)' },
+    db:      { disabled: isWL || isLean, note: isWL ? ' (รวมในแพ็กเกจ)' : ' (ใช้กับ Starter ขึ้นไป)' },
+    support: { disabled: isWL, note: ' (รวมในแพ็กเกจ)' },
+    ai:      { disabled: isLean, note: ' (ใช้กับ Starter ขึ้นไป)' },
+  };
+  Object.entries(rules).forEach(([id, r]) => {
+    const a = document.querySelector(`.addon[data-addon=${id}]`);
+    if (!a) return;
+    const cb = a.querySelector('input[type=checkbox]');
+    const b = a.querySelector('.info b');
+    const qty = a.querySelector('.qty');
+    if (!cb || !b) return;
+    b.textContent = b.textContent.replace(/\s*\((รวมในแพ็กเกจ|ใช้กับ Starter ขึ้นไป)\)/g, '');
+    cb.disabled = r.disabled;
+    if (r.disabled) {
+      cb.checked = false;
+      b.textContent += r.note;
+      if (qty) qty.disabled = true;
+    } else if (qty) {
+      qty.disabled = !cb.checked;
+    }
+    a.classList.toggle('disabled', r.disabled);
+  });
+}
+
 document.querySelectorAll('input[name=pkg]').forEach(r => {
   r.addEventListener('change', () => {
     document.querySelectorAll('.pkg').forEach(p => p.classList.toggle('selected', p.querySelector('input').checked));
-    const isWL = selectedPkg() === 'whitelabel';
-    INCLUDED_WHITELABEL.forEach(id => {
-      const a = document.querySelector(`.addon[data-addon=${id}]`);
-      if (!a) return;
-      const cb = a.querySelector('input[type=checkbox]');
-      cb.disabled = isWL;
-      cb.checked = false;
-      a.classList.toggle('disabled', isWL);
-      const b = a.querySelector('.info b');
-      if (b) b.textContent = b.textContent.replace(/\s*\(รวมในแพ็กเกจ\)/, '') + (isWL ? ' (รวมในแพ็กเกจ)' : '');
-    });
+    applyPkgRules();
     recalc();
   });
 });
