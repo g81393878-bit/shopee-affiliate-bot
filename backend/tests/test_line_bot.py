@@ -60,6 +60,15 @@ def test_install_owner_gets_owner_reply(sim):
     assert "เตรียม 4 อย่าง" in r["preview"]
 
 
+def test_install_no_longer_promises_free(sim):
+    # โปรโมชั่นฟรีหมดแล้ว → ต้องชี้ไปแพ็กเกจ ไม่ใช่ "ฟรีทั้งหมด"
+    r = sim.send(sim.owner_uid, "ติดตั้งยังไง")
+    assert "แพ็กเกจ" in r["preview"]
+    assert "ฟรีทั้งหมด" not in r["preview"]
+    r2 = sim.send("U_cust_1", "โค้ดอยู่ไหน")
+    assert "ฟรี" not in r2["preview"] or "ดาวน์โหลดได้ฟรี" not in r2["preview"]
+
+
 @pytest.mark.parametrize("text", ["ต้องมีอะไรบ้าง", "ตั้งค่าระบบยังไง", "โค้ดอยู่ไหน", "github"])
 def test_install_related_customer_questions(sim, text):
     r = sim.send("U_cust_1", text)

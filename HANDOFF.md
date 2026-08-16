@@ -14,6 +14,7 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- ✅ feat(line-bot): **ล้างคำว่า "ฟรี/โอเพนซอร์ส/ดาวน์โหลดฟรี" ออกจาก FAQ** — โปรโมชั่นฟรีหมดแล้ว → ติดตั้ง/ค่าใช้จ่าย/ลิขสิทธิ์/โค้ด ชี้ไปแพ็กเกจ 990/1,990/4,990 แทน (INSTALL_REPLY_OWNER ยังเก็บ "เตรียม 4 อย่าง" ไว้กันเทสต์พัง); `_github_button_card` เปลี่ยนเป็นการ์ดแพ็กเกจ 3 ระดับ → 605 passed
 - ✅ feat(line-bot): **FAQ แพ็กเกจ/ราคาบอทในคู่มือ** — พิมพ์ "ค่าบริการ"/"แพ็กเกจราคา"/"สมัครใช้บอท"/"ซื้อบอท"/"เปิดร้าน" → ตอบ 3 แพ็กเกจ (Starter 990 / Business 1,990 / White-Label 4,990); ใช้คำเฉพาะ ไม่ใช้ "แพ็กเกจ" เดี่ยว (ชนชื่อสินค้า 3 ตัว) + สลับ section ให้ "ค่าบริการ" ไปแพ็กเกจก่อน "บริการ" ไป 5 ขั้นตอน; guard test กัน "แพ็กเกจกล่อง/ผ้ามาตรฐาน" โดนดัก → 604 passed
 - ✅ feat(white-label): **Bot Profile — รวมศูนย์ตัวตนร้านไว้จุดเดียว** (`app/services/bot_profile.py`) — อ่าน `BOT_NAME`/`PERSONA_NAME`/`BOT_SLOGAN` จาก env (default "ป้าเข็ม ขายของ"/"ป้าเข็ม"/"ความพึงพอใจของคุณคือความสำเร็จของเรา") → เปลี่ยนชื่อบอท/เสียง/สโลแกนได้โดยไม่แตะโค้ด; wire เข้า `persona.py` (PERSONA_PROMPT เป็น f-string ใช้ชื่อจริง), `line_bot.py` (BOT_NAME + สโลแกนท้าย 5 ขั้นตอน), `facebook_bot.py` (BOT_NAME) — 4 ไฟล์; เทสต์ `tests/test_bot_profile.py` 4 ตัว → รวม 598 passed
 - ✅ feat(ops): **`tools/backup_config.py`** — ก๊อป `.env`/`fb_cookies.json`/`affiliate_db.db`/`db-password.txt`/`render cli.yaml` ไป `backups/<timestamp>/` (เพิ่ม `backups/` ใน `.gitignore` กัน secret หลุด commit); กู้คืนเมื่อโค้ด/ค่าพัง = ก๊อปกลับจากโฟลเดอร์ล่าสุด
