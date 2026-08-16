@@ -419,13 +419,15 @@ def nosearch_new_text(user_text: str, category: str, tone: str = "neutral") -> s
 
 def quick_reply_items() -> QuickReply:
     """ปุ่มลัดแบบสากล (Quick Reply) — ลูกค้าแตะแทนพิมพ์
-    3 ปุ่มพอ: 🔍 ค้นหาสินค้า · 🤖 คุยกับป้าเข็ม · 💬 ฝากคำถาม (ส่วนที่เหลือลูกค้า
-    พิมพ์เองได้ หรือกดจาก Rich Menu แถบติดหน้าจอ) — ปุ่มทุกตัวส่งข้อความที่
-    dispatch route ตรง intent ไม่หลุด "ค้นไม่เจอ"""
+    4 ปุ่ม: 🔍 ค้นหาสินค้า · 🤖 คุยกับป้าเข็ม · 💬 ฝากคำถาม · 💰 ราคาบอท/แพ็กเกจ
+    (ส่วนที่เหลือลูกค้าพิมพ์เองได้ หรือกดจาก Rich Menu แถบติดหน้าจอ) — ปุ่มทุกตัว
+    ส่งข้อความที่ dispatch route ตรง intent ไม่หลุด "ค้นไม่เจอ"
+    ปุ่ม "ราคาบอท" = ขายบอทต่อ (ป้าเข็มขายทั้งสินค้าและบอทเอง) → การ์ด 5 ทางเลือก"""
     return QuickReply(items=[
         QuickReplyButton(action=MessageAction(label="🔍 ค้นหาสินค้า", text="ค้นสินค้า")),
         QuickReplyButton(action=MessageAction(label="🤖 คุยกับป้าเข็ม", text="คุยกับป้าเข็ม")),
         QuickReplyButton(action=MessageAction(label="💬 ฝากคำถาม", text="ฝากคำถาม")),
+        QuickReplyButton(action=MessageAction(label="💰 ราคาบอท/แพ็กเกจ", text="ราคาบอท")),
     ])
 
 
@@ -498,7 +500,7 @@ def _web_answer_messages(query, answer=None):
 
 
 def welcome_quick_reply() -> QuickReply:
-    """ปุ่มตอนแอดครั้งแรก — ใช้ชุดเดียวกับเมนูหลัก (3 ปุ่ม สากล ไม่ซ้ำ Rich Menu)"""
+    """ปุ่มตอนแอดครั้งแรก — ใช้ชุดเดียวกับเมนูหลัก (4 ปุ่ม สากล ไม่ซ้ำ Rich Menu)"""
     return quick_reply_items()
 
 

@@ -190,6 +190,17 @@ def test_is_package_request_excludes_line_oa_fee():
     assert lb.is_package_request("บริการ") is False
 
 
+def test_quick_reply_includes_bot_price_button():
+    # ปุ่มลัดสากลมีปุ่ม "ราคาบอท/แพ็กเกจ" → แตะแล้วไปการ์ด 5 ทางเลือก (ขายบอทต่อ)
+    qr = lb.quick_reply_items()
+    labels = [item.action.label for item in qr.items]
+    texts = [item.action.text for item in qr.items]
+    assert labels == ["🔍 ค้นหาสินค้า", "🤖 คุยกับป้าเข็ม", "💬 ฝากคำถาม", "💰 ราคาบอท/แพ็กเกจ"], labels
+    assert texts[-1] == "ราคาบอท"
+    # แตะปุ่มราคาบอท → การ์ด Flex แพ็กเกจ (intent manual) ไม่ใช่ค้นสินค้า
+    assert lb.is_package_request("ราคาบอท") is True
+
+
 # ---------- ขายขาด / ซื้อครั้งเดียว (แม่ค้าไม่อยากผูกเดือน) ----------
 PERPETUAL_PHRASES = ["ขายขาด", "ซื้อขาด", "ซื้อครั้งเดียว", "เหมาจ่าย", "จ่ายครั้งเดียว"]
 
