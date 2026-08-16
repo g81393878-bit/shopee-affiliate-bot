@@ -66,7 +66,7 @@
 - **NFR-2 PDPA:** คำสั่ง "ลบข้อมูลฉัน" ลบเฉพาะข้อมูลในร้านของลูกค้าคนนั้น
 - **NFR-3 ความปลอดภัย:** โทเคน LINE / คุกกี้ / คีย์ AI ต้องไม่ commit เข้า Git (`.gitignore` มีอยู่แล้ว)
 - **NFR-4 เสถียรภาพ:** คงกลไก pool_pre_ping / keep-alive / failover LLM เดิม
-- **NFR-5 ต้นทุน:** ใช้ free tier (Render + Supabase) ได้นานที่สุดก่อนยกระดับ
+- **NFR-5 ต้นทุน:** ลูกค้าแยกบัญชี Render+Supabase (free tier) เป็นหลัก — แอดมิน 0 บาท; โฮสต์รวมเป็นตัวเลือกที่บวกค่าดูแลเข้าแพ็กเกจ
 
 ---
 
@@ -97,5 +97,6 @@ Model C (roadmap): shared DB + คอลัมน์ tenant_id + PostgreSQL Row-
 
 1. **ใครตั้งค่าบอท = ทั้งคู่** — แอดมินตั้งให้ได้ (FR-4, Model A) + ลูกค้าตั้งเองได้ (Model C, roadmap → ต้องมี customer portal + role/permission)
 2. **ลูกค้าเป้าหมาย = ทั้งคู่** — ร้านค้าตัวเอง + คนทำ affiliate → FR-2 ต้องรองรับคลัง 2 แบบ (สินค้าร้านเอง + ลิงก์ affiliate)
+3. **ค่า Render/Supabase = ลูกค้าออกเอง (แยกบัญชี free tier)** — แอดมิน 0 บาท; Model A = แยก DB ต่อร้าน (ไม่ต้อง RLS); แอดมินโฮสต์รวมเป็นตัวเลือกแพ็กเกจ (Model C)
 
 > ขั้นถัดไป = System & Database Design (schema + API; RLS เฉพาะถ้าเลือก Model C)
