@@ -23,7 +23,7 @@ from app.services.category import guess_category, CATEGORY_KEYWORDS, normalize_q
 from app.services.web_search import web_search_answer
 from app.services.hermes_brain import load_skills_safe, market_emphasis
 from app.config import settings
-from app.services.bot_profile import BOT_NAME, BOT_SLOGAN
+from app.services.bot_profile import BOT_NAME, BOT_SLOGAN, owner_contact_text
 
 logger = logging.getLogger(__name__)
 
@@ -600,16 +600,18 @@ BOT_MANUAL_PHRASES = (
     # ยอดมัดจำ/ส่งมอบรายแพ็กเกจ (ปุ่ม Quick Reply แยก 5 แพ็กเกจ) — 0 ชนชื่อสินค้า
     "ยอดlean", "ยอดstarter", "ยอดbusiness", "ยอดwhitelabel", "ยอดขายขาด",
 )
-CONTACT_PHRASES = (
-    "คุยกับป้าเข็ม", "คุยกับแม่เข็ม",
+OWNER_CONTACT_PHRASES = (
     "คุยคนจริง", "คุยกับคนจริง", "คุยกับคน", "คุยเจ้าของ",
-    "ติดต่อเจ้าของร้าน", "ติดต่อร้าน", "ติดต่อแม่เข็ม", "ติดต่อป้าเข็ม",
+    "ติดต่อเจ้าของร้าน", "ติดต่อร้าน", "ติดต่อแม่เข็ม", "ติดต่อป้าเข็ม", "ติดต่อแม่ค้า",
     "แอดไลน์", "ขอไลน์", "ไลน์แม่เข็ม", "ไลน์ป้าเข็ม", "ขอไลน์แม่เข็ม", "ขอไลน์ป้าเข็ม",
     "เบอร์โทรแม่เข็ม", "เบอร์โทรป้าเข็ม", "เบอร์โทร",
-    "ฝากคำถาม", "ฝากข้อความ", "อยากถาม", "มีคำถามจะถาม", "ติดต่อแม่ค้า", "ติดต่อแม่เข็ม",
     "แม่เข็มอยู่ไหม", "แม่เข็มอยู่มั้ย", "ป้าเข็มอยู่ไหม", "ป้าเข็มอยู่มั้ย",
     "แม่เข็มอยู่หรือเปล่า", "แม่เข็มอยู่เปล่า", "ป้าเข็มอยู่หรือเปล่า", "ป้าเข็มอยู่เปล่า",
 )
+LEAVE_MESSAGE_PHRASES = (
+    "ฝากคำถาม", "ฝากข้อความ", "อยากถาม", "มีคำถามจะถาม",
+)
+CONTACT_PHRASES = ("คุยกับป้าเข็ม", "คุยกับแม่เข็ม") + OWNER_CONTACT_PHRASES + LEAVE_MESSAGE_PHRASES
 BOT_MANUAL = (
     "🤗 ป้าเข็มคือผู้ช่วยช้อปของดีจาก Shopee ให้คุณจ๊ะ — ราคาเท่ากับในแอปเป๊ะ ไม่บวกเพิ่ม\n\n"
     "พิมพ์ชื่อสินค้าที่อยากได้ เช่น \"หูฟัง\" \"กระติกน้ำ\"\n"
@@ -2437,10 +2439,16 @@ def is_contact_request(text: str) -> bool:
     return any(p in t for p in CONTACT_PHRASES)
 
 
-def is_leave_request(text: str) -> bool:
-    """ขอฝากคำถาม/คุยกับเจ้าของ (ไม่ใช่แชทกับบอท) → ฝากไว้ให้เจ้าของตอบทีหลัง"""
+def is_owner_contact_request(text: str) -> bool:
+    """ลูกค้าขอติดต่อเจ้าของร้านโดยตรง (LINE/เบอร์) — ตอบช่องทางติดต่อ ไม่เข้า flow ฝากคำถาม"""
     t = (text or "").strip().lower().replace(" ", "")
-    return is_contact_request(t) and not any(p in t for p in CHAT_BOT_PHRASES)
+    return any(p in t for p in OWNER_CONTACT_PHRASES)
+
+
+def is_leave_request(text: str) -> bool:
+    """ขอฝากคำถามไว้ (ไม่ใช่ช่องทางติดต่อตรง) → ฝากไว้ให้เจ้าของตอบทีหลัง"""
+    t = (text or "").strip().lower().replace(" ", "")
+    return any(p in t for p in LEAVE_MESSAGE_PHRASES)
 
 
 def _notify_owner_question(user, question: str) -> None:
@@ -2766,9 +2774,16 @@ def message_text(event):
             reply = TextSendMessage(text=CHAT_BOT_PROMPT,
                                     quick_reply=quick_reply_items())
             intent = 'human'
+        elif is_owner_contact_request(normalized_text):
+            # ติดต่อเจ้าของร้านตรง ๆ → ตอบช่องทางติดต่อ (LINE ID + ลิงก์ + เบอร์ ถ้าตั้ง)
+            # (วางก่อน manual — กัน "ติดต่อเจ้าของร้าน" โดน keyword "เจ้าของร้าน" ดักเป็นคู่มือ)
+            _pending_question.pop(line_user_id, None)  # สลับโหมด: แชท → ติดต่อตรง
+            _pending_leave.pop(line_user_id, None)
+            reply = TextSendMessage(text=owner_contact_text(),
+                                    quick_reply=quick_reply_items())
+            intent = 'human'
         elif is_leave_request(normalized_text):
             # ฝากคำถาม = ยังไม่ตอบ: ฝากรายละเอียดไว้ → เจ้าของร้านตอบทีหลัง
-            # (วางก่อน manual — กัน "ติดต่อเจ้าของร้าน" โดน keyword "เจ้าของร้าน" ดักเป็นคู่มือ)
             _pending_question.pop(line_user_id, None)  # สลับโหมด: แชท → ฝากคำถาม
             _pending_leave[line_user_id] = datetime.datetime.utcnow()
             reply = TextSendMessage(text=LEAVE_MESSAGE_PROMPT,

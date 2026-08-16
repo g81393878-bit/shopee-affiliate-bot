@@ -39,3 +39,11 @@ def test_line_cta_footer_override_url():
     footer = bot_profile.line_cta_footer("https://lin.ee/custom")
     assert "https://lin.ee/custom" in footer
     assert bot_profile.LINE_OA_ID in footer  # ID ยังติดครบทุกโพสต์
+
+
+def test_owner_contact_text_has_line_and_link():
+    # คำตอบ "ติดต่อเจ้าของร้าน" ต้องมี LINE ID + ลิงก์ (เบอร์โทรเฉพาะเมื่อตั้ง OWNER_PHONE)
+    text = bot_profile.owner_contact_text()
+    assert bot_profile.LINE_OA_ID in text
+    assert bot_profile.LINE_OA_URL in text
+    assert "ติดต่อเจ้าของร้านได้โดยตรง" in text
