@@ -8,6 +8,7 @@
 import pytest
 
 from app import models  # noqa: E402
+from app.api import line_bot as lb  # noqa: E402
 
 
 # สินค้าเพิ่ม (นอกเหนือ conftest SEED) ที่ battery ใช้ทดสอบค้นสินค้าให้แมตช์เจอ
@@ -163,7 +164,7 @@ DIRECT_CASES = [
 
 
 # (expected_intent, คำถาม) — 100 คำถามหนักๆ ที่ลูกค้าพิมพ์หลังแตะ "ฝากคำถาม"
-# manual = ตอบคู่มือเฉพาะส่วน, web = ความรู้ทั่วไปจริงๆ (เท่านั้น ไม่ใช่ขยะ)
+# ฝากคำถาม = ยังไม่ตอบ: ทุกข้อความถูกฝากไว้ (intent 'human') + แจ้งเจ้าของ — ไม่ route ตอบทันที
 PENDING_CASES = [
     # คำถามคู่มือ/FAQ (ต้อง manual ไม่ใช่ web ขยะ)
     ("manual", "ติดตั้งยังไง"),
@@ -282,9 +283,17 @@ def test_direct_battery(sim, expected, text):
         f"{text!r} → intent={r['intent']} preview={r['preview'][:60]!r}"
 
 
-@pytest.mark.parametrize("expected,question", PENDING_CASES)
-def test_pending_battery(sim, expected, question):
+@pytest.mark.parametrize("question", [q for _e, q in PENDING_CASES])
+def test_pending_battery_saves_question(sim, question):
+    # ฝากคำถาม = ยังไม่ตอบ: ทุกข้อความถูกฝากไว้ (intent 'human') + แจ้งเจ้าของ
     sim.send("U_cust_1", "ฝากคำถาม")
     r2 = sim.send("U_cust_1", question)
-    assert r2["intent"] == expected, \
-        f"ฝากคำถาม + {question!r} → intent={r2['intent']} preview={r2['preview'][:60]!r}"
+    assert r2["intent"] == "human", \
+        f"ฝากคำถาม + {question!r} → intent={r2['intent']} (ควรเป็น human = ฝากไว้)"
+    if lb.is_contact_request(question):
+        # ข้อความนั้นเป็น "ฝากคำถาม/อยากถาม" ซ้ำ → โชว์ prompt ใหม่ ไม่ push
+        assert "ฝากคำถามได้เลย" in r2["preview"], f"{question!r} ไม่ได้โชว์ prompt"
+        assert r2["owner_pushes"] == [], f"{question!r} แตะปุ่มซ้ำต้องไม่ push"
+    else:
+        assert "เก็บข้อความไว้" in r2["preview"], f"{question!r} ไม่ยืนยันว่าฝากไว้แล้ว"
+        assert len(r2["owner_pushes"]) == 1, f"ฝากคำถาม + {question!r} ต้องแจ้งเจ้าของ"

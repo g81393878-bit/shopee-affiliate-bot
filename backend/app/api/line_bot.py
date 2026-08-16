@@ -1989,15 +1989,11 @@ def get_or_create_line_user(db: Session, line_user_id: str) -> models.User:
     return user
 
 
-# --- ฝากคำถาม 2 ขั้น: แตะปุ่ม → บอทถามคำถามจริง → ลูกค้าพิมพ์ → ป้าเข็มตอบเอง ---
+# --- ฝากคำถาม/แชท 2 ขั้น: แตะปุ่ม → บอทถามคำถามจริง → ข้อความถัดไปถูกจัดการ ---
 # เก็บ state ในหน่วยความจำ (uvicorn 1 process พอเพียง): uid → เวลาที่แตะปุ่ม
-_pending_question: dict = {}
+_pending_question: dict = {}   # โหมดแชทกับบอท ("คุยกับป้าเข็ม") → ตอบทันที
+_pending_leave: dict = {}      # โหมดฝากคำถาม ("ฝากคำถาม") → เก็บไว้ เจ้าของตอบทีหลัง
 PENDING_QUESTION_TTL_MIN = 30          # รอคำถามได้ 30 นาที แล้วคืนโหมดปกติ
-ASK_QUESTION_PROMPT = (
-    "🖊️ ป้าเข็มรับฟังเองจ๊ะ — พิมพ์คำถามของคุณได้เลยค่ะ\n"
-    "ถามสินค้า / ความรู้ทั่วไป / เรื่องร้าน ป้าเข็มตอบให้เองทุกคำถาม\n\n"
-    "ถ้าเปลี่ยนใจ พิมพ์ \"ยกเลิก\" ได้เลย 😊"
-)
 # ปุ่ม "คุยกับป้าเข็ม" — ทักทายด้วยมาตรฐาน 5 ขั้นตอน (สั้น/ชัด/ไม่อ่านรก) แล้วรอรับคำถามจริง
 CHAT_BOT_PHRASES = ("คุยกับป้าเข็ม", "คุยกับแม่เข็ม")
 CHAT_BOT_PROMPT = (
@@ -2008,6 +2004,24 @@ CHAT_BOT_PROMPT = (
     "4️⃣ ดำเนินการรวดเร็ว\n"
     "5️⃣ ติดตามผลและขอบคุณ\n\n"
     "พิมพ์ชื่อสินค้า งบ หรือคำถามได้เลยจ๊ะ 👇"
+)
+# ปุ่ม "ฝากคำถาม" — ฝากรายละเอียดไว้ แล้วเจ้าของร้านตอบทีหลัง (ไม่ตอบทันที)
+LEAVE_MESSAGE_PROMPT = (
+    "🖊️ ฝากคำถามได้เลยจ๊ะ — พิมพ์รายละเอียด/คำถามของคุณ\n"
+    "ป้าเข็มเก็บไว้ให้ แล้วเจ้าของร้านจะตอบกลับทีหลัง\n\n"
+    "ถ้าเปลี่ยนใจ พิมพ์ \"ยกเลิก\" ได้เลย 😊"
+)
+LEAVE_MESSAGE_CONFIRM = (
+    "💌 รับทราบจ๊ะ ป้าเข็มเก็บข้อความไว้ให้แล้ว\n"
+    "เจ้าของร้านจะตอบกลับเร็ว ๆ นี้ค่ะ\n\n"
+    "อยากได้คำตอบทันที พิมพ์ชื่อสินค้า (เช่น \"หูฟัง\") ให้ป้าเข็มหาให้ได้เลยจ๊ะ 😊"
+)
+# เจ้าของตอบลูกค้าทีหลัง: /ตอบ <userId> <ข้อความ>
+OWNER_REPLY_PREFIX = "/ตอบ"
+OWNER_REPLY_HELP = (
+    "วิธีตอบลูกค้าทีหลังจ๊ะ:\n"
+    "/ตอบ <userId> <ข้อความ>\n\n"
+    "userId อยู่ในข้อความแจ้งเตือนที่คุณได้รับตอนลูกค้าฝากคำถาม"
 )
 CANCEL_CONFIRM = "รับทราบจ๊ะ กลับมาเมนูปกติได้เลยค่ะ 😊"
 # ป้าเข็มตอบเรื่องร้าน/สั่งซื้อเอง (นายหน้า ไม่มีข้อมูลสั่งซื้อ/พัสดุของลูกค้า)
@@ -2047,9 +2061,50 @@ def is_bot_manual_request(text: str) -> bool:
 
 
 def is_contact_request(text: str) -> bool:
-    """ลูกค้าขอคุย/ฝากคำถาม? → บอทถามคำถามจริงแล้วตอบเอง (ไม่ส่งเจ้าของ)"""
+    """ลูกค้าขอคุย/ฝากคำถาม/ติดต่อเจ้าของ? — ตอบว่าใช่ (แยกโหมดใน dispatch)"""
     t = (text or "").strip().lower().replace(" ", "")
     return any(p in t for p in CONTACT_PHRASES)
+
+
+def is_leave_request(text: str) -> bool:
+    """ขอฝากคำถาม/คุยกับเจ้าของ (ไม่ใช่แชทกับบอท) → ฝากไว้ให้เจ้าของตอบทีหลัง"""
+    t = (text or "").strip().lower().replace(" ", "")
+    return is_contact_request(t) and not any(p in t for p in CHAT_BOT_PHRASES)
+
+
+def _notify_owner_question(user, question: str) -> None:
+    """แจ้งเจ้าของร้านว่ามีลูกค้าฝากคำถามไว้ → เจ้าของตอบทีหลังด้วย /ตอบ <userId> <ข้อความ>"""
+    if "mock" in LINE_ACCESS_TOKEN.lower():
+        return
+    try:
+        uid = user.line_user_id
+        name = user.name or uid
+        line_bot_api.push_message(ADMIN_LINE_USER_ID, TextSendMessage(text=(
+            f"💬 ลูกค้า {name} ({uid}) ฝากคำถามไว้:\n"
+            f"“{question}”\n\n"
+            f"ตอบกลับ: /ตอบ {uid} <ข้อความ>"
+        )))
+    except Exception as e:
+        logger.warning(f"owner notify failed: {e}")
+
+
+def handle_owner_reply(raw: str):
+    """เจ้าของตอบลูกค้าทีหลัง: /ตอบ <userId> <ข้อความ> → push ข้อความถึงลูกค้า"""
+    rest = (raw or "").strip()
+    if rest.startswith(OWNER_REPLY_PREFIX):
+        rest = rest[len(OWNER_REPLY_PREFIX):].strip()
+    parts = rest.split(" ", 1)
+    if len(parts) < 2 or not parts[0].strip().startswith("U") or not parts[1].strip():
+        return TextSendMessage(text=OWNER_REPLY_HELP)
+    target_uid, msg = parts[0].strip(), parts[1].strip()
+    if "mock" in LINE_ACCESS_TOKEN.lower():
+        return TextSendMessage(text=f"✅ ส่งคำตอบถึง {target_uid} แล้ว (โหมดทดสอบ)")
+    try:
+        line_bot_api.push_message(target_uid, TextSendMessage(text=f"💌 {BOT_NAME} ตอบกลับ: {msg}"))
+        return TextSendMessage(text=f"✅ ส่งคำตอบถึง {target_uid} แล้วจ๊ะ")
+    except Exception as e:
+        logger.warning(f"owner reply push fail: {e}")
+        return TextSendMessage(text=f"❌ ส่งไม่สำเร็จ ({e}) — ลองใหม่ หรือเช็คว่า {target_uid} ยังแอดไลน์ร้านอยู่ไหม")
 
 
 # --- EQ: จับอารมณ์ลูกค้า แล้วตอบด้วยความเข้าใจก่อนช่วย (แม่ค้าใจดี ไม่ใช่หุ่นยนต์) ---
@@ -2187,14 +2242,31 @@ def message_text(event):
         user = get_or_create_line_user(db, line_user_id)
         tone = get_tone(db, line_user_id, normalized_text)
         emphasis = market_emphasis(db)  # Hermes hot-reload: ท่าทีตลาด ("" ถ้ายังไม่ learn)
-        # --- ฝากคำถาม 2 ขั้น: ลูกค้าเพิ่งแตะ "ฝากคำถาม" → ข้อความถัดไป = คำถามจริง ---
-        # (วางก่อน branch อื่น — ให้ทุกข้อความถัดไปถูกจับเป็นคำถาม ยกเว้นลบข้อมูล/ยกเลิก)
+        # --- ฝากคำถาม/แชท 2 ขั้น: ลูกค้าเพิ่งแตะปุ่ม → ข้อความถัดไปถูกจัดการ ---
+        # (วางก่อน branch อื่น — ให้ทุกข้อความถัดไปถูกจับ ยกเว้นลบข้อมูล/ยกเลิก)
+        leave_ts = _pending_leave.get(line_user_id)
+        if leave_ts:
+            if (datetime.datetime.utcnow() - leave_ts).total_seconds() > PENDING_QUESTION_TTL_MIN * 60:
+                _pending_leave.pop(line_user_id, None)  # หมดเวลา → คืนโหมดปกติ
+                leave_ts = None
         pending_ts = _pending_question.get(line_user_id)
         if pending_ts:
             if (datetime.datetime.utcnow() - pending_ts).total_seconds() > PENDING_QUESTION_TTL_MIN * 60:
                 _pending_question.pop(line_user_id, None)  # หมดเวลา → คืนโหมดปกติ
                 pending_ts = None
-        if pending_ts and not is_owner and normalized_text not in DELETE_PHRASES \
+        if leave_ts and not is_owner and normalized_text not in DELETE_PHRASES \
+                and not any(p in normalized_text for p in PENDING_CANCEL_IF) and not is_contact_request(normalized_text):
+            _pending_leave.pop(line_user_id, None)
+            # ฝากคำถาม = ยังไม่ตอบ: เก็บรายละเอียดไว้ (log ลง chat_logs + ชีทอัตโนมัติ)
+            # + แจ้งเจ้าของร้าน → เจ้าของตอบทีหลังด้วย /ตอบ <userId> <ข้อความ>
+            reply = TextSendMessage(text=LEAVE_MESSAGE_CONFIRM, quick_reply=quick_reply_items())
+            intent = 'human'
+            _notify_owner_question(user, normalized_text)
+        elif leave_ts and normalized_text in PENDING_CANCEL_IF:
+            _pending_leave.pop(line_user_id, None)
+            reply = TextSendMessage(text=CANCEL_CONFIRM)
+            intent = 'human'
+        elif pending_ts and not is_owner and normalized_text not in DELETE_PHRASES \
                 and not any(p in normalized_text for p in PENDING_CANCEL_IF) and not is_contact_request(normalized_text):
             _pending_question.pop(line_user_id, None)
             # ป้าเข็มตอบเองทั้งหมด (NUANOSE: AI = พนักงาน) — mirror routing ข้อความตรงๆ:
@@ -2288,6 +2360,10 @@ def message_text(event):
             # เอเจนต์ทำแคมเปญ (เฉพาะเจ้าของ) — dry-run ก่อนส่งจริง
             reply = handle_campaign(db, normalized_text, is_owner)
             intent = 'campaign'
+        elif is_owner and normalized_text.startswith(OWNER_REPLY_PREFIX):
+            # เจ้าของตอบลูกค้าทีหลัง: /ตอบ <userId> <ข้อความ> → push ถึงลูกค้า
+            reply = handle_owner_reply(normalized_text)
+            intent = 'admin'
         elif is_greeting(normalized_text):
             # แนวสากล: ทักทาย + ปุ่มทางเลือก — ไม่ยิงสินค้าจนกว่าลูกค้าจะบอกความต้องการ
             reply = TextSendMessage(text=_append_market_emphasis(greeting_text_for(user.name, tone), emphasis),
@@ -2317,15 +2393,17 @@ def message_text(event):
             if _wants_code_buttons(normalized_text):
                 reply = [reply, _github_button_card()]
         elif normalized_text in CHAT_BOT_PHRASES:
-            # กด "คุยกับป้าเข็ม" → ทักทายด้วยมาตรฐาน 5 ขั้นตอน (ชัด/ไม่อ่านรก) แล้วรอรับคำถามถัดไป
+            # กด "คุยกับป้าเข็ม" → แชทกับบอททันที (มาตรฐาน 5 ขั้นตอน + รอรับคำถามถัดไป)
+            _pending_leave.pop(line_user_id, None)  # สลับโหมด: ฝากคำถาม → แชท
             _pending_question[line_user_id] = datetime.datetime.utcnow()
             reply = TextSendMessage(text=CHAT_BOT_PROMPT,
                                     quick_reply=quick_reply_items())
             intent = 'human'
-        elif is_contact_request(normalized_text):
-            # ฝากคำถาม 2 ขั้น: แตะปุ่ม → ถามคำถามจริง → ป้าเข็มตอบเอง (ไม่มีทางส่งเจ้าของ)
-            _pending_question[line_user_id] = datetime.datetime.utcnow()
-            reply = TextSendMessage(text=ASK_QUESTION_PROMPT,
+        elif is_leave_request(normalized_text):
+            # ฝากคำถาม = ยังไม่ตอบ: ฝากรายละเอียดไว้ → เจ้าของร้านตอบทีหลัง
+            _pending_question.pop(line_user_id, None)  # สลับโหมด: แชท → ฝากคำถาม
+            _pending_leave[line_user_id] = datetime.datetime.utcnow()
+            reply = TextSendMessage(text=LEAVE_MESSAGE_PROMPT,
                                     quick_reply=quick_reply_items())
             intent = 'human'
         elif is_owner and normalized_text in ADMIN_STATS_CMDS:

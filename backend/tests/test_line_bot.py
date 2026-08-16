@@ -308,13 +308,15 @@ def test_sticker_reply(sim):
     assert len(sim.replies) == 1
 
 
-# ---------- ฝากคำถาม 2 ขั้น ----------
-def test_pending_question_store_marker(sim):
+# ---------- ฝากคำถาม: ฝากรายละเอียดไว้ เจ้าของร้านตอบทีหลัง (ไม่ตอบทันที) ----------
+def test_leave_message_saves_and_notifies_owner(sim):
     r1 = sim.send("U_cust_1", "ฝากคำถาม")
     assert r1["intent"] == "human"
+    assert "ฝากคำถามได้เลย" in r1["preview"]  # ชวนฝากรายละเอียด
     r2 = sim.send("U_cust_1", "พัสดุของฉันอยู่ไหน")
-    assert r2["intent"] == "manual"
-    assert r2["owner_pushes"] == []  # ป้าเข็มตอบวิธีเช็คเอง ไม่ปลุกเจ้าของ (NUANOSE)
+    assert r2["intent"] == "human"  # ยังไม่ตอบ → ฝากไว้
+    assert "เก็บข้อความไว้" in r2["preview"]
+    assert len(r2["owner_pushes"]) == 1  # แจ้งเจ้าของให้ตอบทีหลัง
 
 
 def test_chat_button_enters_ai_flow(sim):
@@ -345,98 +347,72 @@ def test_how_to_buy_uses_faq_not_web(sim):
     assert "สั่งซื้อผ่าน Shopee" in r["preview"]
 
 
-def test_pending_question_web_answer(sim):
-    sim.send("U_cust_1", "ฝากคำถาม")
-    r2 = sim.send("U_cust_1", "วิธีชงกาแฟให้อร่อย")
-    assert r2["intent"] == "web"
+def test_leave_message_saves_any_question(sim):
+    # ทุกคำถามหลัง "ฝากคำถาม" (แม้แต่ค้นสินค้า/FAQ/ความรู้/เทียบ/ของใหม่) ถูกฝากไว้ ไม่ตอบทันที
+    for q in ("หูฟัง", "วิธีชงกาแฟให้อร่อย", "ติดตั้งยังไง", "คืนเงินได้ไหม",
+              "เทียบ หูฟังบลูทูธไร้สาย รุ่นโปร กับ แก้วสแตนเลส 316 เก็บความเย็น",
+              "มีของใหม่ไหม", "อืม"):
+        sim.send("U_cust_1", "ฝากคำถาม")
+        r2 = sim.send("U_cust_1", q)
+        assert r2["intent"] == "human", f"{q!r} → {r2['intent']}"
+        assert "เก็บข้อความไว้" in r2["preview"], f"{q!r} ไม่ยืนยันว่าฝากไว้แล้ว"
+        assert len(r2["owner_pushes"]) == 1, f"{q!r} ต้องแจ้งเจ้าของ"
 
 
-def test_pending_question_retap_does_not_push_owner(sim):
-    # แตะ "ฝากคำถาม" ซ้ำ (ปุ่มติดมาใน prompt) ต้องไม่ push คำว่า "ฝากคำถาม" ไปเจ้าของ
+def test_leave_message_retap_shows_prompt_no_push(sim):
+    # แตะ "ฝากคำถาม" ซ้ำ (ปุ่มติดมาใน prompt) → โชว์ prompt ใหม่ ไม่ push เจ้าของ
     sim.send("U_cust_1", "ฝากคำถาม")
     r2 = sim.send("U_cust_1", "ฝากคำถาม")
     assert r2["owner_pushes"] == []
-    assert "พิมพ์คำถาม" in r2["preview"]  # ถามคำถามจริงซ้ำ แทนการตอบรับทราบ
+    assert "ฝากคำถามได้เลย" in r2["preview"]
 
 
-def test_pending_question_wismo(sim):
+def test_leave_message_cancel(sim):
     sim.send("U_cust_1", "ฝากคำถาม")
-    r2 = sim.send("U_cust_1", "เลขพัสดุหาย ตามของหน่อย")
-    assert r2["intent"] == "wismo"
-    assert r2["owner_pushes"] == []
-
-
-def test_pending_question_web_fail_fallback(sim, monkeypatch):
-    monkeypatch.setattr(lb, "web_search_answer",
-                        lambda q, *a, **k: {"text": "ขออภัย หาไม่เจอ", "images": []})
-    sim.send("U_cust_1", "ฝากคำถาม")
-    r2 = sim.send("U_cust_1", "วิธีทำขนมปังโฮมเมด")
+    r2 = sim.send("U_cust_1", "ยกเลิก")
     assert r2["intent"] == "human"
     assert r2["owner_pushes"] == []
-    assert "ตอบให้ตรง" in r2["preview"]
+    assert "กลับมาเมนูปกติ" in r2["preview"]
 
 
-def test_pending_question_unclear_fallback(sim):
+def test_leave_message_ttl_expiry(sim):
     sim.send("U_cust_1", "ฝากคำถาม")
-    r2 = sim.send("U_cust_1", "อืม")
-    assert r2["intent"] == "human"
-    assert r2["owner_pushes"] == []
-    assert "ตอบให้ตรง" in r2["preview"]
-
-
-def test_pending_question_ttl_expiry(sim):
-    sim.send("U_cust_1", "ฝากคำถาม")
-    lb._pending_question["U_cust_1"] = datetime.datetime.utcnow() - datetime.timedelta(minutes=31)
+    lb._pending_leave["U_cust_1"] = datetime.datetime.utcnow() - datetime.timedelta(minutes=31)
     r2 = sim.send("U_cust_1", "หูฟัง")
     assert r2["intent"] == "search"  # พ้น TTL → กลับโหมดค้นสินค้าปกติ
 
 
-# ---------- ฝากคำถาม: คำถามคู่มือ/เทียบ/ค้นเน็ต/ของใหม่ ต้องไม่หลุดไป web ขยะ ----------
-def test_pending_manual_question_not_web(sim):
+def test_leave_message_logged_in_chat_logs(sim, db):
     sim.send("U_cust_1", "ฝากคำถาม")
-    r2 = sim.send("U_cust_1", "ติดตั้งยังไง")
-    assert r2["intent"] == "manual"
-    assert "ไม่ต้องติดตั้งอะไรเลย" in r2["preview"]
+    sim.send("U_cust_1", "อยากได้กระติกน้ำ 2 ลิตร")
+    row = (db.query(models.ChatLog)
+             .filter(models.ChatLog.line_user_id == "U_cust_1")
+             .order_by(models.ChatLog.id.desc()).first())
+    assert row is not None
+    assert row.intent == "human"  # intent='human' = "ฝากคำถาม" ในแดชบอร์ด
 
 
-def test_pending_refund_question_manual(sim):
-    sim.send("U_cust_1", "ฝากคำถาม")
-    r2 = sim.send("U_cust_1", "คืนเงินได้ไหม")
-    assert r2["intent"] == "manual"
-    assert "คืนเงิน" in r2["preview"]
+def test_chat_button_still_answers_immediately(sim):
+    # "คุยกับป้าเข็ม" ต่างจาก "ฝากคำถาม" — แชทกับบอทตอบทันที ไม่แจ้งเจ้าของ
+    r1 = sim.send("U_cust_1", "คุยกับป้าเข็ม")
+    assert r1["intent"] == "human"
+    r2 = sim.send("U_cust_1", "หูฟัง")
+    assert r2["intent"] == "search"
+    assert r2["owner_pushes"] == []
+
+
+def test_owner_reply_command(sim):
+    # เจ้าของตอบลูกค้าทีหลัง: /ตอบ <userId> <ข้อความ> → push ถึงลูกค้า
+    r = sim.send(sim.owner_uid, "/ตอบ U_cust_1 สวัสดีจ๊ะ มีของค่ะ")
+    assert r["intent"] == "admin"
+    assert "ส่งคำตอบถึง U_cust_1" in r["preview"]
 
 
 def test_pending_damaged_question_manual(sim):
-    """'ของชำรุด' ต้องไป FAQ คืนสินค้า ไม่ใช่ web/fallback"""
+    """'ของชำรุด' ต้องไป FAQ คืนสินค้า ไม่ใช่ web/fallback (พิมพ์ตรง ไม่ผ่านฝากคำถาม)"""
     r = sim.send("U_cust_1", "ของชำรุด ทำไง")
     assert r["intent"] == "manual"
     assert "คืนเงิน" in r["preview"] or "คืนสินค้า" in r["preview"]
-
-
-def test_pending_compare(sim):
-    sim.send("U_cust_1", "ฝากคำถาม")
-    r2 = sim.send("U_cust_1", "เทียบ หูฟังบลูทูธไร้สาย รุ่นโปร กับ แก้วสแตนเลส 316 เก็บความเย็น")
-    assert r2["intent"] == "compare"
-
-
-def test_pending_web_search_request(sim):
-    sim.send("U_cust_1", "ฝากคำถาม")
-    r2 = sim.send("U_cust_1", "ค้นเน็ต สภาพอากาศวันนี้")
-    assert r2["intent"] == "web"
-
-
-def test_pending_new_arrivals(sim):
-    # "มีอะไรใหม่" เป็นปุ่มเมนู → อยู่ใน PENDING_CANCEL_IF (ถือว่าเปลี่ยนใจ) ใช้ "มีของใหม่" แทน
-    sim.send("U_cust_1", "ฝากคำถาม")
-    r2 = sim.send("U_cust_1", "มีของใหม่")
-    assert r2["intent"] == "new"
-
-
-def test_pending_new_arrivals_question_suffix(sim):
-    """'มีของใหม่ไหม' (มีคำถามต่อท้าย) ก็ต้องไป new ไม่ใช่ fallback"""
-    sim.send("U_cust_1", "ฝากคำถาม")
-    r2 = sim.send("U_cust_1", "มีของใหม่ไหม")
-    assert r2["intent"] == "new"
 
 
 # ---------- คำสุภาพล้วน (ครับ/จ้า/ค่ะ) ต้องไม่แมตช์ทุกสินค้า ----------

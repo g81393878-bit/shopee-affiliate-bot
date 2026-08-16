@@ -86,6 +86,7 @@ def _blank_llm_keys(monkeypatch):
 def db():
     """session สด + ล้างสถานะในหน่วยความจำ/ตารางลูกค้าระหว่างแต่ละเทสต์"""
     lb._pending_question.clear()
+    lb._pending_leave.clear()
     s = SessionLocal()
     for m in (models.LeadAction, models.FacebookDemandEvent, models.FacebookDetectedLead, models.FacebookGroupMonitor, models.ChatLog, models.UserPreference, models.User, models.CampaignLog):
         s.query(m).delete(synchronize_session=False)
