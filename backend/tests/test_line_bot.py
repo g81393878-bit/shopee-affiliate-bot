@@ -192,11 +192,13 @@ def test_is_package_request_excludes_line_oa_fee():
 
 def test_quick_reply_includes_bot_price_button():
     # ปุ่มลัดสากลมีปุ่ม "ราคาบอท/แพ็กเกจ" → แตะแล้วไปการ์ด 5 ทางเลือก (ขายบอทต่อ)
+    # ไม่มี "คุยกับป้าเข็ม" (ซ้ำซ้อน — บอทตอบเองทุกข้อความอยู่แล้ว)
     qr = lb.quick_reply_items()
     labels = [item.action.label for item in qr.items]
     texts = [item.action.text for item in qr.items]
-    assert labels == ["🔍 ค้นหาสินค้า", "🤖 คุยกับป้าเข็ม", "💬 ฝากคำถาม", "💰 ราคาบอท/แพ็กเกจ"], labels
+    assert labels == ["🔍 ค้นหาสินค้า", "💬 ฝากคำถาม", "💰 ราคาบอท/แพ็กเกจ"], labels
     assert texts[-1] == "ราคาบอท"
+    assert "คุยกับป้าเข็ม" not in texts
     # แตะปุ่มราคาบอท → การ์ด Flex แพ็กเกจ (intent manual) ไม่ใช่ค้นสินค้า
     assert lb.is_package_request("ราคาบอท") is True
 
