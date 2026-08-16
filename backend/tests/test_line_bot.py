@@ -279,16 +279,17 @@ SALES_FAQ_CASES = [
 
 
 def test_payment_reply_precalculates_amounts():
-    # บอทคำนวณมัดจำ/ส่งมอบครึ่ง-ครึ่งให้เสร็จ — ราคาแพ็กเกจ = ยอดที่จ่าย (ไม่มีค่าติดตั้งแยก)
+    # รายเดือนจ่ายเต็มเดือนแรกก่อนเริ่ม (ไม่มีมัดจำ/ค่าติดตั้งแยก) · ขายขาดมัดจำ 50% จ่ายครั้งเดียว
     text = lb.payment_reply_text()
-    assert "มัดจำ 245" in text and "ส่งมอบ 245" in text  # Lean (ครึ่ง-ครึ่ง = 490)
-    assert "มัดจำ 495" in text and "ส่งมอบ 495" in text  # Starter
-    assert "มัดจำ 995" in text and "ส่งมอบ 995" in text  # Business
-    assert "มัดจำ 2,495" in text and "ส่งมอบ 2,495" in text  # White-Label
-    assert "7,500–12,500" in text  # ขายขาด
-    # ราคาแพ็กเกจ = ยอดที่จ่ายจริง ไม่มีค่าติดตั้งแยก + บอกหลังส่งมอบจ่ายรายเดือนต่อ
+    assert "จ่าย 490 ก่อนเริ่ม" in text  # Lean (เดือนแรกเต็ม)
+    assert "จ่าย 990 ก่อนเริ่ม" in text  # Starter
+    assert "จ่าย 1,990 ก่อนเริ่ม" in text  # Business
+    assert "จ่าย 4,990 ก่อนเริ่ม" in text  # White-Label
+    assert "มัดจำ 50%" in text and "7,500–12,500" in text  # ขายขาด
+    # ไม่มีมัดจำ/ค่าติดตั้งแยกสำหรับรายเดือน + บอกหลังรับบอทจ่ายรายเดือนต่อ
+    assert "ไม่มีมัดจำ" in text
     assert "ไม่มีค่าติดตั้งแยก" in text
-    assert "หลังส่งมอบ จ่ายรายเดือน" in text
+    assert "จ่ายรายเดือนต่อ" in text
 
 
 def test_payment_reply_is_text_only_no_qr(sim):
@@ -322,13 +323,13 @@ def test_tap_package_quick_reply_shows_that_package_amount(sim):
     r = sim.send("U_cust_1", "ยอด Starter")
     assert r["intent"] == "manual"
     assert "🟢 Starter 990" in r["preview"]
-    assert "มัดจำก่อนทำ: 495 บาท" in r["preview"]
-    assert "จ่ายตอนส่งมอบ: 495 บาท" in r["preview"]
-    assert "รวม: 990 บาท" in r["preview"]
-    assert "หลังส่งมอบ: 990 บาท/เดือน" in r["preview"]
-    # แตะปุ่มขายขาด → ยอดขายขาด
+    assert "จ่ายเดือนแรกก่อนเริ่มทำ: 990 บาท" in r["preview"]
+    assert "หลังรับบอท จ่ายรายเดือน: 990 บาท/เดือน" in r["preview"]
+    # แตะปุ่มขายขาด → มัดจำ 50% + ที่เหลือตอนส่งมอบ + รวมครั้งเดียว
     r2 = sim.send("U_cust_1", "ยอด ขายขาด")
-    assert "รวม: 15,000–25,000 บาท" in r2["preview"]
+    assert "มัดจำก่อนเริ่ม: 7,500–12,500 บาท" in r2["preview"]
+    assert "จ่ายตอนส่งมอบ: 7,500–12,500 บาท" in r2["preview"]
+    assert "รวมจ่ายครั้งเดียว: 15,000–25,000 บาท" in r2["preview"]
 
 
 def test_payment_reply_shows_account_numbers_as_text(sim, monkeypatch):
@@ -373,10 +374,11 @@ def test_package_card_has_realistic_leadtime():
 
 
 def test_build_time_counts_from_confirmation_and_deposit(sim):
-    # บอกชัดว่าเริ่มนับวันเมื่อยืนยันสั่งทำ + จ่ายมัดจำครบ (กันลูกค้าถามซ้ำว่าวันไหนเริ่ม)
+    # บอกชัดว่าเริ่มนับวันเมื่อยืนยันสั่งทำ + จ่ายเดือนแรกครบ (ขายขาด = มัดจำ 50%)
     r = sim.send("U_cust_1", "ใช้เวลานานแค่ไหน")
     assert r["intent"] == "manual"
-    assert "มัดจำ 50%" in r["preview"], f"ไม่แจ้งมัดจำ 50%: {r['preview'][:180]}"
+    assert "จ่ายเดือนแรกครบ" in r["preview"], f"ไม่แจ้งเงื่อนไขเริ่มนับวัน: {r['preview'][:180]}"
+    assert "มัดจำ 50%" in r["preview"], f"ไม่แจ้งเงื่อนไขขายขาด (มัดจำ 50%): {r['preview'][:180]}"
     assert "เริ่มนับวัน" in r["preview"], f"ไม่บอกว่าเริ่มนับวันเมื่อไหร่: {r['preview'][:180]}"
     assert "นับจากวันนั้น" in r["preview"], f"ไม่ชี้แจงว่านับจากวันที่จ่ายครบ: {r['preview'][:180]}"
 
