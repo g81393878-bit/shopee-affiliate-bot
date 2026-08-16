@@ -185,11 +185,12 @@ def check_category_cooldown_allowed(
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=cooldown_hours)
 
+    # 'pending' = กำลังจะโพสต์ (commit ก่อน post_feed) — นับด้วยเพื่อกัน concurrent ซ้ำหมวด
     recent_count = (
         db.query(models.FacebookDemandEvent.id)
         .join(models.Product, models.FacebookDemandEvent.matched_product_id == models.Product.id)
         .filter(
-            models.FacebookDemandEvent.notification_status.in_(["posted", "sent"]),
+            models.FacebookDemandEvent.notification_status.in_(["posted", "sent", "pending"]),
             models.FacebookDemandEvent.created_at >= cutoff,
             models.Product.category == category,
         )
@@ -214,10 +215,11 @@ def check_daily_post_limit_allowed(
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=window_hours)
 
+    # 'pending' = กำลังจะโพสต์ (commit ก่อน post_feed) — นับด้วยเพื่อกัน concurrent เกินโควต้า
     total_posts = (
         db.query(models.FacebookDemandEvent.id)
         .filter(
-            models.FacebookDemandEvent.notification_status.in_(["posted", "sent"]),
+            models.FacebookDemandEvent.notification_status.in_(["posted", "sent", "pending"]),
             models.FacebookDemandEvent.created_at >= cutoff,
         )
         .count()
@@ -510,6 +512,10 @@ def ingest_facebook_leads(
                 )
                 db.add(demand_event)
                 db.flush()
+                # Commit ก่อน post_feed — กันบั๊ก "โพสต์ขึ้น FB แล้วแต่ record หาย"
+                # (เคยเจอโพสต์ซ้ำ 4 ตัว: post_feed สำเร็จแต่ db.commit() ท้ายสุดพัง/ถูกฆ่า →
+                #  lead + demand_event ถูก rollback → dedup/cooldown มองไม่เห็นโพสต์ → ยิงซ้ำได้)
+                db.commit()
 
                 image_url = (matched_product.image_url or "").strip()
                 if image_url:
@@ -545,6 +551,8 @@ def ingest_facebook_leads(
                     status_str = "deal_matched_post_failed"
 
                 alert_sent = False
+                # อัปเดตสถานะ posted/failed ให้ durable (แยกจาก commit ก่อนโพสต์)
+                db.commit()
             else:
                 # ไม่พบสินค้าที่ตรงกันในคลัง
                 demand_event = models.FacebookDemandEvent(

@@ -1334,3 +1334,62 @@ def test_radar_post_feed_failure_handling(client, db_session):
         lead = db_session.query(models.FacebookDetectedLead).filter_by(fb_post_id=post_id).first()
         ev = db_session.query(models.FacebookDemandEvent).filter_by(lead_id=lead.id).first()
         assert ev.notification_status == "failed"
+
+
+def test_radar_commit_before_post_keeps_record_when_post_crashes(client, db_session):
+    """commit เกิดก่อน post_feed → ถ้า post_feed พัง (raise) record 'pending' ยังอยู่ ไม่หาย
+    (กันบั๊กโพสต์ขึ้น FB แล้ว record ถูก rollback → re-ingest แล้วโพสต์ซ้ำ 4 ตัว)"""
+    post_id = f"boom_{int(time.time() * 1000)}"
+    payload = {
+        "fb_post_id": post_id,
+        "author_name": "คนทดสอบ",
+        "post_text": "หูฟังพัง อยากได้หูฟังบลูทูธใหม่ด่วน งบ 500 บาท",
+        "post_url": f"https://facebook.com/posts/{post_id}",
+    }
+    mock_ai = {
+        "intent": "buy_request",
+        "demand_score": 90,
+        "urgency": "high",
+        "budget": 500.0,
+        "budget_text": "500 บาท",
+        "product_keyword": "หูฟัง",
+        "detected_category": "หูฟัง",
+        "pain_points": ["พัง"],
+        "sentiment": "positive",
+        "reasoning": "ทดสอบ",
+    }
+
+    def boom(message=None, **kwargs):
+        raise RuntimeError("connection reset mid-post")
+
+    with patch("app.api.facebook_radar.post_feed", side_effect=boom), \
+         patch("app.api.facebook_radar.analyze_lead_intent_and_demand", return_value=mock_ai):
+        with pytest.raises(RuntimeError):
+            client.post("/api/admin/facebook-radar/leads", json=payload)
+
+    # record ยังอยู่ (commit เกิดก่อน post_feed) — ถ้าหายจะ re-ingest แล้วโพสต์ซ้ำได้
+    lead = db_session.query(models.FacebookDetectedLead).filter_by(fb_post_id=post_id).first()
+    assert lead is not None
+    ev = db_session.query(models.FacebookDemandEvent).filter_by(lead_id=lead.id).first()
+    assert ev is not None
+    assert ev.notification_status == "pending"  # ยังไม่ทันอัปเดต เพราะ post พังไปก่อน
+
+
+def test_cooldown_and_daily_limit_count_pending_events(db_session):
+    """สถานะ 'pending' (กำลังจะโพสต์) ต้องถูกนับเป็นโพสต์ด้วย — กัน concurrent ซ้ำหมวด/เกินโควต้า"""
+    prod = models.Product(name="หูฟังเทสต์", category="หูฟัง", price=100, rating=4.5,
+                          sales_count=1000, commission=10, affiliate_url="https://shope.ee/t",
+                          link_status="ok", ai_score=80)
+    db_session.add(prod)
+    db_session.flush()
+    lead = models.FacebookDetectedLead(fb_post_id="t_pend_1", post_url="https://facebook.com/t1",
+                                       post_text="อยากได้หูฟัง")
+    db_session.add(lead)
+    db_session.flush()
+    ev = models.FacebookDemandEvent(lead_id=lead.id, intent="buy_request", demand_score=90,
+                                    matched_product_id=prod.id, notification_status="pending")
+    db_session.add(ev)
+    db_session.commit()
+
+    assert radar_api.check_category_cooldown_allowed(db_session, "หูฟัง") is False
+    assert radar_api.check_daily_post_limit_allowed(db_session, max_posts=1) is False
