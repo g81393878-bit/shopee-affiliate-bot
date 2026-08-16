@@ -584,6 +584,14 @@ BOT_MANUAL = (
     "ถามป้าเข็มได้เลย หรือแตะปุ่มด้านล่างจ๊ะ 👇\n\n"
     "🛠️ อยากเอาไปเปิดร้านเอง — ถาม \"ติดตั้งยังไง\" ป้าเข็มบอกทีละขั้นให้จ๊ะ"
 )
+
+# แพ็กเกจ/ราคาบอท (ขายต่อ) — keyword เดียวกับ BOT_MANUAL_SECTIONS + ใช้จับ branch การ์ด Flex
+PACKAGE_KWS = (
+    "ค่าบริการ", "แพ็กเกจราคา", "ราคาแพ็กเกจ", "ราคาบอท",
+    "สมัครใช้", "สมัครบอท", "สมัครสมาชิก", "สมัครแพ็กเกจ",
+    "ซื้อบอท", "อยากได้บอท", "เปิดร้าน",
+)
+
 BOT_MANUAL_SECTIONS = [
     (("ค้น", "หา"), "🔍 ค้นสินค้าค่ะ — พิมพ์ชื่อ เช่น \"หูฟัง\" \"กระติกน้ำ\" หรือใส่เงื่อนไข \"หูฟังไม่เกิน 300\" \"กระติก 200-400\" ป้าเข็มหาให้จากข้อมูลจริงในร้านจ๊ะ"),
     (("เทียบ", "เปรียบเทียบ"), "⚖️ เทียบสินค้าค่ะ — พิมพ์ \"เทียบ A กับ B\" เช่น \"เทียบกระติก ESKIMO กับ YTL\" ป้าเข็มเทียบ ราคา/ยอดขาย/ขนาด ให้ดูจ๊ะ"),
@@ -734,9 +742,7 @@ BOT_MANUAL_SECTIONS = [
      "💰 ราคาร้านป้าเข็ม = ราคาจริงจาก Shopee เป๊ะ ไม่บวกเพิ่ม ไม่คิดค่าบริการจ๊ะ\n"
      "ป้าเข็มเป็นนายหน้า — ได้ค่าคอมจาก Shopee/แบรนด์ ไม่เก็บเพิ่มจากลูกค้า\n"
      "กดซื้อไปที่แอป Shopee จ่ายตามราคาร้านค้าโดยตรงเลยจ๊ะ"),
-    (("ค่าบริการ", "แพ็กเกจราคา", "ราคาแพ็กเกจ", "ราคาบอท",
-      "สมัครใช้", "สมัครบอท", "สมัครสมาชิก", "สมัครแพ็กเกจ",
-      "ซื้อบอท", "อยากได้บอท", "เปิดร้าน"),
+    (PACKAGE_KWS,
      "💼 แพ็กเกจร้านป้าเข็ม มี 4 ระดับจ๊ะ:\n\n"
      "🟡 Lean 490/เดือน — บอทง่าย ตอบคีย์เวิร์ด + เก็บข้อมูลลง Google Sheets (ไม่มี AI/DB)\n"
      "🟢 Starter 990/เดือน — บอทตอบแชท: ค้นหา/แนะนำสินค้า + ลิงก์สั่งซื้อ (สินค้า ≤300 ตัว, แชท 5,000/เดือน)\n"
@@ -801,20 +807,96 @@ def _wants_code_buttons(text: str) -> bool:
 
 
 def _github_button_card():
-    """การ์ดแพ็กเกจ (เดิมเป็นการ์ดโค้ด GitHub — โค้ดปิดแล้ว ขายเป็นแพ็กเกจ)"""
-    return FlexSendMessage(
-        alt_text="แพ็กเกจร้านป้าเข็ม",
-        contents={
+    """การ์ดแพ็กเกจ 4 ระดับ (เดิมเป็นการ์ดโค้ด GitHub — โค้ดปิดแล้ว ขายเป็นแพ็กเกจ)"""
+    return package_flex_card()
+
+
+# ข้อมูลแพ็กเกจ 4 ระดับ สำหรับการ์ด LINE Flex (สีแยกชัด: เหลือง/เขียว/น้ำเงิน/ม่วง)
+PACKAGES = (
+    {
+        "name": "🟡 Lean",
+        "price": "490฿/เดือน",
+        "color": "#F5A623",
+        "tagline": "บอทง่าย ตอบคีย์เวิร์ด + เก็บข้อมูลลงชีท",
+        "features": ("ตอบตามคีย์เวิร์ด", "เก็บข้อความลง Google Sheets",
+                     "ต้อนรับอัตโนมัติ + ฝากคำถาม", "ตั้งค่า 3 จุด ไฟล์เดียว"),
+    },
+    {
+        "name": "🟢 Starter",
+        "price": "990฿/เดือน",
+        "color": "#2ECC71",
+        "tagline": "บอท AI ตอบแชท + ขายของ",
+        "features": ("ค้นหา/แนะนำสินค้า AI", "ลิงก์ affiliate ตรวจแล้ว",
+                     "สินค้า ≤300 ตัว", "แชท 5,000/เดือน"),
+    },
+    {
+        "name": "🔵 Business",
+        "price": "1,990฿/เดือน",
+        "color": "#3498DB",
+        "tagline": "บอทรันเองทั้งวงจร",
+        "features": ("Facebook auto-post", "หาคนอยากซื้ออัตโนมัติ (Radar)",
+                     "แจ้งราคาตก + ของใหม่", "แดชบอร์ด + ไม่จำกัด"),
+    },
+    {
+        "name": "🟣 White-Label",
+        "price": "4,990฿/เดือน",
+        "color": "#9B59B6",
+        "tagline": "เป็นแบรนด์ของคุณเอง",
+        "features": ("เปลี่ยนชื่อ/เสียง/โลโก้", "แยกฐานข้อมูล",
+                     "custom domain", "support เร็วที่สุด"),
+    },
+)
+
+
+def package_flex_card() -> FlexSendMessage:
+    """การ์ด LINE Flex carousel 4 ใบ (Lean/Starter/Business/White-Label)
+    สีแยกชัด + ปุ่ม 'สนใจแพ็กเกจนี้' → ส่ง 'ติดต่อเจ้าของร้าน' (เข้า flow ฝากคำถาม)"""
+    bubbles = []
+    for p in PACKAGES:
+        bubbles.append({
             "type": "bubble",
-            "body": {
-                "type": "box", "layout": "vertical", "spacing": "sm",
+            "header": {
+                "type": "box", "layout": "vertical", "backgroundColor": p["color"],
                 "contents": [
-                    {"type": "text", "text": "💼 แพ็กเกจร้านป้าเข็ม", "weight": "bold", "size": "sm", "wrap": True},
-                    {"type": "text", "text": "🟢 Starter 990/เดือน\n🔵 Business 1,990/เดือน\n🟣 White-Label 4,990/เดือน", "size": "sm", "wrap": True},
+                    {"type": "text", "text": p["name"], "color": "#FFFFFF",
+                     "weight": "bold", "size": "md", "align": "center"},
                 ],
             },
-        },
-    )
+            "body": {
+                "type": "box", "layout": "vertical", "spacing": "md",
+                "contents": [
+                    {"type": "text", "text": p["price"], "weight": "bold", "size": "xl",
+                     "color": p["color"], "align": "center"},
+                    {"type": "text", "text": p["tagline"], "size": "sm", "wrap": True,
+                     "align": "center", "color": "#333333"},
+                    {"type": "separator"},
+                    {"type": "text", "text": "• " + "\n• ".join(p["features"]),
+                     "size": "xs", "wrap": True, "color": "#666666"},
+                ],
+            },
+            "footer": {
+                "type": "box", "layout": "vertical",
+                "contents": [
+                    {"type": "button", "style": "primary", "color": p["color"], "height": "sm",
+                     "action": {"type": "message", "label": "สนใจแพ็กเกจนี้",
+                                "text": "ติดต่อเจ้าของร้าน"}},
+                ],
+            },
+        })
+    alt_text = ("แพ็กเกจร้านป้าเข็ม 4 ระดับ: 🟡 Lean 490฿/เดือน · "
+                "🟢 Starter 990฿/เดือน · 🔵 Business 1,990฿/เดือน · "
+                "🟣 White-Label 4,990฿/เดือน")
+    return FlexSendMessage(alt_text=alt_text,
+                           contents={"type": "carousel", "contents": bubbles})
+
+
+def is_package_request(text: str) -> bool:
+    """ลูกค้าถามแพ็กเกจ/ราคาบอท? → ตอบการ์ด Flex แทนข้อความล้วน"""
+    t = (text or "").strip().lower().replace(" ", "")
+    # "ค่าบริการไลน์"/"ไลน์แพ็กเกจ" = ค่า LINE OA (section แยก) ไม่ใช่แพ็กเกจบอท
+    if "ค่าบริการไลน์" in t or "ไลน์แพ็กเกจ" in t:
+        return False
+    return any(k in t for k in PACKAGE_KWS)
 
 
 # หัวข้อที่ตอบละเอียดเฉพาะเจ้าของร้าน/คนอยากเปิดร้านเอง — ลูกค้าทั่วไปถาม → ตอบสั้นชี้ทางแทน
@@ -2355,6 +2437,9 @@ def message_text(event):
                 # "มีอะไรใหม่"/"มีของใหม่ไหม" → ดันของใหม่หมวดที่เคยสนใจ (เหมือนพิมพ์ตรงๆ)
                 reply = handle_new_arrivals(db, user, line_user_id, is_owner)
                 intent = 'new'
+            elif is_package_request(normalized_text):
+                reply = package_flex_card()
+                intent = 'manual'
             elif is_bot_manual_request(normalized_text):
                 # คำถามคู่มือ (ติดตั้ง/คืนเงิน/ค่าคอม/โค้ด...) → ตอบจากคู่มือเฉพาะส่วน
                 # ไม่ปล่อยไป web search (เคยตอบขยะยาวนอกเรื่องตอนถามผ่านเมนูฝากคำถาม)
@@ -2468,6 +2553,10 @@ def message_text(event):
             reply = TextSendMessage(text=LEAVE_MESSAGE_PROMPT,
                                     quick_reply=quick_reply_items())
             intent = 'human'
+        elif is_package_request(normalized_text):
+            # ถามแพ็กเกจ/ราคาบอท → การ์ด Flex 4 ระดับ (สวย + กดได้) แทนข้อความล้วน
+            reply = package_flex_card()
+            intent = 'manual'
         elif is_bot_manual_request(normalized_text):
             # คำถามคู่มือ (ค้น/เทียบ/จำ/พัสดุ/ติดตั้ง...) = ตอบจากคู่มือเท่านั้น ไม่ AI เดา
             reply = TextSendMessage(text=bot_manual_reply(normalized_text, is_owner))
