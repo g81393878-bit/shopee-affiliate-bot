@@ -321,9 +321,21 @@ def test_chat_button_enters_ai_flow(sim):
     # "คุยกับป้าเข็ม" ต้องเข้าแชท AI (ไม่ใช่คู่มือตายตัว) — NUANOSE: AI ตอบเอง
     r1 = sim.send("U_cust_1", "คุยกับป้าเข็ม")
     assert r1["intent"] == "human"
-    assert "พิมพ์คำถาม" in r1["preview"]
+    assert "5 ขั้นตอน" in r1["preview"]
+    assert "ต้อนรับอย่างอบอุ่น" in r1["preview"]
+    assert "พิมพ์ชื่อสินค้า" in r1["preview"]
     r2 = sim.send("U_cust_1", "หูฟัง")
     assert r2["intent"] == "search"
+
+
+def test_chat_button_shows_clean_five_steps(sim):
+    # กด "คุยกับป้าเข็ม" → ตอบชัด/ไม่อ่านรก: แค่ 5 หัวข้อ ไม่ใช่ข้อความยืดยาวหรือข้อย่อย
+    r1 = sim.send("U_cust_1", "คุยกับป้าเข็ม")
+    assert r1["intent"] == "human"
+    assert "1️⃣ ต้อนรับอย่างอบอุ่น" in r1["preview"]
+    assert "5️⃣ ติดตามผลและขอบคุณ" in r1["preview"]
+    # ยังไม่ยิงข้อย่อยเต็ม (อันนั้นสำหรับพิมพ์ "บริการ"/"มาตรฐานการบริการ")
+    assert "ทักทายด้วยรอยยิ้ม" not in r1["preview"]
 
 
 def test_how_to_buy_uses_faq_not_web(sim):

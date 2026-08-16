@@ -1998,6 +1998,17 @@ ASK_QUESTION_PROMPT = (
     "ถามสินค้า / ความรู้ทั่วไป / เรื่องร้าน ป้าเข็มตอบให้เองทุกคำถาม\n\n"
     "ถ้าเปลี่ยนใจ พิมพ์ \"ยกเลิก\" ได้เลย 😊"
 )
+# ปุ่ม "คุยกับป้าเข็ม" — ทักทายด้วยมาตรฐาน 5 ขั้นตอน (สั้น/ชัด/ไม่อ่านรก) แล้วรอรับคำถามจริง
+CHAT_BOT_PHRASES = ("คุยกับป้าเข็ม", "คุยกับแม่เข็ม")
+CHAT_BOT_PROMPT = (
+    "🤗 ป้าเข็มพร้อมคุยและดูแลคุณตามมาตรฐาน 5 ขั้นตอนจ๊ะ:\n\n"
+    "1️⃣ ต้อนรับอย่างอบอุ่น\n"
+    "2️⃣ รับฟังอย่างตั้งใจ\n"
+    "3️⃣ นำเสนอของที่ตรงใจ\n"
+    "4️⃣ ดำเนินการรวดเร็ว\n"
+    "5️⃣ ติดตามผลและขอบคุณ\n\n"
+    "พิมพ์ชื่อสินค้า งบ หรือคำถามได้เลยจ๊ะ 👇"
+)
 CANCEL_CONFIRM = "รับทราบจ๊ะ กลับมาเมนูปกติได้เลยค่ะ 😊"
 # ป้าเข็มตอบเรื่องร้าน/สั่งซื้อเอง (นายหน้า ไม่มีข้อมูลสั่งซื้อ/พัสดุของลูกค้า)
 STORE_QUESTION_SELF_SERVICE = (
@@ -2305,6 +2316,12 @@ def message_text(event):
             # ถามติดตั้ง/โค้ด → แนบปุ่มเปิด GitHub + คู่มือ (แตะได้ ไม่ต้องก๊อปลิงก์)
             if _wants_code_buttons(normalized_text):
                 reply = [reply, _github_button_card()]
+        elif normalized_text in CHAT_BOT_PHRASES:
+            # กด "คุยกับป้าเข็ม" → ทักทายด้วยมาตรฐาน 5 ขั้นตอน (ชัด/ไม่อ่านรก) แล้วรอรับคำถามถัดไป
+            _pending_question[line_user_id] = datetime.datetime.utcnow()
+            reply = TextSendMessage(text=CHAT_BOT_PROMPT,
+                                    quick_reply=quick_reply_items())
+            intent = 'human'
         elif is_contact_request(normalized_text):
             # ฝากคำถาม 2 ขั้น: แตะปุ่ม → ถามคำถามจริง → ป้าเข็มตอบเอง (ไม่มีทางส่งเจ้าของ)
             _pending_question[line_user_id] = datetime.datetime.utcnow()
