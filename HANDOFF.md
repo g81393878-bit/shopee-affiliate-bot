@@ -54,10 +54,10 @@
 
 ## 3. ขั้นตอนต่อไป
 
-- โพสต์คลิป MP4 ที่เจ้าของทำไว้ (assets/202608161242.mp4) ขึ้นเพจจริงเมื่อสั่ง:
-  `python tools/post_fb_video.py --file assets/202608161242.mp4 --caption "..." --dry-run` (ดู dry-run ก่อน)
-  แล้วลบ `--dry-run` เพื่อโพสต์จริง — **ต้องเช็ค page token มี scope pages_read_engagement + pages_show_list ก่อน** (ถ้าขาด FB ตอบ error 200)
-- ทางเลือกไม่ต้องแตะ token: อัปโหลด MP4 ไป URL สาธารณะ (Drive/CDN) → `--url` ใช้ได้จาก Render ด้วย
+- โพสต์คลิป MP4 ที่เจ้าของทำไว้ (assets/202608161242.mp4, ~17.8MB) ขึ้นเพจจริงเมื่อสั่ง:
+  `backend/.venv/Scripts/python.exe tools/post_fb_video.py --file assets/202608161242.mp4 --caption "..."`
+  (token เครื่อง sync แล้ว — สิทธิ์ครบ 10 scope; 17.8MB < 1GB / <20นาที simple upload ได้ ไม่ต้อง chunked)
+- ทางเลือกจาก production: อัปโหลด MP4 ไป URL สาธารณะ → `--url` ใช้ได้จาก Render ด้วย
 
 ## 4. ไฟล์ที่ถืออยู่ / โดนแก้
 
@@ -71,3 +71,4 @@
 *   การทดสอบทั้งหมดของ Social Demand Radar ใน `tests/test_facebook_demand_radar.py` ผ่านการ Mock การวิเคราะห์อย่างสมบูรณ์แบบเพื่อหลีกเลี่ยงผลกระทบจาก Rate Limit 429 ของ API ภายนอก และแก้ปัญหา Mojibake บนระบบ Windows ส่งผลให้เทสต์ทำงานได้เสถียรและเร็วขึ้นมาก
 *   เพิ่มระบบ Relevance Safeguard ใน `product_matcher.py` เพื่อบล็อกดีลสินค้าหากไม่มีสินค้าในคลังที่ตรงกับความต้องการของลูกค้าจริง (Relevance Score < 12.0) ป้องกันการสแปมและยิงโพสต์มั่วซั่วขึ้นบนเพจ
 *   Facebook Messenger webhook + Live เรียบร้อยแล้ว (ยืนยันจากลูกค้าจริงที่ทักแชทแล้วบอทตอบ); ล้าง subscription เก่า `object=user` ที่ชี้ `huan-khuen-cafe` แล้ว — ตอนนี้เหลือ subscription เดียว `object=page` ชี้ที่บอทป้าเข็ม
+*   **Local `backend/.env` FACEBOOK_PAGE_ACCESS_TOKEN sync จาก Render แล้ว (2026-08-16)** — token เดิมใน .env หมดอายุ (valid=False, แค่ 2 scope) → เปลี่ยนเป็น token จริงบน Render (valid=True, 10 scope incl. pages_manage_posts/pages_read_engagement/pages_show_list) → สคริปต์ `tools/post_fb_video.py` ใช้โพสต์วิดีโอจากเครื่องได้ทันที
