@@ -281,13 +281,16 @@ SALES_FAQ_CASES = [
 
 
 def test_payment_reply_precalculates_amounts():
-    # บอทคำนวณมัดจำ/ส่งมอบ/รวมให้เสร็จ — ลูกค้าไม่ต้องคิดเลขเอง
+    # บอทคำนวณมัดจำ/ส่งมอบให้เสร็จ + แยกค่าติดตั้ง 1,500 ชัด ๆ (ไม่บวกปนให้มั่ว)
     text = lb.payment_reply_text()
-    assert "มัดจำ 245" in text and "ส่งมอบ 1,745" in text and "รวม 1,990" in text  # Lean
-    assert "มัดจำ 495" in text and "ส่งมอบ 1,995" in text and "รวม 2,490" in text  # Starter
-    assert "มัดจำ 995" in text and "ส่งมอบ 2,495" in text and "รวม 3,490" in text  # Business
-    assert "มัดจำ 2,495" in text and "รวม 4,990" in text  # White-Label
-    assert "7,500–12,500" in text and "รวม 15,000–25,000" in text  # ขายขาด
+    assert "มัดจำ 245" in text and "ส่งมอบ 1,745" in text  # Lean
+    assert "มัดจำ 495" in text and "ส่งมอบ 1,995" in text  # Starter
+    assert "มัดจำ 995" in text and "ส่งมอบ 2,495" in text  # Business
+    assert "มัดจำ 2,495" in text  # White-Label
+    assert "7,500–12,500" in text  # ขายขาด
+    # แยกค่าติดตั้ง 1,500 ออกมาชัด + บอกหลังส่งมอบจ่ายรายเดือนต่อ
+    assert "ค่าติดตั้งครั้งแรก" in text and "1,500" in text
+    assert "หลังส่งมอบ จ่ายรายเดือน" in text
 
 
 def test_payment_reply_is_text_only_no_qr(sim):
@@ -322,10 +325,11 @@ def test_tap_package_quick_reply_shows_that_package_amount(sim):
     assert r["intent"] == "manual"
     assert "🟢 Starter 990" in r["preview"]
     assert "มัดจำก่อนทำ: 495 บาท" in r["preview"]
-    assert "รวมจ่าย: 2,490 บาท" in r["preview"]
+    assert "รวมจ่ายครั้งแรก: 2,490 บาท" in r["preview"]
+    assert "หลังส่งมอบ: 990 บาท/เดือน" in r["preview"]
     # แตะปุ่มขายขาด → ยอดขายขาด
     r2 = sim.send("U_cust_1", "ยอด ขายขาด")
-    assert "รวมจ่าย: 15,000–25,000 บาท" in r2["preview"]
+    assert "รวมจ่ายครั้งแรก: 15,000–25,000 บาท" in r2["preview"]
 
 
 def test_payment_reply_shows_account_numbers_as_text(sim, monkeypatch):
