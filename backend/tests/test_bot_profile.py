@@ -26,3 +26,16 @@ def test_line_bot_and_facebook_bot_share_bot_name():
     from app.api.facebook_bot import BOT_NAME as fb_name
     assert line_name == bot_profile.BOT_NAME
     assert fb_name == bot_profile.BOT_NAME
+
+
+def test_line_cta_footer_has_id_and_link():
+    # ท้ายโพสต์ Facebook ต้องชวนแอดไลน์ครบทั้ง ID และลิงก์
+    footer = bot_profile.line_cta_footer()
+    assert bot_profile.LINE_OA_ID in footer
+    assert bot_profile.LINE_OA_URL in footer
+
+
+def test_line_cta_footer_override_url():
+    footer = bot_profile.line_cta_footer("https://lin.ee/custom")
+    assert "https://lin.ee/custom" in footer
+    assert bot_profile.LINE_OA_ID in footer  # ID ยังติดครบทุกโพสต์

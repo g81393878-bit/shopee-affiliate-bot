@@ -8,11 +8,15 @@
 > - **เมื่องานเสร็จและ commit ครบ:** ให้ล้างเนื้อหาในส่วน 1–5 กลับเป็นสถานะว่าง แล้ว commit
 >   ไฟล์นี้ — เพื่อไม่ให้ AI ตัวถัดไปเข้าใจผิดว่างานยังค้าง
 
-## สถานะ: 🟢 ว่าง — งานล่าสุด (guard ingest กันโพสต์สแปมลิงก์ Lazada/Shopee ของคนอื่น + ล้าง lead สแปม 46 ตัวใน production) เสร็จ — ยังไม่ push/deploy
+## สถานะ: 🟢 ว่าง — งานล่าสุด (ใส่ LINE ID+ลิงก์ท้ายโพสต์ FB + routing "ชำระเงิน" → วิธีจ่ายค่าบอท) เสร็จ — ยังไม่ push/deploy
 
 ---
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
+
+- ✅ fix(line-bot): **"ชำระเงิน/จ่ายเงิน/โอนเงิน" → ตอบวิธีจ่ายค่าบอท (โฟกัสขายบอท)** — เจ้าของเทสต์เอง (Jeerawat=จีรวัฒน์) พิมพ์ "ชำระเงิน"/"ชำระเงินยังไง" ได้คำตอบสั่งซื้อ Shopee; แก้ตามสั่ง Option A: เพิ่ม `ชำระเงิน/จ่ายเงิน/จ่ายยังไง/โอนเงิน/โอนจ่าย` เข้า `BOT_PAYMENT_KWS` + ถอดออกจาก FAQ "สั่งซื้อผ่าน Shopee" (เหลือ `สั่งซื้อ/ซื้อยังไง/วิธีซื้อ` ตอบ Shopee เดิม); เทสต์: เปลี่ยน `test_bot_payment_does_not_hijack_product_payment` → `test_plain_payment_words_answer_bot_payment` + เพิ่ม `test_shopee_order_phrases_still_answer_shopee_payment` + 6 เคสใน SALES_FAQ_CASES → รวม **1042 passed**
+
+- ✅ feat(facebook): **ใส่ LINE ID + ลิงก์แอดไลน์ท้ายโพสต์ FB ทุกโพสต์** — เจ้าของสังเกตโพสต์ไม่มี `@137gsref` + ลิงก์ไลน์; เพิ่ม `LINE_OA_ID`/`LINE_OA_URL` + `line_cta_footer()` ใน `bot_profile.py` (default `@137gsref` + `https://lin.ee/o9Kjp1N`, แก้ได้จาก env) แล้วแปะท้าย: โพสต์ deal radar (`facebook_radar.py`), โพสต์สินค้า 4 ชม. (`cron.py` `_build_fb_caption`), คอนเทนต์ curated/local (เปลี่ยนมาใช้ footer เดียวกัน มี ID ด้วย) + ลง `.env.example`; เทสต์ใหม่ 2 ตัวใน `test_bot_profile.py` → รวม **1035 passed**
 
 - ✅ fix(radar): **guard ingest กันโพสต์สแปมลิงก์ Lazada/Shopee ของคนอื่นไม่ให้เข้าเป็น lead** — `facebook_radar.py` เพิ่ม `SPAM_LINK_MARKERS` + `_looks_like_spam_link()` (เจอ `lazada.co.th` / `s.shopee.co.th` affiliate ของรายอื่น / `shope.ee` ปลอม ใน post_text → ข้าม `status="spam_link_skipped"` ก่อน dedup/วิเคราะห์ AI/โพสต์) + เรียกใน `ingest_facebook_leads` ขั้น 0.5; ตั้งใจ**ไม่**บล็อก `shopee.co.th/product/...` ธรรมดา (ลูกค้าอาจแปะลิงก์ถามจริง); เทสต์ใหม่ 2 ตัว (unit `_looks_like_spam_link` + integration skip) → รวม **1033 passed** — **โค้ดนี้ยังไม่ deploy ขึ้น production**
 

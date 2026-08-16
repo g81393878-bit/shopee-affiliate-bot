@@ -21,6 +21,7 @@ import httpx
 
 from app.config import settings
 from app.services.persona import persona_system_prompt
+from app.services.bot_profile import line_cta_footer
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +180,6 @@ def curate_caption(item: dict, line_oa: str = "") -> str:
     if not caption:
         caption = f"ป้าเห็นข่าวนี้แล้วต้องเอามาฝากลูกหลาน 😊 {item['title']}"
     parts = [caption]
-    if line_oa:
-        parts.append(f"👉 แอดไลน์ป้า ถามป้าก่อนซื้อ: {line_oa}")
+    parts.append(line_cta_footer(line_oa))
     parts.append("#ป้าเข็ม #ถ้าไม่คุ้มป้าบอกให้")
     return "\n\n".join(parts)

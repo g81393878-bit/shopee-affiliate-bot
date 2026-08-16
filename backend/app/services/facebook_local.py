@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 
 from app.config import settings
 from app.services.persona import persona_system_prompt
+from app.services.bot_profile import line_cta_footer
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +152,6 @@ def curate_local_caption(item: dict, line_oa: str = "") -> str:
     if not caption:
         caption = f"ป้าไปเจอ {item['title']} ที่{item.get('topic') or 'บ้านเรา'} มาฝากลูกหลาน 😋"
     parts = [caption]
-    if line_oa:
-        parts.append(f"👉 แอดไลน์ป้า ป้าแนะนำร้านเด็ด ของฝาก ของกินให้: {line_oa}")
+    parts.append(line_cta_footer(line_oa))
     parts.append("#ป้าเข็ม #เที่ยวไทย #ของกินอร่อย #ถ้าไม่คุ้มป้าบอกให้")
     return "\n\n".join(parts)

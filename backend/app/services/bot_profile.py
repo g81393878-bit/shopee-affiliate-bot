@@ -32,3 +32,19 @@ PERSONA_NAME = _env("PERSONA_NAME", "ป้าเข็ม")
 
 # สโลแกนร้าน (ใช้ท้ายคอนเทนต์/คำตอบมาตรฐานบริการ)
 BOT_SLOGAN = _env("BOT_SLOGAN", "ความพึงพอใจของคุณคือความสำเร็จของเรา")
+
+# LINE OA ของร้าน — โชว์ ID + ลิงก์ในท้ายโพสต์ Facebook ทุกโพสต์
+LINE_OA_ID = _env("LINE_OA_ID", "@137gsref")
+LINE_OA_URL = _env("LINE_OA_URL", "https://lin.ee/o9Kjp1N")
+
+
+def line_cta_footer(line_url: str = "") -> str:
+    """ท้ายโพสต์ Facebook — ชวนแอดไลน์ร้าน (LINE ID + ลิงก์กดแอดได้ทันที).
+
+    line_url ใช้ override ลิงก์รายโพสต์ได้ (เช่น เทสต์/แคมเปญเฉพาะ); ว่าง = ใช้ LINE_OA_URL.
+    """
+    url = (line_url or LINE_OA_URL).strip()
+    parts = [f"👉 แอดไลน์{PERSONA_NAME}: {LINE_OA_ID}"]
+    if url:
+        parts.append(f"🔗 {url}")
+    return "\n".join(parts)

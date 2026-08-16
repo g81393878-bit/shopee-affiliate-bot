@@ -37,6 +37,7 @@ from app.services.line_quota import push_guard
 from app.services.product_cards import format_radar_deal_flex_message
 from app.services.product_matcher import match_best_product_for_demand, is_valid_shopee_affiliate_url
 from app.services.hermes_brain import load_skills_safe
+from app.services.bot_profile import line_cta_footer
 
 logger = logging.getLogger(__name__)
 
@@ -507,6 +508,10 @@ def ingest_facebook_leads(
                     suggested_reasons=suggested_reasons,
                     lead_intent_data=analysis,
                 )
+
+            # ท้ายโพสต์ทุกตัว: ชวนแอดไลน์ร้าน (LINE ID + ลิงก์) — เจ้าของสั่งให้ใส่ครบ
+            if copy_text:
+                copy_text = f"{copy_text.strip()}\n\n{line_cta_footer()}"
 
             # 5.3 ตรวจสอบ Safety Guards: Category Cooldown (24h) & Daily Rate Limit
             cooldown_ok = check_category_cooldown_allowed(

@@ -275,6 +275,13 @@ SALES_FAQ_CASES = [
     ("promptpay", "วิธีจ่ายเงิน"),
     ("บัตรเครดิต", "ตัดอัตโนมัติ"),
     ("โอนค่าบอท", "วิธีจ่ายเงิน"),
+    # โฟกัสขายบอท (เจ้าของสั่ง): คำจ่ายเงินทั่วไปก็ตอบวิธีจ่ายค่าบอท
+    ("ชำระเงิน", "วิธีจ่ายเงิน"),
+    ("ชำระเงินยังไง", "วิธีจ่ายเงิน"),
+    ("จ่ายเงิน", "วิธีจ่ายเงิน"),
+    ("จ่ายยังไง", "วิธีจ่ายเงิน"),
+    ("โอนเงิน", "วิธีจ่ายเงิน"),
+    ("โอนจ่าย", "วิธีจ่ายเงิน"),
 ]
 
 
@@ -349,13 +356,21 @@ def test_payment_reply_shows_account_numbers_as_text(sim, monkeypatch):
     assert "123-4-56789-0" in r["preview"]
 
 
-def test_bot_payment_does_not_hijack_product_payment(sim):
-    # "จ่ายเงินยังไง"/"โอนเงิน"/"ชำระเงิน" (ทั่วไป) = จ่ายค่าสินค้า → ตอบ "จ่ายที่ Shopee" ไม่ใช่ค่าบอท
-    for q in ("จ่ายเงินยังไง", "โอนเงิน", "ชำระเงิน"):
+def test_plain_payment_words_answer_bot_payment(sim):
+    # โฟกัสขายบอท (เจ้าของสั่ง): "ชำระเงิน/จ่ายเงิน/โอนเงิน" ทั่วไป → ตอบวิธีจ่ายค่าบอท ไม่ใช่จ่ายที่ Shopee
+    for q in ("ชำระเงิน", "ชำระเงินยังไง", "จ่ายเงิน", "จ่ายเงินยังไง", "โอนเงิน", "โอนจ่าย", "จ่ายยังไง"):
         r = sim.send("U_cust_1", q)
-        assert r["intent"] == "manual"
-        assert "Shopee" in r["preview"], f"'{q}' ควรตอบจ่ายที่ Shopee: {r['preview'][:120]}"
-        assert "PromptPay" not in r["preview"], f"'{q}' หลุดไปตอบวิธีจ่ายค่าบอท"
+        assert r["intent"] == "manual", f"'{q}' intent={r['intent']}"
+        assert "วิธีจ่ายเงินค่าบอท" in r["preview"], f"'{q}' ควรตอบวิธีจ่ายค่าบอท: {r['preview'][:120]}"
+        assert "Shopee" not in r["preview"], f"'{q}' ยังตอบจ่ายที่ Shopee: {r['preview'][:120]}"
+
+
+def test_shopee_order_phrases_still_answer_shopee_payment(sim):
+    # "สั่งซื้อ/ซื้อยังไง/วิธีซื้อ" ยังตอบสั่งผ่าน Shopee เหมือนเดิม (แยกจากจ่ายค่าบอท)
+    for q in ("สั่งซื้อยังไง", "ซื้อสินค้ายังไง", "วิธีสั่งซื้อ"):
+        r = sim.send("U_cust_1", q)
+        assert r["intent"] == "manual", f"'{q}' intent={r['intent']}"
+        assert "Shopee" in r["preview"], f"'{q}' ควรตอบสั่งผ่าน Shopee: {r['preview'][:120]}"
 
 
 def test_package_card_has_realistic_leadtime():

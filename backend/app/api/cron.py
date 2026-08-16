@@ -34,6 +34,7 @@ from app.services.facebook_poster import post_feed, log_post_async
 from app.services.facebook_intro import intro_posts, short_bg_posts
 from app.services.facebook_curated import fetch_news_items, item_key, curate_caption
 from app.services.facebook_local import fetch_local_items, item_key as local_item_key, curate_local_caption
+from app.services.bot_profile import line_cta_footer
 from app.services.product_image import fetch_product_image
 from linebot import LineBotApi
 from linebot.models import TextSendMessage
@@ -325,6 +326,8 @@ def _build_fb_caption(p) -> str:
     lines = [caption]
     if tags:
         lines.append(tags)
+    # ท้ายโพสต์สินค้าทุกตัว: ชวนแอดไลน์ร้าน (LINE ID + ลิงก์) — เจ้าของสั่งให้ใส่ครบ
+    lines.append(line_cta_footer())
     return "\n\n".join(lines)
 
 
