@@ -153,7 +153,7 @@ def test_package_request_returns_flex_card(sim):
     # ถามแพ็กเกจ → ตอบการ์ด Flex (alt_text) ไม่ใช่ข้อความล้วน paragraph
     r = sim.send("U_cust_1", "ค่าบริการ")
     assert r["intent"] == "manual"
-    assert r["preview"].startswith("แพ็กเกจร้านป้าเข็ม 4 ระดับ:"), r["preview"][:80]
+    assert r["preview"].startswith("แพ็กเกจร้านป้าเข็ม 5 ทางเลือก:"), r["preview"][:80]
     assert "มี 4 ระดับจ๊ะ" not in r["preview"], "ยังใช้ข้อความล้วน ไม่ได้การ์ด Flex"
 
 
@@ -162,16 +162,19 @@ def _flex_dict(card):
     return c if isinstance(c, dict) else c.as_json_dict()
 
 
-def test_package_flex_card_has_four_colored_bubbles():
+def test_package_flex_card_has_five_colored_bubbles():
     card = lb.package_flex_card()
     d = _flex_dict(card)
     assert d["type"] == "carousel"
     bubbles = d["contents"]
-    assert len(bubbles) == 4
+    assert len(bubbles) == 5
     colors = [b["header"]["backgroundColor"] for b in bubbles]
-    assert len(set(colors)) == 4, f"สีแพ็กเกจต้องแยกชัดไม่ซ้ำ: {colors}"
+    assert len(set(colors)) == 5, f"สีแพ็กเกจต้องแยกชัดไม่ซ้ำ: {colors}"
     prices = [b["body"]["contents"][0]["text"] for b in bubbles]
-    assert prices == ["490฿/เดือน", "990฿/เดือน", "1,990฿/เดือน", "4,990฿/เดือน"]
+    assert prices == ["490฿/เดือน", "990฿/เดือน", "1,990฿/เดือน",
+                      "4,990฿/เดือน", "15,000–25,000฿"]
+    # ใบสุดท้าย = ขายขาด (ซื้อครั้งเดียว ไม่ใช่รายเดือน)
+    assert bubbles[-1]["header"]["contents"][0]["text"] == "🟠 ขายขาด"
     for b in bubbles:
         btn = b["footer"]["contents"][0]
         assert btn["action"] == {"type": "message", "label": "สนใจแพ็กเกจนี้",
@@ -185,6 +188,18 @@ def test_is_package_request_excludes_line_oa_fee():
     assert lb.is_package_request("ค่าบริการไลน์") is False
     assert lb.is_package_request("ไลน์แพ็กเกจ") is False
     assert lb.is_package_request("บริการ") is False
+
+
+# ---------- ขายขาด / ซื้อครั้งเดียว (แม่ค้าไม่อยากผูกเดือน) ----------
+PERPETUAL_PHRASES = ["ขายขาด", "ซื้อขาด", "ซื้อครั้งเดียว", "เหมาจ่าย", "จ่ายครั้งเดียว"]
+
+
+@pytest.mark.parametrize("text", PERPETUAL_PHRASES)
+def test_perpetual_faq(sim, text):
+    r = sim.send("U_cust_1", text)
+    assert r["intent"] == "manual", f"{text!r} → intent={r['intent']}"
+    assert "15,000–25,000" in r["preview"], f"{text!r} ไม่โชว์ราคาขายขาด: {r['preview'][:140]}"
+    assert "จ่ายครั้งเดียว" in r["preview"], f"{text!r} ไม่บอกว่าจ่ายครั้งเดียว"
 
 
 # ---------- Lean Stack / Shopee Affiliate / ไฟล์สินค้า / ฟีเจอร์เสริม / ค่าดูแล (ขายบอท) ----------
