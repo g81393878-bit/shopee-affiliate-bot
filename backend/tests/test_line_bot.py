@@ -89,6 +89,24 @@ def test_faq_does_not_promise_human_reply(sim, text, expect):
         assert bad not in r["preview"], f"{text!r} ยังมี '{bad}' ในคำตอบ"
 
 
+# ---------- มาตรฐานการบริการ 5 ขั้นตอน (Customer Experience) ----------
+SERVICE_STANDARD_PHRASES = ["มาตรฐานการบริการ", "บริการ", "ประสบการณ์ลูกค้า", "5 ขั้นตอน"]
+
+
+@pytest.mark.parametrize("text", SERVICE_STANDARD_PHRASES)
+def test_service_standard_five_steps(sim, text):
+    r = sim.send("U_cust_1", text)
+    assert r["intent"] == "manual", f"{text!r} → intent={r['intent']}"
+    assert "5 ขั้นตอน" in r["preview"], f"{text!r} ไม่ได้โชว์ 5 ขั้นตอน: {r['preview'][:120]}"
+    assert "ความพึงพอใจของคุณคือความสำเร็จ" in r["preview"]
+
+
+def test_service_standard_does_not_shadow_product_search(sim):
+    # "มาตรฐาน"/"ขั้นตอน" เป็นส่วนหนึ่งของชื่อสินค้าจริงในคลัง — ต้องไม่โดนดักเป็นคู่มือ
+    r = sim.send("U_cust_1", "ผ้ามาตรฐาน")
+    assert r["intent"] != "manual", "คำค้นสินค้า 'ผ้ามาตรฐาน' โดนดักเป็นคู่มือผิด"
+
+
 # ---------- Bulk: ทุก reply ในคู่มือต้องไม่มีวลี escalation ----------
 # สแกนทุกข้อความที่ bot_manual_reply ส่งได้ (ทุก FAQ + fallback) — ไม่ใช่แค่ 3 FAQ ข้างบน
 MANUAL_REPLY_SOURCES = [
