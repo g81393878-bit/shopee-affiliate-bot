@@ -301,6 +301,33 @@ def test_payment_reply_is_text_only_no_qr(sim):
     assert msgs.text == lb.payment_reply_text()
 
 
+def test_package_quick_reply_has_five_package_buttons():
+    qr = lb.package_quick_reply()
+    labels = [item.action.label for item in qr.items]
+    texts = [item.action.text for item in qr.items]
+    assert labels == ["🟡 Lean", "🟢 Starter", "🔵 Business", "🟣 White-Label", "🟠 ขายขาด"], labels
+    assert texts == ["ยอด lean", "ยอด starter", "ยอด business", "ยอด whitelabel", "ยอด ขายขาด"], texts
+
+
+def test_payment_reply_attaches_package_quick_reply():
+    # ถามวิธีจ่าย → ตอบข้อความ + แนบปุ่ม 5 แพ็กเกจให้แตะดูยอดเฉพาะตัว
+    msgs = lb._manual_reply_messages("วิธีจ่ายค่าบอท")
+    assert msgs.quick_reply is not None
+    labels = [i.action.label for i in msgs.quick_reply.items]
+    assert "🟢 Starter" in labels and "🟠 ขายขาด" in labels
+
+
+def test_tap_package_quick_reply_shows_that_package_amount(sim):
+    r = sim.send("U_cust_1", "ยอด Starter")
+    assert r["intent"] == "manual"
+    assert "🟢 Starter 990" in r["preview"]
+    assert "มัดจำก่อนทำ: 495 บาท" in r["preview"]
+    assert "รวมจ่าย: 2,490 บาท" in r["preview"]
+    # แตะปุ่มขายขาด → ยอดขายขาด
+    r2 = sim.send("U_cust_1", "ยอด ขายขาด")
+    assert "รวมจ่าย: 15,000–25,000 บาท" in r2["preview"]
+
+
 def test_payment_reply_shows_account_numbers_as_text(sim, monkeypatch):
     # ตั้งเลขพร้อมเพย์ + บัญชีธนาคาร → ข้อความโชว์เลขให้ลูกค้าจดได้ (นอกเหนือจาก QR)
     monkeypatch.setattr(lb, "OWNER_PROMPTPAY", "089-999-8888")

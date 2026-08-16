@@ -8,12 +8,13 @@
 > - **เมื่องานเสร็จและ commit ครบ:** ให้ล้างเนื้อหาในส่วน 1–5 กลับเป็นสถานะว่าง แล้ว commit
 >   ไฟล์นี้ — เพื่อไม่ให้ AI ตัวถัดไปเข้าใจผิดว่างานยังค้าง
 
-## สถานะ: 🟢 ว่าง — งานล่าสุด (คำตอบวิธีจ่ายโชว์ยอดรวมชัดเจน) เสร็จ+commit — ยังไม่ push/deploy
+## สถานะ: 🟢 ว่าง — งานล่าสุด (ปุ่ม Quick Reply 5 แพ็กเกจดูยอดเฉพาะตัว) เสร็จ+commit — ยังไม่ push/deploy
 
 ---
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- ✅ feat(line-bot): **ปุ่ม Quick Reply 5 แพ็กเกจให้แตะดูยอดมัดจำ/ส่งมอบเฉพาะตัว** — เพิ่ม `PACKAGE_PAYMENTS` + `package_payment_key()` (จับ "ยอดlean/starter/business/whitelabel/ขายขาด" 0 ชนชื่อสินค้า) + `package_payment_reply()` (ตอบยอดตัวนั้น: มัดจำ/ส่งมอบ/รวม) + `package_quick_reply()` (5 ปุ่ม); แนบ 5 ปุ่มใน `_manual_reply_messages` เมื่อถามวิธีจ่าย/ยอดแพ็กเกจ; เติม "ยอด*" เข้า BOT_MANUAL_PHRASES; เทสต์ใหม่ 3 ตัว → รวม **1028 passed**
 - ✅ feat(line-bot): **คำตอบวิธีจ่ายโชว์ยอดรวมชัดเจน (มัดจำ + ส่งมอบ = รวม)** — ตารางเปลี่ยนเป็น "มัดจำ X + ส่งมอบ Y = รวม Z" ต่อแพ็กเกจ (Lean 245+1,745=1,990 · Starter 495+1,995=2,490 · Business 995+2,495=3,490 · White-Label 2,495+2,495=4,990 · ขายขาด 7,500–12,500 = 15,000–25,000); ลูกค้าเห็นยอดที่ต้องจ่ายชัด ไม่ต้องบวกเลขเอง; เทสต์ `test_payment_reply_precalculates_amounts` เพิ่ม assert "รวม X" → รวม **1025 passed**
 - ✅ feat(line-bot): **ตัด QR code ออกจากคำตอบวิธีจ่ายเงิน** — ลบ `BOT_PAYMENT_QR_URL`/`OWNER_PROMPTPAY_QR_URL` + แนบ ImageSendMessage ออกจาก `_manual_reply_messages` (เหลือตอบข้อความเดียว), ลบ "ส่ง QR/เลขบัญชีให้" ออกจาก fallback → "โอนตามเลขด้านล่าง"; env รับเงินจริง 4 ตัว (OWNER_PROMPTPAY=0935325959 · BANK_NAME=ธนาคารกรุงไทย · BANK_ACCOUNT=0380253131 · BANK_HOLDER=จีรวัฒน์ พลอาจ) ตั้งบน Render + .env เครื่องแล้ว; เทสต์เปลี่ยนเป็น `test_payment_reply_is_text_only_no_qr` + แก้ assert ให้ไม่ขึ้นกับ env → รวม **1025 passed**
 - ✅ feat(line-bot): **คำตอบวิธีจ่ายเงินคำนวณมัดจำ/ส่งมอบให้ลูกค้าเสร็จ** — `payment_reply_text()` เพิ่มตาราง "💰 คำนวณให้แล้ว ไม่ต้องคิดเอง" (Lean มัดจำ 245/ส่งมอบ 1,745 · Starter 495/1,995 · Business 995/2,495 · White-Label 2,495/2,495 · ขายขาด 7,500–12,500) + note "ยอดส่งมอบรวมค่าติดตั้ง 1,500 (White-Label ฟรี)"; ลูกค้าถาม "จ่ายยังไง/จ่ายมัดจำ" เห็นเลขเลย ไม่ต้องคำนวณเอง; เทสต์ใหม่ `test_payment_reply_precalculates_amounts` → รวม **1026 passed**

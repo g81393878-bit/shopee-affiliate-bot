@@ -598,6 +598,8 @@ BOT_MANUAL_PHRASES = (
     "promptpay", "พร้อมเพย์", "บัตรเครดิต", "ตัดบัตร",
     "โอนค่าบอท", "ชำระค่าบอท", "จ่ายค่างวด", "ค่างวด",
     "โอนมัดจำ", "จ่ายค่าดูแล", "ชำระค่ามัดจำ", "โอนค่ามัดจำ",
+    # ยอดมัดจำ/ส่งมอบรายแพ็กเกจ (ปุ่ม Quick Reply แยก 5 แพ็กเกจ) — 0 ชนชื่อสินค้า
+    "ยอดlean", "ยอดstarter", "ยอดbusiness", "ยอดwhitelabel", "ยอดขายขาด",
 )
 CONTACT_PHRASES = (
     "คุยกับป้าเข็ม", "คุยกับแม่เข็ม",
@@ -680,6 +682,54 @@ def payment_reply_text() -> str:
         "4) งานเสร็จ จ่ายยอดคงเหลือ → 5) รับบอท + คู่มือใช้เลย\n\n"
         'ถาม "แพ็กเกจ" ดูราคา/ระยะเวลาได้เลยจ๊ะ 💕'
     )
+
+
+# ยอดมัดจำ/ส่งมอบ/รวม รายแพ็กเกจ (ปุ่ม Quick Reply แยก 5 แพ็กเกจ — ลูกค้าแตะเห็นยอดตัวนั้นชัด ๆ)
+PACKAGE_PAYMENTS = (
+    {"key": "lean", "label": "🟡 Lean", "name": "🟡 Lean 490",
+     "deposit": "245 บาท", "delivery": "1,745 บาท (รวมค่าติดตั้ง 1,500)", "total": "1,990 บาท"},
+    {"key": "starter", "label": "🟢 Starter", "name": "🟢 Starter 990",
+     "deposit": "495 บาท", "delivery": "1,995 บาท (รวมค่าติดตั้ง 1,500)", "total": "2,490 บาท"},
+    {"key": "business", "label": "🔵 Business", "name": "🔵 Business 1,990",
+     "deposit": "995 บาท", "delivery": "2,495 บาท (รวมค่าติดตั้ง 1,500)", "total": "3,490 บาท"},
+    {"key": "whitelabel", "label": "🟣 White-Label", "name": "🟣 White-Label 4,990",
+     "deposit": "2,495 บาท", "delivery": "2,495 บาท (ติดตั้งฟรี)", "total": "4,990 บาท"},
+    {"key": "ขายขาด", "label": "🟠 ขายขาด", "name": "🟠 ขายขาด 15,000–25,000",
+     "deposit": "7,500–12,500 บาท", "delivery": "7,500–12,500 บาท (เท่ากับมัดจำ)", "total": "15,000–25,000 บาท"},
+)
+
+
+def package_payment_key(text: str):
+    """'ยอดlean'/'ยอดstarter'/... → คืน key แพ็กเกจ; ไม่ตรง → None (ปุ่ม Quick Reply ส่ง 'ยอด <แพ็กเกจ>')"""
+    t = (text or "").strip().lower().replace(" ", "")
+    for p in PACKAGE_PAYMENTS:
+        if f"ยอด{p['key']}" in t:
+            return p["key"]
+    return None
+
+
+def package_payment_reply(key: str) -> str:
+    """ยอดมัดจำ/ส่งมอบ/รวมของแพ็กเกจที่ลูกค้าแตะเลือก — ชัด ๆ ตัวเดียว"""
+    for p in PACKAGE_PAYMENTS:
+        if p["key"] == key:
+            return (
+                f"💰 {p['name']} จ่ายแบบนี้จ๊ะ:\n"
+                f"• มัดจำก่อนทำ: {p['deposit']}\n"
+                f"• จ่ายตอนส่งมอบ: {p['delivery']}\n"
+                f"• รวมจ่าย: {p['total']}\n\n"
+                "มัดจำจ่ายก่อนเริ่มทำ · ที่เหลือจ่ายตอนส่งมอบ\n"
+                'ถาม "จ่ายยังไง" ดูเลขบัญชี/พร้อมเพย์ได้เลยจ๊ะ 💕'
+            )
+    return payment_reply_text()
+
+
+def package_quick_reply() -> QuickReply:
+    """ปุ่ม Quick Reply 5 แพ็กเกจ — ลูกค้าแตะแล้วเห็นยอดมัดจำ/ส่งมอบของแพ็กเกจนั้น"""
+    return QuickReply(items=[
+        QuickReplyButton(action=MessageAction(label=p["label"], text=f"ยอด {p['key']}"))
+        for p in PACKAGE_PAYMENTS
+    ])
+
 
 # ทำไม 490/รายเดือน (แม่ค้าถามความคุ้ม/เหตุผลราคา) — คำเฉพาะมีคำถามนำหน้า 0 ชนชื่อสินค้า
 # (ห้ามใช้ "490" เดี่ยว/"490บาท" — ชนคำค้นสินค้างบ 490 เช่น "หูฟัง490")
@@ -1079,6 +1129,9 @@ def bot_manual_reply(text: str, is_owner: bool = False) -> str:
         return INSTALL_REPLY_OWNER if is_owner else INSTALL_REPLY_CUSTOMER
     if any(k in t for k in BOT_PAYMENT_KWS):
         return payment_reply_text()
+    _pkg_key = package_payment_key(text)
+    if _pkg_key:
+        return package_payment_reply(_pkg_key)
     for kws, section in BOT_MANUAL_SECTIONS:
         if any(k in t for k in kws):
             if not is_owner and any(k in t for k in OWNER_ONLY_KWS):
@@ -1094,8 +1147,11 @@ def is_bot_payment_request(text: str) -> bool:
 
 
 def _manual_reply_messages(text: str, is_owner: bool = False):
-    """ตอบคู่มือ — ข้อความเดียว (เลขพร้อมเพย์/บัญชีโชว์ในข้อความแล้ว ไม่ใช้ QR รูป)"""
-    return TextSendMessage(text=bot_manual_reply(text, is_owner))
+    """ตอบคู่มือ — ถ้าถามวิธีจ่าย/ยอดแพ็กเกจ → แนบปุ่ม 5 แพ็กเกจให้แตะดูยอดเฉพาะตัว"""
+    reply_text = bot_manual_reply(text, is_owner)
+    if is_bot_payment_request(text) or package_payment_key(text):
+        return TextSendMessage(text=reply_text, quick_reply=package_quick_reply())
+    return TextSendMessage(text=reply_text)
 
 
 # --- เทียบสินค้า A กับ B (แบบ Amazon "Compare with": ข้อมูลจริงในคลัง ไม่ AI เดา) ---
