@@ -243,7 +243,7 @@ def test_why_490_does_not_hijack_price_search(sim):
     assert r2["intent"] == "search", f"คำค้น 'หูฟัง 490 บาท' โดนดัก: intent={r2['intent']}"
 
 
-# ---------- Lean Stack / Shopee Affiliate / ไฟล์สินค้า / ฟีเจอร์เสริม / ค่าดูแล (ขายบอท) ----------
+# ---------- Lean Stack / Shopee Affiliate / ไฟล์สินค้า / ฟีเจอร์เสริม (ขายบอท) ----------
 SALES_FAQ_CASES = [
     ("บอทง่าย", "Lean 490"),
     ("ตอบคีย์เวิร์ด", "Lean 490"),
@@ -259,8 +259,6 @@ SALES_FAQ_CASES = [
     ("คอลัมน์ csv มีอะไรบ้าง", "ลิงก์ข้อเสนอ"),
     ("ฟีเจอร์เสริม", "เปลี่ยนแบรนด์"),
     ("addon มีอะไร", "เปลี่ยนแบรนด์"),
-    ("ค่าดูแล", "ค่าดูแล"),
-    ("รายปีจ่ายเท่าไหร่", "ค่าดูแล"),
     ("ค่าบริการไลน์", "555"),
     ("ไลน์แพ็กเกจ", "555"),
     ("ใช้เวลานานแค่ไหน", "1 วัน"),
@@ -357,17 +355,6 @@ def test_bot_payment_does_not_hijack_product_payment(sim):
         assert r["intent"] == "manual"
         assert "Shopee" in r["preview"], f"'{q}' ควรตอบจ่ายที่ Shopee: {r['preview'][:120]}"
         assert "PromptPay" not in r["preview"], f"'{q}' หลุดไปตอบวิธีจ่ายค่าบอท"
-
-
-def test_ma_values_match_brd_range(sim):
-    # BRD ล็อก M/A = 2,500–5,000/ปี — ทุกแพ็กเกจต้องอยู่ในช่วงนี้ (Lean เดิม 1,500 ต่ำกว่าเกณฑ์)
-    r = sim.send("U_cust_1", "ค่าดูแลรายปี")
-    assert r["intent"] == "manual"
-    assert "Lean 2,500" in r["preview"]
-    assert "Starter 2,500" in r["preview"]
-    assert "Business 3,500" in r["preview"]
-    assert "White-Label 5,000" in r["preview"]
-    assert "Lean 1,500" not in r["preview"]
 
 
 def test_package_card_has_realistic_leadtime():

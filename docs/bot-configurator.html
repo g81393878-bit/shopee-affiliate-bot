@@ -150,7 +150,7 @@
         <div class="desc">เป็นแบรนด์ของคุณ: เปลี่ยนชื่อ/เสียง/โลโก้ + ฐานข้อมูลแยก + หน้าเว็บ/โดเมนของคุณ + support เร็วสุด · ⏱️ เสร็จใน 1-2 สัปดาห์</div>
       </label>
     </div>
-    <div style="margin-top:10px; font-size:.85rem; color:#777">🟠 <b>ขายขาด:</b> จ่ายครั้งเดียว 15,000–25,000฿ (รวมติดตั้ง + ตั้งค่าให้ครบ) — เหมาะร้านที่อยากจบทีเดียว · ⏱️ เสร็จใน 2-3 สัปดาห์<br>🔧 <b>M/A</b> = ค่าซ่อม/อัปเดตเมื่อ Facebook/LINE เปลี่ยนระบบ (หลังปีแรก 2,500–5,000/ปี)</div>
+    <div style="margin-top:10px; font-size:.85rem; color:#777">🟠 <b>ขายขาด:</b> จ่ายครั้งเดียว 15,000–25,000฿ (รวมติดตั้ง + ตั้งค่าให้ครบ) — เหมาะร้านที่อยากจบทีเดียว · ⏱️ เสร็จใน 2-3 สัปดาห์</div>
   </div>
 
   <!-- ส่วน 4: ฟีเจอร์เสริม -->
@@ -199,14 +199,13 @@
     <div class="row"><span>เงินมัดจำเริ่มทำ (50%)</span><b id="sumDeposit">495 บาท</b></div>
     <div class="row"><span>ยอดคงเหลือหลังหักมัดจำ (จ่ายเมื่อส่งมอบ)</span><b id="sumBalance">1,995 บาท</b></div>
     <div class="row total"><span>รวมรายเดือน</span><span id="sumMonthly">990 บาท</span></div>
-    <div class="row"><span>ค่าดูแลรายปี (เริ่มปีที่ 2)</span><b id="sumMA">2,500/ปี</b></div>
     <div class="note">🔒 เงินมัดจำ 50% จ่ายก่อนเริ่มทำ · เริ่มนับวันส่งมอบเมื่อยืนยัน + จ่ายมัดจำครบ<br>⚠️ ยังไม่รวม LINE OA (555/เดือน จ่ายตรง LINE) · Render/Supabase (ลูกค้าแยกบัญชี ฟรี) · VAT 7%</div>
     <button class="send" onclick="sendOrder()">📨 ส่งใบสั่งซื้อ</button>
   </div>
 </div>
 
 <script>
-const PKGS = { lean: {price: 490, ma: 2500}, starter: {price: 990, ma: 2500}, business: {price: 1990, ma: 3500}, whitelabel: {price: 4990, ma: 5000} };
+const PKGS = { lean: {price: 490}, starter: {price: 990}, business: {price: 1990}, whitelabel: {price: 4990} };
 
 const $ = id => document.getElementById(id);
 
@@ -234,7 +233,6 @@ function recalc() {
   $('sumMonthly').textContent = monthly.toLocaleString() + ' บาท';
   $('sumDeposit').textContent = deposit.toLocaleString() + ' บาท';
   $('sumBalance').textContent = (monthly - deposit).toLocaleString() + ' บาท';
-  $('sumMA').textContent = PKGS[pkg].ma.toLocaleString() + '/ปี';
 }
 
 // ไฮไลต์แพ็กเกจที่เลือก + ปิด add-on ที่รวมใน White-Label / ใช้กับ Starter ขึ้นไป (Lean ไม่มี AI/DB)
@@ -301,7 +299,6 @@ function sendOrder() {
     'รวมรายเดือน: ' + $('sumMonthly').textContent,
     'เงินมัดจำ 50%: ' + $('sumDeposit').textContent,
     'ยอดคงเหลือเมื่อส่งมอบ: ' + $('sumBalance').textContent,
-    'ค่าดูแล/ปี: ' + $('sumMA').textContent,
   ];
   prompt('ก๊อปข้อความนี้ส่งให้เจ้าของร้าน (LINE/อีเมล) ได้เลย:', lines.join('\n'));
 }
