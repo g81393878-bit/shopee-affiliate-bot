@@ -175,10 +175,11 @@ def test_package_flex_card_has_five_colored_bubbles():
                       "4,990฿/เดือน", "15,000–25,000฿"]
     # ใบสุดท้าย = ขายขาด (ซื้อครั้งเดียว ไม่ใช่รายเดือน)
     assert bubbles[-1]["header"]["contents"][0]["text"] == "🟠 ขายขาด"
-    for b in bubbles:
+    keys = ["lean", "starter", "business", "whitelabel", "ขายขาด"]
+    for b, key in zip(bubbles, keys):
         btn = b["footer"]["contents"][0]
         assert btn["action"] == {"type": "message", "label": "สนใจแพ็กเกจนี้",
-                                   "text": "ติดต่อเจ้าของร้าน"}
+                                   "text": f"ยอด {key}"}
 
 
 def test_is_package_request_excludes_line_oa_fee():
@@ -332,11 +333,21 @@ def test_tap_package_quick_reply_shows_that_package_amount(sim):
     assert "🟢 Starter 990" in r["preview"]
     assert "จ่ายเดือนแรกก่อนเริ่มทำ: 990 บาท" in r["preview"]
     assert "หลังรับบอท จ่ายรายเดือน: 990 บาท/เดือน" in r["preview"]
+    assert "ชำระเงินได้เลย" in r["preview"]  # หน้าชำระรายแพ็กเกจต้องแนบวิธีโอนด้วย
     # แตะปุ่มขายขาด → มัดจำ 50% + ที่เหลือตอนส่งมอบ + รวมครั้งเดียว
     r2 = sim.send("U_cust_1", "ยอด ขายขาด")
     assert "มัดจำก่อนเริ่ม: 7,500–12,500 บาท" in r2["preview"]
     assert "จ่ายตอนส่งมอบ: 7,500–12,500 บาท" in r2["preview"]
     assert "รวมจ่ายครั้งเดียว: 15,000–25,000 บาท" in r2["preview"]
+
+
+def test_package_card_interest_button_goes_to_payment(sim):
+    # กด "สนใจแพ็กเกจนี้" ในการ์ด → ส่ง "ยอด <แพ็กเกจ>" → หน้าชำระเงินของแพ็กเกจนั้น (ไม่ใช่ติดต่อเจ้าของ)
+    r = sim.send("U_cust_1", "ยอด business")
+    assert r["intent"] == "manual"
+    assert "🔵 Business 1,990" in r["preview"]
+    assert "ชำระเงินได้เลย" in r["preview"]
+    assert "ติดต่อเจ้าของร้าน" not in r["preview"]
 
 
 def test_payment_reply_shows_account_numbers_as_text(sim, monkeypatch):
