@@ -647,9 +647,7 @@ BOT_PAYMENT_KWS = (
 )
 
 # วิธีจ่ายเงินค่าบอท (แยก check ก่อน loop — กัน "มัดจำ" โดน section "จำไว้" แย่ง)
-# QR PromptPay ของเจ้าของร้าน (URL รูปภาพ) — ถ้าตั้ง OWNER_PROMPTPAY_QR_URL → บอทแนบรูปให้ลูกค้าแสกนโอนได้เลย
-BOT_PAYMENT_QR_URL = os.getenv("OWNER_PROMPTPAY_QR_URL", "").strip()
-# เลขพร้อมเพย์/บัญชีธนาคารของเจ้าของร้าน (โชว์เป็นข้อความให้ลูกค้าจดเลขได้ นอกเหนือจาก QR)
+# เลขพร้อมเพย์/บัญชีธนาคารของเจ้าของร้าน (โชว์เป็นข้อความให้ลูกค้าโอนได้เลย ไม่ใช้ QR)
 OWNER_PROMPTPAY = os.getenv("OWNER_PROMPTPAY", "").strip()
 OWNER_BANK_NAME = os.getenv("OWNER_BANK_NAME", "").strip()
 OWNER_BANK_ACCOUNT = os.getenv("OWNER_BANK_ACCOUNT", "").strip()
@@ -665,7 +663,7 @@ def payment_reply_text() -> str:
     if bank:
         pay_lines.append(f"• โอนธนาคาร: {bank}")
     if not pay_lines:
-        pay_lines.append("• โอน PromptPay / โอนธนาคาร — เจ้าของร้านส่ง QR/เลขบัญชีให้ กดจ่ายแล้วส่งสลิปในแชทได้เลย")
+        pay_lines.append("• โอน PromptPay / โอนธนาคาร — ลูกค้าโอนตามเลขด้านล่างแล้วส่งสลิปในแชทได้เลย")
     pay_lines.append("• บัตรเครดิต/เดบิต (ตัดอัตโนมัติ) — ยังไม่เปิดตอนนี้ อยู่ในแผนระยะถัดไป")
     return (
         "💳 วิธีจ่ายเงินค่าบอท/มัดจำ จ๊ะ:\n\n"
@@ -1096,11 +1094,7 @@ def is_bot_payment_request(text: str) -> bool:
 
 
 def _manual_reply_messages(text: str, is_owner: bool = False):
-    """ตอบคู่มือ — ปกติข้อความเดียว; ถ้าถามวิธีจ่าย + ตั้ง OWNER_PROMPTPAY_QR_URL → แนบ QR PromptPay รูปภาพ"""
-    if is_bot_payment_request(text) and BOT_PAYMENT_QR_URL:
-        return [TextSendMessage(text=payment_reply_text()),
-                ImageSendMessage(original_content_url=BOT_PAYMENT_QR_URL,
-                                 preview_image_url=BOT_PAYMENT_QR_URL)]
+    """ตอบคู่มือ — ข้อความเดียว (เลขพร้อมเพย์/บัญชีโชว์ในข้อความแล้ว ไม่ใช้ QR รูป)"""
     return TextSendMessage(text=bot_manual_reply(text, is_owner))
 
 

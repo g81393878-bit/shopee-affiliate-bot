@@ -270,29 +270,14 @@ SALES_FAQ_CASES = [
     ("เสร็จเมื่อไหร่", "ระยะเวลาทำบอท"),
     ("ส่งมอบบอท", "1 วัน"),
     ("บอทแพ็กเกจ Business ใช้เวลากี่วัน", "5 วัน"),
-    ("จ่ายค่าบอท", "PromptPay"),
-    ("จ่ายมัดจำ", "PromptPay"),
-    ("จ่ายมัดจำยังไง", "PromptPay"),
-    ("วิธีจ่ายค่าบอท", "PromptPay"),
-    ("promptpay", "PromptPay"),
+    ("จ่ายค่าบอท", "วิธีจ่ายเงิน"),
+    ("จ่ายมัดจำ", "วิธีจ่ายเงิน"),
+    ("จ่ายมัดจำยังไง", "วิธีจ่ายเงิน"),
+    ("วิธีจ่ายค่าบอท", "วิธีจ่ายเงิน"),
+    ("promptpay", "วิธีจ่ายเงิน"),
     ("บัตรเครดิต", "ตัดอัตโนมัติ"),
-    ("โอนค่าบอท", "PromptPay"),
+    ("โอนค่าบอท", "วิธีจ่ายเงิน"),
 ]
-
-
-def test_payment_reply_attaches_promptpay_qr_image(sim, monkeypatch):
-    # ตั้ง OWNER_PROMPTPAY_QR_URL → ถามวิธีจ่าย → ตอบข้อความ + แนบรูป QR (ImageSendMessage)
-    monkeypatch.setattr(lb, "BOT_PAYMENT_QR_URL", "https://example.com/qr-promptpay.png")
-    r = sim.send("U_cust_1", "วิธีจ่ายค่าบอท")
-    assert r["intent"] == "manual"
-    assert "PromptPay" in r["preview"]
-    assert "<ImageSendMessage>" in r["preview"], f"ไม่แนบ QR รูป: {r['preview'][:160]}"
-    # _manual_reply_messages คืน [ข้อความ, รูป] พร้อม URL ถูกต้อง
-    msgs = lb._manual_reply_messages("วิธีจ่ายค่าบอท")
-    assert len(msgs) == 2
-    assert msgs[0].text == lb.payment_reply_text()
-    assert msgs[1].original_content_url == "https://example.com/qr-promptpay.png"
-    assert msgs[1].preview_image_url == "https://example.com/qr-promptpay.png"
 
 
 def test_payment_reply_precalculates_amounts():
@@ -305,9 +290,12 @@ def test_payment_reply_precalculates_amounts():
     assert "7,500–12,500" in text  # ขายขาด
 
 
-def test_payment_reply_no_qr_url_returns_text_only(sim):
-    # ไม่ตั้ง OWNER_PROMPTPAY_QR_URL → ตอบข้อความอย่างเดียว ไม่มีรูป
-    assert not lb.BOT_PAYMENT_QR_URL
+def test_payment_reply_is_text_only_no_qr(sim):
+    # วิธีจ่าย = ข้อความเดียว (เลขพร้อมเพย์/บัญชีในข้อความแล้ว) ไม่แนบ QR รูป
+    r = sim.send("U_cust_1", "วิธีจ่ายค่าบอท")
+    assert r["intent"] == "manual"
+    assert "วิธีจ่ายเงิน" in r["preview"]
+    assert "<ImageSendMessage>" not in r["preview"]
     msgs = lb._manual_reply_messages("วิธีจ่ายค่าบอท")
     assert not isinstance(msgs, list)
     assert msgs.text == lb.payment_reply_text()
