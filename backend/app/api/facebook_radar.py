@@ -53,10 +53,27 @@ MAX_DAILY_POSTS_CAP = 25
 # หมายเหตุ: ไม่รวม "test_" เพราะ pytest ใช้ post_id แบบ test_* กับ SQLite test DB เอง
 TEST_LEAD_PREFIXES = ("fb_sample_", "fb_mock_", "demo_")
 
+# ลิงก์โปรโมตของคนอื่น/ลิงก์ปลอมใน post_text = โพสต์สแปม ไม่ใช่ buyer demand — กันไม่ให้เข้าเป็น lead
+# (เจอจริง 16/08: โพสต์ AI-generated แปะลิงก์ affiliate ของรายอื่น 46 แถวใน 3 กลุ่ม ต้องล้างมือ)
+# - lazada.co.th  = แพลตฟอร์มอื่น (s.lazada.co.th / S.LAZADA.CO.TH)
+# - s.shopee.co.th = ลิงก์ affiliate Shopee ของรายอื่น (โปรโมตของตัวเอง ไม่ใช่คนอยากซื้อ)
+# - shope.ee      = ลิงก์ปลอม (กดแล้ว 404) — ชั้นเดียวกับ DB link policy
+SPAM_LINK_MARKERS = ("lazada.co.th", "s.shopee.co.th", "shope.ee")
+
 
 def _looks_like_test_lead(fb_post_id: str) -> bool:
     """True เมื่อ fb_post_id เป็น lead ทดสอบ/หลอก (ไม่ใช่โพสต์จริงจากกลุ่ม FB)."""
     return (fb_post_id or "").strip().lower().startswith(TEST_LEAD_PREFIXES)
+
+
+def _looks_like_spam_link(post_text: str) -> bool:
+    """True เมื่อ post_text มีลิงก์ Lazada/Shopee-affiliate ของคนอื่น หรือลิงก์ปลอม.
+
+    โพสต์แบบนี้คือโฆษณาโปรโมตของรายอื่น ไม่ใช่ความต้องการซื้อ — ตัดทิ้งก่อนวิเคราะห์
+    เพื่อไม่ให้ไปสร้าง lead/stat หลอก และไม่เสีย LLM call.
+    """
+    text = (post_text or "").strip().lower()
+    return any(marker in text for marker in SPAM_LINK_MARKERS)
 
 
 def _is_production() -> bool:
@@ -336,6 +353,22 @@ def ingest_facebook_leads(
                     fb_post_id=fb_post_id,
                     lead_id=None,
                     status="test_lead_skipped",
+                    demand_score=None,
+                    intent=None,
+                    alert_sent=False,
+                    matched_product_id=None,
+                )
+            )
+            continue
+
+        # 0.5 กันโพสต์สแปมโปรโมตลิงก์ของคนอื่น (Lazada / Shopee affiliate ของรายอื่น) —
+        #     ไม่ใช่ buyer demand อย่าให้เข้าเป็น lead/stat หลอก (เคยปน 46 แถวใน 3 กลุ่ม 16/08)
+        if _looks_like_spam_link(item["post_text"]):
+            results.append(
+                schemas.IngestedLeadResult(
+                    fb_post_id=fb_post_id,
+                    lead_id=None,
+                    status="spam_link_skipped",
                     demand_score=None,
                     intent=None,
                     alert_sent=False,

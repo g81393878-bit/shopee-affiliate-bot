@@ -8,11 +8,15 @@
 > - **เมื่องานเสร็จและ commit ครบ:** ให้ล้างเนื้อหาในส่วน 1–5 กลับเป็นสถานะว่าง แล้ว commit
 >   ไฟล์นี้ — เพื่อไม่ให้ AI ตัวถัดไปเข้าใจผิดว่างานยังค้าง
 
-## สถานะ: 🟢 ว่าง — งานล่าสุด (ตั้งกฎ DB กันลิงก์ปลอมเข้าระบบ: affiliate_url ต้องเป็น s.shopee.co.th) เสร็จ+commit — ยังไม่ push/deploy
+## สถานะ: 🟢 ว่าง — งานล่าสุด (guard ingest กันโพสต์สแปมลิงก์ Lazada/Shopee ของคนอื่น + ล้าง lead สแปม 46 ตัวใน production) เสร็จ — ยังไม่ push/deploy
 
 ---
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
+
+- ✅ fix(radar): **guard ingest กันโพสต์สแปมลิงก์ Lazada/Shopee ของคนอื่นไม่ให้เข้าเป็น lead** — `facebook_radar.py` เพิ่ม `SPAM_LINK_MARKERS` + `_looks_like_spam_link()` (เจอ `lazada.co.th` / `s.shopee.co.th` affiliate ของรายอื่น / `shope.ee` ปลอม ใน post_text → ข้าม `status="spam_link_skipped"` ก่อน dedup/วิเคราะห์ AI/โพสต์) + เรียกใน `ingest_facebook_leads` ขั้น 0.5; ตั้งใจ**ไม่**บล็อก `shopee.co.th/product/...` ธรรมดา (ลูกค้าอาจแปะลิงก์ถามจริง); เทสต์ใหม่ 2 ตัว (unit `_looks_like_spam_link` + integration skip) → รวม **1033 passed** — **โค้ดนี้ยังไม่ deploy ขึ้น production**
+
+- ✅ data(prod): **ล้างโพสต์สแปมลิงก์ปลอม 46 ตัวออกจาก `facebook_detected_leads`** — เจอ 35 ตัวลิงก์ Lazada (`s.lazada.co.th`/`S.LAZADA.CO.TH`) + 11 ตัวลิงก์ Shopee affiliate ของคนอื่น (AI-generated `#สั่งซื้อได้ที่ s.shopee.co.th/...` + ปั้มน้ำ MITSUBISHI) ปนเป็น lead ปลอมใน 3 กลุ่ม (331188988816762 / 402771414350390 / 984343641981437); เปลี่ยน status `processed`→`ignored` ก่อน แล้วลบถาวรตามสั่งเจ้าของ (ไม่มี demand_event/lead_action ผูก จึงลบสะอาด) → leads 176→**130**, สแปมเหลือ 0; `facebook_demand_events` ไม่แตะ (posted 1 · sent 0 · pending 0) cooldown/daily-limit ถูกต้องอยู่แล้ว
 
 - ✅ feat(products): **ตั้งกฎ DB กันลิงก์ปลอมเข้าระบบ (ลิงก์ปลอมเข้าไม่ได้แม้ insert ตรง DB)** — `Product.affiliate_url` ต้องเป็น `s.shopee.co.th` เท่านั้น: SQLAlchemy event `before_insert`/`before_update` ใน `models.py` raise `ValueError` กัน `https://shope.ee/...` (before_update ตรวจเฉพาะเมื่อ URL ถูกแก้จริง — update ราคา/รูป/status ของแถว legacy ยังผ่านได้); ย้าย helper `is_valid_shopee_affiliate_url()` ไป `link_checker.py` (แหล่งความจริงเดียว ใช้ทั้ง DB rule + matcher + guard post_feed); เขียนกฎลง AGENTS.md หัวข้อ Product link policy; เปลี่ยน fixtures ~8 ไฟล์เป็น URL รูปแบบ `s.shopee.co.th` + refactor เทสต์ matcher เป็น 3 เทสต์กฎ DB (insert ปลอม raise / update ปลอม raise / legacy update ฟิลด์อื่นผ่าน) → รวม **1031 passed**
 

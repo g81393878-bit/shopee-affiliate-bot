@@ -26,7 +26,7 @@ from app.db import SessionLocal
 from app.main import app
 from app import models
 from app.services.product_cards import format_radar_deal_flex_message
-from app.api.facebook_radar import _safe_daily_post_limit, _looks_like_test_lead
+from app.api.facebook_radar import _safe_daily_post_limit, _looks_like_test_lead, _looks_like_spam_link
 
 TEST_ADMIN_TOKEN = os.getenv("CRON_TOKEN") or os.getenv("ADMIN_DASHBOARD_PASSWORD") or "test_radar_admin_secret"
 
@@ -56,6 +56,48 @@ def test_looks_like_test_lead_detects_mock_prefixes():
     # โพสต์จริง (id ตัวเลขแบบ FB) และ test_* ของ pytest ไม่โดนบล็อก
     assert _looks_like_test_lead("123456789_987654321") is False
     assert _looks_like_test_lead("test_fb_high_123") is False
+
+
+def test_looks_like_spam_link_detects_foreign_and_fake_links():
+    # ลิงก์ Lazada (แพลตฟอร์มอื่น) — ทุกรูปแบบ
+    assert _looks_like_spam_link("โปรโมชั่นแรง https://s.lazada.co.th/s.abc กดเลย") is True
+    assert _looks_like_spam_link("S.LAZADA.CO.TH น้ำยาถูพื้น 2 ขวด") is True
+    # ลิงก์ affiliate Shopee ของรายอื่น
+    assert _looks_like_spam_link("#สั่งซื้อได้ที่ https://s.shopee.co.th/9zwy4FdVLv") is True
+    # ลิงก์ปลอม shope.ee
+    assert _looks_like_spam_link("แวะดู https://shope.ee/earbuds_ok") is True
+    # โพสต์ buyer demand ปกติ (ไม่มีลิงก์) ไม่โดนบล็อก
+    assert _looks_like_spam_link("อยากได้หูฟังบลูทูธงบ 500 แนะนำหน่อยครับ") is False
+    # ลิงก์สินค้า Shopee ธรรมดา (ไม่ใช่ affiliate short link) ไม่โดนบล็อก
+    assert _looks_like_spam_link("อันนี้ดีไหม https://shopee.co.th/product/123456") is False
+    # ข้อความว่าง/None ไม่พัง
+    assert _looks_like_spam_link("") is False
+    assert _looks_like_spam_link(None) is False
+
+
+def test_ingest_skips_spam_link_leads(client, db_session):
+    """โพสต์ที่มีลิงก์ Lazada/Shopee ของคนอื่น ต้องถูกข้าม ไม่สร้าง lead/event/โพสต์
+    กันสแปมโปรโมตของรายอื่นปนเข้า radar (เจอจริง 16/08 46 แถวใน 3 กลุ่ม)."""
+    post_id = f"spam_link_{int(time.time() * 1000)}"
+    payload = {
+        "fb_post_id": post_id,
+        "group_id": "grp_market",
+        "group_name": "มาร์เก็ตสินค้า",
+        "author_name": "ร้านค้ารายอื่น",
+        "post_text": "#สั่งซื้อได้ที่ https://s.shopee.co.th/9zwy4FdVLv โปรดีมาก",
+        "post_url": f"https://facebook.com/groups/market/posts/{post_id}",
+        "post_time": datetime.now(timezone.utc).isoformat(),
+    }
+    with patch("app.api.facebook_radar.post_feed") as mock_post:
+        resp = client.post("/api/admin/facebook-radar/leads", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["processed"] == 0
+    assert data["results"][0]["status"] == "spam_link_skipped"
+    mock_post.assert_not_called()
+    lead = (db_session.query(models.FacebookDetectedLead)
+            .filter(models.FacebookDetectedLead.fb_post_id == post_id).first())
+    assert lead is None
 
 
 def test_ingest_skips_test_leads_in_production(client, db_session, monkeypatch):
