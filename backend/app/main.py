@@ -16,7 +16,7 @@ import httpx
 
 from app.db import engine, Base
 from app.api import users, products, performance, line_bot, cron, admin_dashboard, facebook_bot, facebook_radar
-from app.api.cron import run_facebook_auto_post
+from app.api.cron import run_facebook_auto_post, run_facebook_product_post, run_facebook_content_post
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -28,6 +28,8 @@ KEEP_ALIVE_URL = (os.getenv("RENDER_EXTERNAL_URL") or "").rstrip("/")
 KEEP_ALIVE_INTERVAL = int(os.getenv("KEEP_ALIVE_INTERVAL", "600"))
 # นาทีระหว่างโพสต์ Facebook อัตโนมัติ (0/ไม่ตั้ง = ปิด) — บอทโพสต์เองในตัว ไม่พึ่ง cron-job.org
 FB_AUTO_POST_INTERVAL = int(os.getenv("FB_AUTO_POST_INTERVAL", "0") or 0)
+# นาทีระหว่างโพสต์คอนเทนต์ (แนะนำแม่เข็ม/ข่าว/ร้าน) — แยกกำหนดเวลาจากสินค้า (0 = ปิด)
+FB_CONTENT_POST_INTERVAL = int(os.getenv("FB_CONTENT_POST_INTERVAL", "0") or 0)
 
 
 FB_AUTO_POST_CHECK_SECONDS = 60  # ตรวจทุก 1 นาทีว่าถึงเวลาโพสต์หรือยัง (ไม่ sleep ยาว 4 ชม. รวดเดียว)
@@ -45,30 +47,58 @@ def _fb_fake_watcher_enabled() -> bool:
     return prod and bool(token)
 
 
-def _auto_post_due() -> bool:
-    """จริงเมื่อเลย FB_AUTO_POST_INTERVAL นาทีตั้งแต่โพสต์อัตโนมัติล่าสุด (หรือยังไม่เคยโพสต์)
-
-    สำคัญ: นับจาก created_at ของแถวโพสต์สำเร็จล่าสุดใน CampaignLog ไม่ใช่ timer ในหน่วยความจำ —
-    เพราะ Render free tier spin-down / deploy ใหม่ = process ถูก kill แล้ว sleep ที่ค้างอยู่หายไป
-    → ถ้ายังนับแบบ sleep ยาว 4 ชม. ตั้งแต่ start โพสต์จะเลื่อนออกเรื่อย ๆ ทุกครั้งที่ restart
-    """
+def _last_post_ts(statuses) -> "datetime.datetime | None":
+    """created_at ของโพสต์สำเร็จล่าสุดใน statuses ที่กำหนด (None = ยังไม่เคยโพสต์)."""
     from app import models
     from app.db import SessionLocal
     db = SessionLocal()
     try:
         last = (db.query(models.CampaignLog)
-                  .filter(models.CampaignLog.status.in_(["fbintro", "fbbg", "fbpost", "fbrss", "fblocal"]))
+                  .filter(models.CampaignLog.status.in_(statuses))
                   .order_by(models.CampaignLog.created_at.desc())
                   .first())
         if last is None or last.created_at is None:
-            return True  # ยังไม่เคยโพสต์เลย → โพสต์แรกทันที
-        last_ts = last.created_at
-        if last_ts.tzinfo is None:  # SQLite คืน naive → เติม tz กัน TypeError ลบ aware - naive
-            last_ts = last_ts.replace(tzinfo=datetime.timezone.utc)
-        elapsed = (datetime.datetime.now(datetime.timezone.utc) - last_ts).total_seconds()
-        return elapsed >= FB_AUTO_POST_INTERVAL * 60
+            return None
+        ts = last.created_at
+        if ts.tzinfo is None:  # SQLite คืน naive → เติม tz กัน TypeError ลบ aware - naive
+            ts = ts.replace(tzinfo=datetime.timezone.utc)
+        return ts
     finally:
         db.close()
+
+
+def _auto_post_due() -> bool:
+    """(backward compat) ถึงเวลาจากโพสต์ล่าสุดทุกชนิด — ใช้โดย facebook_auto_post_loop เดิม.
+
+    สำคัญ: นับจาก created_at ของแถวโพสต์สำเร็จล่าสุดใน CampaignLog ไม่ใช่ timer ในหน่วยความจำ —
+    เพราะ Render free tier spin-down / deploy ใหม่ = process ถูก kill แล้ว sleep ที่ค้างอยู่หายไป
+    → ถ้ายังนับแบบ sleep ยาว 4 ชม. ตั้งแต่ start โพสต์จะเลื่อนออกเรื่อย ๆ ทุกครั้งที่ restart
+    """
+    last = _last_post_ts(["fbintro", "fbbg", "fbpost", "fbrss", "fblocal"])
+    if last is None:
+        return True  # ยังไม่เคยโพสต์เลย → โพสต์แรกทันที
+    elapsed = (datetime.datetime.now(datetime.timezone.utc) - last).total_seconds()
+    return elapsed >= FB_AUTO_POST_INTERVAL * 60
+
+
+def _product_due() -> bool:
+    """ถึงเวลาโพสต์สินค้าถัดไปไหม — นับจากโพสต์สินค้า (fbpost) ล่าสุดเท่านั้น."""
+    last = _last_post_ts(["fbpost"])
+    if last is None:
+        return True  # ยังไม่เคยโพสต์สินค้า → โพสต์ทันที
+    elapsed = (datetime.datetime.now(datetime.timezone.utc) - last).total_seconds()
+    return elapsed >= FB_AUTO_POST_INTERVAL * 60
+
+
+def _content_due() -> bool:
+    """ถึงเวลาโพสต์คอนเทนต์ (แนะนำ/ข่าว/ร้าน) ถัดไปไหม — แยก timer จากสินค้า (0 = ปิด)."""
+    if FB_CONTENT_POST_INTERVAL <= 0:
+        return False
+    last = _last_post_ts(["fbintro", "fbbg", "fbrss", "fblocal"])
+    if last is None:
+        return True
+    elapsed = (datetime.datetime.now(datetime.timezone.utc) - last).total_seconds()
+    return elapsed >= FB_CONTENT_POST_INTERVAL * 60
 
 
 async def facebook_auto_post_loop():
@@ -94,6 +124,48 @@ async def facebook_auto_post_loop():
                     logger.info(f"facebook auto-post: {result.get('note') or result}")
         except Exception as e:
             logger.warning(f"facebook auto-post failed: {e}")
+        await asyncio.sleep(FB_AUTO_POST_CHECK_SECONDS)
+
+
+async def facebook_product_post_loop():
+    """โพสต์สินค้าอัตโนมัติทุก FB_AUTO_POST_INTERVAL นาที (นับจากโพสต์สินค้าล่าสุด) — แยกจากคอนเทนต์."""
+    if FB_AUTO_POST_INTERVAL <= 0:
+        logger.info("FB_AUTO_POST_INTERVAL not set — product auto-post disabled")
+        return
+    logger.info(f"product auto-post enabled — ทุก {FB_AUTO_POST_INTERVAL} นาที")
+    while True:
+        try:
+            if _product_due():
+                result = await asyncio.to_thread(run_facebook_product_post, 1)
+                posted = [r for r in result.get("posted", []) if r.get("posted")]
+                if posted:
+                    names = [p.get("name") or p.get("id") for p in posted]
+                    logger.info(f"product auto-post โพสต์แล้ว: {names}")
+                else:
+                    logger.info(f"product auto-post: {result.get('note') or result}")
+        except Exception as e:
+            logger.warning(f"product auto-post failed: {e}")
+        await asyncio.sleep(FB_AUTO_POST_CHECK_SECONDS)
+
+
+async def facebook_content_post_loop():
+    """โพสต์คอนเทนต์ (แนะนำแม่เข็ม/ข่าว/ร้าน) ทุก FB_CONTENT_POST_INTERVAL นาที — แยกจากสินค้า."""
+    if FB_CONTENT_POST_INTERVAL <= 0:
+        logger.info("FB_CONTENT_POST_INTERVAL not set — content auto-post disabled")
+        return
+    logger.info(f"content auto-post enabled — ทุก {FB_CONTENT_POST_INTERVAL} นาที")
+    while True:
+        try:
+            if _content_due():
+                result = await asyncio.to_thread(run_facebook_content_post)
+                posted = [r for r in result.get("posted", []) if r.get("posted")]
+                if posted:
+                    names = [p.get("name") or p.get("title") or p.get("id") for p in posted]
+                    logger.info(f"content auto-post โพสต์แล้ว: {names}")
+                else:
+                    logger.info(f"content auto-post: {result.get('note') or result}")
+        except Exception as e:
+            logger.warning(f"content auto-post failed: {e}")
         await asyncio.sleep(FB_AUTO_POST_CHECK_SECONDS)
 
 
@@ -148,11 +220,13 @@ async def keep_alive_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     keep_alive = asyncio.create_task(keep_alive_loop())
-    auto_post = asyncio.create_task(facebook_auto_post_loop())
+    product_post = asyncio.create_task(facebook_product_post_loop())
+    content_post = asyncio.create_task(facebook_content_post_loop())
     fake_watcher = asyncio.create_task(facebook_fake_post_watcher())
     yield
     keep_alive.cancel()
-    auto_post.cancel()
+    product_post.cancel()
+    content_post.cancel()
     fake_watcher.cancel()
 
 

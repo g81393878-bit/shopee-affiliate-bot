@@ -613,22 +613,13 @@ def _post_next_curated(db) -> Optional[dict]:
 _AUTO_POST_LOCK = threading.Lock()
 
 
-def run_facebook_auto_post(limit: int = 1) -> dict:
-    """โพสต์ลงเพจ Facebook อัตโนมัติ — หมุนเวียน 4 คลัง: แบรนด์ → สินค้า → คอนเทนต์โลก → ท้องถิ่น (วนซ้ำ)
-
-    - แบรนด์ (status=fbintro/fbbg): แนะนำตัว(มาสคอต) ↔ ข้อความสั้นพื้นสี
-    - สินค้า (status=fbpost): เปิดเมื่อตั้ง FB_POST_PRODUCTS=1 เท่านั้น
-    - คอนเทนต์โลก (status=fbrss): ข่าว/เทรนด์จาก RSS เขียนเสียงป้าเข็ม (Groq)
-    - ท้องถิ่น (status=fblocal): ร้านอร่อย/ของฝาก/ของกินจาก Firecrawl ตามจังหวัด
-    กันโพสต์ซ้ำด้วย CampaignLog + _AUTO_POST_LOCK (กัน concurrent ยิงซ้ำ) —
-    เรียกได้ทั้ง HTTP endpoint และ scheduler ในตัว
-    """
+def _run_post_locked(kind: str, limit: int = 1) -> dict:
+    """แกนโพสต์ร่วม: preflight + lock แล้วแยก kind='product' (สินค้า) | 'content' (แนะนำ/ข่าว/ร้าน)."""
     if not _AUTO_POST_LOCK.acquire(blocking=False):
         logger.warning("[facebook-post] มีโพสต์กำลังทำงานอยู่ — ข้ามรอบนี้ (กันโพสต์ซ้ำ)")
         return {"posted": [], "note": "โพสต์กำลังทำงานอยู่ — ข้ามรอบนี้ (กันโพสต์ซ้ำ)"}
     try:
         # ตรวจความพร้อมก่อนยิงโพสต์ (token ตั้ง/ใช้ได้, page id) — ไม่พร้อม → ข้าม + แจ้งเจ้าของ
-        # (จัดการเป็นขั้นตอน: พร้อมไหม → ไม่พร้อมแจ้ง → พร้อมค่อยโพสต์ กันโพสต์ล้มเงียบ ๆ)
         ok, reasons = preflight_ready()
         if not ok:
             notify_owner_once("fb_preflight_cron",
@@ -636,33 +627,58 @@ def run_facebook_auto_post(limit: int = 1) -> dict:
             return {"posted": [], "note": "ยังไม่พร้อมโพสต์: " + "; ".join(reasons)}
         db = SessionLocal()
         try:
+            if kind == "product":
+                # โหมดสินค้า: โพสต์เฉพาะสินค้า affiliate
+                res = _post_next_product(db, limit)
+                if res is not None:
+                    return res
+                return {"posted": [],
+                        "note": "โพสต์สินค้าเข้าเกณฑ์ครบแล้ว (รอสินค้าใหม่/ลิงก์ตรวจผ่าน — หรือตั้ง MIN_SALES ต่ำลง)"}
+
+            # kind == "content": แนะนำแม่เข็ม ↔ ข่าว RSS ↔ ร้านท้องถิ่น (ไม่แตะสินค้า)
             brand_n = (db.query(models.CampaignLog)
                          .filter(models.CampaignLog.status.in_(["fbintro", "fbbg"])).count())
-            prod_n = (db.query(models.CampaignLog)
-                         .filter(models.CampaignLog.status == "fbpost").count())
             rss_n = (db.query(models.CampaignLog)
                          .filter(models.CampaignLog.status == "fbrss").count())
             local_n = (db.query(models.CampaignLog)
                          .filter(models.CampaignLog.status == "fblocal").count())
-            slot = (brand_n + prod_n + rss_n + local_n) % 4  # 0=แบรนด์, 1=สินค้า, 2=คอนเทนต์โลก, 3=ท้องถิ่น
-            for s in (slot, (slot + 1) % 4, (slot + 2) % 4, (slot + 3) % 4):
+            slot = (brand_n + rss_n + local_n) % 3  # 0=แนะนำแม่เข็ม, 1=ข่าว, 2=ร้าน
+            for s in (slot, (slot + 1) % 3, (slot + 2) % 3):
                 if s == 0:
                     res = _post_next_brand(db)
                 elif s == 1:
-                    res = _post_next_product(db, limit)
-                elif s == 2:
                     res = _post_next_curated(db)
                 else:
                     res = _post_next_local(db)
                 if res is not None:
                     return res
-            if os.getenv("FB_POST_PRODUCTS", "").lower() not in ("1", "true", "yes"):
-                return {"posted": [], "note": "โพสต์แบรนด์ครบแล้ว — ตั้ง FB_POST_PRODUCTS=1 เพื่อโพสต์สินค้า"}
-            return {"posted": [], "note": "ไม่มีคอนเทนต์ใหม่ (สินค้าครบ / รอ RSS feed / รอ Firecrawl)"}
+            return {"posted": [],
+                    "note": "ไม่มีคอนเทนต์ใหม่ (แบรนด์ครบ / รอ RSS / รอ Firecrawl)"}
         finally:
             db.close()
     finally:
         _AUTO_POST_LOCK.release()
+
+
+def run_facebook_product_post(limit: int = 1) -> dict:
+    """โหมดสินค้า: โพสต์เฉพาะสินค้า affiliate — ใช้ scheduler แยก (FB_AUTO_POST_INTERVAL)."""
+    return _run_post_locked("product", limit)
+
+
+def run_facebook_content_post() -> dict:
+    """โหมดคอนเทนต์: แนะนำแม่เข็ม ↔ ข่าว ↔ ร้าน — ใช้ scheduler แยก (FB_CONTENT_POST_INTERVAL)."""
+    return _run_post_locked("content")
+
+
+def run_facebook_auto_post(limit: int = 1) -> dict:
+    """backward compat (HTTP endpoint / เทสต์เดิม): dispatch ตาม FB_POST_PRODUCTS.
+
+    scheduler ในตัวใช้ run_facebook_product_post / run_facebook_content_post โดยตรง
+    เพื่อให้สินค้ากับคอนเทนต์กำหนดเวลาแยกกัน (แยกชัดเจน)
+    """
+    if os.getenv("FB_POST_PRODUCTS", "").lower() in ("1", "true", "yes"):
+        return run_facebook_product_post(limit)
+    return run_facebook_content_post()
 
 
 @router.post("/facebook-post")
