@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, Integer, BigInteger, String, Numeric, Text, Date, DateTime, ForeignKey, Float, JSON, Boolean, event, inspect
+from sqlalchemy import Column, Integer, BigInteger, String, Numeric, Text, Date, DateTime, ForeignKey, Float, JSON, Boolean, LargeBinary, event, inspect
 from sqlalchemy.orm import relationship
 from app.db import Base
 from app.services.link_checker import is_valid_shopee_affiliate_url
@@ -52,6 +52,25 @@ class BotPurchase(Base):
     status = Column(String(20), nullable=False, default="interested")
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    paid_at = Column(DateTime(timezone=True), nullable=True)       # ลูกค้าแจ้งโอนเงินเมื่อไหร่
+    confirmed_at = Column(DateTime(timezone=True), nullable=True)  # เจ้าของยืนยันรับเงิน (เริ่มทำ) เมื่อไหร่
+    slip_url = Column(Text, nullable=True)      # ลิงก์เปิดดูรูปสลิป (แจ้งเจ้าของในแชท)
+    amount = Column(String(50), nullable=True)  # ยอดที่คาดว่าจะโอนตามแพ็กเกจ (OCR ทับด้วยยอดจริงจากสลิป)
+    ref_no = Column(String(50), nullable=True)  # เลขอ้างอิงจากสลิป (OCR เติม)
+
+
+class BotPurchaseSlip(Base):
+    """รูปสลิปโอนเงินที่ลูกค้าส่งมา (ขายบอท) — เก็บ binary + content-type ไว้ให้เจ้าของตรวจยอด
+    ตารางแยกใหม่ (create_all สร้างให้อัตโนมัติทั้ง dev/prod ไม่ต้อง migrate)
+    """
+    __tablename__ = "bot_purchase_slips"
+
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    line_user_id = Column(String(100), index=True, nullable=False)
+    content = Column(LargeBinary, nullable=False)
+    content_type = Column(String(50), nullable=False, default="image/jpeg")
+    size_bytes = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 
 
 class ShopeeProduct(Base):

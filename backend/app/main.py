@@ -13,8 +13,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import httpx
+from sqlalchemy import text
 
-from app.db import engine, Base
+from app.db import engine, Base, is_sqlite
 from app.api import users, products, performance, line_bot, cron, admin_dashboard, facebook_bot, facebook_radar
 from app.api.cron import run_facebook_auto_post, run_facebook_product_post, run_facebook_content_post
 from app.config import settings
@@ -23,6 +24,37 @@ logger = logging.getLogger(__name__)
 
 # Create database tables on startup (especially helpful for SQLite/Supabase development)
 Base.metadata.create_all(bind=engine)
+
+
+def _migrate_schema():
+    """เพิ่มคอลัมน์ใหม่ให้ตารางที่มีอยู่แล้ว (create_all สร้างแต่ตาราง ไม่ ALTER ตารางเดิม)
+    - paid_at / confirmed_at ของ bot_purchases: บันทึกเวลารับเรื่อง/เริ่มทำ กันระยะเวลาเลื่อนไปเรื่อย ๆ
+    - slip_url / amount / ref_no ของ bot_purchases: เก็บหลักฐานสลิปโอนเงิน (ลิงก์เปิดดู + ยอด + เลขอ้างอิง)"""
+    try:
+        with engine.begin() as conn:
+            if is_sqlite:
+                cols = [row[1] for row in conn.execute(text("PRAGMA table_info(bot_purchases)"))]
+                if "paid_at" not in cols:
+                    conn.execute(text("ALTER TABLE bot_purchases ADD COLUMN paid_at TIMESTAMP"))
+                if "confirmed_at" not in cols:
+                    conn.execute(text("ALTER TABLE bot_purchases ADD COLUMN confirmed_at TIMESTAMP"))
+                if "slip_url" not in cols:
+                    conn.execute(text("ALTER TABLE bot_purchases ADD COLUMN slip_url TEXT"))
+                if "amount" not in cols:
+                    conn.execute(text("ALTER TABLE bot_purchases ADD COLUMN amount VARCHAR(50)"))
+                if "ref_no" not in cols:
+                    conn.execute(text("ALTER TABLE bot_purchases ADD COLUMN ref_no VARCHAR(50)"))
+            else:
+                conn.execute(text("ALTER TABLE bot_purchases ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ"))
+                conn.execute(text("ALTER TABLE bot_purchases ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ"))
+                conn.execute(text("ALTER TABLE bot_purchases ADD COLUMN IF NOT EXISTS slip_url TEXT"))
+                conn.execute(text("ALTER TABLE bot_purchases ADD COLUMN IF NOT EXISTS amount VARCHAR(50)"))
+                conn.execute(text("ALTER TABLE bot_purchases ADD COLUMN IF NOT EXISTS ref_no VARCHAR(50)"))
+    except Exception as e:
+        logger.warning(f"migrate bot_purchases columns failed: {e}")
+
+
+_migrate_schema()
 
 KEEP_ALIVE_URL = (os.getenv("RENDER_EXTERNAL_URL") or "").rstrip("/")
 KEEP_ALIVE_INTERVAL = int(os.getenv("KEEP_ALIVE_INTERVAL", "600"))
@@ -251,6 +283,7 @@ app.include_router(users.router, prefix="/api")
 app.include_router(products.router, prefix="/api")
 app.include_router(performance.router, prefix="/api")
 app.include_router(line_bot.router, prefix="/api")
+app.include_router(line_bot.slips_router, prefix="/api")  # เปิดดูรูปสลิปโอนเงิน (ลิงก์แจ้งเจ้าของ)
 app.include_router(facebook_bot.router, prefix="/api")
 app.include_router(facebook_radar.router, prefix="/api")
 app.include_router(cron.router, prefix="/api")

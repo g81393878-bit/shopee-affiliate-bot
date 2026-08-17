@@ -149,12 +149,24 @@ def test_package_faq_shows_all_four_tiers(sim):
     assert "4,990" in r["preview"]
 
 
-def test_package_request_returns_flex_card(sim):
-    # ถามแพ็กเกจ → ตอบการ์ด Flex (alt_text) ไม่ใช่ข้อความล้วน paragraph
+def test_package_request_returns_summary(sim):
+    # ถามแพ็กเกจ/ราคาบอท → สรุปย่อ + ปุ่มเลือกทีละแพ็กเกจ (ไม่ทิ้งการ์ดเต็ม 5 ใบทันที)
     r = sim.send("U_cust_1", "ค่าบริการ")
     assert r["intent"] == "manual"
-    assert r["preview"].startswith("แพ็กเกจร้านป้าเข็ม 5 ทางเลือก:"), r["preview"][:80]
-    assert "มี 4 ระดับจ๊ะ" not in r["preview"], "ยังใช้ข้อความล้วน ไม่ได้การ์ด Flex"
+    assert "5 ทางเลือก" in r["preview"], r["preview"][:80]
+    assert "Lean 490" in r["preview"]
+    assert "15,000–25,000" in r["preview"]
+    assert "มี 4 ระดับจ๊ะ" not in r["preview"], "ยังใช้ข้อความล้วนแบบเก่า"
+
+
+def test_package_summary_quick_reply_has_five_buttons():
+    # สรุปย่อแนบปุ่ม 5 แพ็กเกจ → แตะส่ง "ยอด <key>" → ไปหน้าชำระเงินของตัวนั้น (ไม่ทิ้งการ์ดเต็ม)
+    qr = lb.package_summary_quick_reply()
+    labels = [i.action.label for i in qr.items]
+    texts = [i.action.text for i in qr.items]
+    assert labels == ["🟡 Lean", "🟢 Starter", "🔵 Business", "🟣 White-Label", "🟠 ขายขาด"]
+    assert texts[0] == "ยอด lean"
+    assert texts[-1] == "ยอด ขายขาด"
 
 
 def _flex_dict(card):
@@ -217,6 +229,34 @@ def test_perpetual_faq(sim, text):
     assert r["intent"] == "manual", f"{text!r} → intent={r['intent']}"
     assert "15,000–25,000" in r["preview"], f"{text!r} ไม่โชว์ราคาขายขาด: {r['preview'][:140]}"
     assert "จ่ายครั้งเดียว" in r["preview"], f"{text!r} ไม่บอกว่าจ่ายครั้งเดียว"
+
+
+# ---------- รายเดือน (เช่าใช้) vs ขายขาด (ซื้อเป็นของตัวเอง) ----------
+RENT_VS_BUYOUT_PHRASES = [
+    "ขายขาดกับรายเดือนต่างกันยังไง",
+    "รายเดือนกับขายขาดต่างกันยังไง",
+    "เช่ากับซื้อต่างกันยังไง",
+    "เช่าใช้กับซื้อขาดต่างกันยังไง",
+    "ควรเช่าหรือซื้อ",
+    "เช่าบอทได้ไหม",
+    "รายเดือนคืออะไร",
+    "ขายขาดคืออะไร",
+]
+
+
+@pytest.mark.parametrize("text", RENT_VS_BUYOUT_PHRASES)
+def test_rent_vs_buyout_faq_explains_both(sim, text):
+    r = sim.send("U_cust_1", text)
+    assert r["intent"] == "manual", f"{text!r} → intent={r['intent']}"
+    assert "เช่าใช้" in r["preview"], f"{text!r} ไม่อธิบายว่ารายเดือน = เช่าใช้: {r['preview'][:160]}"
+    assert "ซื้อเป็นของตัวเอง" in r["preview"], f"{text!r} ไม่อธิบายว่าขายขาด = ซื้อเป็นของตัวเอง: {r['preview'][:160]}"
+    assert "15,000–25,000" in r["preview"], f"{text!r} ไม่โชว์ราคาขายขาด"
+
+
+def test_rent_vs_buyout_does_not_hijack_rental_search(sim):
+    # "เช่าชุดไทย" = ค้นสินค้า/ชุดให้เช่า → ต้องไม่โดนดักเป็น FAQ ความต่าง
+    r = sim.send("U_cust_1", "เช่าชุดไทย")
+    assert r["intent"] != "manual", "คำค้น 'เช่าชุดไทย' โดนดักเป็น FAQ"
 
 
 # ---------- ทำไม 490฿/เดือน (แม่ค้าถามความคุ้ม/เหตุผลราคา) ----------
@@ -377,6 +417,80 @@ def test_interest_tracks_bot_purchase(sim, db):
     assert p.status == "interested"
 
 
+def test_interest_shows_queue_number(sim, db):
+    # แตะ "สนใจแพ็กเกจนี้" → เห็นเลขคิวของตัวเอง (ลูกค้าแรก = คิวที่ 1, คนถัดไป = คิวที่ 2)
+    r = sim.send("U_cust_1", "ยอด lean")
+    assert "คิวที่ 1" in r["preview"], f"ไม่เห็นเลขคิว: {r['preview'][:160]}"
+    r2 = sim.send("U_cust_2", "ยอด starter")
+    assert "คิวที่ 2" in r2["preview"], f"คิวไม่เพิ่ม: {r2['preview'][:160]}"
+
+
+def test_owner_queue_command_lists_pending(sim, db):
+    # เจ้าของพิมพ์ /คิว → เห็นรายการงานค้างเรียงตามลำดับ (FIFO)
+    sim.send("U_cust_1", "ยอด lean")
+    sim.send("U_cust_2", "ยอด starter")
+    r = sim.send(sim.owner_uid, "/คิว")
+    assert r["intent"] == "admin"
+    assert "คิวงานบอท (2 งานค้าง)" in r["preview"]
+    assert "🟡 Lean 490" in r["preview"]
+    assert "🟢 Starter 990" in r["preview"]
+
+
+def test_owner_queue_empty(sim, db):
+    # ไม่มีงานค้าง → /คิว บอกว่าไม่มีงาน
+    r = sim.send(sim.owner_uid, "/คิว")
+    assert r["intent"] == "admin"
+    assert "ไม่มีงานค้าง" in r["preview"]
+
+
+def test_customer_queue_shows_number_and_leadtime(sim, db):
+    # ลูกค้าแตะสนใจแพ็กเกจ → พิมพ์ "คิวของฉัน" → เห็นเลขคิว + ระยะเวลาทำ
+    sim.send("U_cust_1", "ยอด business")
+    r = sim.send("U_cust_1", "คิวของฉัน")
+    assert r["intent"] == "manual"
+    assert "คิวที่ 1" in r["preview"], f"ไม่เห็นเลขคิว: {r['preview'][:160]}"
+    assert "🔵 Business 1,990" in r["preview"]
+    assert "เสร็จภายใน 5 วัน" in r["preview"]
+
+
+def test_customer_queue_empty_guides_to_packages(sim, db):
+    # ยังไม่สั่ง → "คิวของฉัน" บอกไม่มี + ชี้ไปถามราคาบอท
+    r = sim.send("U_cust_1", "คิวของฉัน")
+    assert r["intent"] == "manual"
+    assert "ไม่มีคำสั่งซื้อ" in r["preview"]
+    assert "ราคาบอท" in r["preview"]
+
+
+def test_purchase_timestamps_recorded(sim, db):
+    # จ่ายแล้ว → บันทึก paid_at; เจ้าของยืนยัน → บันทึก confirmed_at (ยึดจุดเริ่มทำ ไม่เลื่อนไปเรื่อย ๆ)
+    sim.send("U_cust_1", "ยอด lean")
+    p = _purchase(db, "U_cust_1")
+    assert p.paid_at is None and p.confirmed_at is None
+    sim.send("U_cust_1", "จ่ายแล้ว")
+    db.expire_all()  # เคลียร์ identity map กัน session แคชของเก่า
+    p = _purchase(db, "U_cust_1")
+    assert p.paid_at is not None
+    assert p.confirmed_at is None
+    sim.send(sim.owner_uid, "/ยืนยัน U_cust_1")
+    db.expire_all()
+    p = _purchase(db, "U_cust_1")
+    assert p.confirmed_at is not None
+
+
+def test_customer_queue_shows_received_time(sim, db):
+    # "คิวของฉัน" → เห็น "รับเรื่องเมื่อ" (เวลาที่สั่ง) ชัดเจน
+    sim.send("U_cust_1", "ยอด lean")
+    r = sim.send("U_cust_1", "คิวของฉัน")
+    assert "รับเรื่องเมื่อ" in r["preview"]
+
+
+def test_owner_queue_shows_received_time(sim, db):
+    # /คิว → แต่ละงานมีเวลารับเรื่อง (ลงบันทึกดี ๆ)
+    sim.send("U_cust_1", "ยอด lean")
+    r = sim.send(sim.owner_uid, "/คิว")
+    assert "รับเรื่อง" in r["preview"]
+
+
 def test_paid_declaration_sets_pending_and_notifies_owner(sim, db):
     sim.send("U_cust_1", "ยอด lean")
     r = sim.send("U_cust_1", "จ่ายแล้ว")
@@ -414,6 +528,150 @@ def test_paid_declaration_without_purchase_ignored(sim, db):
     assert r["intent"] != "purchase"
     assert _purchase(db, "U_cust_1") is None
     assert r["owner_pushes"] == []
+
+
+# ---------- รับรูปสลิป (ImageMessage) — ดาวน์โหลดผ่าน LINE Content API ----------
+class _ImageEvent:
+    def __init__(self, uid, message_id="msg_slip_1"):
+        self.message = type("M", (), {"id": message_id})()
+        self.source = type("S", (), {"user_id": uid})()
+        self.reply_token = f"rt_{uid}"
+
+
+class _FakeContent:
+    def __init__(self, data, content_type="image/jpeg"):
+        self._data = data
+        self.content_type = content_type
+
+    def iter_content(self, chunk_size=1024):
+        for i in range(0, len(self._data), chunk_size):
+            yield self._data[i:i + chunk_size]
+
+
+def _send_slip(sim, monkeypatch, uid, data=b"fake-slip-image", content_type="image/jpeg"):
+    """จำลองลูกค้าส่งรูปสลิป → คืน {preview, owner_pushes} เหมือน sim.send"""
+    content = _FakeContent(data, content_type)
+    monkeypatch.setattr(lb.line_bot_api, "get_message_content",
+                        lambda mid, timeout=None: content)
+    sim.replies.clear()
+    sim.pushes.clear()
+    lb.image_slip(_ImageEvent(uid))
+    return {"preview": sim.replies[0] if sim.replies else "",
+            "owner_pushes": list(sim.pushes)}
+
+
+def test_slip_image_stored_and_notifies_owner(sim, db, monkeypatch):
+    # ลูกค้าสั่งบอทแล้วส่งรูปสลิป → เก็บรูป + ลิงก์ + สถานะรอยืนยัน + แจ้งเจ้าของ
+    monkeypatch.delenv("SLIP_VIEW_TOKEN", raising=False)
+    monkeypatch.delenv("CRON_TOKEN", raising=False)
+    sim.send("U_cust_1", "ยอด lean")
+    r = _send_slip(sim, monkeypatch, "U_cust_1", b"\x89PNG fake-slip", "image/png")
+    assert "รับรูปสลิปแล้ว" in r["preview"]
+    assert len(r["owner_pushes"]) == 1
+    assert "ส่งรูปสลิปมาแล้ว" in r["owner_pushes"][0]
+    assert "ดูสลิป:" in r["owner_pushes"][0]
+    assert "/api/slips/" in r["owner_pushes"][0]
+    assert "/ยืนยัน U_cust_1" in r["owner_pushes"][0]
+    p = _purchase(db, "U_cust_1")
+    assert p.status == "paid_pending"
+    assert p.slip_url and "/api/slips/" in p.slip_url
+    assert p.amount == "490 บาท"  # ยอดคาดจากแพ็กเกจ lean
+    assert p.ref_no is None
+    slip = db.query(models.BotPurchaseSlip).filter_by(line_user_id="U_cust_1").first()
+    assert slip is not None
+    assert slip.content == b"\x89PNG fake-slip"
+    assert slip.content_type == "image/png"
+    assert slip.size_bytes == len(b"\x89PNG fake-slip")
+
+
+def test_slip_image_without_order_guides_customer(sim, db, monkeypatch):
+    # ยังไม่มีคำสั่งซื้อค้าง → ชี้ทางแตะสนใจแพ็กเกจก่อน ไม่เก็บรูป ไม่แจ้งเจ้าของ
+    r = _send_slip(sim, monkeypatch, "U_cust_1", b"x")
+    assert "ยังไม่เจอคำสั่งซื้อ" in r["preview"]
+    assert r["owner_pushes"] == []
+    assert db.query(models.BotPurchaseSlip).filter_by(line_user_id="U_cust_1").first() is None
+
+
+def test_slip_download_streams_and_limits_size(monkeypatch):
+    # _download_slip รวม chunks + content-type; เกิน SLIP_MAX_BYTES → _SlipTooLarge
+    monkeypatch.setattr(lb.line_bot_api, "get_message_content",
+                        lambda mid, timeout=None: _FakeContent(b"abcde", "image/jpeg"))
+    data, ctype = lb._download_slip("msg_1")
+    assert data == b"abcde"
+    assert ctype == "image/jpeg"
+
+    monkeypatch.setattr(lb.line_bot_api, "get_message_content",
+                        lambda mid, timeout=None: _FakeContent(b"x" * (lb.SLIP_MAX_BYTES + 1)))
+    with pytest.raises(lb._SlipTooLarge):
+        lb._download_slip("msg_2")
+
+
+def test_slip_download_failure_replies_error(sim, db, monkeypatch):
+    # ดาวน์โหลดพัง (content หมดอายุ/เน็ตล่ม) → ตอบขอโทษ ไม่ crash ไม่เปลี่ยนสถานะ
+    sim.send("U_cust_1", "ยอด lean")
+    monkeypatch.setattr(lb.line_bot_api, "get_message_content",
+                        lambda mid, timeout=None: (_ for _ in ()).throw(RuntimeError("expired")))
+    sim.replies.clear()
+    sim.pushes.clear()
+    lb.image_slip(_ImageEvent("U_cust_1"))
+    assert sim.replies, "ต้องตอบลูกค้าบางอย่าง"
+    assert "ไม่สำเร็จ" in sim.replies[0]
+    assert _purchase(db, "U_cust_1").status == "interested"  # ยังไม่เปลี่ยนเป็นรอยืนยัน
+    assert sim.pushes == []
+
+
+def test_slip_view_url_embeds_token(monkeypatch):
+    # มี SLIP_VIEW_TOKEN → ฝัง token ในลิงก์ให้เจ้าของเปิดดูได้ทันที
+    monkeypatch.setenv("SLIP_VIEW_TOKEN", "secret123")
+    monkeypatch.setenv("RENDER_EXTERNAL_URL", "https://example.com")
+    assert lb.slip_view_url(42) == "https://example.com/api/slips/42?token=secret123"
+
+
+def test_slip_view_url_falls_back_to_cron_token(monkeypatch):
+    # ไม่ตั้ง SLIP_VIEW_TOKEN → ใช้ CRON_TOKEN สำรอง
+    monkeypatch.delenv("SLIP_VIEW_TOKEN", raising=False)
+    monkeypatch.setenv("CRON_TOKEN", "cron_secret")
+    monkeypatch.setenv("RENDER_EXTERNAL_URL", "https://example.com")
+    assert lb.slip_view_url(7) == "https://example.com/api/slips/7?token=cron_secret"
+
+
+def test_slip_view_url_open_without_token(monkeypatch):
+    # ไม่ตั้ง token ทั้งคู่ → ลิงก์เปิด (เหมือน /health ใน dev)
+    monkeypatch.delenv("SLIP_VIEW_TOKEN", raising=False)
+    monkeypatch.delenv("CRON_TOKEN", raising=False)
+    monkeypatch.setenv("RENDER_EXTERNAL_URL", "https://example.com")
+    assert lb.slip_view_url(9) == "https://example.com/api/slips/9"
+
+
+def test_get_slip_image_serves_bytes(db, monkeypatch):
+    # endpoint คืนรูปสลิปเป็น bytes + content-type ถูกต้อง (ไม่มี token = เปิด)
+    slip = models.BotPurchaseSlip(line_user_id="U_cust_1", content=b"\x89PNG bytes",
+                                  content_type="image/png", size_bytes=9)
+    db.add(slip)
+    db.commit()
+    db.refresh(slip)
+    monkeypatch.delenv("SLIP_VIEW_TOKEN", raising=False)
+    monkeypatch.delenv("CRON_TOKEN", raising=False)
+    resp = lb.get_slip_image(slip.id, token="")
+    assert resp.body == b"\x89PNG bytes"
+    assert resp.media_type == "image/png"
+
+
+def test_get_slip_image_requires_token(monkeypatch):
+    # ตั้ง token แล้ว → ?token ผิด = 401
+    monkeypatch.setenv("SLIP_VIEW_TOKEN", "secret123")
+    with pytest.raises(lb.HTTPException) as exc:
+        lb.get_slip_image(1, token="wrong")
+    assert exc.value.status_code == 401
+
+
+def test_get_slip_image_unknown_id_404(db, monkeypatch):
+    # ไม่มี slip id นั้น → 404
+    monkeypatch.delenv("SLIP_VIEW_TOKEN", raising=False)
+    monkeypatch.delenv("CRON_TOKEN", raising=False)
+    with pytest.raises(lb.HTTPException) as exc:
+        lb.get_slip_image(999999, token="")
+    assert exc.value.status_code == 404
 
 
 def test_payment_reply_shows_account_numbers_as_text(sim, monkeypatch):
@@ -481,6 +739,30 @@ def test_build_time_does_not_hijack_shipping_question(sim):
     assert r["intent"] == "manual"
     assert "จัดส่ง" in r["preview"], f"ส่งของกี่วันโดน build-time แย่ง: {r['preview'][:120]}"
     assert "ระยะเวลาทำบอท" not in r["preview"]
+
+
+def test_build_time_answers_plain_duration_word(sim):
+    # "ระยะเวลา" คำเดียว (ไม่มีคำต่อ) → ตอบระยะเวลาทำบอท ไม่หลุดไปตอบทั่วไป
+    r = sim.send("U_cust_1", "ระยะเวลา")
+    assert r["intent"] == "manual"
+    assert "ระยะเวลาทำบอท" in r["preview"], f"'ระยะเวลา' เดี่ยว ตอบไม่ตรง: {r['preview'][:140]}"
+
+
+def test_build_time_includes_buffer_note(sim):
+    # หมายเหตุ buffer: ระยะเวลาอาจบวกลบ 1–2 วันตามคิวงาน (บอกตามตรง ไม่ผูกวันที่แน่นอน)
+    r = sim.send("U_cust_1", "กี่วันเสร็จ")
+    assert "บวกลบ 1–2 วัน" in r["preview"], f"ไม่มีหมายเหตุ buffer: {r['preview'][:200]}"
+    # แตะแพ็กเกจก็เห็นหมายเหตุเดียวกัน
+    assert "บวกลบ 1–2 วัน" in lb.package_payment_reply("lean")
+
+
+def test_package_payment_reply_includes_leadtime_and_features():
+    # แตะแพ็กเกจ → เห็นราคา + ระยะเวลาทำ + สิ่งที่ได้ + ยอดจ่าย ในที่เดียว
+    r = lb.package_payment_reply("business")
+    assert "🔵 Business 1,990฿/เดือน" in r
+    assert "เสร็จภายใน 5 วัน" in r
+    assert "สิ่งที่ได้" in r
+    assert "จ่ายเดือนแรกก่อนเริ่มทำ: 1,990 บาท" in r
 
 
 @pytest.mark.parametrize("text,expect", SALES_FAQ_CASES)

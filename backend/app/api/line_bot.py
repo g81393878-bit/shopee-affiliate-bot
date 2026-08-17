@@ -4,13 +4,13 @@ import re
 import logging
 import inspect
 from typing import List, Optional, Tuple
-from fastapi import APIRouter, HTTPException, Header, Request
+from fastapi import APIRouter, HTTPException, Header, Request, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 import datetime
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import (TextMessage, MessageEvent, TextSendMessage, StickerMessage,
+from linebot.models import (TextMessage, MessageEvent, TextSendMessage, StickerMessage, ImageMessage,
                             StickerSendMessage, QuickReply, QuickReplyButton,
                             MessageAction, FollowEvent, FlexSendMessage, ImageSendMessage)
 from pydantic import BaseModel
@@ -583,6 +583,11 @@ BOT_MANUAL_PHRASES = (
     "ของหมด", "ลิงก์ตาย",
     # ขายขาด/ซื้อครั้งเดียว (แม่ค้าไม่อยากผูกเดือน) — 0 ชนชื่อสินค้า
     "ขายขาด", "ซื้อขาด", "ซื้อครั้งเดียว", "เหมาจ่าย", "จ่ายครั้งเดียว",
+    # รายเดือน (เช่าใช้) vs ขายขาด (ซื้อเป็นของตัวเอง) — อธิบายความต่างไม่ให้สับสน
+    "ขายขาดกับรายเดือน", "รายเดือนกับขายขาด", "รายเดือนกับซื้อขาด", "ซื้อขาดกับรายเดือน",
+    "ขายขาดต่าง", "รายเดือนต่างจากขายขาด", "ขายขาดต่างจากรายเดือน",
+    "เช่าใช้", "เช่ากับซื้อ", "ซื้อกับเช่า", "เช่าหรือซื้อ", "ซื้อหรือเช่า", "เช่าบอท",
+    "รายเดือนคือ", "ขายขาดคือ", "ซื้อขาดคือ",
     # ทำไม 490/รายเดือน (แม่ค้าถามความคุ้ม/เหตุผลราคา) — คำเฉพาะมีคำถามนำหน้า 0 ชน
     "ทำไม490", "ทำไมต้อง490", "ทำไมจ่าย490", "490ทำไม",
     "490แพง", "490คุ้ม", "490ถูก", "490เดือน", "490/เดือน", "จ่าย490",
@@ -590,7 +595,7 @@ BOT_MANUAL_PHRASES = (
     "รายเดือนแพง", "รายเดือนคุ้ม",
     # ระยะเวลาสร้าง/ส่งมอบบอท (แม่ค้าถามกี่วันเสร็จ) — คำเฉพาะ 0 ชนชื่อสินค้า
     "ใช้เวลานาน", "กี่วันเสร็จ", "เสร็จเมื่อไหร่", "นานแค่ไหน", "เสร็จกี่วัน",
-    "ระยะเวลาทำ", "ระยะเวลาสร้าง", "สร้างบอท", "ทำบอท", "ส่งมอบบอท",
+    "ระยะเวลา", "ระยะเวลาทำ", "ระยะเวลาสร้าง", "สร้างบอท", "ทำบอท", "ส่งมอบบอท",
     "ทำเสร็จ", "ใช้เวลาเท่าไหร่", "ใช้เวลากี่วัน", "เสร็จเมื่อ",
     # วิธีจ่ายเงินค่าบอท/มัดจำ (PromptPay/โอน/บัตร) — คำเฉพาะ 0 ชนชื่อสินค้า
     "จ่ายค่าบอท", "จ่ายมัดจำ", "จ่ายแพ็กเกจ", "วิธีจ่ายค่าบอท",
@@ -633,10 +638,18 @@ PERPETUAL_KWS = (
     "ขายขาด", "ซื้อขาด", "ซื้อครั้งเดียว", "เหมาจ่าย", "จ่ายครั้งเดียว",
 )
 
+# รายเดือน (เช่าใช้) vs ขายขาด (ซื้อเป็นของตัวเอง) — ลูกค้าถามความต่าง → อธิบาย 2 แบบชัด ๆ
+RENT_VS_BUYOUT_KWS = (
+    "ขายขาดกับรายเดือน", "รายเดือนกับขายขาด", "รายเดือนกับซื้อขาด", "ซื้อขาดกับรายเดือน",
+    "ขายขาดต่าง", "รายเดือนต่างจากขายขาด", "ขายขาดต่างจากรายเดือน",
+    "เช่าใช้", "เช่ากับซื้อ", "ซื้อกับเช่า", "เช่าหรือซื้อ", "ซื้อหรือเช่า", "เช่าบอท",
+    "รายเดือนคือ", "ขายขาดคือ", "ซื้อขาดคือ",
+)
+
 # ระยะเวลาสร้าง/ส่งมอบบอท (แม่ค้าถามกี่วันเสร็จ) — คำเฉพาะ 0 ชนชื่อสินค้า
 BUILD_TIME_KWS = (
     "ใช้เวลานาน", "กี่วันเสร็จ", "เสร็จเมื่อไหร่", "นานแค่ไหน", "เสร็จกี่วัน",
-    "ระยะเวลาทำ", "ระยะเวลาสร้าง", "สร้างบอท", "ทำบอท", "ส่งมอบบอท",
+    "ระยะเวลา", "ระยะเวลาทำ", "ระยะเวลาสร้าง", "สร้างบอท", "ทำบอท", "ส่งมอบบอท",
     "ทำเสร็จ", "ใช้เวลาเท่าไหร่", "ใช้เวลากี่วัน", "เสร็จเมื่อ",
 )
 
@@ -689,7 +702,7 @@ def payment_reply_text() -> str:
         + "\n\nจบในแชทได้เลย:\n"
         "1) เลือกแพ็กเกจ → 2) จ่ายเดือนแรกเต็ม (ขายขาดจ่ายมัดจำ 50%) → 3) เจ้าของเริ่มทำบอท\n"
         "4) งานเสร็จ รับบอท + คู่มือ (ขายขาดจ่ายที่เหลือก่อนรับ)\n\n"
-        'ถาม "แพ็กเกจ" ดูราคา/ระยะเวลาได้เลยจ๊ะ 💕'
+        'ถาม "ราคาบอท" ดูราคา/ระยะเวลาได้เลยจ๊ะ 💕'
     )
 
 
@@ -719,26 +732,30 @@ def package_payment_key(text: str):
 
 
 def package_payment_reply(key: str) -> str:
-    """ยอดจ่ายของแพ็กเกจที่ลูกค้าแตะเลือก — รายเดือนจ่ายเดือนแรกเต็มก่อนเริ่ม · ขายขาดมัดจำ 50% + ที่เหลือตอนส่งมอบ"""
-    for p in PACKAGE_PAYMENTS:
-        if p["key"] == key:
-            if key == "ขายขาด":
-                return (
-                    f"💰 {p['name']} จ่ายแบบนี้จ๊ะ:\n"
-                    f"• มัดจำก่อนเริ่ม: {p['deposit']}\n"
-                    f"• จ่ายตอนส่งมอบ: {p['delivery']}\n"
-                    f"• รวมจ่ายครั้งเดียว: {p['total']}\n\n"
-                    "จ่ายครั้งเดียวจบ ไม่มีรายเดือน\n\n"
-                    '💳 แตะปุ่ม "ชำระเงิน" ด้านล่างดูเลขบัญชี/วิธีโอนได้เลยจ๊ะ'
-                )
-            return (
-                f"💰 {p['name']} จ่ายแบบนี้จ๊ะ:\n"
-                f"• จ่ายเดือนแรกก่อนเริ่มทำ: {p['first']}\n"
-                f"• หลังรับบอท จ่ายรายเดือน: {p['monthly']}\n\n"
-                "ไม่มีมัดจำ ไม่มีค่าติดตั้งแยก\n\n"
-                '💳 แตะปุ่ม "ชำระเงิน" ด้านล่างดูเลขบัญชี/วิธีโอนได้เลยจ๊ะ'
-            )
-    return payment_reply_text()
+    """รายละเอียดแพ็กเกจที่ลูกค้าแตะเลือก — ราคา + ระยะเวลาทำ + สิ่งที่ได้ + ยอดจ่าย (รายเดือน/ขายขาด)"""
+    pkg = next((p for p in PACKAGES if p["key"] == key), None)
+    if pkg is None:
+        return payment_reply_text()
+    features = "\n".join(f"• {f}" for f in pkg["features"])
+    paym = next((p for p in PACKAGE_PAYMENTS if p["key"] == key), None)
+    if key == "ขายขาด":
+        pay = (f"• มัดจำก่อนเริ่ม: {paym['deposit']}\n"
+               f"• จ่ายตอนส่งมอบ: {paym['delivery']}\n"
+               f"• รวมจ่ายครั้งเดียว: {paym['total']}\n\n"
+               "จ่ายครั้งเดียวจบ ไม่มีรายเดือน")
+    else:
+        pay = (f"• จ่ายเดือนแรกก่อนเริ่มทำ: {paym['first']}\n"
+               f"• หลังรับบอท จ่ายรายเดือน: {paym['monthly']}\n\n"
+               "ไม่มีมัดจำ ไม่มีค่าติดตั้งแยก")
+    return (
+        f"{pkg['name']} {pkg['price']}\n"
+        f"{pkg['leadtime']}\n"
+        "⏳ ระยะเวลาอาจบวกลบ 1–2 วันตามคิวงานช่วงนั้นนะจ๊ะ\n"
+        f"{pkg['tagline']}\n\n"
+        f"สิ่งที่ได้:\n{features}\n\n"
+        f"💰 ยอดจ่าย:\n{pay}\n\n"
+        '💳 แตะปุ่ม "ชำระเงิน" ด้านล่างดูเลขบัญชี/วิธีโอนได้เลยจ๊ะ'
+    )
 
 
 def package_payment_quick_reply() -> QuickReply:
@@ -768,6 +785,23 @@ CANCEL_PURCHASE_REPLY = (
     "🙏 รับทราบจ๊ะ ยกเลิกคำสั่งซื้อบอทแล้ว\n"
     "ป้าเข็มแจ้งเจ้าของร้านให้แล้ว — ถ้าเปลี่ยนใจกลับมาใหม่ได้ตลอดนะคะ 😊"
 )
+# --- รับรูปสลิปโอนเงิน (ขายบอท) — ดาวน์โหลดจาก LINE Content API เก็บหลักฐาน ---
+SLIP_MAX_BYTES = 10 * 1024 * 1024  # 10 MB — กันรูปใหญ่เกินจน memory ระเบิด
+SLIP_REPLY_WITH_ORDER = (
+    "💚 รับรูปสลิปแล้วจ๊ะ! ป้าเข็มแจ้งเจ้าของร้านให้แล้ว\n"
+    "พอเช็คยอดแล้วจะแจ้งผลให้ทันที (ปกติไม่เกิน 24 ชม.)"
+)
+SLIP_REPLY_NO_ORDER = (
+    "📸 ป้าเข็มรับรูปไว้แล้วจ๊ะ แต่ยังไม่เจอคำสั่งซื้อของคุณ\n"
+    "ให้แตะ \"สนใจแพ็กเกจนี้\" ในการ์ดแพ็กเกจก่อน แล้วส่งสลิปอีกรอบ\n"
+    "พร้อมพิมพ์ \"จ่ายแล้ว\" ได้เลยนะคะ 😊"
+)
+SLIP_REPLY_TOO_LARGE = (
+    "🙏 รูปใหญ่เกินไปจ๊ะ (จำกัด 10 MB) — ลองส่งสลิปที่บีบขนาดแล้วอีกรอบนะคะ"
+)
+SLIP_REPLY_ERROR = (
+    "🙏 ขอโทษด้วยจ๊ะ ดึงรูปสลิปไม่สำเร็จ — ลองส่งรูปอีกรอบนะคะ"
+)
 # เจ้าของยืนยันรับเงินลูกค้า: /ยืนยัน <userId>
 OWNER_CONFIRM_PREFIX = "/ยืนยัน"
 OWNER_CONFIRM_HELP = (
@@ -775,6 +809,8 @@ OWNER_CONFIRM_HELP = (
     "/ยืนยัน <userId>\n\n"
     "userId อยู่ในข้อความแจ้งเตือนตอนลูกค้าแจ้งว่าโอนเงินแล้ว"
 )
+# เจ้าของดูคิวงานสั่งบอท: /คิว
+OWNER_QUEUE_PREFIX = "/คิว"
 
 
 def _purchase_package_name(key: str) -> str:
@@ -850,6 +886,7 @@ def _mark_paid(db, user) -> None:
     if not purchase:
         return
     purchase.status = "paid_pending"
+    purchase.paid_at = datetime.datetime.utcnow()
     db.commit()
     _notify_owner_purchase(user, purchase.package_key, "paid_pending")
 
@@ -862,6 +899,194 @@ def _cancel_purchase(db, user) -> None:
     purchase.status = "cancelled"
     db.commit()
     _notify_owner_purchase(user, purchase.package_key, "cancelled")
+
+
+class _SlipTooLarge(Exception):
+    """รูปสลิปเกิน SLIP_MAX_BYTES"""
+
+
+def _download_slip(message_id: str, timeout: int = 30) -> Tuple[bytes, str]:
+    """ดาวน์โหลดรูปสลิปจาก LINE Content API (streaming + จำกัดขนาด)
+    คืน (bytes, content-type) — ยก _SlipTooLarge ถ้าเกิน SLIP_MAX_BYTES"""
+    content = line_bot_api.get_message_content(message_id, timeout=timeout)
+    content_type = (content.content_type or "image/jpeg").split(";")[0].strip()
+    chunks = []
+    total = 0
+    for chunk in content.iter_content(chunk_size=256 * 1024):
+        total += len(chunk)
+        if total > SLIP_MAX_BYTES:
+            raise _SlipTooLarge()
+        chunks.append(chunk)
+    if not chunks:
+        raise ValueError("slip content empty")
+    return b"".join(chunks), content_type
+
+
+def _expected_amount(package_key: str):
+    """ยอดที่คาดว่าจะโอนตามแพ็กเกจ (ไว้ให้เจ้าของเทียบกับสลิป) — OCR จะทับด้วยยอดจริงจากสลิป"""
+    for p in PACKAGE_PAYMENTS:
+        if p["key"] == package_key:
+            if package_key == "ขายขาด":
+                return p.get("deposit")
+            return p.get("first")
+    return None
+
+
+def _slip_view_token() -> str:
+    """โทเคนเปิดดูสลิป — SLIP_VIEW_TOKEN ก่อน, สำรอง CRON_TOKEN (ถ้าไม่ตั้ง = เปิดเหมือน /health)"""
+    return (os.getenv("SLIP_VIEW_TOKEN") or os.getenv("CRON_TOKEN") or "").strip()
+
+
+def _slip_authorized(token: str) -> bool:
+    expected = _slip_view_token()
+    return not expected or token == expected
+
+
+def slip_view_url(slip_id: int) -> str:
+    """ลิงก์เปิดดูสลิป (แนบในข้อความแจ้งเจ้าของ) — มี token ก็ฝังไว้ให้เปิดได้ทันที"""
+    base = (os.getenv("RENDER_EXTERNAL_URL") or "https://shopee-affiliate-bot-9e9n.onrender.com").rstrip("/")
+    url = f"{base}/api/slips/{slip_id}"
+    token = _slip_view_token()
+    if token:
+        url += f"?token={token}"
+    return url
+
+
+def _notify_owner_slip(user, purchase, size_bytes: int, content_type: str) -> None:
+    """แจ้งเจ้าของว่าลูกค้าส่งรูปสลิปมา (ขนาด/ชนิด/ยอดคาด/ลิงก์ดูสลิป) — เช็คยอดแล้ว /ยืนยัน <userId>"""
+    if "mock" in LINE_ACCESS_TOKEN.lower():
+        return
+    try:
+        uid = user.line_user_id
+        name = user.name or uid
+        pkg = _purchase_package_name(purchase.package_key)
+        if size_bytes < 1024 * 1024:
+            size_txt = f"{max(size_bytes / 1024, 0.1):.0f} KB"
+        else:
+            size_txt = f"{size_bytes / (1024 * 1024):.1f} MB"
+        lines = [f"📸 ลูกค้า {name} ({uid}) ส่งรูปสลิปมาแล้ว ({content_type}, {size_txt})!",
+                 f"แพ็กเกจ: {pkg}"]
+        if purchase.amount:
+            lines.append(f"ยอดที่คาด: {purchase.amount}")
+        if purchase.slip_url:
+            lines.append(f"ดูสลิป: {purchase.slip_url}")
+        lines.append(f"เช็คยอดแล้วยืนยัน: /ยืนยัน {uid}")
+        line_bot_api.push_message(ADMIN_LINE_USER_ID, TextSendMessage(text="\n".join(lines)))
+    except Exception as e:
+        logger.warning(f"owner slip notify failed: {e}")
+
+
+# --- เสิร์ฟรูปสลิป (ลิงก์เปิดดูจากข้อความแจ้งเจ้าของ) — ติดตั้งที่ /api ใน main.py ---
+slips_router = APIRouter(tags=["slips"])
+
+
+@slips_router.get("/slips/{slip_id}")
+def get_slip_image(slip_id: int, token: str = ""):
+    """เปิดดูรูปสลิปที่เก็บไว้ — ต้อง ?token= ตรงกับ SLIP_VIEW_TOKEN/CRON_TOKEN (ไม่ตั้ง = เปิด)"""
+    if not _slip_authorized(token):
+        raise HTTPException(status_code=401, detail="invalid token")
+    db = SessionLocal()
+    try:
+        slip = db.query(models.BotPurchaseSlip).filter(models.BotPurchaseSlip.id == slip_id).first()
+        if not slip:
+            raise HTTPException(status_code=404, detail="slip not found")
+        return Response(content=slip.content, media_type=slip.content_type or "image/jpeg")
+    finally:
+        db.close()
+
+
+# --- จัดคิวงานสั่งบอท (เลขคิวลูกค้า + รายการคิวเจ้าของ) ---
+def _queue_number(db, line_user_id: str):
+    """เลขคิวของลูกค้า (เริ่ม 1) ในบรรดางานที่ยังค้าง — None ถ้าไม่อยู่ในคิว (ยังไม่สั่ง/จบแล้ว)"""
+    purchase = _get_purchase(db, line_user_id)
+    if not purchase or purchase.status not in PURCHASE_ACTIVE_STATUSES:
+        return None
+    active = (db.query(models.BotPurchase)
+                .filter(models.BotPurchase.status.in_(PURCHASE_ACTIVE_STATUSES))
+                .order_by(models.BotPurchase.created_at.asc(), models.BotPurchase.id.asc())
+                .all())
+    for i, p in enumerate(active):
+        if p.line_user_id == line_user_id:
+            return i + 1
+    return None
+
+
+def _append_queue_line(reply, q: int):
+    """แนบเลขคิวท้ายข้อความ (ลูกค้าเพิ่งแตะ 'สนใจแพ็กเกจนี้')"""
+    line = f"🧾 คุณคือคิวที่ {q} — เจ้าของร้านจะเริ่มทำตามลำดับคิวจ๊ะ"
+    msg = reply[0] if isinstance(reply, list) else reply
+    if hasattr(msg, "text"):
+        msg.text = (msg.text or "") + "\n\n" + line
+    return reply
+
+
+def _fmt_bkk(dt) -> str:
+    """แปลงเวลา (UTC) → เวลาไทย UTC+7 สำหรับโชว์ลูกค้า/เจ้าของ"""
+    if not dt:
+        return ""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    return dt.astimezone(datetime.timezone(datetime.timedelta(hours=7))).strftime("%d/%m/%Y %H:%M")
+
+
+def admin_queue_list(db) -> str:
+    """รายการคิวงานที่เจ้าของดูด้วย /คิว — เรียงตามลำดับ (FIFO)"""
+    active = (db.query(models.BotPurchase)
+                .filter(models.BotPurchase.status.in_(PURCHASE_ACTIVE_STATUSES))
+                .order_by(models.BotPurchase.created_at.asc(), models.BotPurchase.id.asc())
+                .all())
+    if not active:
+        return "📋 ตอนนี้ไม่มีงานค้างในคิวจ๊ะ 🎉"
+    status_label = {"interested": "สนใจ", "paid_pending": "รอยืนยันยอด"}
+    lines = [f"📋 คิวงานบอท ({len(active)} งานค้าง):"]
+    for i, p in enumerate(active):
+        user = db.query(models.User).filter(models.User.line_user_id == p.line_user_id).first()
+        name = (user.name if user and user.name else p.line_user_id)
+        lines.append(f"{i+1}. {name} — {_purchase_package_name(p.package_key)} — {status_label.get(p.status, p.status)}")
+        times = [f"รับเรื่อง {_fmt_bkk(p.created_at)}"]
+        if p.paid_at:
+            times.append(f"โอน {_fmt_bkk(p.paid_at)}")
+        if p.confirmed_at:
+            times.append(f"เริ่มทำ {_fmt_bkk(p.confirmed_at)}")
+        lines.append("   🕐 " + " · ".join(times))
+    return "\n".join(lines)
+
+
+# ลูกค้าเช็คคิว/ระยะเวลาทำของตัวเอง ("คิวของฉัน")
+CUSTOMER_QUEUE_KWS = (
+    "คิวของฉัน", "คิวของหนู", "คิวฉัน", "คิวเท่าไหร่", "คิวที่เท่าไหร่",
+    "เช็คคิว", "ดูคิว",
+)
+
+
+def is_customer_queue_request(text: str) -> bool:
+    t = (text or "").strip().lower().replace(" ", "")
+    return any(k in t for k in CUSTOMER_QUEUE_KWS)
+
+
+def customer_queue_text(db, line_user_id: str) -> str:
+    """ลูกค้าเช็คคิว/ระยะเวลาทำของตัวเอง — ไม่มีคำสั่งซื้อ → ชี้ไปถามราคาบอท"""
+    purchase = _get_purchase(db, line_user_id)
+    if not purchase or purchase.status not in PURCHASE_ACTIVE_STATUSES:
+        return ('🧾 ยังไม่มีคำสั่งซื้อในคิวจ๊ะ — '
+                'ถาม "ราคาบอท" แล้วแตะแพ็กเกจที่สนใจได้เลยจ๊ะ 💕')
+    q = _queue_number(db, line_user_id)
+    pkg = _purchase_package_name(purchase.package_key)
+    leadtime = next((p["leadtime"] for p in PACKAGES if p["key"] == purchase.package_key), "")
+    status = {"interested": "สนใจ (ยังไม่จ่าย)", "paid_pending": "โอนแล้ว รอยืนยันยอด"}.get(purchase.status, purchase.status)
+    lines = [f"🧾 คุณคือคิวที่ {q} จ๊ะ"]
+    lines.append(f"📦 แพ็กเกจ: {pkg}")
+    if leadtime:
+        lines.append(f"⏱️ {leadtime}")
+    lines.append(f"สถานะ: {status}")
+    lines.append(f"🕐 รับเรื่องเมื่อ: {_fmt_bkk(purchase.created_at)}")
+    if purchase.paid_at:
+        lines.append(f"💸 โอนเมื่อ: {_fmt_bkk(purchase.paid_at)}")
+    if purchase.confirmed_at:
+        lines.append(f"✅ เริ่มทำเมื่อ: {_fmt_bkk(purchase.confirmed_at)}")
+    lines.append("⏳ ระยะเวลาอาจบวกลบ 1–2 วันตามคิวงานช่วงนั้นนะจ๊ะ")
+    lines.append("เจ้าของร้านจะเริ่มทำตามลำดับคิวนะคะ 😊")
+    return "\n".join(lines)
 
 
 def handle_owner_confirm(raw: str):
@@ -878,13 +1103,16 @@ def handle_owner_confirm(raw: str):
         if not purchase or purchase.status != "paid_pending":
             return TextSendMessage(text=f"ไม่พบคำสั่งซื้อที่รอการยืนยันของ {target_uid} จ๊ะ")
         purchase.status = "confirmed"
+        purchase.confirmed_at = datetime.datetime.utcnow()
         db.commit()
         pkg = _purchase_package_name(purchase.package_key)
+        start_at = _fmt_bkk(purchase.confirmed_at)
         if "mock" in LINE_ACCESS_TOKEN.lower():
             return TextSendMessage(text=f"✅ ยืนยันรับเงิน {target_uid} แล้ว (แพ็กเกจ {pkg}) — โหมดทดสอบ ไม่ push")
         try:
             line_bot_api.push_message(target_uid, TextSendMessage(text=(
                 f"🎉 เจ้าของร้านยืนยันรับเงินแล้วจ๊ะ! เริ่มทำบอทแพ็กเกจ {pkg} ให้เลย\n"
+                f"🕐 เริ่มทำเมื่อ {start_at} — "
                 "ตามเวลาที่สัญญาไว้ — ถ้าอยากคุยรายละเอียด พิมพ์ \"ติดต่อเจ้าของร้าน\" ได้เลยจ๊ะ"
             )))
             return TextSendMessage(text=f"✅ ยืนยันรับเงิน {target_uid} แล้ว (แพ็กเกจ {pkg}) — แจ้งลูกค้าแล้ว")
@@ -939,7 +1167,7 @@ BOT_MANUAL_SECTIONS = [
      "ห้ามเอาไปขายต่อ/ดัดแปลงขายโดยไม่ได้รับอนุญาตจากเจ้าของร้านนะจ๊ะ"),
     (("ค่าใช้จ่าย", "เสียเงิน"),
      "💰 ลูกค้าที่ซื้อของผ่านบอท = ไม่มีค่าใช้จ่ายจ๊ะ (จ่ายตามราคาร้านค้าบน Shopee) "
-     "ส่วนคนอยากได้บอทไปเปิดร้านเอง มีแพ็กเกจ 990/1,990/4,990 — ถาม \"แพ็กเกจ\" ได้เลยจ๊ะ"),
+     "ส่วนคนอยากได้บอทไปเปิดร้านเอง มีแพ็กเกจ 990/1,990/4,990 — ถาม \"ราคาบอท\" ได้เลยจ๊ะ"),
     (("สมัครshopee", "สมัครaffiliate", "สมัครแอฟฟิลิเอต", "สมัครนายหน้า", "affiliateสมัคร"),
      "📦 สมัคร Shopee Affiliate ฟรี: affiliate.shopee.co.th → สมัคร/รออนุมัติ → ได้ Affiliate ID "
      "ใช้ทำลิงก์ค่าคอม + export สินค้า (ขั้นละเอียดใน docs/setup-guide.md จ๊ะ)"),
@@ -962,7 +1190,7 @@ BOT_MANUAL_SECTIONS = [
      "(บางร้านมี/ไม่มี ขึ้นกับร้านค้านั้นๆ)"),
     (("โค้ดจากไหน", "โค้ดอยู่ไหน", "โค้ดหน่อย", "โค้ดของบอท", "โค้ด", "ดาวน์โหลด", "github", "ซอร์ส", "source"),
      "💻 โค้ดบอทเป็นความลับของร้าน ไม่เปิดให้ดาวน์โหลดแล้วจ๊ะ — อยากได้บอทไปใช้เอง สมัครแพ็กเกจได้เลย "
-     "ถาม \"แพ็กเกจ\" ดูราคา 990/1,990/4,990 จ๊ะ"),
+     "ถาม \"ราคาบอท\" ดูราคา 990/1,990/4,990 จ๊ะ"),
     (("ขอบคุณ", "ขอบใจ"),
      "😊 ด้วยความยินดีจ๊ะ! ถ้าอยากได้อะไรเพิ่ม พิมพ์ชื่อสินค้า หรือแตะเมนูด้านล่างได้เลยนะคะ"),
     (("ราคาเท่าไหร่", "ราคาเท่าไร"),
@@ -1015,7 +1243,7 @@ BOT_MANUAL_SECTIONS = [
      "• เก็บข้อความลูกค้าลง Google Sheets อัตโนมัติ\n"
      "• ต้อนรับอัตโนมัติ + ฝากคำถามให้เจ้าของ\n"
      "• ติดตั้งไฟล์เดียว ตั้งค่า 3 จุด (ชีท ID + Token + Secret) ใช้ได้เลย\n\n"
-     "เหมาะกับร้านที่อยากได้บอทตอบ FAQ ง่าย ๆ — ถาม \"แพ็กเกจ\" ดูครบ 4 ระดับได้เลยจ๊ะ"),
+     "เหมาะกับร้านที่อยากได้บอทตอบ FAQ ง่าย ๆ — ถาม \"ราคาบอท\" ดูครบ 4 ระดับได้เลยจ๊ะ"),
     (WHY_490_KWS,
      "💛 ทำไม 490฿/เดือน? ป้าเข็มตอบให้แม่ค้าชัด ๆ จ๊ะ:\n\n"
      "1️⃣ ถูกกว่าจ้างคนตอบแชท\n"
@@ -1029,7 +1257,7 @@ BOT_MANUAL_SECTIONS = [
      "   รายเดือน = ค่าดูแล/อัปเดตรวม ไม่ต้องจ่ายก้อนใหญ่ เริ่มเบา ๆ\n\n"
      "4️⃣ ไม่อยากผูกเดือน? มีขายขาด\n"
      "   ถาม \"ขายขาด\" → จ่ายครั้งเดียว 15,000–25,000 บาท\n\n"
-     "ดูทั้ง 4 ระดับ ถาม \"แพ็กเกจ\" ได้เลยจ๊ะ 💕"),
+     "ดูทั้ง 4 ระดับ ถาม \"ราคาบอท\" ได้เลยจ๊ะ 💕"),
     (("เฉพาะshopee", "ใช้เฉพาะ", "ใช้กับshopee", "ลาซาด้า", "lazada", "ติ๊กต็อก", "แพลตฟอร์มอื่น"),
      "🛒 ใช้กับแพลตฟอร์มไหนจ๊ะ:\n"
      "🟡 Lean (490) = ใช้ได้ทุกแพลตฟอร์ม (Lazada/TikTok/ร้านอาหาร/คลินิก) แค่แก้คำตอบในชีท\n"
@@ -1052,7 +1280,7 @@ BOT_MANUAL_SECTIONS = [
     (("ค่าบริการไลน์", "ไลน์แพ็กเกจ"),
      "💬 ค่า LINE OA (555 บาท/เดือน) = ลูกค้าเจ้าของร้านจ่ายตรง LINE เองจ๊ะ\n"
      "ค่าคลาวด์ (Render + Supabase) ใช้ฟรีทั้งคู่ — แอดมินไม่เก็บค่าส่วนนี้\n"
-     "ราคาแพ็กเกจที่จ่าย = ค่าซอฟต์แวร์ล้วน ๆ ถาม \"แพ็กเกจ\" ดูรายละเอียดได้เลยจ๊ะ"),
+     "ราคาแพ็กเกจที่จ่าย = ค่าซอฟต์แวร์ล้วน ๆ ถาม \"ราคาบอท\" ดูรายละเอียดได้เลยจ๊ะ"),
     (("เชื่อถือ", "น่าเชื่อ", "ไว้ใจ", "โกง", "มิจฉาชีพ", "หลอกลวง", "เชื่อได้ไหม", "โดนหลอก"),
      "🤝 ร้านป้าเข็มคือร้านจริง ไม่ใช่สแกมจ๊ะ:\n"
      "• ป้าเข็มเป็นนายหน้า Shopee (ลิงก์ affiliate แท้) ลูกค้ากดซื้อ = จ่ายที่แอป Shopee โดยตรง\n"
@@ -1073,7 +1301,8 @@ BOT_MANUAL_SECTIONS = [
      "• 🟠 ขายขาด — 2-3 สัปดาห์ (ติดตั้ง + ตั้งค่าให้ครบทั้งระบบ)\n\n"
      "ยิ่งแพ็กเกจสูง ฟีเจอร์ยิ่งเยอะ ใช้เวลาเพิ่มตาม — เริ่มเร็วสุด 1 วัน (Lean)\n\n"
      "⏳ เริ่มนับวันเมื่อยืนยันสั่งทำ + จ่ายเดือนแรกครบแล้วนะจ๊ะ (ขายขาด = จ่ายมัดจำ 50% ครบ) "
-     "จ่ายครบวันไหน นับจากวันนั้นเลย ไม่ต้องถามซ้ำจ๊ะ 💕"),
+     "จ่ายครบวันไหน นับจากวันนั้นเลย ไม่ต้องถามซ้ำจ๊ะ\n"
+     "⏳ ระยะเวลาอาจบวกลบ 1–2 วันตามคิวงานช่วงนั้นนะจ๊ะ 💕"),
     (PACKAGE_KWS,
      "💼 แพ็กเกจร้านป้าเข็ม มี 4 ระดับจ๊ะ:\n\n"
      "🟡 Lean 490/เดือน — บอทง่าย ตอบคีย์เวิร์ด + เก็บข้อมูลลง Google Sheets (ไม่มี AI/DB)\n"
@@ -1081,11 +1310,23 @@ BOT_MANUAL_SECTIONS = [
      "🔵 Business 1,990/เดือน — บอทรันเองทั้งวงจร: + Facebook auto-post + หาคนอยากซื้ออัตโนมัติ + แจ้งราคาตก + ของใหม่ + แดชบอร์ด (สินค้า/แชทไม่จำกัด)\n"
      "🟣 White-Label 4,990/เดือน — Business + เปลี่ยนชื่อ/เสียง/โลโก้ + แยกฐานข้อมูล + custom domain + support เร็วสุด\n\n"
      "สนใจแพ็กเกจไหน ติดต่อเจ้าของร้านได้เลยจ๊ะ 💕"),
+    (RENT_VS_BUYOUT_KWS,
+     "🧾 รายเดือน กับ ขายขาด ต่างกันแบบนี้จ๊ะ:\n\n"
+     "🔁 แพ็กเกจรายเดือน (490/990/1,990/4,990) = เช่าใช้\n"
+     "• จ่ายเดือนแรกก่อนเริ่ม แล้วจ่ายต่อทุกเดือน\n"
+     "• ป้าเข็มดูแล + อัปเดตระบบให้ตลอด (FB/LINE เปลี่ยนยังไงก็ตามให้)\n"
+     "• อยากหยุดเมื่อไหร่ก็หยุดได้ ไม่ผูก\n\n"
+     "🟠 ขายขาด (15,000–25,000) = ซื้อเป็นของตัวเอง\n"
+     "• จ่ายครั้งเดียวจบ ไม่มีรายเดือน\n"
+     "• รวมติดตั้ง + ตั้งค่าให้ครบทั้งระบบ\n"
+     "• เหมาะร้านที่อยากจบทีเดียว ไม่ผูกเดือน\n\n"
+     "สรุป: รายเดือน = เช่าใช้ จ่ายเบา ๆ ให้ป้าเข็มดูแล · ขายขาด = ซื้อขาด จ่ายก้อนเดียวจบ\n\n"
+     "ถาม \"ราคาบอท\" ดูรายละเอียด/ราคาได้เลยจ๊ะ 💕"),
     (PERPETUAL_KWS,
      "🟠 ขายขาด (ซื้อครั้งเดียว) จ๊ะ:\n"
      "• ค่าติดตั้ง + ตั้งค่า 15,000–25,000 บาท (จ่ายครั้งเดียว ไม่มีรายเดือน)\n"
      "• ค่า LINE OA + คลาวด์ = ลูกค้าจ่ายเอง (ตามปกติ)\n\n"
-     "เหมาะร้านที่ไม่อยากผูกเดือน — ถาม \"แพ็กเกจ\" ดูแบบรายเดือน 4 ระดับได้ด้วยจ๊ะ 💕"),
+     "เหมาะร้านที่ไม่อยากผูกเดือน — ถาม \"ราคาบอท\" ดูแบบรายเดือน 4 ระดับได้ด้วยจ๊ะ 💕"),
     (("มาตรฐานการบริการ", "มาตรฐานบริการ", "บริการลูกค้า", "ประสบการณ์ลูกค้า",
       "ขั้นตอนการบริการ", "การบริการ", "บริการดี", "บริการ", "ห้าขั้นตอน", "5ขั้นตอน"),
      "💛 ป้าเข็มดูแลลูกค้าตามมาตรฐาน 5 ขั้นตอนจ๊ะ:\n\n"
@@ -1120,7 +1361,7 @@ INSTALL_REPLY_CUSTOMER = (
     "แค่กดแอดไลน์ร้าน แล้วพิมพ์ชื่อสินค้า/ถามได้ทันที "
     "(มือถือ คอม แท็บเล็ต ใช้ได้หมด ไม่ต้องลงแอปเพิ่ม ไม่มีค่าใช้จ่าย)\n\n"
     "ลองพิมพ์ \"ค้นสินค้า\" หรือชื่อที่อยากได้ เช่น \"หูฟังไม่เกิน 300\" ได้เลยจ๊ะ 😊\n\n"
-    "💻 อยากได้บอทไปเปิดร้านเอง? ถาม \"แพ็กเกจ\" ดูราคาได้เลยจ๊ะ"
+    "💻 อยากได้บอทไปเปิดร้านเอง? ถาม \"ราคาบอท\" ดูราคาได้เลยจ๊ะ"
 )
 INSTALL_REPLY_OWNER = (
     "🛠️ อยากเปิดร้านด้วยบอทป้าเข็ม? สมัครแพ็กเกจก่อน (990/1,990/4,990) แล้วเตรียม 4 อย่าง:\n"
@@ -1128,7 +1369,7 @@ INSTALL_REPLY_OWNER = (
     "② บัญชี Shopee Affiliate — ทำลิงก์ค่าคอม + import สินค้า\n"
     "③ ที่เก็บข้อมูล + เซิร์ฟเวอร์ (Supabase + Render)\n"
     "④ คีย์ AI (Groq/Gemini)\n\n"
-    "💼 ถาม \"แพ็กเกจ\" ดูราคา/รายละเอียดได้เลยจ๊ะ"
+    "💼 ถาม \"ราคาบอท\" ดูราคา/รายละเอียดได้เลยจ๊ะ"
 )
 
 
@@ -1250,12 +1491,36 @@ def package_flex_card() -> FlexSendMessage:
 
 
 def is_package_request(text: str) -> bool:
-    """ลูกค้าถามแพ็กเกจ/ราคาบอท? → ตอบการ์ด Flex แทนข้อความล้วน"""
+    """ลูกค้าถามแพ็กเกจ/ราคาบอท? → ตอบสรุปย่อ + ปุ่มเลือกทีละแพ็กเกจ"""
     t = (text or "").strip().lower().replace(" ", "")
     # "ค่าบริการไลน์"/"ไลน์แพ็กเกจ" = ค่า LINE OA (section แยก) ไม่ใช่แพ็กเกจบอท
     if "ค่าบริการไลน์" in t or "ไลน์แพ็กเกจ" in t:
         return False
     return any(k in t for k in PACKAGE_KWS)
+
+
+def package_summary_text() -> str:
+    """สรุปย่อ 5 แพ็กเกจ — ลูกค้าถาม 'ราคาบอท' เห็นราคาครบ แล้วแตะดูรายละเอียดทีละตัว (ไม่ทิ้งการ์ดเต็มทันที)"""
+    return (
+        "💼 แพ็กเกจร้านป้าเข็ม มี 5 ทางเลือกจ๊ะ:\n\n"
+        "🟡 Lean 490฿/เดือน\n"
+        "🟢 Starter 990฿/เดือน\n"
+        "🔵 Business 1,990฿/เดือน\n"
+        "🟣 White-Label 4,990฿/เดือน\n"
+        "🟠 ขายขาด 15,000–25,000฿ (จ่ายครั้งเดียว)\n\n"
+        "แตะแพ็กเกจที่สนใจด้านล่าง ดูรายละเอียด + ระยะเวลาทำ + ยอดจ่ายได้เลยจ๊ะ 👇"
+    )
+
+
+def package_summary_quick_reply() -> QuickReply:
+    """ปุ่ม 5 แพ็กเกจ — แตะ → 'ยอด <key>' → ตอบรายละเอียดตัวนั้น (เส้นเดียว ไม่ทิ้งการ์ดเต็มทันที)"""
+    return QuickReply(items=[
+        QuickReplyButton(action=MessageAction(label="🟡 Lean", text="ยอด lean")),
+        QuickReplyButton(action=MessageAction(label="🟢 Starter", text="ยอด starter")),
+        QuickReplyButton(action=MessageAction(label="🔵 Business", text="ยอด business")),
+        QuickReplyButton(action=MessageAction(label="🟣 White-Label", text="ยอด whitelabel")),
+        QuickReplyButton(action=MessageAction(label="🟠 ขายขาด", text="ยอด ขายขาด")),
+    ])
 
 
 # หัวข้อที่ตอบละเอียดเฉพาะเจ้าของร้าน/คนอยากเปิดร้านเอง — ลูกค้าทั่วไปถาม → ตอบสั้นชี้ทางแทน
@@ -2825,7 +3090,8 @@ def message_text(event):
                 reply = handle_new_arrivals(db, user, line_user_id, is_owner)
                 intent = 'new'
             elif is_package_request(normalized_text):
-                reply = package_flex_card()
+                reply = TextSendMessage(text=package_summary_text(),
+                                        quick_reply=package_summary_quick_reply())
                 intent = 'manual'
             elif is_bot_manual_request(normalized_text):
                 # คำถามคู่มือ (ติดตั้ง/คืนเงิน/ค่าคอม/โค้ด...) → ตอบจากคู่มือเฉพาะส่วน
@@ -2835,6 +3101,10 @@ def message_text(event):
                 intent = 'manual'
                 if _wants_code_buttons(normalized_text):
                     reply = reply + [_github_button_card()] if isinstance(reply, list) else [reply, _github_button_card()]
+                elif package_payment_key(normalized_text):
+                    q = _queue_number(db, line_user_id)
+                    if q is not None:
+                        reply = _append_queue_line(reply, q)
             elif any(m in normalized_text for m in STORE_QUESTION_MARKERS):
                 # เรื่องร้าน/สั่งซื้อ/ราคา/ชำระเงิน (ที่ไม่ใช่คำถามคู่มือตรงๆ) → ตอบวิธีจัดการเอง
                 reply = TextSendMessage(text=STORE_QUESTION_SELF_SERVICE)
@@ -2919,6 +3189,10 @@ def message_text(event):
             # เจ้าของยืนยันรับเงินลูกค้า: /ยืนยัน <userId> → สถานะ confirmed + แจ้งลูกค้า
             reply = handle_owner_confirm(normalized_text)
             intent = 'admin'
+        elif is_owner and normalized_text.startswith(OWNER_QUEUE_PREFIX):
+            # เจ้าของดูคิวงานสั่งบอท: /คิว → รายการงานค้างเรียงตามลำดับ (FIFO)
+            reply = TextSendMessage(text=admin_queue_list(db))
+            intent = 'admin'
         elif is_greeting(normalized_text):
             # แนวสากล: ทักทาย + ปุ่มทางเลือก — ไม่ยิงสินค้าจนกว่าลูกค้าจะบอกความต้องการ
             reply = TextSendMessage(text=_append_market_emphasis(greeting_text_for(user.name, tone), emphasis),
@@ -2962,9 +3236,14 @@ def message_text(event):
             reply = TextSendMessage(text=LEAVE_MESSAGE_PROMPT,
                                     quick_reply=quick_reply_items())
             intent = 'human'
+        elif is_customer_queue_request(normalized_text):
+            # ลูกค้าเช็คคิว/ระยะเวลาทำของตัวเอง ("คิวของฉัน")
+            reply = TextSendMessage(text=customer_queue_text(db, line_user_id))
+            intent = 'manual'
         elif is_package_request(normalized_text):
-            # ถามแพ็กเกจ/ราคาบอท → การ์ด Flex 4 ระดับ (สวย + กดได้) แทนข้อความล้วน
-            reply = package_flex_card()
+            # ถามแพ็กเกจ/ราคาบอท → สรุปย่อ + ปุ่มเลือกทีละแพ็กเกจ (ไม่ทิ้งการ์ดเต็มทันที)
+            reply = TextSendMessage(text=package_summary_text(),
+                                    quick_reply=package_summary_quick_reply())
             intent = 'manual'
         elif is_bot_manual_request(normalized_text):
             # คำถามคู่มือ (ค้น/เทียบ/จำ/พัสดุ/ติดตั้ง...) = ตอบจากคู่มือเท่านั้น ไม่ AI เดา
@@ -2974,6 +3253,10 @@ def message_text(event):
             # ถามติดตั้ง/โค้ด → แนบปุ่มเปิด GitHub + คู่มือ (แตะได้ ไม่ต้องก๊อปลิงก์)
             if _wants_code_buttons(normalized_text):
                 reply = reply + [_github_button_card()] if isinstance(reply, list) else [reply, _github_button_card()]
+            elif package_payment_key(normalized_text):
+                q = _queue_number(db, line_user_id)
+                if q is not None:
+                    reply = _append_queue_line(reply, q)
         elif is_owner and normalized_text in ADMIN_STATS_CMDS:
             reply = TextSendMessage(text=admin_customer_stats(db))
             intent = 'admin'
@@ -3102,6 +3385,49 @@ def sticker_text(event):
             event.reply_token,
             StickerSendMessage(package_id='6136', sticker_id='10551379')
         )
+
+
+@handler.add(MessageEvent, message=ImageMessage)
+def image_slip(event):
+    """ลูกค้าส่งรูปสลิปโอนเงิน → ดาวน์โหลดเก็บหลักฐาน + สถานะรอยืนยัน + แจ้งเจ้าของ
+    (เดิมบอทไม่มี handler ImageMessage → รูปสลิปถูกทิ้งเงียบ ๆ)"""
+    line_user_id = event.source.user_id
+    db = SessionLocal()
+    try:
+        user = get_or_create_line_user(db, line_user_id)
+        purchase = _active_purchase(db, line_user_id)
+        if not purchase:
+            # ยังไม่มีคำสั่งซื้อค้าง → ชี้ทางให้แตะสนใจแพ็กเกจก่อน (ไม่ดาวน์โหลด/ไม่เก็บขยะ)
+            reply = TextSendMessage(text=SLIP_REPLY_NO_ORDER)
+        else:
+            try:
+                data, content_type = _download_slip(event.message.id)
+            except _SlipTooLarge:
+                reply = TextSendMessage(text=SLIP_REPLY_TOO_LARGE)
+            except Exception as e:
+                logger.warning(f"slip download failed: {e}")
+                reply = TextSendMessage(text=SLIP_REPLY_ERROR)
+            else:
+                slip = models.BotPurchaseSlip(line_user_id=line_user_id, content=data,
+                                              content_type=content_type, size_bytes=len(data))
+                db.add(slip)
+                db.flush()  # ได้ slip.id สำหรับทำลิงก์เปิดดูสลิป
+                purchase.status = "paid_pending"
+                purchase.slip_url = slip_view_url(slip.id)
+                purchase.amount = _expected_amount(purchase.package_key)
+                db.commit()
+                _notify_owner_slip(user, purchase, len(data), content_type)
+                reply = TextSendMessage(text=SLIP_REPLY_WITH_ORDER)
+    except Exception as e:
+        logger.error(f"Error processing slip image: {e}")
+        reply = TextSendMessage(text=SLIP_REPLY_ERROR)
+    finally:
+        db.close()
+
+    if "mock" in LINE_ACCESS_TOKEN.lower():
+        logger.info(f"Mock slip reply sent. ReplyToken: {event.reply_token}")
+    else:
+        line_bot_api.reply_message(event.reply_token, _ensure_menu(reply))
 
 
 @handler.add(FollowEvent)
