@@ -28,10 +28,25 @@ ITEM_URL_RE = re.compile(r"/product/|/opaanlp/|-[a-z0-9-]+-i\.\d+\.\d+", re.IGNO
 # (https://shope.ee/... = ลิงก์ปลอม/ของ mock — กดแล้ว 404 ห้ามเข้าระบบ/โพสต์)
 SHOPEE_SHORT_PREFIXES = ("https://s.shopee.co.th/", "http://s.shopee.co.th/")
 
+# รหัสสั้น Shopee จริงเป็น base62 (0-9, a-z, A-Z) ยาว ~9-11 ตัว ไม่มี _ / - / อักขระพิเศษ
+# (เคยเจอ mock อย่าง s.shopee.co.th/earbuds_ok หลุดขึ้นโพสต์เพจจริง — ตรวจ format กันอีกชั้น)
+_SHORT_CODE_RE = re.compile(r"^[A-Za-z0-9]+$")
+
 
 def is_valid_shopee_affiliate_url(url) -> bool:
-    """True เมื่อ url เป็นลิงก์สั้น Shopee จริง (s.shopee.co.th) — นโยบายเด็ดขาด ใช้ทั้ง DB rule, matcher และหน้าโพสต์."""
-    return bool(url) and str(url).strip().lower().startswith(SHOPEE_SHORT_PREFIXES)
+    """True เมื่อ url เป็นลิงก์สั้น Shopee จริง (s.shopee.co.th) + รหัสสั้นเป็น alphanumeric
+    (ฐาน62 ไม่มีอักขระพิเศษ) — นโยบายเด็ดขาด ใช้ทั้ง DB rule, matcher และหน้าโพสต์.
+    """
+    s = (str(url or "").strip().lower())
+    if not s.startswith(SHOPEE_SHORT_PREFIXES):
+        return False
+    for p in SHOPEE_SHORT_PREFIXES:
+        if s.startswith(p):
+            code = s[len(p):]
+            break
+    # ตัด trailing path / query / hash ออก (กรณีมีอักขระเกิน เช่น ?utm=...) เหลือเฉพาะรหัสสั้น
+    code = code.split("/")[0].split("?")[0].split("#")[0].strip()
+    return bool(code) and bool(_SHORT_CODE_RE.match(code))
 
 
 def check_affiliate_link(url: str) -> Tuple[str, str]:

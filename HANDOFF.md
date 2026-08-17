@@ -8,11 +8,13 @@
 > - **เมื่องานเสร็จและ commit ครบ:** ให้ล้างเนื้อหาในส่วน 1–5 กลับเป็นสถานะว่าง แล้ว commit
 >   ไฟล์นี้ — เพื่อไม่ให้ AI ตัวถัดไปเข้าใจผิดว่างานยังค้าง
 
-## สถานะ: 🟢 ว่าง — งานล่าสุด (ติดตามสถานะซื้อบอท: สนใจ → จ่ายแล้ว → เจ้าอวยยืนยัน → ยกเลิก) เสร็จ — ยังไม่ push/deploy
+## สถานะ: 🟢 ว่าง — งานล่าสุด (กันลิงก์สั้นปลอม format ขึ้นโพสต์ FB) เสร็จ — ยังไม่ push/deploy
 
 ---
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
+
+- ✅ fix(radar): **กันลิงก์สั้นปลอม format ขึ้นโพสต์ FB — `is_valid_shopee_affiliate_url()` ตรวจรหัสสั้นเป็น base62 (ไม่มี `_`/`-`/อักขระพิเศษ)** — เจ้าของเจอเพจถูกโพสต์ "หูฟังลิงก์จริง" (ลิงก์ปลอม `s.shopee.co.th/earbuds_ok`) ซ้ำเป็นคู่ ๆ ทุก ~20 นาที; สืบพบ: โพสต์นั้น**ไม่มาจาก production** (ตรวจครบ: ไม่มีสินค้า/ไม่มี demand_event ใน Supabase, ไม่ใช่ rotation/campaign_logs, render env = DB เดียวกัน, process local = monitor ที่ submit lead อย่างเดียว) → เป็น script ทดสอบที่โพสต์ตรงขึ้นเพจด้วย mock (ข้อมูลตรงกับ test fixture เป๊ะ) แล้วหยุดเองตอน 23:53; สาเหตุที่ `earbuds_ok` ผ่านได้ = `is_valid_shopee_affiliate_url` ตรวจแค่ prefix `s.shopee.co.th` ไม่ตรวจ format รหัสสั้น (Shopee จริงเป็น base62 9-11 ตัว ไม่มี `_`); แก้: `link_checker.py` ตรวจรหัสสั้นเป็น `[A-Za-z0-9]+` (ตัด query/trailing slash) → `earbuds_ok`/`maternity_ok`/`earphone-budget` ฯลฯ ถูก reject ครอบทุกจุดที่ใช้ helper เดียวกัน (DB rule insert/update + matcher + guard หน้า post_feed); อัปเดต test fixtures ที่ใช้ url mock `_ok`/`-link` เป็น base62 ล้วน + เพิ่มเทสต์ใหม่ `test_is_valid_shopee_affiliate_url_rejects_mock_short_codes` → รวม **1053 passed** — **ยังไม่ push/deploy**
 
 - ✅ feat(line-bot): **ติดตามสถานะซื้อบอท (สนใจ → จ่ายแล้ว → เจ้าอวยยืนยัน → ยกเลิก)** — เพิ่มตาราง `bot_purchases` (create_all สร้างอัตโนมัติ dev/prod ไม่ต้อง migrate); กด "สนใจแพ็กเกจนี้"/"ยอด <key>" → บันทึกสถานะ `interested` (ไม่ลดระดับถ้าจ่ายแล้ว/ยืนยันแล้ว); พิมพ์ "จ่ายแล้ว/โอนแล้ว/ส่งสลิป" → `paid_pending` + push แจ้งเจ้าอวย (เช็คยอดแล้วยืนยัน `/ยืนยัน <userId>`); เจ้าอวย `/ยืนยัน` → `confirmed` + push แจ้งลูกค้า; พิมพ์ "ยกเลิก" → `cancelled` + แจ้งเจ้าอวย; ไม่มีคำสั่งซื้อค้าง → "จ่ายแล้ว"/"ยกเลิก" ตอบปกติ (ไม่เข้าติดตาม); เทสต์ใหม่ 5 ตัว → รวม **1052 passed** — **ยังไม่ push/deploy**
 

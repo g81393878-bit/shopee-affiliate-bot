@@ -133,13 +133,13 @@ def seed_e2e_products(db_session):
         pytest.skip("ไม่ seed สินค้า mock ลง DB production (DATABASE_URL เป็น postgres)")
 
     products_to_seed = [
-        ("ชุดคลุมท้องผ้าฝ้ายทรงหลวม ผ้านิ่มระบายอากาศ", "แฟชั่น", 299.00, 4.9, 5420, 35.00, "https://s.shopee.co.th/maternity_ok", "ok", 92),
-        ("หูฟังบลูทูธไร้สาย TWS ตัดเสียงรบกวน", "หูฟัง", 399.00, 4.8, 8500, 40.00, "https://s.shopee.co.th/earbuds_ok", "ok", 90),
-        ("เบาะรองนั่งเพื่อสุขภาพ เมมโมรี่โฟม แก้ปวดหลัง", "เฟอร์นิเจอร์", 450.00, 4.7, 3200, 30.00, "https://s.shopee.co.th/cushion_ok", "ok", 86),
-        ("อาหารแมวสูตรดูแลไต โรคไต 1kg", "สัตว์เลี้ยง", 350.00, 4.8, 1900, 25.00, "https://s.shopee.co.th/catfood_ok", "ok", 88),
-        ("พัดลมตั้งโต๊ะมินิ ชาร์จ USB เสียงเงียบ ลมแรง", "พัดลม", 259.00, 4.7, 12000, 20.00, "https://s.shopee.co.th/fan_ok", "ok", 85),
-        ("เครื่องฟอกอากาศ HEPA กรองฝุ่น PM2.5", "เครื่องใช้ไฟฟ้า", 1890.00, 4.9, 4500, 95.00, "https://s.shopee.co.th/airpurifier_ok", "ok", 94),
-        ("กระติกน้ำเก็บความเย็น 1 ลิตร สแตนเลส 316", "แก้วน้ำ", 299.00, 4.8, 6200, 22.00, "https://s.shopee.co.th/bottle_ok", "ok", 87),
+        ("ชุดคลุมท้องผ้าฝ้ายทรงหลวม ผ้านิ่มระบายอากาศ", "แฟชั่น", 299.00, 4.9, 5420, 35.00, "https://s.shopee.co.th/maternityok", "ok", 92),
+        ("หูฟังบลูทูธไร้สาย TWS ตัดเสียงรบกวน", "หูฟัง", 399.00, 4.8, 8500, 40.00, "https://s.shopee.co.th/earbudsok", "ok", 90),
+        ("เบาะรองนั่งเพื่อสุขภาพ เมมโมรี่โฟม แก้ปวดหลัง", "เฟอร์นิเจอร์", 450.00, 4.7, 3200, 30.00, "https://s.shopee.co.th/cushionok", "ok", 86),
+        ("อาหารแมวสูตรดูแลไต โรคไต 1kg", "สัตว์เลี้ยง", 350.00, 4.8, 1900, 25.00, "https://s.shopee.co.th/catfoodok", "ok", 88),
+        ("พัดลมตั้งโต๊ะมินิ ชาร์จ USB เสียงเงียบ ลมแรง", "พัดลม", 259.00, 4.7, 12000, 20.00, "https://s.shopee.co.th/fanok", "ok", 85),
+        ("เครื่องฟอกอากาศ HEPA กรองฝุ่น PM2.5", "เครื่องใช้ไฟฟ้า", 1890.00, 4.9, 4500, 95.00, "https://s.shopee.co.th/airpurifierok", "ok", 94),
+        ("กระติกน้ำเก็บความเย็น 1 ลิตร สแตนเลส 316", "แก้วน้ำ", 299.00, 4.8, 6200, 22.00, "https://s.shopee.co.th/bottleok", "ok", 87),
     ]
 
     for name, cat, price, rating, sales, comm, url, status, score in products_to_seed:
@@ -287,7 +287,7 @@ def test_t1_f4_product_matching_and_ai_reasoning(db_session):
         rating=5.0,
         sales_count=99999,
         commission=Decimal("80.00"),
-        affiliate_url="https://s.shopee.co.th/dead_link",
+        affiliate_url="https://s.shopee.co.th/deadlink",
         link_status="dead",
         ai_score=99,
     )

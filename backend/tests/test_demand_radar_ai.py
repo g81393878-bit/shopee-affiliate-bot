@@ -162,7 +162,7 @@ def test_product_matcher_strict_link_status_filter(db):
         rating=4.8,
         sales_count=2000,
         commission=Decimal("35.00"),
-        affiliate_url="https://s.shopee.co.th/ok-link",
+        affiliate_url="https://s.shopee.co.th/oklink",
         link_status="ok",
         ai_score=85,
     )
@@ -173,7 +173,7 @@ def test_product_matcher_strict_link_status_filter(db):
         rating=4.9,
         sales_count=5000,
         commission=Decimal("40.00"),
-        affiliate_url="https://s.shopee.co.th/dead-link",
+        affiliate_url="https://s.shopee.co.th/deadlink",
         link_status="dead",
         ai_score=95,
     )
@@ -184,7 +184,7 @@ def test_product_matcher_strict_link_status_filter(db):
         rating=4.7,
         sales_count=1500,
         commission=Decimal("25.00"),
-        affiliate_url="https://s.shopee.co.th/unknown-link",
+        affiliate_url="https://s.shopee.co.th/unknownlink",
         link_status="unknown",
         ai_score=80,
     )
@@ -230,7 +230,7 @@ def test_product_rejects_non_shopee_affiliate_url_on_update(db):
         rating=4.8,
         sales_count=8500,
         commission=Decimal("40.00"),
-        affiliate_url="https://s.shopee.co.th/earbuds_ok",
+        affiliate_url="https://s.shopee.co.th/earbudsok",
         link_status="ok",
         ai_score=90,
     )
@@ -267,6 +267,22 @@ def test_is_valid_shopee_affiliate_url():
     assert is_valid_shopee_affiliate_url(None) is False
 
 
+def test_is_valid_shopee_affiliate_url_rejects_mock_short_codes():
+    """รหัสสั้น Shopee จริงเป็น base62 (ไม่มี _ / - / อักขระพิเศษ) — กัน mock
+    อย่าง s.shopee.co.th/earbuds_ok (ที่เคยหลุดขึ้นโพสต์เพจจริง) ไม่ให้ผ่าน."""
+    # mock/test ที่มีอักขระพิเศษ → reject
+    assert is_valid_shopee_affiliate_url("https://s.shopee.co.th/earbuds_ok") is False
+    assert is_valid_shopee_affiliate_url("https://s.shopee.co.th/maternity_ok") is False
+    assert is_valid_shopee_affiliate_url("https://s.shopee.co.th/cushion-ok") is False
+    assert is_valid_shopee_affiliate_url("https://s.shopee.co.th/earbuds ok") is False
+    # รหัสจริง (base62) ยังผ่าน
+    assert is_valid_shopee_affiliate_url("https://s.shopee.co.th/9pdS1rMwH8") is True
+    assert is_valid_shopee_affiliate_url("https://s.shopee.co.th/AKZigzXz9J") is True
+    # มี query/trailing slash ต่อท้ายรหัสจริง → ยังผ่าน
+    assert is_valid_shopee_affiliate_url("https://s.shopee.co.th/9pdS1rMwH8?utm=1") is True
+    assert is_valid_shopee_affiliate_url("https://s.shopee.co.th/9pdS1rMwH8/") is True
+
+
 def test_product_matcher_budget_alignment(db):
     """Test that products fitting within budget get higher score than over-budget products."""
     p_in_budget = models.Product(
@@ -276,7 +292,7 @@ def test_product_matcher_budget_alignment(db):
         rating=4.7,
         sales_count=3000,
         commission=Decimal("30.00"),
-        affiliate_url="https://s.shopee.co.th/earphone-budget",
+        affiliate_url="https://s.shopee.co.th/earphonebudget",
         link_status="ok",
         ai_score=80,
     )
@@ -287,7 +303,7 @@ def test_product_matcher_budget_alignment(db):
         rating=4.9,
         sales_count=3000,
         commission=Decimal("80.00"),
-        affiliate_url="https://s.shopee.co.th/earphone-expensive",
+        affiliate_url="https://s.shopee.co.th/earphoneexpensive",
         link_status="ok",
         ai_score=90,
     )
@@ -309,7 +325,7 @@ def test_suggested_reasons_generation():
         rating=4.8,
         sales_count=15000,
         commission=Decimal("25.00"),
-        affiliate_url="https://s.shopee.co.th/fan-mini",
+        affiliate_url="https://s.shopee.co.th/fanmini",
         link_status="ok",
     )
     reasons = generate_suggested_reasons(product, budget=400.0)

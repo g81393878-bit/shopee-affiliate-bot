@@ -175,7 +175,7 @@ def seed_test_radar_products(db_session):
             rating=4.9,
             sales_count=5420,
             commission=Decimal("35.00"),
-            affiliate_url="https://s.shopee.co.th/test_maternity_url",
+            affiliate_url="https://s.shopee.co.th/testmaternityurl",
             link_status="ok",
             ai_score=92,
         )
