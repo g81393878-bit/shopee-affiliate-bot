@@ -726,3 +726,94 @@ def test_post_video_no_token(monkeypatch):
     res = fp.post_video(file_url="https://cdn.example.com/c.mp4")
     assert res["ok"] is False
     assert "FACEBOOK_PAGE_ACCESS_TOKEN" in res["error"]
+
+
+# ===========================================================================
+# กวาดลบโพสต์ลิงก์ปลอม (clean-fake-posts)
+# ===========================================================================
+
+def test_is_fake_link_post_detects_fake_links():
+    """shope.ee / lazada / s.shopee.co.th รหัสไม่ valid (มี _) = โพสต์ปลอม"""
+    assert fp.is_fake_link_post("ดู https://shope.ee/abc") is True
+    assert fp.is_fake_link_post("", ["https://s.lazada.co.th/x"]) is True
+    assert fp.is_fake_link_post("", ["https://s.shopee.co.th/earbuds_ok"]) is True
+
+
+def test_is_fake_link_post_checks_known_links():
+    """รหัส base62 ที่ผ่าน format แต่ไม่ใช่ลิงก์ในคลัง (เช่น earbudsok ของ mock poster) = ปลอม"""
+    known = {"https://s.shopee.co.th/9pdS1rMwH8"}
+    # ไม่มีในคลัง → ปลอม
+    assert fp.is_fake_link_post("", ["https://s.shopee.co.th/earbudsok"], known_links=known) is True
+    # มีในคลัง (case-sensitive รหัส) → ของจริง
+    assert fp.is_fake_link_post("", ["https://s.shopee.co.th/9pdS1rMwH8"], known_links=known) is False
+    # ไม่ส่ง known_links → เช็คแค่ format (earbudsok base62 ผ่าน format → ไม่ปลอม)
+    assert fp.is_fake_link_post("", ["https://s.shopee.co.th/earbudsok"], known_links=None) is False
+
+
+def test_is_fake_link_post_allows_non_shopee_links():
+    """ลิงก์คอนเทนต์ (ข่าว/ท้องถิ่น) ที่ไม่ใช่ Shopee → ไม่ปลอม"""
+    assert fp.is_fake_link_post("ป้าเล่าข่าว", ["https://news.example/1"],
+                                known_links=set()) is False
+    assert fp.is_fake_link_post("ร้านเด็ด", ["https://www.wongnai.com/y"],
+                                known_links=set()) is False
+
+
+def test_extract_post_urls_decodes_fb_redirect():
+    """ดึง URL จากข้อความ + attachment และถอด l.facebook.com/l.php?u= ให้เป็น URL จริง"""
+    atts = {"data": [{"type": "share",
+                      "url": "https://l.facebook.com/l.php?u=https%3A%2F%2Fs.shopee.co.th%2Fearbudsok%3Fcontent"}]}
+    urls = fp.extract_post_urls("ดู https://s.shopee.co.th/abc", atts)
+    assert "https://s.shopee.co.th/abc" in urls
+    assert "https://s.shopee.co.th/earbudsok?content" in urls  # ถอด redirect แล้ว
+
+
+def test_cron_clean_fake_posts_endpoint(monkeypatch, db):
+    """POST /api/cron/clean-fake-posts — ลบเฉพาะโพสต์ปลอม, เก็บของจริง, dry_run ไม่ลบ
+
+    ใช้ลิงก์ deterministic: s.shopee.co.th/test = seed ของ conftest (session-scoped คงอยู่ทุกเทสต์)
+    → "ในคลัง"; zzMockFake99 = base62 ที่ไม่มีในคลังแน่นอน → "ปลอม"; shope.ee = ปลอมเสมอ.
+    """
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.setattr(cron, "_authorized", lambda t: True)
+    fake_posts = [
+        {"id": "pg_1", "message": "ใจเย็นๆ นะลูก! 'หูฟังลิงก์จริง'",
+         "created_time": "2026-08-17T02:26:21+0000",
+         "urls": ["https://s.shopee.co.th/zzMockFake99"]},  # base62 แต่ไม่มีในคลัง → ปลอม
+        {"id": "pg_2", "message": "ขายของจริง",
+         "created_time": "2026-08-17T01:00:00+0000",
+         "urls": ["https://s.shopee.co.th/test"]},          # seed ของ conftest → ในคลัง → ของจริง
+        {"id": "pg_3", "message": "ดู https://shope.ee/abc",
+         "created_time": "2026-08-17T00:00:00+0000",
+         "urls": []},                                       # shope.ee → ปลอม
+    ]
+    monkeypatch.setattr(cron, "fetch_page_posts", lambda limit=100: fake_posts)
+    deleted = []
+    monkeypatch.setattr(cron, "delete_page_post", lambda pid: deleted.append(pid) or True)
+    client = TestClient(app)
+
+    # dry-run → ไม่ลบ
+    r = client.post("/api/cron/clean-fake-posts", params={"token": "x", "dry_run": "true"})
+    assert r.status_code == 200
+    b = r.json()
+    assert b["dry_run"] is True and b["scanned"] == 3 and b["kept_count"] == 1
+    assert len(b["deleted"]) == 2  # pg_1 + pg_3 (ปลอม)
+    assert deleted == []  # dry-run ไม่ลบจริง
+
+    # ลบจริง → ลบเฉพาะ pg_1 + pg_3
+    r2 = client.post("/api/cron/clean-fake-posts", params={"token": "x"})
+    b2 = r2.json()
+    assert b2["dry_run"] is False
+    assert sorted(d["id"] for d in b2["deleted"]) == ["pg_1", "pg_3"]
+    assert sorted(deleted) == ["pg_1", "pg_3"]
+
+
+def test_cron_clean_fake_posts_requires_token(monkeypatch):
+    """ไม่ผ่าน token → 401"""
+    from fastapi.testclient import TestClient
+    from app.main import app
+    monkeypatch.setattr(cron, "_authorized", lambda t: False)
+    client = TestClient(app)
+    r = client.post("/api/cron/clean-fake-posts", params={"token": "wrong"})
+    assert r.status_code == 401

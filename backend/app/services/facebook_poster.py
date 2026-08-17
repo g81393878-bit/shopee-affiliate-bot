@@ -14,6 +14,8 @@ Graph API:
 """
 import logging
 import os
+import re
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 
@@ -132,6 +134,136 @@ def post_feed(message: str, link: str = "", image_url: str = "",
         return {"ok": True, "post_id": pid, "error": None}
     err = (body.get("error") or {}).get("message") or f"HTTP {r.status_code}"
     return {"ok": False, "post_id": None, "error": str(err)[:200]}
+
+
+# ===========================================================================
+# กวาดลบโพสต์ลิงก์ปลอมบนเพจ (กันสคริปต์ mock โพสต์ลิงก์ปลอมขึ้นเพจ — เจอจริง 16-17/08)
+# ===========================================================================
+
+_URL_RE = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
+_SHOPEE_PREFIXES = ("https://s.shopee.co.th/", "http://s.shopee.co.th/")
+
+
+def _decode_fb_redirect(url: str) -> str:
+    """ถอดลิงก์ share preview ของ Facebook (l.facebook.com/l.php?u=...) ให้เป็น URL ปลายทางจริง
+    (โพสต์ที่มีลิงก์ attachment จะเก็บ URL จริงไว้ในพารามิเตอร์ ?u= ซึ่ง URL-encode ไว้)"""
+    try:
+        if "l.facebook.com/l.php" in (url or ""):
+            q = parse_qs(urlparse(url).query)
+            if q.get("u"):
+                return q["u"][0]
+    except Exception:
+        pass
+    return url or ""
+
+
+def _collect_attachment_urls(attachments) -> list:
+    """เก็บทุก URL ในโครงสร้าง attachments (รวม subattachments) — กันพลาดลิงก์ที่ซ้อนลึก"""
+    urls = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            for k in ("url", "unshimmed_url"):
+                v = node.get(k)
+                if isinstance(v, str) and v.startswith("http"):
+                    urls.append(v)
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(attachments or {})
+    return urls
+
+
+def extract_post_urls(message: str = "", attachments=None) -> list:
+    """รวบ URL ทั้งหมดจากข้อความ + attachments ของโพสต์ (ถอด redirect l.php ด้วย)"""
+    urls = _URL_RE.findall(message or "")
+    urls += _collect_attachment_urls(attachments)
+    return [_decode_fb_redirect(u).rstrip(")").rstrip(".") for u in urls]
+
+
+def _normalize_shopee_link(url) -> str:
+    """normalize ลิงก์สั้น Shopee ให้เป็น https://s.shopee.co.th/<code> (ตัด query/trailing) —
+    ใช้เทียบกับ affiliate_url ในคลังสินค้า (รหัสสั้นเป็น base62 case-sensitive → ห้าม lowercase รหัส)"""
+    s = (str(url or "").strip())
+    low = s.lower()
+    for p in _SHOPEE_PREFIXES:
+        if low.startswith(p):
+            code = s[len(p):].split("/")[0].split("?")[0].split("#")[0].strip()
+            return f"https://s.shopee.co.th/{code}"
+    return s
+
+
+def is_fake_link_post(message: str = "", urls=None, known_links=None) -> bool:
+    """True = โพสต์เป็นลิงก์ปลอม/ของ mock — ใช้กวาดลบโพสต์ปลอมบนเพจ
+
+    สัญญาณ (conservative — ลบเฉพาะที่ชัดเจน):
+    - shope.ee   = ลิงก์ปลอมเสมอ (กด 404)
+    - lazada.co.th = แพลตฟอร์มอื่น (โฆษณาโปรโมต)
+    - s.shopee.co.th ที่รหัสสั้น format ไม่ valid (มี _ / - / อักขระพิเศษ) = mock
+    - s.shopee.co.th ที่ไม่ใช่ลิงก์ในคลังสินค้า (known_links) = mock
+      (เช่น s.shopee.co.th/earbudsok — base62 ผ่าน format แต่ไม่ใช่ของจริงในคลัง)
+    """
+    text = (message or "").lower()
+    if "shope.ee" in text or "lazada.co.th" in text:
+        return True
+    for u in (urls or []):
+        lu = u.lower()
+        if "shope.ee" in lu or "lazada.co.th" in lu:
+            return True
+        if "s.shopee.co.th" in lu:
+            if not is_valid_shopee_affiliate_url(u):
+                return True
+            if known_links is not None and _normalize_shopee_link(u) not in known_links:
+                return True
+    return False
+
+
+def fetch_page_posts(limit: int = 100) -> list:
+    """ดึงโพสต์ล่าสุดของเพจ (เรียงใหม่ก่อน) — คืน [{id, message, created_time, permalink_url, urls}]
+    (urls = ลิงก์ที่อยู่ในข้อความ + attachment ถอด redirect แล้ว)"""
+    token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or ""
+    if not token:
+        return []
+    url = f"{GRAPH_URL}/{PAGE_ID}/posts"
+    params = {"fields": "id,message,created_time,attachments,permalink_url",
+              "limit": 100, "access_token": token}
+    out = []
+    while url and len(out) < limit:
+        try:
+            r = httpx.get(url, params=params, timeout=20)
+        except Exception as e:
+            logger.warning(f"[facebook_poster] fetch posts failed: {e}")
+            break
+        if r.status_code != 200:
+            logger.warning(f"[facebook_poster] fetch posts HTTP {r.status_code}")
+            break
+        body = r.json()
+        for p in body.get("data", []):
+            p["urls"] = extract_post_urls(p.get("message") or "", p.get("attachments"))
+            out.append(p)
+            if len(out) >= limit:
+                break
+        nxt = (body.get("paging") or {}).get("next")
+        url = nxt if nxt else None
+        params = None  # paging.next มี access_token ใน URL อยู่แล้ว
+    return out
+
+
+def delete_page_post(post_id: str) -> bool:
+    """ลบโพสต์ออกจากเพจผ่าน Graph API DELETE /{post_id} — คืน True เมื่อสำเร็จ"""
+    token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or ""
+    if not token or not post_id:
+        return False
+    try:
+        r = httpx.request("DELETE", f"{GRAPH_URL}/{post_id}",
+                          params={"access_token": token}, timeout=20)
+        return r.status_code == 200
+    except Exception as e:
+        logger.warning(f"[facebook_poster] delete post failed {post_id}: {e}")
+        return False
 
 
 def post_video(description: str = "", file_url: str = "", file_path: str = "",

@@ -30,7 +30,14 @@ from app.services.hermes_brain import analyze_market, market_tone
 from app.services.price_refresh import refresh_price
 from app.services.line_quota import push_guard
 from app.services.product_cards import product_cards_message
-from app.services.facebook_poster import post_feed, log_post_async
+from app.services.facebook_poster import (
+    post_feed,
+    log_post_async,
+    fetch_page_posts,
+    delete_page_post,
+    is_fake_link_post,
+    _normalize_shopee_link,
+)
 from app.services.facebook_intro import intro_posts, short_bg_posts
 from app.services.facebook_curated import fetch_news_items, item_key, curate_caption
 from app.services.facebook_local import fetch_local_items, item_key as local_item_key, curate_local_caption
@@ -567,6 +574,45 @@ def cron_facebook_post(token: str = "", limit: int = 1):
     if not _authorized(token):
         raise HTTPException(status_code=401, detail="invalid token")
     return run_facebook_auto_post(limit)
+
+
+@router.post("/clean-fake-posts")
+def cron_clean_fake_posts(token: str = "", limit: int = 100, dry_run: bool = False):
+    """กวาดลบโพสต์ลิงก์ปลอมบนเพจ Facebook — กันสคริปต์ mock โพสต์ลิงก์ปลอมขึ้นเพจ
+
+    ลบโพสต์ที่มี: shope.ee (ปลอมเสมอ) / lazada.co.th (แพลตฟอร์มอื่น) /
+    s.shopee.co.th รหัส format ไม่ valid หรือ **ไม่ใช่ลิงก์ในคลังสินค้า** (เช่น
+    s.shopee.co.th/earbudsok ที่ mock poster ใช้ — base62 ผ่าน format แต่ไม่มีใน products)
+
+    เรียกจาก cron-job.org เป็นระยะ (ต้อง ?token=<CRON_TOKEN>); `dry_run=true` = ดูตัวอย่างไม่ลบ
+    """
+    if not _authorized(token):
+        raise HTTPException(status_code=401, detail="invalid token")
+    db = SessionLocal()
+    try:
+        known = set()
+        for (u,) in db.query(models.Product.affiliate_url)\
+                     .filter(models.Product.affiliate_url.isnot(None)).all():
+            if u:
+                known.add(_normalize_shopee_link(u))
+        posts = fetch_page_posts(limit=limit)
+        deleted, kept = [], []
+        for p in posts:
+            if is_fake_link_post(p.get("message") or "", p.get("urls") or [],
+                                 known_links=known):
+                pid = p.get("id")
+                ok = True
+                if not dry_run:
+                    ok = delete_page_post(pid)
+                deleted.append({"id": pid, "created_time": p.get("created_time"),
+                                "message": (p.get("message") or "")[:60],
+                                "deleted": ok})
+            else:
+                kept.append(p.get("id"))
+        return {"scanned": len(posts), "deleted": deleted,
+                "kept_count": len(kept), "dry_run": dry_run}
+    finally:
+        db.close()
 
 
 @router.post("/daily-report")
