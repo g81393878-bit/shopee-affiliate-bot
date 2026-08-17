@@ -381,6 +381,71 @@ def test_auto_post_due_old_post_is_due(monkeypatch, db):
     assert main_mod._auto_post_due() is True
 
 
+def test_product_due_counts_only_fbpost(monkeypatch, db):
+    """โพสต์สินค้า timer นับจาก fbpost เท่านั้น (ไม่ขึ้นกับโพสต์แนะนำ/ข่าว/ร้าน)"""
+    from app import main as main_mod
+    from app import models
+    monkeypatch.setattr(main_mod, "FB_AUTO_POST_INTERVAL", 240)
+    db.add(models.CampaignLog(category="0", recipients=1, status="fbintro"))
+    db.commit()
+    assert main_mod._product_due() is True  # ยังไม่เคยโพสต์สินค้า (มีแต่ fbintro) → due
+    db.add(models.CampaignLog(category="21", recipients=1, status="fbpost"))
+    db.commit()
+    assert main_mod._product_due() is False  # เพิ่งโพสต์สินค้า → not due
+
+
+def test_content_due_off_when_interval_zero(monkeypatch, db):
+    """FB_CONTENT_POST_INTERVAL=0 → คอนเทนต์ปิด (ไม่โพสต์)"""
+    from app import main as main_mod
+    monkeypatch.setattr(main_mod, "FB_CONTENT_POST_INTERVAL", 0)
+    assert main_mod._content_due() is False
+
+
+def test_content_due_counts_only_content(monkeypatch, db):
+    """คอนเทนต์ timer นับจากแนะนำ/ข่าว/ร้านเท่านั้น (ไม่ขึ้นกับโพสต์สินค้า)"""
+    from app import main as main_mod
+    from app import models
+    monkeypatch.setattr(main_mod, "FB_CONTENT_POST_INTERVAL", 1440)
+    db.add(models.CampaignLog(category="21", recipients=1, status="fbpost"))
+    db.commit()
+    assert main_mod._content_due() is True  # ยังไม่เคยโพสต์คอนเทนต์ (มีแต่สินค้า) → due
+    db.add(models.CampaignLog(category="0", recipients=1, status="fbrss"))
+    db.commit()
+    assert main_mod._content_due() is False
+
+
+def test_product_post_loop_calls_runner(monkeypatch):
+    """product loop เรียก run_facebook_product_post (ไม่ใช่ run_facebook_auto_post เดิม)"""
+    import asyncio
+    import pytest
+    from app import main as main_mod
+    monkeypatch.setattr(main_mod, "FB_AUTO_POST_INTERVAL", 1)
+    calls = []
+
+    class _Stop(Exception):
+        pass
+
+    async def fake_sleep(s):
+        if calls:
+            raise _Stop()
+
+    async def fake_to_thread(fn, *a, **k):
+        return await fn(*a, **k)
+
+    def fake_runner(limit):
+        calls.append(limit)
+        return {"posted": [], "note": "mock"}
+
+    monkeypatch.setattr(main_mod, "run_facebook_product_post", fake_runner)
+    monkeypatch.setattr(main_mod, "_product_due", lambda: True)
+    monkeypatch.setattr(main_mod.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(main_mod.asyncio, "to_thread", fake_to_thread)
+
+    with pytest.raises(_Stop):
+        asyncio.run(main_mod.facebook_product_post_loop())
+    assert calls == [1]
+
+
 def test_cron_facebook_post_rotation(monkeypatch):
     """หมุนเวียน 4 คลัง: แบรนด์ → (สินค้า ยังไม่เปิด) → คอนเทนต์โลก(RSS) → ท้องถิ่น → ครบแล้วหยุด"""
     from fastapi.testclient import TestClient
@@ -432,10 +497,49 @@ def test_cron_facebook_post_rotation(monkeypatch):
     # tick 4 → ทุกคลังหมด (RSS/local กันซ้ำ + แบรนด์ครบ + สินค้ายังไม่เปิด) → หยุด
     r4 = client.post("/api/cron/facebook-post")
     assert r4.json()["posted"] == []
-    assert "FB_POST_PRODUCTS" in r4.json()["note"]
+    assert "ไม่มีคอนเทนต์ใหม่" in r4.json()["note"]
 
     assert len(posted) == 3
     assert [r["kind"] for r in sheet_rows] == ["intro", "rss", "local"]
+
+
+def test_auto_post_product_mode_posts_only_products(monkeypatch, db):
+    """FB_POST_PRODUCTS=1 → โพสต์เฉพาะสินค้า ไม่ผสมแนะนำ/ข่าว/ร้าน (แยกโหมดชัดเจน)"""
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.setattr(cron, "_authorized", lambda t: True)
+    monkeypatch.setenv("FB_POST_PRODUCTS", "1")
+    _reset_products(db)
+    _add_test_product(db, name="หูฟัง A", commission=999)
+    monkeypatch.setattr(cron, "generate_script_for_product", _fake_script)
+    monkeypatch.setattr(cron, "fetch_product_image", lambda url: "")
+    # คอนเทนต์มีพร้อม แต่ต้องไม่ถูกโพสต์ในโหมดสินค้า
+    monkeypatch.setattr(cron, "intro_posts", lambda: [{"title": "แนะนำ", "caption": "โพสต์แนะนำ"}])
+    monkeypatch.setattr(cron, "short_bg_posts", lambda: [])
+    monkeypatch.setattr(cron, "fetch_news_items", lambda max_items=20: [
+        {"guid": "g1", "title": "ข่าว", "link": "https://news.example/1",
+         "summary": "", "source": "T", "topic": "เทค"},
+    ])
+    monkeypatch.setattr(cron, "curate_caption", lambda it, line_oa="": "ป้าเล่าข่าว")
+    monkeypatch.setattr(cron, "fetch_local_items", lambda index=0, max_items=5: [
+        {"guid": "l1", "title": "ร้าน", "link": "https://food.example/1",
+         "summary": "", "source": "f", "topic": "ของกิน"},
+    ])
+    monkeypatch.setattr(cron, "curate_local_caption", lambda it, line_oa="": "ป้าแนะนำร้าน")
+    posted = []
+    monkeypatch.setattr(cron, "post_feed",
+                        lambda msg, link="", image_url="", background_preset_id="": posted.append(msg) or
+                        {"ok": True, "post_id": f"post_{len(posted)}", "error": None})
+
+    client = TestClient(app)
+    r = client.post("/api/cron/facebook-post")
+    b = r.json()["posted"]
+    assert len(b) == 1 and b[0]["posted"] is True
+    assert len(posted) == 1  # โพสต์แค่สินค้า 1 ตัว
+    assert "ป้าเล่าข่าว" not in posted[0]
+    assert "ป้าแนะนำร้าน" not in posted[0]
+    assert "โพสต์แนะนำ" not in posted[0]
 
 
 def test_post_next_local_skips_failed_link(monkeypatch, db):
@@ -726,6 +830,116 @@ def test_post_video_no_token(monkeypatch):
     res = fp.post_video(file_url="https://cdn.example.com/c.mp4")
     assert res["ok"] is False
     assert "FACEBOOK_PAGE_ACCESS_TOKEN" in res["error"]
+
+
+def test_post_photo_file_path_uploads_source(monkeypatch):
+    """file_path → multipart upload source (ไฟล์รูปในเครื่อง) ไป /photos"""
+    import tempfile
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    fd, path = tempfile.mkstemp(suffix=".png")
+    os.close(fd)
+    try:
+        with open(path, "wb") as fh:
+            fh.write(b"\x89PNG\r\n\x1a\n" + b"x" * 32)
+        captured = {}
+
+        class Resp:
+            status_code = 200
+            def json(self):
+                return {"id": "photo_1", "post_id": "page_post_1"}
+
+        def fake_post(url, params=None, data=None, files=None, timeout=None):
+            captured["url"] = url
+            captured["data"] = data
+            captured["files"] = files
+            return Resp()
+
+        monkeypatch.setattr(fp.httpx, "post", fake_post)
+        res = fp.post_photo("เปิดตัวป้าเข็ม", file_path=path)
+        assert res["ok"] is True
+        assert res["post_id"] == "page_post_1"  # ใช้ post_id (ลิงก์โพสต์) ไม่ใช่ photo id
+        assert captured["url"].endswith("/photos")
+        assert "url" not in captured["data"]  # ใช้ source ไม่ใช่ url
+        assert captured["data"]["message"] == "เปิดตัวป้าเข็ม"
+        name, fobj, ctype = captured["files"]["source"]
+        assert name == os.path.basename(path) and ctype == "image/png"
+        assert fobj.startswith(b"\x89PNG\r\n\x1a\n")  # ไบต์ไฟล์ถูกส่งจริง
+    finally:
+        os.remove(path)
+
+
+def test_post_photo_image_url(monkeypatch):
+    """image_url → โพสต์ /photos ด้วย url (ไม่ multipart)"""
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    captured = {}
+
+    class Resp:
+        status_code = 200
+        def json(self):
+            return {"id": "photo_2"}
+
+    def fake_post(url, params=None, data=None, files=None, timeout=None):
+        captured["data"] = data
+        captured["files"] = files
+        return Resp()
+
+    monkeypatch.setattr(fp.httpx, "post", fake_post)
+    res = fp.post_photo("แคปชัน", image_url="https://example.com/p.png")
+    assert res["ok"] is True
+    assert captured["data"]["url"] == "https://example.com/p.png"
+    assert captured["files"] is None
+
+
+def test_post_photo_requires_source(monkeypatch):
+    """ไม่ระบุทั้ง file_path และ image_url → ปฏิเสธ"""
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    res = fp.post_photo("แคปชัน")
+    assert res["ok"] is False
+    assert "file_path" in res["error"] or "image_url" in res["error"]
+
+
+def test_post_photo_missing_file(monkeypatch):
+    """ไฟล์ในเครื่องไม่มี → ปฏิเสธก่อนเรียก API"""
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    res = fp.post_photo(file_path="C:/nonexistent/x.png")
+    assert res["ok"] is False
+    assert "ไม่พบ" in res["error"]
+
+
+def test_post_photo_no_token(monkeypatch):
+    monkeypatch.delenv("FACEBOOK_PAGE_ACCESS_TOKEN", raising=False)
+    res = fp.post_photo(file_path="C:/x.png")
+    assert res["ok"] is False
+    assert "FACEBOOK_PAGE_ACCESS_TOKEN" in res["error"]
+
+
+def test_post_photo_sanitizes_message(monkeypatch):
+    """แคปชันที่มีอักษรต่างภาษา (LLM หลุด) ต้องถูกกรองก่อนส่ง"""
+    import tempfile
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    fd, path = tempfile.mkstemp(suffix=".png")
+    os.close(fd)
+    try:
+        with open(path, "wb") as fh:
+            fh.write(b"\x89PNG")
+        captured = {}
+
+        class Resp:
+            status_code = 200
+            def json(self):
+                return {"id": "photo_s"}
+
+        def fake_post(url, params=None, data=None, files=None, timeout=None):
+            captured["data"] = data
+            return Resp()
+
+        monkeypatch.setattr(fp.httpx, "post", fake_post)
+        res = fp.post_photo("ป้าแนะนำ دیزاین 😊", file_path=path)
+        assert res["ok"] is True
+        assert "دیزاین" not in captured["data"]["message"]
+        assert "ป้าแนะนำ" in captured["data"]["message"]
+    finally:
+        os.remove(path)
 
 
 # ===========================================================================

@@ -277,6 +277,66 @@ def post_feed(message: str, link: str = "", image_url: str = "",
     return {"ok": False, "post_id": None, "error": str(err)[:200]}
 
 
+def post_photo(message: str = "", file_path: str = "", image_url: str = "") -> dict:
+    """โพสต์รูปภาพลงเพจ — POST /{page-id}/photos (รองรับไฟล์ในเครื่อง + URL)
+
+    source เลือกอย่างใดอย่างหนึ่ง:
+      file_path: ไฟล์รูปในเครื่อง (multipart upload source) — ใช้เฉพาะเครื่องที่มีไฟล์
+      image_url: URL สาธารณะที่ Facebook ดาวน์โหลดได้เอง
+
+    message: แคปชันใต้รูป (ไม่บังคับ) — กรองอักษรต่างภาษาก่อนส่ง
+    คืน {ok, post_id, error} (ใช้ post_id เพราะลิงก์ตรงโพสต์ feed มากกว่า photo id)
+    """
+    token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or ""
+    if not token:
+        return {"ok": False, "post_id": None, "error": "FACEBOOK_PAGE_ACCESS_TOKEN ไม่ได้ตั้ง"}
+    message = sanitize_post_text(message or "")
+    file_path = (file_path or "").strip()
+    image_url = (image_url or "").strip()
+    if not file_path and not image_url:
+        return {"ok": False, "post_id": None,
+                "error": "ต้องมี file_path หรือ image_url อย่างใดอย่างหนึ่ง"}
+
+    endpoint = f"{GRAPH_URL}/{PAGE_ID}/photos"
+    data = {}
+    if message:
+        data["message"] = message
+
+    files = None
+    if file_path:
+        if not os.path.exists(file_path):
+            return {"ok": False, "post_id": None, "error": f"ไฟล์ไม่พบ: {file_path}"}
+        ext = os.path.splitext(file_path)[1].lower().lstrip(".") or "png"
+        mime = {
+            "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+            "gif": "image/gif", "webp": "image/webp", "bmp": "image/bmp",
+        }.get(ext, "image/png")
+        with open(file_path, "rb") as fh:
+            img_bytes = fh.read()
+        files = {"source": (os.path.basename(file_path), img_bytes, mime)}
+    else:
+        data["url"] = image_url
+
+    try:
+        kwargs = {"params": {"access_token": token}, "data": data, "timeout": 60}
+        if files:
+            kwargs["files"] = files
+        r = httpx.post(endpoint, **kwargs)
+    except Exception as e:
+        logger.warning(f"[facebook_poster] photo post failed: {e}")
+        return {"ok": False, "post_id": None, "error": str(e)[:200]}
+    try:
+        body = r.json()
+    except Exception:
+        body = {}
+    # /photos คืนทั้ง id (รูป) และ post_id (โพสต์ feed) — ใช้ post_id เพราะลิงก์ตรงโพสต์
+    pid = body.get("post_id") or body.get("id")
+    if r.status_code == 200 and pid:
+        return {"ok": True, "post_id": str(pid), "error": None}
+    err = (body.get("error") or {}).get("message") or f"HTTP {r.status_code}"
+    return {"ok": False, "post_id": None, "error": str(err)[:200]}
+
+
 # ===========================================================================
 # กวาดลบโพสต์ลิงก์ปลอมบนเพจ (กันสคริปต์ mock โพสต์ลิงก์ปลอมขึ้นเพจ — เจอจริง 16-17/08)
 # ===========================================================================
