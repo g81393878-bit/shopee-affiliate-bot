@@ -17,6 +17,7 @@
   # ระบุชื่อวิดีโอ (ไม่บังคับ)
   python tools/post_fb_video.py --file assets/202608161242.mp4 --caption "..." --title "แนะนำบอท"
 
+ไม่ระบุ --caption → สร้างแคปชันโปรโมทบอทป้าเข็มให้อัตโนมัติ (เหมือน bot/post_page.py)
 อ่าน env จาก backend/.env (FACEBOOK_PAGE_ACCESS_TOKEN) อัตโนมัติ
 
 Permission ที่ page token ต้องมี: pages_manage_posts + pages_read_engagement + pages_show_list
@@ -38,13 +39,14 @@ from dotenv import load_dotenv  # noqa: E402
 load_dotenv(os.path.join(BACKEND, ".env"))
 
 from app.services.facebook_poster import PAGE_ID, post_video  # noqa: E402
+from app.services.bot_profile import pick_promo_caption  # noqa: E402
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="โพสต์ MP4 ลงเพจ Facebook")
     ap.add_argument("--file", help="path ไฟล์ .mp4 ในเครื่อง")
     ap.add_argument("--url", help="URL สาธารณะของไฟล์วิดีโอ (แทน --file)")
-    ap.add_argument("--caption", default="", help="แคปชันใต้คลิป (รองรับ emoji)")
+    ap.add_argument("--caption", default=None, help="แคปชันใต้คลิป (default = โปรโมทบอทป้าเข็ม)")
     ap.add_argument("--title", default="", help="ชื่อวิดีโอ (ไม่บังคับ)")
     ap.add_argument("--dry-run", action="store_true", help="ตรวจก่อน ไม่โพสต์จริง")
     args = ap.parse_args()
@@ -52,15 +54,17 @@ def main() -> int:
     if not args.file and not args.url:
         ap.error("ต้องระบุ --file หรือ --url อย่างใดอย่างหนึ่ง")
 
+    caption = args.caption if args.caption is not None else pick_promo_caption(advance=not args.dry_run)
+
     if args.dry_run:
         print("[dry-run] จะโพสต์คลิปลงเพจ Facebook (PAGE_ID=%s)" % PAGE_ID)
         print("[dry-run] file: %s" % (args.file or "-"))
         print("[dry-run] url : %s" % (args.url or "-"))
-        print("[dry-run] caption: %s" % args.caption)
+        print("[dry-run] caption: %s" % caption)
         return 0
 
     res = post_video(
-        description=args.caption,
+        description=caption,
         file_url=args.url or "",
         file_path=args.file or "",
         title=args.title,

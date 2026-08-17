@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 บอทโพสต์ลงเพจป้าเข็ม (Graph API) — แยกส่วน: โพสต์อย่างเดียว ไม่แชร์ ไม่บันทึกชีท
-สร้างแคปชั่นโปรโมท + แนบภาพโปสเตอร์จากโฟลเดอร์ assets (สุ่มหมุนเวียน)
+สร้างแคปชั่นโปรโมท + แนบภาพโปสเตอร์จากโฟลเดอร์ assets (หมุนเวียนทีละภาพ)
 คืน URL โพสต์ทาง stdout + เขียนลง --out-file (ให้บอทแชร์ share_group.py เอาไปใช้ต่อ)
 
 ใช้งาน:
@@ -12,8 +12,8 @@
   python bot/post_page.py --dry-run                         # จำลอง ไม่โพสต์จริง
 """
 import argparse
+import json
 import os
-import random
 import sys
 from pathlib import Path
 from typing import Optional
@@ -26,6 +26,9 @@ except Exception:
 ROOT = Path(__file__).resolve().parent.parent
 
 DEFAULT_POSTER_DIR = r"D:\Shopee_Web_Scraping\assets"
+
+# state จำภาพโปสเตอร์ล่าสุด (หมุนเวียนไม่ซ้ำจนกว่าจะครบทุกภาพ)
+_POSTER_STATE = ROOT / "backend" / ".promo_poster_state.json"
 
 
 def _load_env():
@@ -46,20 +49,28 @@ _load_env()
 
 sys.path.insert(0, str(ROOT / "backend"))
 from app.services.facebook_poster import post_feed, post_photo  # noqa: E402
+from app.services.bot_profile import pick_promo_caption  # noqa: E402
 
 
-def _default_caption() -> str:
-    """เนื้อหาโพสต์ลงเพจ (โปรโมทบอทป้าเข็ม — ไม่มีลิงก์สินค้า)"""
-    line_oa_url = os.getenv("LINE_OA_URL", "https://lin.ee/o9Kjp1N")
-    return (
-        "อยากใช้บอทช่วยขายของ Shopee (บอทป้าเข็ม) ป้าจัดการระบบให้พร้อมใช้ทันทีจ้า 😊\n"
-        "🛠️ ปลอดภัยรันบนบัญชี/คีย์คุณเอง แอดมินดูแลหลังบ้านให้หมด ไม่ต้องเซ็ตค่าเองให้ปวดหัวจ้า\n"
-        f"💼 เริ่มต้น 490.- แอดไลน์คุยรายละเอียดแพ็กเกจกับป้าเลยจ้า 👉 {line_oa_url}"
-    )
+def _read_poster_state() -> Optional[str]:
+    try:
+        return json.loads(_POSTER_STATE.read_text(encoding="utf-8")).get("name")
+    except Exception:
+        return None
 
 
-def resolve_poster_image(path: Optional[str]) -> Optional[str]:
-    """หาไฟล์ภาพโปสเตอร์: เป็นไฟล์ → ใช้เลย; เป็นโฟลเดอร์ → สุ่มภาพ (ข้าม avatar/icon)."""
+def _write_poster_state(name: str) -> None:
+    try:
+        _POSTER_STATE.write_text(json.dumps({"name": name}), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def resolve_poster_image(path: Optional[str], advance: bool = True) -> Optional[str]:
+    """หาไฟล์ภาพโปสเตอร์: เป็นไฟล์ → ใช้เลย; เป็นโฟลเดอร์ → หมุนเวียนทีละภาพ (ข้าม avatar/icon).
+
+    advance=True (โพสต์จริง) เลื่อนไปภาพถัดไป; advance=False (dry-run) แค่ดูภาพที่จะใช้ถัดไป.
+    """
     if not path:
         return None
     p = Path(path)
@@ -67,11 +78,21 @@ def resolve_poster_image(path: Optional[str]) -> Optional[str]:
         return str(p)
     if p.is_dir():
         images = [f for ext in ("*.png", "*.jpg", "*.jpeg", "*.webp") for f in p.glob(ext)]
-        posters = [f for f in images
-                   if "avatar" not in f.name.lower() and "icon" not in f.name.lower()]
+        posters = sorted([f for f in images
+                          if "avatar" not in f.name.lower() and "icon" not in f.name.lower()],
+                         key=lambda f: f.name)
         if posters:
-            chosen = random.choice(posters)
-            print(f"[POSTER] เจอภาพโปสเตอร์ {len(posters)} รูป → สุ่มใช้: {chosen.name}")
+            state_name = _read_poster_state()
+            idx = 0
+            if state_name:
+                for i, f in enumerate(posters):
+                    if f.name == state_name:
+                        idx = i
+                        break
+            chosen = posters[idx]
+            if advance:
+                _write_poster_state(posters[(idx + 1) % len(posters)].name)
+            print(f"[POSTER] เจอภาพโปสเตอร์ {len(posters)} รูป → ใช้: {chosen.name}")
             return str(chosen)
         return None
     print(f"[WARN] ไม่พบพาธภาพโปสเตอร์: {path}")
@@ -89,8 +110,8 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="จำลอง: ไม่โพสต์จริง")
     args = parser.parse_args()
 
-    caption = args.caption or _default_caption()
-    poster = resolve_poster_image(args.poster)
+    caption = args.caption or pick_promo_caption(advance=not args.dry_run)
+    poster = resolve_poster_image(args.poster, advance=not args.dry_run)
 
     if args.dry_run:
         print("[DRY-RUN] (โหมดจำลอง — ไม่โพสต์ลงเพจจริง)")

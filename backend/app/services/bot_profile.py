@@ -10,13 +10,18 @@
 Phase 1 = อ่านจาก env (ติดตั้งง่าย + แบ็คอัพง่าย = ก๊อป .env)
 Phase 2 = ย้ายไปตาราง bot_profiles + หน้าแอดมิน (ดู docs/srs-white-label-bot.md)
 """
+import json
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 # โหลด .env ทุกครั้งที่ import ตัวนี้ (กันกรณีถูก import ก่อน app.config)
-load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent.parent / ".env")
+_BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+load_dotenv(dotenv_path=_BACKEND_DIR / ".env")
+
+# state จำตำแหน่งแคปชันโพสต์ล่าสุด (หมุนเวียนไม่ซ้ำติดกัน) — ไฟล์เดียวทั้งโพสต์รูป/วิดีโอ
+_PROMO_CAPTION_STATE = _BACKEND_DIR / ".promo_caption_state.json"
 
 
 def _env(key: str, default: str) -> str:
@@ -48,6 +53,52 @@ def line_cta_footer(line_url: str = "") -> str:
     if url:
         parts.append(f"🔗 {url}")
     return "\n".join(parts)
+
+
+def promo_captions() -> list:
+    """แคปชันโปรโมทบอทหลายแบบ (หมุนเวียนกันโพสต์ให้ไม่ซ้ำ) — แหล่งความจริงเดียว."""
+    url = LINE_OA_URL
+    return [
+        (f"อยากใช้บอทช่วยขายของ Shopee (บอทป้าเข็ม) ป้าจัดการระบบให้พร้อมใช้ทันทีจ้า 😊\n"
+         "🛠️ ปลอดภัยรันบนบัญชี/คีย์คุณเอง แอดมินดูแลหลังบ้านให้หมด ไม่ต้องเซ็ตค่าเองให้ปวดหัวจ้า\n"
+         f"💼 เริ่มต้น 490.- แอดไลน์คุยรายละเอียดแพ็กเกจกับป้าเลยจ้า 👉 {url}"),
+        (f"เบื่อไหมตอบแชทลูกค้าเองทั้งวัน 🤖 บอทป้าเข็มช่วยได้ — ค้นสินค้า + ตอบแชท + จำความชอบลูกค้า\n"
+         "📦 แปลงลิงก์ค่าคอม Shopee ให้อัตโนมัติ แม่ค้าแค่แชร์ ๆ ๆ\n"
+         f"💼 เริ่มต้น 490.- แอดไลน์ป้าเข็มได้เลยจ้า 👉 {url}"),
+        (f"อยากให้เพจหาคนซื้อให้แบบไม่ต้องนั่งเฝ้า 🔍 บอทป้าเข็มส่องโพสต์คนอยากซื้อ แล้วจับคู่สินค้าในคลัง\n"
+         "🚀 โพสต์อัตโนมัติ + แจ้งเตือน โควตาจำกัดไม่สแปม\n"
+         f"💼 เริ่มต้น 490.- คุยแพ็กเกจกับป้าได้เลยจ้า 👉 {url}"),
+        (f"เปิดร้านออนไลน์แล้วยังเงียบ ๆ อยู่ไหม 🛒 บอทป้าเข็มช่วยขายของ Shopee ให้แม่ค้าไทย\n"
+         "🧠 AI เข้าใจภาษาไทย ตอบเอง 24 ชม. ไม่มีวันหยุด\n"
+         f"💼 เริ่มต้น 490.- แอดไลน์คุยกับป้าเข็มเลยจ้า 👉 {url}"),
+    ]
+
+
+def _read_promo_state() -> int:
+    try:
+        data = json.loads(_PROMO_CAPTION_STATE.read_text(encoding="utf-8"))
+        return int(data.get("idx", 0))
+    except Exception:
+        return 0
+
+
+def _write_promo_state(idx: int) -> None:
+    try:
+        _PROMO_CAPTION_STATE.write_text(json.dumps({"idx": idx}), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def pick_promo_caption(advance: bool = True) -> str:
+    """หยิบแคปชันโปรโมททีละแบบ (round-robin) — advance=True เลื่อนไปตัวถัดไป (ใช้โพสต์จริง).
+
+    advance=False = แค่ดู (dry-run) ไม่กินตำแหน่ง ไม่เลื่อน rotation.
+    """
+    captions = promo_captions()
+    idx = _read_promo_state() % len(captions)
+    if advance:
+        _write_promo_state((idx + 1) % len(captions))
+    return captions[idx]
 
 
 def owner_contact_text() -> str:
