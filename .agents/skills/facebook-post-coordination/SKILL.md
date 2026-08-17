@@ -20,10 +20,31 @@ description: >-
 
 | บอท | Trigger | ไฟล์ |
 |---|---|---|
-| **Radar** | local monitor ส่ง lead → `/api/admin/facebook-radar/leads` → demand ≥70 + จับคู่ → โพสต์ | `backend/app/api/facebook_radar.py` |
+| **Radar** | local monitor ส่ง lead → `/api/admin/facebook-radar/leads` → demand ≥70 → แยก group/page (ดูด้านล่าง) | `backend/app/api/facebook_radar.py` |
 | **Cron rotation** | scheduler ในตัว (`main.py` ตรวจทุก 60 วิ ครบ `FB_AUTO_POST_INTERVAL` นาทีไหม) → หมุน 4 คลัง | `backend/app/api/cron.py` + `backend/app/main.py` |
 
-ทุกตัวยิงผ่าน `post_feed()` ใน `backend/app/services/facebook_poster.py` (จุดเดียว) — ตรวจ/แก้ที่จุดเดียวนี้ก่อนเสมอ
+ทุกตัวที่โพสต์**เพจ**ยิงผ่าน `post_feed()` ใน `backend/app/services/facebook_poster.py` (จุดเดียว) — ตรวจ/แก้ที่จุดเดียวนี้ก่อนเสมอ
+
+## แยก 2 flow: กลุ่ม vs เพจ (status ต่างกัน — อย่าให้ขัดกัน)
+
+`ingest_facebook_leads` แยกตาม `lead.group_id` (ตั้ง = โพสต์จากกลุ่ม, null = โพสต์เพจ):
+
+| | **Flow A — กลุ่ม (group polling)** | **Flow B — เพจป้าเข็ม (Graph API)** |
+|---|---|---|
+| เงื่อนไข | `lead.group_id is not None` | `lead.group_id is None` |
+| สถานะเริ่ม | `pending_polling` (เข้าคิว) | `pending` (commit ก่อน post_feed) |
+| ใครโพสต์ | บอท local poll `GET /tasks/pending` → แชร์ลงกลุ่ม (งาน AI ตัวอื่น) | ตัวเรา `post_feed()` ตรง ๆ |
+| สถานะจบ | `shared` (สำเร็จ) / `failed` (ล้ม) ผ่าน `POST /tasks/{id}/status` | `posted` (สำเร็จ) / `failed` (ล้ม) |
+| ใช้ guard ไหน | ไม่ใช้ cooldown/โควต้า/preflight ของเพจ (บอท local ควบคุมจังหวะ) | cooldown + daily limit + `preflight_ready()` |
+| แจ้งเจ้าของ | `notify_owner_once(f"radar_task_{completed|failed}_{task_id}")` | `fb_preflight_radar` / `fb_post_hard_error` |
+
+**กติกาสำคัญ:** `shared` (กลุ่ม) **ไม่นับ** ใน `RADAR_MAX_DAILY_POSTS` และ category cooldown —
+ทั้งคู่นับแค่ `posted/sent/pending` (โควต้า/cooldown ของ**เพจ**เท่านั้น) → กลุ่มแชร์เยอะไม่ไปบล็อกโพสต์เพจ
+และเพจโพสต์เยอะไม่ไปบล็อกการแชร์กลุ่ม
+
+**Pivot:** radar ไม่จับคู่สินค้าในคลังแล้ว (โพสต์ promo ติดตั้งบอท — `matched_product_id=None`) →
+`check_category_cooldown_allowed` นับได้ทั้ง `Product.category` (event เก่า) และ `product_keyword`
+(event ใหม่) ผ่าน `or_`
 
 ## สัญญา coordination (ห้ามทำลาย — เคยเจอโพสต์ซ้ำ/หมวดถี่เกินจริง)
 
