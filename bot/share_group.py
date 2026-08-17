@@ -290,6 +290,169 @@ def share_post_to_group(driver, post_url: str, group_name: str,
         return False, "กดโพสต์แล้ว แต่ dialog ไม่ปิด (ไม่ยืนยัน — ตรวจที่กลุ่ม)"
 
 
+# ---------------------------------------------------------------------------
+# โพสต์ตรงลงกลุ่ม (Direct Post — สูตร "รูปสะอาด + ลิงก์ในคอมเมนต์" ตามคู่มือ)
+# ---------------------------------------------------------------------------
+def _comment_newest_post(driver, text: str) -> bool:
+    """โพสต์แรกสุดในฟีด (โพสต์ที่เพิ่งสร้าง) → เปิดหน้าโพสต์ → พิมพ์คอมเมนต์ (วางลิงก์ LINE)."""
+    try:
+        articles = WebDriverWait(driver, 10).until(
+            EC.presence_of_all_elements_located((By.XPATH, '//div[@role="article"]'))
+        )
+    except Exception:
+        print("[COMMENT] ไม่พบโพสต์ในฟีด → ข้ามคอมเมนต์")
+        return False
+    if not articles:
+        return False
+    # หา link ไปหน้าโพสต์ในโพสต์แรกสุด (โพสต์ของเราเพิ่งโพสต์ → อยู่บนสุด)
+    post_url = None
+    for a in articles[0].find_elements(
+            By.XPATH,
+            './/a[contains(@href, "/posts/") or contains(@href, "permalink") '
+            'or contains(@href, "story_fbid")]'):
+        href = (a.get_attribute("href") or "").strip()
+        if href:
+            post_url = href
+            break
+    if not post_url:
+        print("[COMMENT] หา URL โพสต์ในฟีดไม่เจอ → ข้ามคอมเมนต์")
+        return False
+    try:
+        driver.get(post_url)
+    except Exception as e:
+        print(f"[WARNING] โหลดหน้าโพสต์เพื่อคอมเมนต์: {e}")
+    time.sleep(5)
+    box = _find_first(driver, [
+        (By.XPATH, '//div[@role="textbox"][contains(@aria-label, "เขียนความคิดเห็น") '
+                   'or contains(@aria-label, "Write a comment") '
+                   'or contains(@aria-label, "แสดงความคิดเห็น") '
+                   'or contains(@aria-label, "comment")]'),
+        (By.XPATH, '//div[@role="textbox"]'),
+    ])
+    if not box:
+        print("[COMMENT] ไม่พบกล่องคอมเมนต์ในหน้าโพสต์ → ต้องวางลิงก์เอง")
+        return False
+    _type_like_human(box, text)
+    time.sleep(2)
+    try:
+        box.send_keys(Keys.ENTER)
+    except Exception as e:
+        print(f"[WARNING] ส่งคอมเมนต์: {e}")
+    time.sleep(3)
+    print("[COMMENT] วางลิงก์ในคอมเมนต์แรกสำเร็จ")
+    return True
+
+
+def post_to_group(driver, group_url: str, caption: str,
+                  poster_path: Optional[str] = None,
+                  comment: Optional[str] = None,
+                  dry_run: bool = False) -> Tuple[bool, bool, str]:
+    """โพสต์ตรงลงกลุ่ม (Direct Post — ปลอดภัยกว่าแชร์จากเพจ ตามคู่มือ):
+
+    เปิดกลุ่ม → กดเริ่มโพสต์ → แนบรูปโปสเตอร์ → พิมพ์แคปชั่นสะอาด (ไม่มีลิงก์)
+    → กดโพสต์ → คอมเมนต์แรกวางลิงก์ LINE (best-effort)
+
+    คืน (posted_ok, comment_ok, note) — โพสต์สำเร็จแต่คอมเมนต์ล้ม = posted_ok=True
+    comment_ok=False (ห้ามนับ fail เพราะเดี๋ยวจะโพสต์ซ้ำ)
+    """
+    print(f"[INFO] เปิดหน้ากลุ่ม: {group_url}")
+    try:
+        driver.get(group_url)
+    except Exception as e:
+        print(f"[WARNING] โหลดหน้ากลุ่ม: {e}")
+    time.sleep(5)
+
+    # ปิด dialog ที่อาจค้างจากกลุ่มก่อนหน้า (กัน state สับสนระหว่างกลุ่ม)
+    try:
+        driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+        time.sleep(1)
+    except Exception:
+        pass
+
+    # 1. กดช่อง "เริ่มโพสต์" (composer)
+    composer_trigger = _find_first(driver, [
+        (By.XPATH, '//div[@role="button"][contains(@aria-label, "เริ่มโพสต์") '
+                   'or contains(@aria-label, "Write something") '
+                   'or contains(@aria-label, "เขียนอะไร")]'),
+        (By.XPATH, '//*[contains(text(), "เริ่มโพสต์") or contains(text(), "Write something")]'),
+        (By.XPATH, '//div[@role="button"][contains(@aria-label, "สร้างโพสต์") '
+                   'or contains(@aria-label, "Create post")]'),
+    ])
+    if not composer_trigger:
+        return False, False, "ไม่พบช่องเริ่มโพสต์ (composer)"
+    _click(driver, composer_trigger)
+    time.sleep(3)
+
+    # 2. ช่องเขียนข้อความ (ใน dialog ที่เปิดขึ้น)
+    box = _find_first(driver, [
+        (By.XPATH, '//div[@role="dialog"]//div[@role="textbox"]'),
+        (By.XPATH, '//div[@role="textbox"][@contenteditable="true"]'),
+        (By.XPATH, '//div[@role="textbox"]'),
+    ])
+    if not box:
+        return False, False, "ไม่พบช่องเขียนโพสต์ใน dialog"
+
+    # 3. แนบรูปโปสเตอร์ (ถ้ามี)
+    if poster_path:
+        try:
+            file_input = driver.find_element(By.XPATH, '//input[@type="file"]')
+            file_input.send_keys(str(Path(poster_path).resolve()))
+            print("[INFO] ส่งไฟล์ภาพให้เบราว์เซอร์แล้ว รอพรีวิวอัปโหลด...")
+            time.sleep(6)
+        except Exception as e:
+            print(f"[WARNING] แนบภาพไม่สำเร็จ (โพสต์ข้อความล้วน): {e}")
+
+    # 4. พิมพ์แคปชั่นสะอาด (ไม่มีลิงก์ — ลิงก์ไปอยู่ในคอมเมนต์แรก)
+    if caption and not dry_run:
+        _type_like_human(box, caption)
+        time.sleep(2)
+    elif caption and dry_run:
+        print(f"[DRY-RUN] จะพิมพ์แคปชั่น:\n{caption}")
+
+    # 5. ปุ่ม "โพสต์"
+    post_btn = _find_first(driver, [
+        (By.XPATH, '//div[@role="dialog"]//div[@role="button"]'
+                   '[normalize-space(text())="โพสต์" or normalize-space(text())="Post"]'),
+        (By.XPATH, '//*[@role="button"][normalize-space(text())="โพสต์" '
+                   'or normalize-space(text())="Post"]'),
+        (By.XPATH, '//*[normalize-space(text())="โพสต์" or normalize-space(text())="Post"]'),
+    ])
+    if not post_btn:
+        return False, False, "ไม่พบปุ่มโพสต์"
+    if dry_run:
+        print("[DRY-RUN] พบปุ่มโพสต์แล้ว — ไม่กด (โหมดจำลอง)")
+        return True, True, "dry-run (locator ครบ: composer/กล่องข้อความ/ปุ่มโพสต์)"
+
+    _click(driver, post_btn)
+
+    # ยืนยันว่าสำเร็จจริง: composer dialog ปิด หรือช่องข้อความหายไป (Facebook รับโพสต์แล้ว)
+    posted = False
+    if _share_dialog_closed(driver):
+        posted = True
+    else:
+        try:
+            WebDriverWait(driver, 8).until(EC.staleness_of(box))
+            posted = True
+        except Exception:
+            posted = False
+    if not posted:
+        return False, False, "กดโพสต์แล้ว แต่ไม่ยืนยันว่าโพสต์ขึ้น (dialog/กล่องไม่ปิด)"
+    time.sleep(4)
+
+    # 6. คอมเมนต์แรกวางลิงก์ (best-effort — ล้มไม่นับ fail เพราะโพสต์ขึ้นแล้ว)
+    comment_ok = True
+    if comment:
+        print("[COMMENT] กำลังวางลิงก์ในคอมเมนต์แรก...")
+        comment_ok = _comment_newest_post(driver, comment)
+        if not comment_ok:
+            print("[WARN] คอมเมนต์ลิงก์ไม่สำเร็จ — โพสต์ขึ้นแล้ว แต่ต้องวางลิงก์เองที่คอมเมนต์")
+
+    note = "โพสต์ตรงลงกลุ่มสำเร็จ (dialog ปิด)"
+    if comment and not comment_ok:
+        note += " · คอมเมนต์ลิงก์ไม่สำเร็จ (วางเอง)"
+    return True, comment_ok, note
+
+
 def _resolve_group_name(driver, group_url: str) -> str:
     """เปิดหน้ากลุ่มแล้วอ่านชื่อจริง (ไว้ป้อนช่องค้นหากลุ่มใน dialog แชร์)."""
     print(f"[INFO] เปิดหน้ากลุ่มเพื่ออ่านชื่อ: {group_url}")

@@ -4,20 +4,23 @@
 
   post   — โพสต์ "แนะนำป้าเข็ม" ลงเพจ (แคปชั่นอัตโนมัติ + ภาพจาก assets)
            ไม่เปิด browser ไม่แตะกลุ่มเลย
-  share  — แชร์ post URL ที่มีอยู่แล้วลงกลุ่มเป้าหมาย (browser + คุกกี้ + dedup + ชีท)
-           ไม่โพสต์ ไม่สร้างแคปชั่น
+  share  — โพสต์ตรงลงกลุ่ม (default, สูตรรูปสะอาด+ลิงก์ในคอมเมนต์) หรือแชร์ post URL
+           (--method share) — browser + คุกกี้ + ledger/blacklist + บันทึกชีท
 
 ใช้งาน:
   # 1) โพสต์แนะนำป้าเข็มลงเพจ (ได้ post URL)
   python bot/run_campaign.py post [--caption "..." ] [--poster "D:\\...\\assets"]
   python bot/run_campaign.py post --dry-run        # โชว์แคปชั่น+ภาพ ไม่โพสต์
 
-  # 2) แชร์โพสต์นั้นลงกลุ่ม (ใช้ post URL จากขั้น 1)
-  python bot/run_campaign.py share --post-url "https://www.facebook.com/<page>/posts/<id>" \
+  # 2) โพสต์ตรงลงกลุ่ม (default — รูปสะอาด + แคปชั่นไร้ลิงก์ + คอมเมนต์แรกวางลิงก์ LINE)
+  python bot/run_campaign.py share --groups-file groups.txt
+  python bot/run_campaign.py share --groups-file groups.txt --dry-run   # ตรวจ locator
+  #    --comment-link ""  → ไม่คอมเมนต์ลิงก์ (ใส่ลิงก์ในแคปชั่นเองได้)
+  #    --group-interval 1800 → เว้น 30 นาที/กลุ่ม (คู่มือแนะนำ 15-30 นาที)
+
+  # 2b) แบบเดิม: แชร์ post URL ลงกลุ่ม (ใช้กับ --method share)
+  python bot/run_campaign.py share --method share --post-url "https://www.facebook.com/<page>/posts/<id>" \
       --groups-file groups.txt
-  python bot/run_campaign.py share --post-url "..." --groups-file groups.txt --dry-run
-  python bot/run_campaign.py share --post-url "..." \
-      --group-url "https://www.facebook.com/groups/123/,https://www.facebook.com/groups/456/"
 
   # 3) ดูสถานะกลุ่ม: กลุ่มไหนเขียว (แชร์สำเร็จ) / แดง (ล้ม) / โดน blacklist
   python bot/run_campaign.py status
@@ -61,6 +64,35 @@ def build_caption(line_oa_url: Optional[str] = None) -> str:
     benefits = "🛠️ ปลอดภัยรันบนบัญชี/คีย์คุณเอง แอดมินดูแลหลังบ้านให้หมด ไม่ต้องเซ็ตค่าเองให้ปวดหัวจ้า"
     price_cta = f"💼 เริ่มต้น 490.- แอดไลน์คุยรายละเอียดแพ็กเกจกับป้าเลยจ้า 👉 {line_oa_url}"
     return "\n".join([hook, benefits, price_cta])
+
+
+# ===========================================================================
+# แคปชั่นโพสต์กลุ่ม (ตามคู่มือ: ไม่มีลิงก์ + เลี่ยงคำแบล็คลิสต์แอดไลน์/ราคา/สมัคร)
+# ===========================================================================
+GROUP_CAPTIONS = [
+    "แม่ค้าออนไลน์ที่อยากขายของใน Shopee ให้ง่ายขึ้น แวะมาคุยกับป้าเข็มได้นะคะ 😊\n"
+    "ป้าช่วยจัดการระบบให้พร้อมใช้ทันที ดูแลหลังบ้านให้หมด ไม่ต้องมานั่งเซ็ตเอง\n"
+    "รายละเอียดเพิ่มเติมปักหมุดไว้ที่คอมเมนต์แรกจ้า 👇",
+    "ขายของออนไลน์อยู่หรือเปล่าคะ ตอบแชทลูกค้าไม่ทันบ้างไหม 😅\n"
+    "ป้าเข็มมีตัวช่วยจัดการให้ สบาย ๆ คุยกันก่อนได้\n"
+    "ทักไลน์มาคุยกับป้าได้เลย รายละเอียดอยู่ในคอมเมนต์แรกนะคะ",
+    "แวะมาชวนแม่ค้าออนไลน์คุยหน่อยค่า 😊\n"
+    "อยากให้ร้านตอบแชทลูกค้าอัตโนมัติ หาคนซื้อให้ ลองคุยกับป้าเข็มดู\n"
+    "ค่าขนมป้าเบา ๆ คุยได้เลย ปักหมุดรายละเอียดไว้ที่คอมเมนต์แรกจ้า 👇",
+]
+
+
+def _pick_group_caption(index: int) -> str:
+    """หมุนแคปชั่นกลุ่ม (spintax) — ข้อความไม่ซ้ำกันทุกกลุ่มเพราะ Facebook จำ hash
+    ข้อความซ้ำ ๆ ข้ามกลุ่มได้ว่าเป็นสแปม (ตามคำแนะนำในคู่มือ)."""
+    return GROUP_CAPTIONS[index % len(GROUP_CAPTIONS)]
+
+
+def _default_comment_link(line_oa_url: Optional[str] = None) -> str:
+    """ข้อความคอมเมนต์แรกใต้โพสต์กลุ่ม — ที่นี่แหละที่วางลิงก์ LINE OA (คู่มือข้อ 1)."""
+    line_oa_url = line_oa_url or os.getenv("LINE_OA_URL", "https://lin.ee/o9Kjp1N")
+    return ("สนใจติดตั้งระบบบอทช่วยขาย พิกัดแอดไลน์คุยกับป้าเข็มตรงนี้ได้เลยจ้า "
+            f"👉 {line_oa_url}")
 
 
 # ===========================================================================
@@ -191,9 +223,12 @@ def _cmd_post(args) -> int:
 # Subcommand: share — แชร์ post URL ที่มีอยู่แล้วลงกลุ่มอย่างเดียว (ไม่โพสต์)
 # ===========================================================================
 def _cmd_share(args) -> int:
-    if not args.post_url:
-        print("[ERROR] share ต้องระบุ --post-url (URL โพสต์บนเพจที่แชร์ไปยังกลุ่ม)")
+    # ตรวจอาร์กิวเมนต์ตาม method
+    if args.method == "share" and not args.post_url:
+        print("[ERROR] --method share ต้องระบุ --post-url (URL โพสต์บนเพจที่จะแชร์)")
         return 2
+    if args.method == "direct" and args.post_url:
+        print(f"[INFO] โหมด direct โพสต์ตรงลงกลุ่ม (ไม่แชร์จากเพจ) — ไม่ใช้ --post-url={args.post_url}")
 
     # รวมรายชื่อกลุ่มจากทุกแหล่ง → (key, is_url, value)
     entries = []
@@ -237,30 +272,68 @@ def _cmd_share(args) -> int:
         print("[STATE] ไม่มีกลุ่มที่ต้องแชร์ (แชร์ครบแล้ว / โดน blacklist หมด) → ไม่เปิดเบราว์เซอร์")
         return 0
 
+    # โหมด direct: เตรียมภาพโปสเตอร์ + ข้อความคอมเมนต์แรก (ลิงก์ LINE)
+    poster = None
+    comment = None
+    if args.method == "direct":
+        poster = resolve_poster_image(args.poster)
+        if args.comment_link is None:
+            comment = _default_comment_link()   # default = ลิงก์ LINE OA ลงคอมเมนต์แรก
+        elif args.comment_link != "":
+            comment = args.comment_link         # ใส่ข้อความเอง
+        # ข้อความ "" = ไม่คอมเมนต์ลิงก์ (ใส่ลิงก์ในแคปชั่นเองได้)
+        if comment:
+            print(f"[COMMENT] จะวางลิงก์ในคอมเมนต์แรก: {comment[:70]}"
+                  f"{'...' if len(comment) > 70 else ''}")
+        else:
+            print("[COMMENT] ปิดคอมเมนต์ลิงก์ (--comment-link \"\") — ต้องมีลิงก์ในแคปชั่นเอง")
+
     cookie_path = Path(args.cookies) if args.cookies else ROOT / "fb_cookies.json"
-    print(f"[SHARE] เปิดเบราว์เซอร์ + ฉีดคุกกี้ (แชร์ {len(pending)} กลุ่ม)")
+    print(f"[SHARE] เปิดเบราว์เซอร์ + ฉีดคุกกี้ (โหมด {args.method}, {len(pending)} กลุ่ม)")
     driver = share_group._launch_driver()
     try:
         if not share_group.inject_cookies(driver, cookie_path):
             print("[ERROR] ตั้งค่าล็อกอิน Facebook ไม่สำเร็จ → ยกเลิก")
             return 1
 
-        # แปลง URL → ชื่อจริง (ฉีดคุกกี้เสร็จแล้วค่อยเปิดอ่านได้)
+        # แปลง URL → ชื่อจริง; โหมด direct ต้องได้ URL (เปิดหน้าโพสต์เอง)
         resolved = []
         for key, is_url, value in pending:
-            if is_url:
+            if not is_url:
+                if args.method == "direct":
+                    print(f"[WARN] โหมด direct ต้องใช้ URL กลุ่ม (เปิดหน้าโพสต์เองได้) "
+                          f"— ข้าม '{value}' (แก้ groups.txt เป็น URL)")
+                    continue
+                resolved.append((key, None, value))
+            else:
                 name = share_group._resolve_group_name(driver, value)
                 print(f"[GROUP] {value} → '{name}'")
-            else:
-                name = value
-            resolved.append((key, name))
+                resolved.append((key, value, name))
+        if not resolved:
+            print("[ERROR] ไม่มีกลุ่มที่รันได้ (โหมด direct ต้องการ URL กลุ่ม)")
+            return 1
 
+        interval = args.group_interval if not args.dry_run else 0
         results = {"ok": 0, "fail": 0, "sheet_ok": 0,
                    "skipped": skipped_shared, "blacklisted": skipped_blacklisted}
-        for i, (key, group) in enumerate(resolved, 1):
-            print(f"\n👉 [{i}/{len(resolved)}] แชร์โพสต์เพจ → กลุ่ม '{group}'")
-            ok, note = share_group.share_post_to_group(
-                driver, args.post_url, group, args.caption or "", args.dry_run)
+        for i, (key, group_url, group_name) in enumerate(resolved, 1):
+            group = group_name or group_url
+            comment_ok = True
+            if args.method == "direct":
+                caption = args.caption or _pick_group_caption(i - 1)
+                print(f"\n👉 [{i}/{len(resolved)}] โพสต์ตรงลงกลุ่ม '{group}'")
+                if any(u in caption for u in ("http://", "https://")):
+                    print("[WARN] แคปชั่นมีลิงก์! Admin Assist หลายกลุ่มลบโพสต์ที่มีลิงก์ในตัวโพสต์ "
+                          "— คู่มือแนะนำให้ลิงก์อยู่ในคอมเมนต์แรก (--comment-link)")
+                ok, comment_ok, note = share_group.post_to_group(
+                    driver, group_url, caption, poster, comment, args.dry_run)
+                if ok and comment and not comment_ok:
+                    note += " · คอมเมนต์ลิงก์ไม่สำเร็จ (วางเอง)"
+            else:  # method share (ปุ่มแชร์จากเพจ — ทางสำรอง)
+                caption = args.caption or share_group._default_caption()
+                print(f"\n👉 [{i}/{len(resolved)}] แชร์โพสต์เพจ → กลุ่ม '{group}'")
+                ok, note = share_group.share_post_to_group(
+                    driver, args.post_url, group, caption, args.dry_run)
 
             if args.dry_run:
                 print(f"[DRY-RUN] {note} — ไม่บันทึกชีท ไม่เขียน ledger/blacklist (โหมดจำลอง)")
@@ -281,28 +354,29 @@ def _cmd_share(args) -> int:
                                    "fails": fails, "last": now, "note": note}
                     print(f"[FAIL] {note}")
                     if fails >= args.fail_threshold:
-                        blacklist[key] = (f"แชร์ล้ม {fails} ครั้งติด (≥ {args.fail_threshold}) — "
-                                          f"{note}")
+                        blacklist[key] = (f"โพสต์/แชร์ล้ม {fails} ครั้งติด "
+                                          f"(≥ {args.fail_threshold}) — {note}")
                         print(f"[BLACKLIST] ขึ้นบัญชีดำ '{group}' อัตโนมัติ "
                               f"(ล้ม {fails} ครั้ง) — ครั้งหน้าไม่ลองอีก "
                               f"(ลบออกจาก {blacklist_path.name} เพื่อลองใหม่)")
                 _save_state(state_path, ledger)   # กันแชร์ซ้ำแม้โปรแกรมล้มกลางทาง
                 _save_blacklist(blacklist_path, blacklist)
                 if share_group._log_to_sheet(
-                        share_group._sheet_row(args.post_url, group,
-                                               args.caption or "", ok)):
+                        share_group._sheet_row(group_url or args.post_url, group,
+                                               caption, ok)):
                     results["sheet_ok"] += 1
 
-            if i < len(resolved):
-                time.sleep(10)
+            if i < len(resolved) and interval > 0:
+                print(f"[WAIT] เว้น {interval} วินาที ({interval / 60:.0f} นาที) "
+                      f"ก่อนกลุ่มถัดไป (คู่มือแนะนำ 15-30 นาที/กลุ่ม) ...")
+                time.sleep(interval)
 
         print("\n==========================================")
-        print(f"โพสต์เพจ: {args.post_url}")
-        print(f"สรุป: แชร์สำเร็จ {results['ok']} | ล้ม {results['fail']} | "
+        print(f"สรุป: สำเร็จ {results['ok']} | ล้ม {results['fail']} | "
               f"บันทึกชีท {results['sheet_ok']} | ข้ามแล้ว {results['skipped']} | "
               f"blacklist {results['blacklisted']}")
         print("ดูประวัติกลุ่ม: python bot/run_campaign.py status")
-        print("ตรวจยืนยันด้วยตา: เปิด post_url บนเพจ + เปิดแต่ละกลุ่มดูโพสต์ที่แชร์")
+        print("ตรวจยืนยันด้วยตา: เปิดแต่ละกลุ่มดูโพสต์ + คอมเมนต์แรกว่ามีลิงก์ครบไหม")
         return 0
     finally:
         try:
@@ -354,12 +428,23 @@ def main() -> int:
                         help="จำลอง: โชว์แคปชั่น+ภาพ ไม่โพสต์จริง")
     p_post.set_defaults(func=_cmd_post)
 
-    # --- share: แชร์ post URL ลงกลุ่ม (ไม่โพสต์) ---
-    p_share = sub.add_parser("share", help="แชร์ post URL ที่มีอยู่แล้วลงกลุ่มเป้าหมาย")
+    # --- share: โพสต์ตรงลงกลุ่ม (default) หรือแชร์ post URL (--method share) ---
+    p_share = sub.add_parser("share", help="โพสต์ตรงลงกลุ่ม (รูปสะอาด+ลิงก์ในคอมเมนต์) หรือแชร์ post URL")
+    p_share.add_argument("--method", type=str, choices=("direct", "share"), default="direct",
+                         help="direct = โพสต์ตรงลงกลุ่ม (default, ตามคู่มือ) | share = แชร์ post URL จากเพจ")
     p_share.add_argument("--post-url", type=str, default=None,
-                         help="URL โพสต์บนเพจที่ต้องการแชร์ (บังคับ)")
+                         help="URL โพสต์บนเพจ (ใช้กับ --method share เท่านั้น)")
+    p_share.add_argument("--poster", type=str, default=DEFAULT_POSTER_DIR,
+                         help="พาธโฟลเดอร์/ไฟล์ภาพโปสเตอร์แนบโพสต์กลุ่ม (default โฟลเดอร์ assets)")
+    p_share.add_argument("--comment-link", type=str, default=None,
+                         help="ข้อความคอมเมนต์แรกวางลิงก์ใต้โพสต์ (default = ลิงก์ LINE OA; "
+                              "ใส่ '' = ไม่คอมเมนต์ลิงก์)")
+    p_share.add_argument("--group-interval", type=int, default=900,
+                         help="เว้นระยะระหว่างกลุ่ม (วินาที, default 900 = 15 นาที — "
+                              "คู่มือแนะนำ 15-30 นาที; dry-run = 0 อัตโนมัติ)")
     p_share.add_argument("--caption", type=str, default=None,
-                         help="แคปชั่นแนบตอนแชร์ (ถ้าใส่ — แชร์พร้อมข้อความ)")
+                         help="แคปชั่นโพสต์กลุ่ม (direct: default = หมุนอัตโนมัติ 3 แบบไร้ลิงก์; "
+                              "ใส่เองได้ แต่เตือนถ้ามีลิงก์)")
     p_share.add_argument("--group-name", type=str, default=None,
                          help="ชื่อกลุ่มเป้าหมาย (หลายกลุ่มคั่น ,)")
     p_share.add_argument("--group-url", type=str, default=None,
