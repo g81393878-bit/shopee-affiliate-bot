@@ -1,0 +1,28 @@
+# Auto-deploy ไปยัง Render ผ่าน Deploy Hook
+# ใช้งาน: push ขึ้น branch main → POST ไปยัง Render Deploy Hook (secret RENDER_DEPLOY_HOOK_URL)
+# ข้าม deploy: ใส่ "[skip deploy]" ใน commit message (เช่น docs ล้วน)
+
+name: auto-deploy to render
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: |
+      !contains(github.event.head_commit.message, '[skip deploy]')
+    steps:
+      - name: Trigger Render Deploy Hook
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RENDER_DEPLOY_HOOK_URL:-}" ]; then
+            echo "::warning::ยังไม่ตั้ง secret RENDER_DEPLOY_HOOK_URL — ตั้งที่ repo Settings → Secrets and variables → Actions (คัดลอกจาก Render Dashboard → service → Settings → Deploy Hook)"
+            exit 0
+          fi
+          echo "Triggering Render deploy hook..."
+          curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"
+          echo "Deploy hook triggered OK"
