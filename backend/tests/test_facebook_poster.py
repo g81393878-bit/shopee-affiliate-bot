@@ -817,3 +817,72 @@ def test_cron_clean_fake_posts_requires_token(monkeypatch):
     client = TestClient(app)
     r = client.post("/api/cron/clean-fake-posts", params={"token": "wrong"})
     assert r.status_code == 401
+
+
+# ===========================================================================
+# กันโพสต์ซ้ำ/โพสต์หมวดถี่เกิน (cron ↔ radar cross-flow)
+# ===========================================================================
+
+def test_post_next_product_skips_recent_category(monkeypatch, db):
+    """หมวดที่ cron เพิ่งโพสต์ (ภายใน cooldown) → ข้ามสินค้าหมวดนั้น (กันหูฟังถี่เกิน)"""
+    from app import models
+    monkeypatch.setenv("FB_POST_PRODUCTS", "1")
+    monkeypatch.delenv("FB_POST_CATEGORY_COOLDOWN_HOURS", raising=False)  # default 24h
+    _reset_products(db)
+    _add_test_product(db, name="หูฟัง A", category="หูฟัง", commission=999)
+    other = _add_test_product(db, name="ของใช้ B", category="ของใช้", commission=998)
+    # เพิ่งโพสต์หูฟัง (CampaignLog fbpost) → cooldown กันหมวดหูฟัง
+    earbuds = db.query(models.Product).filter(models.Product.name == "หูฟัง A").first()
+    db.add(models.CampaignLog(category=str(earbuds.id), recipients=1, status="fbpost"))
+    db.commit()
+    monkeypatch.setattr(cron, "generate_script_for_product",
+                        lambda *a, **k: {"caption": "ป้า", "hashtags": []})
+    monkeypatch.setattr(cron, "fetch_product_image", lambda url: "")
+    posted = {}
+    monkeypatch.setattr(cron, "post_feed",
+                        lambda msg, link="", **k: posted.update(name=msg) or
+                        {"ok": True, "post_id": "p1", "error": None})
+    res = cron._post_next_product(db)
+    assert res is not None and res["posted"][0]["posted"] is True
+    assert res["posted"][0]["name"] == "ของใช้ B"  # ข้ามหูฟัง (เพิ่งโพสต์) เลือกของใช้แทน
+
+
+def test_post_next_product_skips_radar_posted_product(monkeypatch, db):
+    """สินค้าที่ radar เพิ่งโพสต์ (demand event posted) → cron ไม่โพสต์ซ้ำ"""
+    from app import models
+    monkeypatch.setenv("FB_POST_PRODUCTS", "1")
+    _reset_products(db)
+    p = _add_test_product(db)
+    # radar เพิ่งโพสต์สินค้านี้
+    lead = models.FacebookDetectedLead(fb_post_id="radar_post_x", post_url="https://fb.com/x",
+                                       post_text="อยากได้", status="processed")
+    db.add(lead)
+    db.flush()
+    db.add(models.FacebookDemandEvent(lead_id=lead.id, intent="buy_request", demand_score=90,
+                                      notification_status="posted", matched_product_id=p.id))
+    db.commit()
+    monkeypatch.setattr(cron, "generate_script_for_product",
+                        lambda *a, **k: {"caption": "ป้า", "hashtags": []})
+    monkeypatch.setattr(cron, "fetch_product_image", lambda url: "")
+    posted = {}
+    monkeypatch.setattr(cron, "post_feed",
+                        lambda msg, link="", **k: posted.update(pid=p.id) or
+                        {"ok": True, "post_id": "p", "error": None})
+    res = cron._post_next_product(db)
+    # สินค้าที่ radar โพสต์ (คอมสูงสุด 999) ต้องถูกข้าม — เลือกตัวอื่นแทน
+    assert res is not None and res["posted"][0]["posted"] is True
+    assert res["posted"][0]["id"] != p.id
+
+
+def test_radar_category_cooldown_counts_cron_fbpost(monkeypatch, db):
+    """radar กันโพสต์หมวดที่ cron เพิ่งโพสต์ (CampaignLog fbpost) — กันหมวดเดียวถี่ข้าม flow"""
+    from app import models
+    from app.api import facebook_radar as radar_api
+    _add_test_product(db, name="หูฟัง A", category="หูฟัง")
+    earbuds = db.query(models.Product).filter(models.Product.name == "หูฟัง A").first()
+    db.add(models.CampaignLog(category=str(earbuds.id), recipients=1, status="fbpost"))
+    db.commit()
+    # cron เพิ่งโพสต์หูฟัง → radar ไม่ควรโพสต์หูฟังภายใน cooldown
+    assert radar_api.check_category_cooldown_allowed(db, "หูฟัง") is False
+    # หมวดอื่นยังโพสต์ได้
+    assert radar_api.check_category_cooldown_allowed(db, "ของใช้") is True

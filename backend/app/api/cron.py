@@ -428,17 +428,54 @@ def _post_next_product(db, limit: int = 1) -> Optional[dict]:
     if os.getenv("FB_POST_PRODUCTS", "").lower() not in ("1", "true", "yes"):
         return None
     min_sales = int(os.getenv("MIN_SALES", "2000") or 2000)
+    try:
+        cooldown_hours = int(os.getenv("FB_POST_CATEGORY_COOLDOWN_HOURS", "24") or 24)
+    except (ValueError, TypeError):
+        cooldown_hours = 24
+    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=cooldown_hours)
+
     posted_ids = {int(c.category) for c in db.query(models.CampaignLog)
                   .filter(models.CampaignLog.status == "fbpost").all()
                   if str(c.category).isdigit()}
+
+    # กันโพสต์ซ้ำ/โพสต์หมวดถี่เกิน (เช่น หูฟัง) — ดูทั้ง cron (fbpost) + radar (demand events):
+    # - หมวดที่เพิ่งโพสต์ภายใน cooldown_hours → ข้าม (กันหมวดเดียวถี่ติดกัน)
+    # - สินค้าที่ radar เพิ่งโพสต์ → ข้าม (cron ไม่โพสต์ซ้ำกับ radar)
+    recent_cats: set = set()
+    recent_radar_ids: set = set()
+    for c in db.query(models.CampaignLog).filter(
+            models.CampaignLog.status == "fbpost",
+            models.CampaignLog.created_at >= cutoff).all():
+        if str(c.category).isdigit():
+            p = db.query(models.Product).filter(models.Product.id == int(c.category)).first()
+            if p and p.category:
+                recent_cats.add(p.category)
+    for e in db.query(models.FacebookDemandEvent).filter(
+            models.FacebookDemandEvent.notification_status.in_(["posted", "sent"]),
+            models.FacebookDemandEvent.created_at >= cutoff).all():
+        if e.matched_product_id:
+            recent_radar_ids.add(e.matched_product_id)
+            p = db.query(models.Product).filter(models.Product.id == e.matched_product_id).first()
+            if p and p.category:
+                recent_cats.add(p.category)
+
     query = (db.query(models.Product)
                .filter(models.Product.link_status == "ok",
                        models.Product.sales_count >= min_sales))
     if posted_ids:
         query = query.filter(~models.Product.id.in_(posted_ids))
-    prods = (query.order_by(models.Product.commission.desc(),
-                            models.Product.ai_score.desc())
-                   .limit(limit).all())
+    if recent_radar_ids:
+        query = query.filter(~models.Product.id.in_(recent_radar_ids))
+    # เรียงคอมสูงก่อน แล้วกรองหมวดที่เพิ่งโพสต์ออก (ดึงเผื่อ limit*20 เผื่อโดนกรองหมด)
+    prods = []
+    for p in (query.order_by(models.Product.commission.desc(),
+                             models.Product.ai_score.desc())
+                   .limit(max(limit * 20, 20)).all()):
+        if p.category and p.category in recent_cats:
+            continue
+        prods.append(p)
+        if len(prods) >= limit:
+            break
     if not prods:
         return None
     results = []

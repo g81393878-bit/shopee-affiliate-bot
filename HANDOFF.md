@@ -8,11 +8,13 @@
 > - **เมื่องานเสร็จและ commit ครบ:** ให้ล้างเนื้อหาในส่วน 1–5 กลับเป็นสถานะว่าง แล้ว commit
 >   ไฟล์นี้ — เพื่อไม่ให้ AI ตัวถัดไปเข้าใจผิดว่างานยังค้าง
 
-## สถานะ: 🟢 ว่าง — งานล่าสุด (เครื่องมือกวาดลบโพสต์ลิงก์ปลอมบนเพจ FB) เสร็จ — ยังไม่ push/deploy
+## สถานะ: 🟢 ว่าง — งานล่าสุด (กันโพสต์ซ้ำ/โพสต์หูฟังถี่เกินใน cron rotation) เสร็จ — ยังไม่ push/deploy
 
 ---
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
+
+- ✅ feat(facebook): **กันโพสต์ซ้ำ/โพสต์หมวดถี่เกิน (เช่น หูฟัง) ใน cron rotation + ข้าม flow กับ radar** — ตรวจจริงแล้ว: cron โพสต์รายชั่วโมง หมุน 4 คลัง (rss/bg/product/local); โพสต์สินค้า 11 ตัว (KHK SHOES ×3, ANCHI e-bike ×2, Za Mask...) ตัวละครั้ง (dedup CampaignLog ทำงาน) ไม่ใช่หูฟัง; radar โพสต์แค่ 2 ตัว (REMAX หูฟัง 1 ครั้ง + ESKIMO กระติก) — แต่**ไม่มี category cooldown ใน cron** และ cron/radar ไม่แชร์ dedup กัน → เพิ่ม: (1) `cron.py _post_next_product` อ่าน `FB_POST_CATEGORY_COOLDOWN_HOURS` (default 24) — ข้ามสินค้าที่หมวดเพิ่งโพสต์ภายใน cooldown (ดูทั้ง CampaignLog fbpost + FacebookDemandEvent posted/sent) + ข้ามสินค้าที่ radar เพิ่งโพสต์ (กันโพสต์ซ้ำข้าม flow); (2) `facebook_radar.py check_category_cooldown_allowed` นับ CampaignLog fbpost ในหมวดด้วย (radar ไม่โพสต์หมวดที่ cron เพิ่งโพสต์); ลง `.env.example`; เทสต์ใหม่ 3 ตัว (cron ข้ามหมวดที่เพิ่งโพสต์ / cron ข้ามสินค้าที่ radar โพสต์ / radar นับโพสต์ cron) → รวม **1066 passed** — **ยังไม่ push/deploy**
 
 - ✅ feat(facebook): **เครื่องมือกวาดลบโพสต์ลิงก์ปลอมบนเพจ FB อัตโนมัติ (cron endpoint + สคริปต์ standalone)** — mock poster "หูฟังลิงก์จริง" ยังรันอยู่ (เจอโพสต์ใหม่ 02:26–02:39 ต่อเนื่อง และลิงก์เปลี่ยนเป็น `s.shopee.co.th/earbudsok` = base62 ผ่าน format guard แต่มันไม่ใช่ของจริงในคลัง!) → แก้ `facebook_poster.py`: เพิ่ม `fetch_page_posts()` (GET posts + paginate, ดึงลิงก์จาก message+attachments, ถอด `l.facebook.com/l.php?u=` redirect), `delete_page_post()` (DELETE /{post_id}), `is_fake_link_post()` (ลบเมื่อ: `shope.ee` / `lazada.co.th` / `s.shopee.co.th` รหัส format ไม่ valid / **ไม่ใช่ลิงก์ในคลังสินค้า** — เช็คกับ products table; `_normalize_shopee_link` preserve case รหัสสั้น), `extract_post_urls()`; เพิ่ม cron endpoint `POST /api/cron/clean-fake-posts` (CRON_TOKEN lock, `dry_run=true` ดูตัวอย่าง, เช็คกับคลังจริง) + สคริปต์ `tools/clean_fake_page_posts.py` (--dry-run/ลบจริง, โหลด .env, DB <10 สินค้า = ข้ามเช็คคลังกันลบของจริง); **รันลบจริงแล้ว 6 โพสต์ปลอม** (02:26/02:36/02:39 คู่ละ 2 ตัว) เพจสะอาด 47 โพสต์; เทสต์ใหม่ 6 ตัว (detect shope.ee/lazada/non-base62/ไม่ในคลัง/valid ในคลัง, decode redirect, cron endpoint dry-run+ลบจริง+401) → รวม **1063 passed** — **ยังไม่ push/deploy** (cron ต้อง deploy + ตั้ง cron-job.org ถึงจะรันอัตโนมัติ)
 

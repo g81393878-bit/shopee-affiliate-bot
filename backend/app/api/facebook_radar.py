@@ -214,7 +214,25 @@ def check_category_cooldown_allowed(
         )
         .count()
     )
-    return recent_count == 0
+    if recent_count:
+        return False
+
+    # กัน radar โพสต์หมวดที่ cron rotation เพิ่งโพสต์ (CampaignLog status=fbpost) —
+    # ไม่งั้น cron โพสต์หูฟังแล้ว radar ตามโพสต์หูฟังอีกภายใน cooldown (หมวดเดียวถี่เกิน)
+    cron_ids = [int(c.category) for c in db.query(models.CampaignLog.category)
+                .filter(models.CampaignLog.status == "fbpost",
+                        models.CampaignLog.created_at >= cutoff).all()
+                if str(c.category).isdigit()]
+    if cron_ids:
+        cron_cat_count = (
+            db.query(models.Product.id)
+            .filter(models.Product.id.in_(cron_ids),
+                    models.Product.category == category)
+            .count()
+        )
+        if cron_cat_count:
+            return False
+    return True
 
 
 def check_daily_post_limit_allowed(
