@@ -277,6 +277,42 @@ def post_feed(message: str, link: str = "", image_url: str = "",
     return {"ok": False, "post_id": None, "error": str(err)[:200]}
 
 
+def post_comment(post_id: str, message: str) -> dict:
+    """โพสต์คอมเมนต์ลงโพสต์ของเพจ — POST /{post_id}/comments.
+    คืนค่า {ok, comment_id, error}
+    """
+    token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or ""
+    if not token:
+        return {"ok": False, "comment_id": None, "error": "FACEBOOK_PAGE_ACCESS_TOKEN ไม่ได้ตั้ง"}
+    if not post_id or not message:
+        return {"ok": False, "comment_id": None, "error": "ต้องระบุ post_id และ message"}
+    
+    message = sanitize_post_text(message)
+    endpoint = f"{GRAPH_URL}/{post_id}/comments"
+    
+    try:
+        r = httpx.post(
+            endpoint,
+            params={"access_token": token},
+            data={"message": message},
+            timeout=30,
+        )
+    except Exception as e:
+        logger.warning(f"[facebook_poster] comment failed: {e}")
+        return {"ok": False, "comment_id": None, "error": str(e)[:200]}
+        
+    try:
+        body = r.json()
+    except Exception:
+        body = {}
+        
+    cid = body.get("id")
+    if r.status_code == 200 and cid:
+        return {"ok": True, "comment_id": str(cid), "error": None}
+    err = (body.get("error") or {}).get("message") or f"HTTP {r.status_code}"
+    return {"ok": False, "comment_id": None, "error": str(err)[:200]}
+
+
 def post_photo(message: str = "", file_path: str = "", image_url: str = "") -> dict:
     """โพสต์รูปภาพลงเพจ — POST /{page-id}/photos (รองรับไฟล์ในเครื่อง + URL)
 

@@ -345,8 +345,7 @@ def test_t1_f6_fastapi_leads_intake_endpoint(client, db_session):
         "leads": [
             {
                 "fb_post_id": post_id,
-                "group_id": "grp_moms_th",
-                "group_name": "กลุ่มแม่และเด็ก",
+                        "group_name": "กลุ่มแม่และเด็ก",
                 "author_name": "คุณแม่น้องมิน",
                 "post_text": "มีใครแนะนำชุดคลุมท้องใส่สบายๆ บ้างคะ งบไม่เกิน 400 บาท ขอบคุณค่ะ",
                 "post_url": f"https://facebook.com/groups/moms_th/posts/{post_id}",
@@ -386,7 +385,7 @@ def test_t1_f6_fastapi_leads_intake_endpoint(client, db_session):
         sheet_payload = mock_sheets.call_args[0][0]
         assert sheet_payload["kind"] == "radar"
         assert sheet_payload["post_id"] == "page_post_t1_001"
-        assert "https://s.shopee.co.th/" in sheet_payload["link"]
+        assert sheet_payload["link"] == ""
         mock_line_alert.assert_not_called()
 
 
@@ -532,7 +531,6 @@ def test_t2_lead_deduplication_idempotency(client, db_session):
     post_id = f"dedup_t2_{int(time.time() * 1000)}"
     payload = {
         "fb_post_id": post_id,
-        "group_id": "grp_tech_deals",
         "group_name": "กลุ่มแกดเจ็ต",
         "author_name": "ผู้ใช้ A",
         "post_text": "อยากได้หูฟังบลูทูธไร้สายตัดเสียงรบกวนดีๆ งบ 500 บาท มีตัวไหนคุ้มสุดตอนนี้บ้างครับ",
@@ -617,7 +615,7 @@ def test_t2_price_parsing_boundary_formats():
 
 
 def test_t2_no_matching_product_or_all_dead_links(client, db_session):
-    """[Boundary] Graceful handling when no products match or only dead links exist."""
+    """[Pivot] ไม่จับคู่สินค้าในคลังแล้ว — โพสต์โปรโมทบอทแม่เข็มแทน (ไม่มีลิงก์สินค้า)."""
     # Ingest demand for an obscure item with no product in DB
     post_id = f"no_prod_{int(time.time() * 1000)}"
     payload = {
@@ -649,7 +647,10 @@ def test_t2_no_matching_product_or_all_dead_links(client, db_session):
 
         lead = db_session.query(models.FacebookDetectedLead).filter_by(fb_post_id=post_id).first()
         assert lead is not None
-        mock_post.assert_not_called()
+        # pivot: ไม่จับคู่สินค้าในคลังแล้ว — โพสต์โปรโมทบอทแม่เข็มแทน (ไม่มีลิงก์สินค้า)
+        mock_post.assert_called_once()
+        assert data["results"][0]["status"] == "deal_matched_and_posted"
+        assert data["results"][0]["matched_product_id"] is None
 
 
 # ===========================================================================
@@ -657,15 +658,14 @@ def test_t2_no_matching_product_or_all_dead_links(client, db_session):
 # ===========================================================================
 
 def test_t3_full_e2e_lifecycle_and_data_flywheel(client, db_session):
-    """[E2E] Full lifecycle:
-    Ingestion -> AI analysis -> Product Matching -> Auntie Khem Copy -> Demand Event ->
+    """[E2E] Full lifecycle (pivot: โพสต์โปรโมทบอท ไม่จับคู่สินค้า):
+    Ingestion -> AI analysis -> Promo Copy -> Demand Event ->
     Page Auto-Post -> Sheets Log -> Admin Feedback Action -> Conversion Metrics Update ->
     Stats Aggregation -> List Leads Pagination.
     """
     post_id = f"e2e_full_{int(time.time() * 1000)}"
     lead_payload = {
         "fb_post_id": post_id,
-        "group_id": "grp_wfh_th",
         "group_name": "กลุ่มคนทำงาน WFH",
         "author_name": "พนักงานออฟฟิศปวดหลัง",
         "post_text": "ปวดหลังมาก ทำงาน WFH นั่งทั้งวัน อยากได้เบาะรองนั่งหรือเก้าอี้เพื่อสุขภาพดีๆ งบ 500 บาท แนะนำหน่อยครับ",
@@ -709,9 +709,9 @@ def test_t3_full_e2e_lifecycle_and_data_flywheel(client, db_session):
     event = db_session.query(models.FacebookDemandEvent).filter_by(lead_id=lead.id).first()
     assert event is not None
     assert event.demand_score >= 70
-    assert event.matched_product_id is not None
+    assert event.matched_product_id is None
     assert event.notification_status == "posted"
-    assert "https://s.shopee.co.th/" in event.ai_comment_draft
+    assert "อยากใช้บอท" in event.ai_comment_draft
 
     # Step 3: Admin records action & conversions via API (Data Flywheel)
     action_payload = {
@@ -720,7 +720,7 @@ def test_t3_full_e2e_lifecycle_and_data_flywheel(client, db_session):
         "action_type": "reply_posted",
         "admin_id": "U_admin_e2e",
         "comment_posted": event.ai_comment_draft,
-        "affiliate_link_used": event.matched_product.affiliate_url,
+        "affiliate_link_used": "",
         "feedback_score": 5,
         "notes": "แอดมินคอมเมนต์ตอบแล้ว ลูกค้ากดดูลิงก์",
     }
@@ -811,7 +811,6 @@ def test_t4_real_world_thai_workloads(client, db_session):
         # 1. High Demand: Maternity Dress
         {
             "fb_post_id": "rw_001_maternity",
-            "group_id": "grp_moms",
             "group_name": "กลุ่มแม่และเด็ก",
             "author_name": "แม่น้องพิมพ์",
             "post_text": "มีแม่ๆ คนไหนแนะนำชุดคลุมท้องใส่สบายๆ บ้างคะ ผ้าระบายอากาศดีๆ ไม่ร้อน งบไม่เกิน 400 บาท",
@@ -820,7 +819,6 @@ def test_t4_real_world_thai_workloads(client, db_session):
         # 2. High Demand: Bluetooth Earbuds
         {
             "fb_post_id": "rw_002_earbuds",
-            "group_id": "grp_tech",
             "group_name": "คนรักแกดเจ็ต",
             "author_name": "เกมเมอร์มือถือ",
             "post_text": "อยากได้หูฟังบลูทูธไร้สายตัดเสียงรบกวนดีๆ งบ 500 บาท มีตัวไหนคุ้มสุดตอนนี้บ้างครับ",
@@ -829,7 +827,6 @@ def test_t4_real_world_thai_workloads(client, db_session):
         # 3. High Demand: Ergonomic Cushion
         {
             "fb_post_id": "rw_003_cushion",
-            "group_id": "grp_wfh",
             "group_name": "มนุษย์ WFH",
             "author_name": "โปรแกรมเมอร์ปวดหลัง",
             "post_text": "ปวดหลังมาก ทำงาน WFH นั่งทั้งวัน อยากได้เบาะรองนั่งหรือเก้าอี้เพื่อสุขภาพดีๆ งบ 1000 บาท แนะนำหน่อยครับ",
@@ -838,7 +835,6 @@ def test_t4_real_world_thai_workloads(client, db_session):
         # 4. High Demand: Kidney Care Cat Food
         {
             "fb_post_id": "rw_004_catfood",
-            "group_id": "grp_cats",
             "group_name": "ทาสแมว ชุมชนคนรักสัตว์",
             "author_name": "ทาสแมวส้ม",
             "post_text": "ตามหาอาหารเปียกแมวโรคไต ยี่ห้อไหนดีบ้างคะ น้องทานยากมาก อยากได้แบบรสชาติดี",
@@ -847,7 +843,6 @@ def test_t4_real_world_thai_workloads(client, db_session):
         # 5. Low Demand: Scam Warning
         {
             "fb_post_id": "rw_005_scam",
-            "group_id": "grp_moms",
             "group_name": "กลุ่มแม่และเด็ก",
             "author_name": "แอดมินเตือนภัย",
             "post_text": "ประกาศเตือนภัยมิจฉาชีพหลอกโอนเงินค่าสินค้า อย่าโอนเด็ดขาด บัญชีคนโกง blacklist ระวังโดนหลอก",
@@ -856,7 +851,6 @@ def test_t4_real_world_thai_workloads(client, db_session):
         # 6. Low Demand: Secondhand Clothes Seller
         {
             "fb_post_id": "rw_006_secondhand",
-            "group_id": "grp_market",
             "group_name": "ตลาดนัดมือสอง",
             "author_name": "แม่ค้าเสื้อผ้า",
             "post_text": "ขออนุญาตแอดมินปล่อยเสื้อผ้ามือสอง สภาพดี ส่งต่อราคาเบาๆ สนใจทักแชทได้เลย",
@@ -865,7 +859,6 @@ def test_t4_real_world_thai_workloads(client, db_session):
         # 7. Low Demand: Spam Follower Seller
         {
             "fb_post_id": "rw_007_spam",
-            "group_id": "grp_market",
             "group_name": "ตลาดนัดมือสอง",
             "author_name": "ร้านฟอลโลเวอร์",
             "post_text": "ฝากร้านหน่อยจ้า รับปั๊มฟอล IG ราคาถูก สนใจทักแชทได้เลย",
@@ -874,7 +867,6 @@ def test_t4_real_world_thai_workloads(client, db_session):
         # 8. Low Demand: Weather Casual Discussion
         {
             "fb_post_id": "rw_008_weather",
-            "group_id": "grp_talk",
             "group_name": "คุยเรื่อยเปื่อย",
             "author_name": "คนเมืองกรุง",
             "post_text": "วันนี้ฝนตกหนักมากแถวสยาม มีใครติดฝนเหมือนกันบ้าง รถติดสุดๆ เลยช่วงนี้",
@@ -883,7 +875,6 @@ def test_t4_real_world_thai_workloads(client, db_session):
         # 9. High Demand: Broken Fan Replacement
         {
             "fb_post_id": "rw_009_fan",
-            "group_id": "grp_appliances",
             "group_name": "เครื่องใช้ไฟฟ้าในบ้าน",
             "author_name": "พ่อบ้านใจกล้า",
             "post_text": "พัดลมตัวเก่าพัง อยากได้พัดลมตั้งโต๊ะเงียบๆ ลมแรงๆ มียี่ห้อไหนดีบ้างคะ ด่วนมากร้อนสุดๆ",
@@ -892,7 +883,6 @@ def test_t4_real_world_thai_workloads(client, db_session):
         # 10. High Demand: Air Purifier Search with Comma Price
         {
             "fb_post_id": "rw_010_airpurifier",
-            "group_id": "grp_home",
             "group_name": "แต่งบ้าน มินิมอล",
             "author_name": "คนรักสุขภาพ",
             "post_text": "มองหาเครื่องฟอกอากาศ HEPA กรองฝุ่น PM2.5 ราคาไม่เกิน 2,500 บาท มีตัวไหนแนะนำบ้างครับ",
@@ -1069,7 +1059,7 @@ def test_t4_real_world_thai_workloads(client, db_session):
                 assert res["status"] == "deal_matched_and_posted"
                 assert res["demand_score"] >= 70
                 assert res["alert_sent"] is False
-                assert res["matched_product_id"] is not None
+                assert res["matched_product_id"] is None
             elif pid == high_demand_pids[5]:
                 # 6th high demand item hits daily limit of 5
                 assert res["status"] == "ignored"
@@ -1296,9 +1286,9 @@ def test_radar_google_sheets_logging_payload(client, db_session):
         sheet_payload = mock_sheets.call_args[0][0]
         assert isinstance(sheet_payload, dict)
         assert sheet_payload["kind"] == "radar"
-        assert "ชุดคลุมท้อง" in sheet_payload["title"]
+        assert "อยากใช้บอท" in sheet_payload["title"]
         assert len(sheet_payload["message"]) > 10
-        assert "https://s.shopee.co.th/" in sheet_payload["link"]
+        assert sheet_payload["link"] == ""
         assert sheet_payload["post_id"] == "page_post_8888"
         assert sheet_payload["post_url"] == "https://www.facebook.com/page_post_8888"
         assert "created_at" in sheet_payload
@@ -1402,21 +1392,10 @@ def test_cooldown_and_daily_limit_count_pending_events(db_session):
     assert radar_api.check_daily_post_limit_allowed(db_session, max_posts=1) is False
 
 
-def test_radar_guard_blocks_non_shopee_affiliate_url(client, db_session):
-    """Guard หน้าตาโพสต์: แม้ matcher จะคืนสินค้ามา แต่ affiliate_url ไม่ใช่ s.shopee.co.th
-    (ลิงก์ mock https://shope.ee/... → 404) ต้องไม่โพสต์ — defense-in-depth ชั้นที่ 2."""
-    post_id = f"guard_fake_url_{int(time.time() * 1000)}"
-    fake_product = models.Product(
-        name="หูฟังบลูทูธไร้สาย TWS ตัดเสียงรบกวน",
-        category="หูฟัง",
-        price=Decimal("399.00"),
-        rating=4.8,
-        sales_count=8500,
-        commission=Decimal("40.00"),
-        affiliate_url="https://shope.ee/earbuds_ok",
-        link_status="ok",
-        ai_score=90,
-    )
+def test_radar_group_lead_queued_for_polling(client, db_session):
+    """[Pivot Flow A] lead ที่มี group_id → เข้าคิวรอ polling จากบอท local (pending_polling)
+    ไม่โพสต์เพจ (post_feed ไม่ถูกเรียก) ไม่บันทึก Sheets และไม่จับคู่สินค้า (matched_product_id=None)."""
+    post_id = f"group_queue_{int(time.time() * 1000)}"
     mock_ai = {
         "intent": "recommendation_request",
         "demand_score": 90,
@@ -1431,30 +1410,26 @@ def test_radar_guard_blocks_non_shopee_affiliate_url(client, db_session):
     }
     payload = {
         "fb_post_id": post_id,
-        "group_id": "grp_guard_test",
+        "group_id": "grp_poll_test",
         "group_name": "กลุ่มทดสอบ",
         "author_name": "ผู้ใช้ทดสอบ",
         "post_text": "หูฟังพัง อยากได้หูฟังใหม่ งบ 500",
         "post_url": f"https://facebook.com/groups/test/posts/{post_id}",
     }
     with patch.object(radar_api, "analyze_lead_intent_and_demand", return_value=mock_ai), \
-         patch.object(radar_api, "match_best_product_for_demand", return_value={
-             "best_product": fake_product,
-             "match_score": 90.0,
-             "suggested_reasons": ["ลิงก์ปลอม"],
-             "candidates": [],
-         }), \
          patch.object(radar_api, "post_feed") as mock_post, \
-         patch.object(radar_api, "log_post_async"):
+         patch.object(radar_api, "log_post_async") as mock_sheets:
         resp = client.post("/api/admin/facebook-radar/leads", json=payload)
         assert resp.status_code == 200
         data = resp.json()
-        assert data["results"][0]["status"] == "deal_matched_post_failed"
+        assert data["results"][0]["status"] == "queued_for_group_polling"
+        assert data["results"][0]["matched_product_id"] is None
         mock_post.assert_not_called()
+        mock_sheets.assert_not_called()
 
     lead = db_session.query(models.FacebookDetectedLead).filter_by(fb_post_id=post_id).first()
     assert lead is not None
     event = db_session.query(models.FacebookDemandEvent).filter_by(lead_id=lead.id).first()
     assert event is not None
-    assert event.notification_status == "failed"
+    assert event.notification_status == "pending_polling"
     assert event.matched_product_id is None

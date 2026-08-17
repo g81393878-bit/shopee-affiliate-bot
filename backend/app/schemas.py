@@ -313,3 +313,9 @@ class RadarStatsResponse(BaseModel):
     top_demanded_keywords: List[Dict[str, Any]]
 
 
+class TaskStatusUpdate(BaseModel):
+    status: str  # "completed" หรือ "failed"
+    error_message: Optional[str] = None
+
+
+

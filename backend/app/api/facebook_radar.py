@@ -21,7 +21,7 @@ import time
 from typing import Any, Dict, List, Optional, Union
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query, Request
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app import models, schemas
@@ -206,13 +206,18 @@ def check_category_cooldown_allowed(
     cutoff = datetime.now(timezone.utc) - timedelta(hours=cooldown_hours)
 
     # 'pending' = กำลังจะโพสต์ (commit ก่อน post_feed) — นับด้วยเพื่อกัน concurrent ซ้ำหมวด
+    # นับได้ 2 ทาง: (ก) event เก่าที่มี matched_product → เทียบ Product.category; (ข) pivot แล้ว
+    # matched_product_id เป็น None → เทียบ product_keyword ที่เก็บใน event (รองรับทั้งคู่)
     recent_count = (
         db.query(models.FacebookDemandEvent.id)
-        .join(models.Product, models.FacebookDemandEvent.matched_product_id == models.Product.id)
+        .outerjoin(models.Product, models.FacebookDemandEvent.matched_product_id == models.Product.id)
         .filter(
             models.FacebookDemandEvent.notification_status.in_(["posted", "sent", "pending"]),
             models.FacebookDemandEvent.created_at >= cutoff,
-            models.Product.category == category,
+            or_(
+                models.Product.category == category,
+                models.FacebookDemandEvent.product_keyword == category,
+            ),
         )
         .count()
     )
@@ -498,162 +503,22 @@ def ingest_facebook_leads(
         # 5. ตรวจสอบเงื่อนไข Demand Score >= radar_min_score
         if is_high_demand(demand_score, threshold=radar_min_score):
             high_demand_count += 1
-            # 5.1 จับคู่สินค้าในคลัง (link_status == 'ok')
-            match_res = match_best_product_for_demand(
-                db=db,
-                product_keyword=product_keyword,
-                budget=budget_val,
-            )
-            matched_product = match_res.get("best_product")
-            suggested_reasons = match_res.get("suggested_reasons", [])
-
-            # Guard: กันลิงก์ปลอม/ของ mock (https://shope.ee/...) หลุดขึ้นโพสต์ — กดแล้ว 404
-            # (matcher กรองไว้ชั้นหนึ่งแล้ว แต่นี่กันซ้ำเป็นชั้นที่สอง defense-in-depth)
-            if matched_product and not is_valid_shopee_affiliate_url(matched_product.affiliate_url):
-                logger.warning(
-                    f"Radar skip: product {matched_product.id} has non-Shopee affiliate_url "
-                    f"{matched_product.affiliate_url!r} (mock/ปลอม) — treat as no-match"
-                )
-                matched_product = None
-                suggested_reasons = []
-
-            # 5.2 ร่างข้อความสไตล์ป้าเข็ม
-            copy_text = None
-            if matched_product:
-                copy_text = generate_auntie_khem_deal_comment(
-                    post_text=item["post_text"],
-                    product_name=matched_product.name,
-                    price=float(matched_product.price or 0.0),
-                    rating=float(matched_product.rating or 0.0),
-                    sales_count=int(matched_product.sales_count or 0),
-                    affiliate_url=matched_product.affiliate_url or "https://shopee.co.th",
-                    suggested_reasons=suggested_reasons,
-                    lead_intent_data=analysis,
-                )
-
-            # ท้ายโพสต์ทุกตัว: ชวนแอดไลน์ร้าน (LINE ID + ลิงก์) — เจ้าของสั่งให้ใส่ครบ
-            if copy_text:
-                copy_text = f"{copy_text.strip()}\n\n{line_cta_footer()}"
-
-            # 5.3 ตรวจสอบ Safety Guards: Category Cooldown (24h) & Daily Rate Limit
-            cooldown_ok = check_category_cooldown_allowed(
-                db=db,
-                category=matched_product.category if matched_product else None,
-            )
-            daily_limit_ok = check_daily_post_limit_allowed(
-                db=db,
-                max_posts=daily_limit,
+            matched_id = None
+            suggested_reasons = []
+            
+            # ไม่เกี่ยวกับสินค้าในคลังแล้ว: ร่างข้อความแนะนำการติดตั้งบอทป้าเข็มและแพ็กเกจ (ฉบับลดคำซ้ำซ้อน)
+            line_oa_url = os.getenv("LINE_OA_URL", "https://lin.ee/o9Kjp1N")
+            copy_text = (
+                f"อยากใช้บอทช่วยขายของ Shopee (บอทป้าเข็ม) ป้าจัดการระบบให้พร้อมใช้ทันทีจ้า 😊\n"
+                f"🛠️ ปลอดภัยรันบนบัญชี/คีย์คุณเอง แอดมินดูแลหลังบ้านให้หมด ไม่ต้องเซ็ตค่าเองให้ปวดหัวจ้า\n"
+                f"💼 เริ่มต้น 490.- แอดไลน์คุยรายละเอียดแพ็กเกจกับป้าเลยจ้า 👉 {line_oa_url}"
             )
 
-            matched_id = matched_product.id if matched_product else None
-
-            if not cooldown_ok or not daily_limit_ok:
-                # บันทึก Demand Event สถานะ 'ignored' เมื่อติด Cooldown หรือ Daily Limit
-                demand_event = models.FacebookDemandEvent(
-                    lead_id=lead.id,
-                    intent=intent,
-                    demand_score=demand_score,
-                    urgency=urgency,
-                    budget=budget_text,
-                    product_keyword=product_keyword,
-                    matched_product_id=matched_id,
-                    suggested_reason=suggested_reasons,
-                    ai_comment_draft=copy_text,
-                    notification_status="ignored",
-                )
-                db.add(demand_event)
-                db.flush()
-
-                status_str = "ignored"
-                alert_sent = False
-            elif matched_product and copy_text:
-                # ตรวจความพร้อมก่อนยิงโพสต์ (token ตั้ง/ใช้ได้, page id) — ไม่พร้อม →
-                # ไม่โพสต์ + แจ้งเจ้าของ (จัดการเป็นขั้นตอน: พร้อมไหม → ไม่พร้อมแจ้ง → พร้อมค่อยโพสต์)
-                preflight_ok, preflight_reasons = preflight_ready()
-                if not preflight_ok:
-                    notify_owner_once("fb_preflight_radar",
-                                      "⚠️ ข้ามโพสต์ radar (ยังไม่พร้อม): "
-                                      + "; ".join(preflight_reasons))
-                    demand_event = models.FacebookDemandEvent(
-                        lead_id=lead.id,
-                        intent=intent,
-                        demand_score=demand_score,
-                        urgency=urgency,
-                        budget=budget_text,
-                        product_keyword=product_keyword,
-                        matched_product_id=matched_id,
-                        suggested_reason=suggested_reasons,
-                        ai_comment_draft=copy_text,
-                        notification_status="failed",
-                    )
-                    db.add(demand_event)
-                    db.flush()
-                    status_str = "deal_matched_post_failed"
-                    alert_sent = False
-                else:
-                    # ผ่าน Safety Guards ทั้งหมด -> โพสต์ขึ้น Facebook Page ทันที
-                    demand_event = models.FacebookDemandEvent(
-                        lead_id=lead.id,
-                        intent=intent,
-                        demand_score=demand_score,
-                        urgency=urgency,
-                        budget=budget_text,
-                        product_keyword=product_keyword,
-                        matched_product_id=matched_id,
-                        suggested_reason=suggested_reasons,
-                        ai_comment_draft=copy_text,
-                        notification_status="pending",
-                    )
-                    db.add(demand_event)
-                    db.flush()
-                    # Commit ก่อน post_feed — กันบั๊ก "โพสต์ขึ้น FB แล้วแต่ record หาย"
-                    # (เคยเจอโพสต์ซ้ำ 4 ตัว: post_feed สำเร็จแต่ db.commit() ท้ายสุดพัง/ถูกฆ่า →
-                    #  lead + demand_event ถูก rollback → dedup/cooldown มองไม่เห็นโพสต์ → ยิงซ้ำได้)
-                    db.commit()
-
-                    image_url = (matched_product.image_url or "").strip()
-                    if image_url:
-                        post_res = post_feed(
-                            message=copy_text,
-                            image_url=image_url,
-                        )
-                    else:
-                        post_res = post_feed(
-                            message=copy_text,
-                            link=matched_product.affiliate_url or "",
-                        )
-
-                    if post_res.get("ok"):
-                        demand_event.notification_status = "posted"
-                        demand_event.notification_sent_at = datetime.now(timezone.utc)
-                        post_id = str(post_res.get("post_id") or "")
-                        post_url = f"https://www.facebook.com/{post_id}" if post_id else ""
-
-                        # บันทึกประวัติโพสต์ลง Google Sheets ผ่าน POSTS_SHEET_WEBHOOK_URL
-                        log_post_async({
-                            "created_at": datetime.now(timezone.utc).isoformat(),
-                            "kind": "radar",
-                            "title": (matched_product.name or "")[:45],
-                            "message": (copy_text or "")[:1000],
-                            "link": matched_product.affiliate_url or "",
-                            "post_id": post_id,
-                            "post_url": post_url,
-                        })
-                        status_str = "deal_matched_and_posted"
-                    else:
-                        demand_event.notification_status = "failed"
-                        status_str = "deal_matched_post_failed"
-                        # error รุนแรง (token หมดอายุ/สิทธิ์หาย/rate-limit) → แจ้งเจ้าของด้วย
-                        if classify_post_error(post_res.get("error") or ""):
-                            notify_owner_once("fb_post_hard_error",
-                                              f"⚠️ โพสต์ radar ล้ม (error รุนแรง): "
-                                              f"{post_res.get('error') or ''}")
-
-                    alert_sent = False
-                    # อัปเดตสถานะ posted/failed ให้ durable (แยกจาก commit ก่อนโพสต์)
-                    db.commit()
-            else:
-                # ไม่พบสินค้าที่ตรงกันในคลัง
+            # 5.3 แยก 2 เส้นทางโพสต์ชัดเจน — ห้ามขัดกัน:
+            #   Flow A (กลุ่ม): group_id ตั้ง → pending_polling รอ polling จากบอท local (งาน AI อื่น)
+            #   Flow B (เพจป้าเข็ม): ไม่ใช่กลุ่ม → cooldown + daily limit + preflight แล้ว post_feed (งานผม)
+            if not copy_text:
+                # ไม่มีข้อความที่จะโพสต์ → บันทึก failed (เคสเดียวกับ "ไม่พบสินค้า" เดิม)
                 demand_event = models.FacebookDemandEvent(
                     lead_id=lead.id,
                     intent=intent,
@@ -671,6 +536,130 @@ def ingest_facebook_leads(
 
                 status_str = "deal_matched_post_failed"
                 alert_sent = False
+            elif lead.group_id is not None:
+                # ── Flow A: กลุ่ม → เข้าคิวรอ Polling จากบอท local ──
+                # (ไม่ใช้ cooldown/โควต้า/preflight ของเพจ — บอท local ควบคุมจังหวะแชร์เอง)
+                demand_event = models.FacebookDemandEvent(
+                    lead_id=lead.id,
+                    intent=intent,
+                    demand_score=demand_score,
+                    urgency=urgency,
+                    budget=budget_text,
+                    product_keyword=product_keyword,
+                    matched_product_id=None,
+                    suggested_reason=[],
+                    ai_comment_draft=copy_text,
+                    notification_status="pending_polling",
+                )
+                db.add(demand_event)
+                db.flush()
+                db.commit()
+                status_str = "queued_for_group_polling"
+                alert_sent = False
+            else:
+                # ── Flow B: เพจป้าเข็ม → cooldown + daily limit + preflight แล้ว post_feed (Graph API) ──
+                cooldown_ok = check_category_cooldown_allowed(
+                    db=db,
+                    category=product_keyword,
+                )
+                daily_limit_ok = check_daily_post_limit_allowed(
+                    db=db,
+                    max_posts=daily_limit,
+                )
+                if not cooldown_ok or not daily_limit_ok:
+                    # ติด cooldown/โควต้าเพจ → ไม่โพสต์ บันทึก ignored
+                    demand_event = models.FacebookDemandEvent(
+                        lead_id=lead.id,
+                        intent=intent,
+                        demand_score=demand_score,
+                        urgency=urgency,
+                        budget=budget_text,
+                        product_keyword=product_keyword,
+                        matched_product_id=None,
+                        suggested_reason=[],
+                        ai_comment_draft=copy_text,
+                        notification_status="ignored",
+                    )
+                    db.add(demand_event)
+                    db.flush()
+                    status_str = "ignored"
+                    alert_sent = False
+                else:
+                    preflight_ok, preflight_reasons = preflight_ready()
+                    if not preflight_ok:
+                        # ไม่พร้อม (token ตั้ง/ใช้ได้) → ข้ามโพสต์ + แจ้งเจ้าของ (contract เดิม)
+                        notify_owner_once("fb_preflight_radar",
+                                          "⚠️ ข้ามโพสต์ radar (ยังไม่พร้อม): "
+                                          + "; ".join(preflight_reasons))
+                        demand_event = models.FacebookDemandEvent(
+                            lead_id=lead.id,
+                            intent=intent,
+                            demand_score=demand_score,
+                            urgency=urgency,
+                            budget=budget_text,
+                            product_keyword=product_keyword,
+                            matched_product_id=None,
+                            suggested_reason=[],
+                            ai_comment_draft=copy_text,
+                            notification_status="failed",
+                        )
+                        db.add(demand_event)
+                        db.flush()
+                        db.commit()  # persist failed — ไม่โพสต์
+                        status_str = "deal_matched_post_failed"
+                        alert_sent = False
+                    else:
+                        # พร้อม → commit pending ก่อน post_feed (กันโพสต์แล้ว record หาย)
+                        demand_event = models.FacebookDemandEvent(
+                            lead_id=lead.id,
+                            intent=intent,
+                            demand_score=demand_score,
+                            urgency=urgency,
+                            budget=budget_text,
+                            product_keyword=product_keyword,
+                            matched_product_id=None,
+                            suggested_reason=[],
+                            ai_comment_draft=copy_text,
+                            notification_status="pending",
+                        )
+                        db.add(demand_event)
+                        db.flush()
+                        db.commit()
+
+                        # ยิงขึ้นเพจหลักเป็นข้อความธรรมดา (ไม่มีภาพสินค้า)
+                        post_res = post_feed(
+                            message=copy_text,
+                        )
+
+                        if post_res.get("ok"):
+                            demand_event.notification_status = "posted"
+                            demand_event.notification_sent_at = datetime.now(timezone.utc)
+                            post_id = str(post_res.get("post_id") or "")
+                            post_url = f"https://www.facebook.com/{post_id}" if post_id else ""
+
+                            # บันทึกประวัติโพสต์ลง Google Sheets (pivot: ไม่มีสินค้า → title=ข้อความ, link ว่าง)
+                            log_post_async({
+                                "created_at": datetime.now(timezone.utc).isoformat(),
+                                "kind": "radar",
+                                "title": (copy_text or "")[:45],
+                                "message": (copy_text or "")[:1000],
+                                "link": "",
+                                "post_id": post_id,
+                                "post_url": post_url,
+                            })
+                            status_str = "deal_matched_and_posted"
+                        else:
+                            demand_event.notification_status = "failed"
+                            status_str = "deal_matched_post_failed"
+                            # error รุนแรง (token หมดอายุ/สิทธิ์หาย/rate-limit) → แจ้งเจ้าของด้วย
+                            if classify_post_error(post_res.get("error") or ""):
+                                notify_owner_once("fb_post_hard_error",
+                                                  f"⚠️ โพสต์ radar ล้ม (error รุนแรง): "
+                                                  f"{post_res.get('error') or ''}")
+
+                        alert_sent = False
+                        # อัปเดตสถานะ posted/failed ให้ durable (แยกจาก commit ก่อนโพสต์)
+                        db.commit()
         else:
             alert_sent = False
             status_str = "low_demand_ignored"
@@ -932,5 +921,132 @@ def analyze_fb_page_insights(
         "status": "success",
         "parsed_metrics": analysis_res
     }
+
+
+# ---------------------------------------------------------------------------
+# Group Sharing Polling Queue API Endpoints
+# ---------------------------------------------------------------------------
+
+# งานแชร์ลงกลุ่ม: bot local poll ทีละ batch → claim ก่อนคืน (กัน poll ซ้ำ / คอมเมนต์ซ้ำ)
+GROUP_POLL_BATCH_SIZE = 20               # จำกัดงานต่อรอบ poll กัน FB จับ bot รัว ๆ
+GROUP_POLL_CLAIM_TIMEOUT_MINUTES = 30    # claim ค้างเกินนี้ = bot ตายกลางทาง → ปล่อยคืนคิว (self-heal)
+
+
+@router.get("/tasks/pending", response_model=List[Dict[str, Any]])
+def get_pending_share_tasks(
+    db: Session = Depends(get_db),
+    authorized: bool = Depends(require_admin_auth),
+):
+    """บอทแชร์ฝั่ง Local จะทำการ Polling มาดึงงานแชร์โพสต์ที่รออยู่
+
+    Claim กัน poll ซ้ำ: ก่อนคืนงานจะ mark เป็น "claimed" (commit ก่อน) —
+    poll ตัวถัดไป / บอทตัวที่สองจะไม่เห็นงานชุดเดิม (เหมือน cron จอง fbpost_pending)
+    งานที่ claim ค้างเกิน GROUP_POLL_CLAIM_TIMEOUT_MINUTES (bot ตาย / report สถานะไม่สำเร็จ)
+    จะถูกปล่อยกลับเป็น pending_polling ให้ poll ใหม่ (self-heal)
+    """
+    now = datetime.now(timezone.utc)
+
+    # self-heal: ปล่อยงานที่ bot claim ค้างไว้นานเกิน (bot ตายกลางทาง)
+    stale_cutoff = now - timedelta(minutes=GROUP_POLL_CLAIM_TIMEOUT_MINUTES)
+    stale_events = (
+        db.query(models.FacebookDemandEvent)
+        .filter(
+            models.FacebookDemandEvent.notification_status == "claimed",
+            models.FacebookDemandEvent.notification_sent_at < stale_cutoff,
+        )
+        .all()
+    )
+    for ev in stale_events:
+        ev.notification_status = "pending_polling"
+    if stale_events:
+        db.commit()
+
+    # claim งานชุดใหม่ (batch จำกัด) ก่อนคืนให้ bot
+    events = (
+        db.query(models.FacebookDemandEvent)
+        .filter(models.FacebookDemandEvent.notification_status == "pending_polling")
+        .order_by(models.FacebookDemandEvent.id)
+        .limit(GROUP_POLL_BATCH_SIZE)
+        .all()
+    )
+    for ev in events:
+        ev.notification_status = "claimed"
+        ev.notification_sent_at = now
+    if events:
+        db.commit()
+
+    return [
+        {
+            "task_id": event.id,
+            "post_url": event.lead.post_url if event.lead else "",
+            "caption": event.ai_comment_draft,
+        }
+        for event in events
+    ]
+
+
+@router.post("/tasks/{task_id}/status")
+def update_share_task_status(
+    task_id: int,
+    update: schemas.TaskStatusUpdate,
+    db: Session = Depends(get_db),
+    authorized: bool = Depends(require_admin_auth),
+):
+    """รับผลการแชร์โพสต์จากบอทแชร์ฝั่ง Local เพื่อบันทึกประวัติและอัปเดตสถานะคิว"""
+    event = (
+        db.query(models.FacebookDemandEvent)
+        .filter(models.FacebookDemandEvent.id == task_id)
+        .first()
+    )
+    if not event:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # Idempotency: รับ report ซ้ำ/มาช้าไม่ได้ — task ที่จบแล้ว (shared/failed) หรือ
+    # เป็นของ flow เพจ (posted/sent/pending/ignored) ต้องไม่ถูกแก้สถานะอีก
+    # (กัน report ที่ retry มาช้า flip shared → failed / ทับประวัติ)
+    if event.notification_status not in ("claimed", "pending_polling"):
+        return {
+            "status": "ignored",
+            "message": f"Task {task_id} already finalized ({event.notification_status})",
+        }
+
+    if update.status == "completed":
+        # ใช้ "shared" (ไม่ใช่ "posted") — กันแชร์ลงกลุ่มไปนับใน RADAR_MAX_DAILY_POSTS
+        # (check_daily_post_limit_allowed นับแค่ posted/sent/pending = โควต้าโพสต์เพจเท่านั้น)
+        event.notification_status = "shared"
+        event.notification_sent_at = datetime.now(timezone.utc)
+        
+        # บันทึกประวัติโพสต์ลง Google Sheets
+        matched_product = event.matched_product
+        post_url = event.lead.post_url if event.lead else ""
+        log_post_async({
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "kind": "radar_group",
+            "title": (matched_product.name or "")[:45] if matched_product else "Group Share",
+            "message": (event.ai_comment_draft or "")[:1000],
+            "link": matched_product.affiliate_url or "" if matched_product else "",
+            "post_id": f"task_{task_id}",
+            "post_url": post_url,
+        })
+        
+        # แจ้งเตือนแอดมินทาง LINE Bot (ใช้คีย์เฉพาะ ID เพื่อข้าม throttle ป้องกันการขัดกัน)
+        notify_owner_once(
+            f"radar_task_completed_{task_id}",
+            f"📢 บอทแชร์อัตโนมัติ: โพสต์แนะนำระบบป้าเข็มสำเร็จแล้วจ้า!\n📍 ลิงก์โพสต์: {post_url}"
+        )
+    else:
+        event.notification_status = "failed"
+        post_url = event.lead.post_url if event.lead else ""
+        err_msg = update.error_message or "ไม่ทราบสาเหตุแน่ชัด"
+        
+        # แจ้งเตือนแอดมินทาง LINE Bot (เพื่อแจ้งข้อขัดข้อง เช่น คุกกี้หมดอายุ หรือ หาช่องพิมพ์ไม่เจอ)
+        notify_owner_once(
+            f"radar_task_failed_{task_id}",
+            f"⚠️ บอทแชร์อัตโนมัติล้มเหลว!\n❌ สาเหตุ: {err_msg}\n📍 ลิงก์โพสต์: {post_url}"
+        )
+
+    db.commit()
+    return {"status": "success", "message": f"Task {task_id} updated to {event.notification_status}"}
+
 
 

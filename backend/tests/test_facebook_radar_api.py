@@ -206,14 +206,13 @@ def mock_radar_ai():
 def test_high_demand_lead_ingestion_creates_event_and_alert(client, db_session):
     """เมื่อส่งโพสต์ที่มีความสนใจซื้อสูง (Score >= 70):
     - ต้องบันทึก facebook_detected_leads
-    - สร้าง facebook_demand_events พร้อม matched_product และ ai_comment_draft
+    - สร้าง facebook_demand_events พร้อม ai_comment_draft (pivot: โพสต์โปรโมทบอท ไม่จับคู่สินค้า)
     - ยิงโพสต์ขึ้น Facebook Page ทันที (post_feed) และบันทึกลง Google Sheets (log_post_async)
     - notification_status == 'posted' และไม่มีการส่ง LINE alert (alerts_sent == 0)
     """
     post_id = f"test_fb_high_{int(time.time() * 1000)}"
     payload = {
         "fb_post_id": post_id,
-        "group_id": "grp_moms_th",
         "group_name": "กลุ่มแม่และเด็ก ของใช้แม่ลูก",
         "author_name": "คุณแม่มือใหม่",
         "post_text": "มีใครแนะนำชุดคลุมท้องใส่สบายๆ ผ้านิ่มๆ ระบายอากาศดีบ้างคะ ขอแบบงบไม่เกิน 400 บาท ขอบคุณค่ะ",
@@ -239,7 +238,7 @@ def test_high_demand_lead_ingestion_creates_event_and_alert(client, db_session):
         assert result["status"] == "deal_matched_and_posted"
         assert result["demand_score"] >= 70
         assert result["alert_sent"] is False
-        assert result["matched_product_id"] is not None
+        assert result["matched_product_id"] is None
 
         mock_post.assert_called_once()
         mock_sheets.assert_called_once()
@@ -263,7 +262,7 @@ def test_high_demand_lead_ingestion_creates_event_and_alert(client, db_session):
     )
     assert event is not None
     assert event.demand_score >= 70
-    assert event.matched_product_id is not None
+    assert event.matched_product_id is None
     assert event.notification_status == "posted"
     assert event.ai_comment_draft is not None
     assert len(event.ai_comment_draft) > 10
@@ -353,7 +352,6 @@ def test_lead_deduplication_idempotency(client, db_session):
     post_id = f"test_fb_dedup_{int(time.time() * 1000)}"
     payload = {
         "fb_post_id": post_id,
-        "group_id": "grp_tech_th",
         "group_name": "กลุ่มคนรักหูฟัง",
         "author_name": "นักฟังเพลง",
         "post_text": "อยากได้หูฟังบลูทูธไร้สายตัดเสียงรบกวนดีๆ งบ 500 บาท มีตัวไหนคุ้มสุดตอนนี้บ้างครับ",
