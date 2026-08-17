@@ -8,7 +8,7 @@
 > - **เมื่องานเสร็จและ commit ครบ:** ให้ล้างเนื้อหาในส่วน 1–5 กลับเป็นสถานะว่าง แล้ว commit
 >   ไฟล์นี้ — เพื่อไม่ให้ AI ตัวถัดไปเข้าใจผิดว่างานยังค้าง
 
-## สถานะ: 🟡 งานผม (facebook coordination + บอทลบโพสต์ปลอม) **deploy ขึ้น Render แล้ว** (17/08 08:04Z live) — ยังมีงานค้างของ agent อื่น (cron-job.org + radar group-polling) ที่ยังไม่ commit
+## สถานะ: 🟡 งานผม commit ครบแล้ว (แยก scheduler สินค้า/คอนเทนต์ + campaign runner + แคปชัน/ภาพโปสเตอร์หมุน + skill) — ยังมีงานค้างของ agent อื่น (cron-job.org + radar group-polling) ที่ยังไม่ commit
 
 ---
 
@@ -20,6 +20,16 @@
 ---
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
+
+- ✅ feat(bot)+docs: **แคปชันโปรโมทอัตโนมัติ + หมุนภาพโปสเตอร์ round-robin + skill** — `bot_profile.promo_captions()` 4 แบบ + `pick_promo_caption(advance)` หมุน (state `backend/.promo_caption_state.json` gitignored); `bot/post_page.py` เปลี่ยน random→round-robin ภาพ (`backend/.promo_poster_state.json`); `tools/post_fb_video.py` ไม่ระบุ --caption→ใช้แคปชันหมุนอัตโนมัติ; `tools/generate_posters.py` สร้างโปสเตอร์ 1080×1350 (Pillow+Tahoma) 4 ภาพลง assets; เพิ่ม skill `.agents/skills/promo-caption-rotation/` + AGENTS.md index; เทสต์ 1082 passed / 9 failed (radar เดิม); commit `36296bb`+`f15a2f1`
+
+- ✅ feat(facebook)+deploy: **แยก scheduler โพสต์สินค้า/คอนเทนต์ + campaign runner + post_photo — DEPLOY live `bab3e89` (13:22Z 17/08)** — `cron.py`/`main.py` แยก `run_facebook_product_post` (FB_AUTO_POST_INTERVAL, สินค้า) กับ `run_facebook_content_post` (FB_CONTENT_POST_INTERVAL, แนะนำ/ข่าว/ร้าน) เป็น 2 loop; `facebook_poster.post_photo()` (multipart/url) + `bot/run_campaign.py` (แคปชัน+ภาพ assets→โพสต์เพจ→แชร์กลุ่ม dedup state/--groups-file/sheet) + share_group/post_page + legacy bots; โพสต์รูป+คลิปจริงยืนยันผ่าน Graph API; production ตั้ง FB_AUTO_POST_INTERVAL=60 (สินค้าทุกชม.) แต่ FB_CONTENT_POST_INTERVAL ยังไม่ตั้ง (คอนเทนต์ปิด); commit `06c9049`+`bab3e89`
+
+- ✅ ops(cron): **`--save-responses` ใน tools/cron_jobs.py — ให้ job กวาดลิงก์ปลอม (8277652) เก็บ response body ไว้ดูย้อนหลัง** — เพิ่ม flag: PATCH `saveResponses=true` ให้ job ชื่อ `ป้าเข็ม-กวาดลิงก์ปลอม` (dry-run รองรับ); รันจริง + verify jobDetails `saveResponses=True` (onFailure ยังครบไม่โดนทับ); ดู body ได้ที่ `GET /jobs/8277652/history/<identifier>` — **รอบ 12:30 เก่า body เป็น null (ตั้งหลังรัน) เริ่มมี body ตั้งแต่รอบ 18:30 เป็นต้นไป**; อัปเดต docs/cron-setup.example.md; ยังไม่ commit
+
+- ✅ ops(cron): **เปิดแจ้งเตือนอีเมลเมื่อ job ล้มเหลว (onFailure) ครบ 8 job บน cron-job.org** — เพิ่ม `NOTIFICATION` (onFailure:true · onFailureCount:1 · onSslCertExpiry:true) ใน `tools/cron_jobs.py` ทั้งตอนสร้าง job ใหม่ (make_job) และตอนรันซ้ำ: PATCH `/jobs/<id>` เติม notification ให้ job เดิมที่ยังไม่ตั้ง (idempotent); ตัดคอลัมน์ alert ออกจากสรุป (GET /jobs list ไม่คืน notification — ดูได้จาก GET /jobs/<id>); รันจริงแล้วทั้ง 8 job `onFailure=True` (verify ผ่าน jobDetails ทุกตัว) — อีเมลปลายทาง = อีเมลบัญชี cron-job.org (Console → Settings → Notification email); อัปเดต docs/cron-setup.example.md; ยังไม่ commit
+
+- ✅ ops(cron): **ตั้ง cron-job.org ให้ครบ 8 job ผ่าน API + อัปเดตเครื่องมือ** — ผู้ใช้ถาม "ตั้ง cron อัตโนมัติผ่าน API" → ทางมีอยู่แล้วคือ `tools/cron_jobs.py` (cron-job.org REST `PUT /jobs`, idempotent, อ่าน `CJKEY`+`CRON_TOKEN` จาก `backend/.env`) แต่ตกหล่น 2 endpoint ใหม่ → เพิ่ม `ป้าเข็ม-สมองเรียนรู้` (hermes-learn วันละ 06:30) + `ป้าเข็ม-กวาดลิงก์ปลอม` (clean-fake-posts ทุก 6 ชม. 00:30/06:30/12:30/18:30) ลง wanted list; **ไม่ใส่ facebook-post** (บอทโพสต์เองในตัว FB_AUTO_POST_INTERVAL — เอาเข้า cron-job.org ซ้ำเสี่ยงโพสต์ซ้ำ); อัปเดต `docs/cron-setup.example.md` (ตาราง 8 job + section API ใหม่ชี้สคริปต์) + `.agents/skills/cron-jobs/SKILL.md` (เพิ่ม endpoint + เครื่องมือ); **รันจริงแล้ว**: dry-run เห็น 6 job เดิม → สร้างเพิ่ม 2 (jobId 8277651/8277652) → ครบ 8 job ทุกตัว on; ยืนยัน endpoint ทั้งหมดอยู่บน production แล้ว (openapi มี clean-fake-posts/hermes-learn) + ยิง `clean-fake-posts?dry_run=true` สำเร็จ (scan 20, ไม่เจอปลอม, ไม่ลบ) — ยังไม่ commit
 
 - ✅ feat(facebook): **กันโพสต์ซ้ำ/โพสต์หมวดถี่เกิน (เช่น หูฟัง) ใน cron rotation + ข้าม flow กับ radar** — ตรวจจริงแล้ว: cron โพสต์รายชั่วโมง หมุน 4 คลัง (rss/bg/product/local); โพสต์สินค้า 11 ตัว (KHK SHOES ×3, ANCHI e-bike ×2, Za Mask...) ตัวละครั้ง (dedup CampaignLog ทำงาน) ไม่ใช่หูฟัง; radar โพสต์แค่ 2 ตัว (REMAX หูฟัง 1 ครั้ง + ESKIMO กระติก) — แต่**ไม่มี category cooldown ใน cron** และ cron/radar ไม่แชร์ dedup กัน → เพิ่ม: (1) `cron.py _post_next_product` อ่าน `FB_POST_CATEGORY_COOLDOWN_HOURS` (default 24) — ข้ามสินค้าที่หมวดเพิ่งโพสต์ภายใน cooldown (ดูทั้ง CampaignLog fbpost + FacebookDemandEvent posted/sent) + ข้ามสินค้าที่ radar เพิ่งโพสต์ (กันโพสต์ซ้ำข้าม flow); (2) `facebook_radar.py check_category_cooldown_allowed` นับ CampaignLog fbpost ในหมวดด้วย (radar ไม่โพสต์หมวดที่ cron เพิ่งโพสต์); ลง `.env.example`; เทสต์ใหม่ 3 ตัว (cron ข้ามหมวดที่เพิ่งโพสต์ / cron ข้ามสินค้าที่ radar โพสต์ / radar นับโพสต์ cron) → รวม **1066 passed** — **ยังไม่ push/deploy**
 
