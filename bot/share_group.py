@@ -369,18 +369,28 @@ def post_to_group(driver, group_url: str, caption: str,
     except Exception:
         pass
 
-    # 1. กดช่อง "เริ่มโพสต์" (composer)
+    # 1. กดช่อง "เริ่มโพสต์" (composer) — FB 2026 หน้า�กลุ่มใช้ span "เขียนอะไรสักหน่อย...."
+    #    (ตัวคลิกจริงคือ ancestor ที่เป็น role=button)
     composer_trigger = _find_first(driver, [
+        (By.XPATH, '//*[contains(text(), "เขียนอะไรสักหน่อย") '
+                   'or contains(text(), "Write something") '
+                   'or contains(text(), "เริ่มโพสต์")]'),
         (By.XPATH, '//div[@role="button"][contains(@aria-label, "เริ่มโพสต์") '
                    'or contains(@aria-label, "Write something") '
-                   'or contains(@aria-label, "เขียนอะไร")]'),
-        (By.XPATH, '//*[contains(text(), "เริ่มโพสต์") or contains(text(), "Write something")]'),
-        (By.XPATH, '//div[@role="button"][contains(@aria-label, "สร้างโพสต์") '
+                   'or contains(@aria-label, "สร้างโพสต์") '
                    'or contains(@aria-label, "Create post")]'),
     ])
     if not composer_trigger:
         return False, False, "ไม่พบช่องเริ่มโพสต์ (composer)"
-    _click(driver, composer_trigger)
+    # span เปล่าไม่คลิกได้ → เดินขึ้นหา ancestor ที่เป็น role=button / <a>
+    target = composer_trigger
+    for _ in range(4):
+        parent = target.find_element(By.XPATH, "..")
+        if parent.get_attribute("role") == "button" or parent.tag_name == "a":
+            target = parent
+            break
+        target = parent
+    _click(driver, target)
     time.sleep(3)
 
     # 2. ช่องเขียนข้อความ (ใน dialog ที่เปิดขึ้น)
@@ -409,13 +419,14 @@ def post_to_group(driver, group_url: str, caption: str,
     elif caption and dry_run:
         print(f"[DRY-RUN] จะพิมพ์แคปชั่น:\n{caption}")
 
-    # 5. ปุ่ม "โพสต์"
+    # 5. ปุ่ม "โพสต์" — FB 2026 ใน dialog สร้างโพสต์เป็น element ข้อความ ไม่ใช่ role=button
     post_btn = _find_first(driver, [
-        (By.XPATH, '//div[@role="dialog"]//div[@role="button"]'
+        (By.XPATH, '//div[@role="dialog"]//*[normalize-space(text())="โพสต์" '
+                   'or normalize-space(text())="Post"]'),
+        (By.XPATH, '//div[@role="dialog"]//*[@role="button"]'
                    '[normalize-space(text())="โพสต์" or normalize-space(text())="Post"]'),
         (By.XPATH, '//*[@role="button"][normalize-space(text())="โพสต์" '
                    'or normalize-space(text())="Post"]'),
-        (By.XPATH, '//*[normalize-space(text())="โพสต์" or normalize-space(text())="Post"]'),
     ])
     if not post_btn:
         return False, False, "ไม่พบปุ่มโพสต์"

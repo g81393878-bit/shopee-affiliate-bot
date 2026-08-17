@@ -45,7 +45,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "backend"))
 sys.path.insert(0, str(ROOT / "bot"))
 
-from app.services.facebook_poster import post_feed, post_photo  # noqa: E402
+from app.services.facebook_poster import post_feed, post_photo, post_comment  # noqa: E402
 
 import share_group  # noqa: E402  (Selenium: เปิด browser/ฉีดคุกกี้/แชร์/บันทึกชีท)
 
@@ -57,13 +57,18 @@ DEFAULT_BLACKLIST_FILE = ROOT / "fb_blacklist.json"
 # ===========================================================================
 # องค์ประกอบโพสต์: แคปชั่น (ประกอบจากชิ้นส่วน)
 # ===========================================================================
-def build_caption(line_oa_url: Optional[str] = None) -> str:
-    """ประกอบแคปชั่นจากองค์ประกอบย่อย ๆ — แก้จุดขาย/ราคา/CTA ได้จากที่เดียว."""
-    line_oa_url = line_oa_url or os.getenv("LINE_OA_URL", "https://lin.ee/o9Kjp1N")
+def build_caption() -> str:
+    """ประกอบแคปชั่นจากองค์ประกอบย่อย ๆ แบบไม่มีลิงก์ (กลยุทธ์โพสต์คลีนปี 2026)."""
     hook = "อยากใช้บอทช่วยขายของ Shopee (บอทป้าเข็ม) ป้าจัดการระบบให้พร้อมใช้ทันทีจ้า 😊"
     benefits = "🛠️ ปลอดภัยรันบนบัญชี/คีย์คุณเอง แอดมินดูแลหลังบ้านให้หมด ไม่ต้องเซ็ตค่าเองให้ปวดหัวจ้า"
-    price_cta = f"💼 เริ่มต้น 490.- แอดไลน์คุยรายละเอียดแพ็กเกจกับป้าเลยจ้า 👉 {line_oa_url}"
+    price_cta = "💼 เริ่มต้น 490.- ปักหมุดรายละเอียดและช่องทางคุยกับป้าไว้ที่คอมเมนต์แรกนะจ๊ะ 👇"
     return "\n".join([hook, benefits, price_cta])
+
+
+def build_comment_link(line_oa_url: Optional[str] = None) -> str:
+    """สร้างข้อความคอมเมนต์ที่มีลิงก์ LINE OA สำหรับปักหมุด."""
+    line_oa_url = line_oa_url or os.getenv("LINE_OA_URL", "https://lin.ee/o9Kjp1N")
+    return f"รายละเอียดช่องทางการทักแชทคุยกับป้าเข็ม เพื่อติดตั้งระบบบอทช่วยขาย Shopee จ้า 👇\n💬 Line OA: {line_oa_url}"
 
 
 # ===========================================================================
@@ -130,7 +135,9 @@ def _entry_key(value: str) -> str:
 
 
 def _read_groups_file(path: str) -> list:
-    """อ่านไฟล์กลุ่ม: บรรทัดละ 1 กลุ่ม (ชื่อ หรือ URL), ข้ามบรรทัดว่าง + คอมเมนต์ #."""
+    """อ่านไฟล์กลุ่ม: บรรทัดละ 1 กลุ่ม (ชื่อ หรือ URL) + แท็กท้ายบรรทัด
+    (#promo/#product หมวด · #safe/#nosafe โพสต์ตรงได้ไหม) — ข้ามบรรทัดว่าง/คอมเมนต์.
+    คืน list ของ (value, tags_set)."""
     p = Path(path)
     if not p.exists():
         raise SystemExit(f"[ERROR] ไม่พบไฟล์กลุ่ม: {path}")
@@ -139,7 +146,11 @@ def _read_groups_file(path: str) -> list:
         line = line.strip()
         if not line or line.startswith("#"):
             continue
-        entries.append(line)
+        parts = line.split()
+        tags = {t.lstrip("#").lower() for t in parts if t.startswith("#")}
+        value = " ".join(t for t in parts if not t.startswith("#"))
+        if value:
+            entries.append((value, tags))
     return entries
 
 
@@ -199,10 +210,12 @@ def _save_blacklist(path: Path, blacklist: dict) -> None:
 def _cmd_post(args) -> int:
     caption = args.caption or build_caption()
     poster = resolve_poster_image(args.poster)
+    comment_text = build_comment_link()
 
     if args.dry_run:
         print("[POST][DRY-RUN] (ไม่โพสต์จริง) จะโพสต์แนะนำป้าเข็ม:")
         print(f"[POST][DRY-RUN] caption:\n{caption}")
+        print(f"[POST][DRY-RUN] comment:\n{comment_text}")
         print(f"[POST][DRY-RUN] ภาพ: {poster or '(ไม่มี — ข้อความล้วน)'}")
         print("[POST][DRY-RUN] เสร็จ — ใช้ --dry-run ไม่ได้ post URL (รันจริงเพื่อโพสต์)")
         return 0
@@ -212,8 +225,18 @@ def _cmd_post(args) -> int:
     if not res.get("ok"):
         print(f"[ERROR] โพสต์ล้ม: {res.get('error')}")
         return 1
-    post_url = f"https://www.facebook.com/{res['post_id']}"
+    post_id = res['post_id']
+    post_url = f"https://www.facebook.com/{post_id}"
     print(f"[OK] โพสต์แนะนำป้าเข็มสำเร็จ: {post_url}")
+
+    # วางลิงก์ในคอมเมนต์ทันที
+    print("[POST] กำลังโพสต์คอมเมนต์แนบลิงก์...")
+    c_res = post_comment(post_id, comment_text)
+    if c_res.get("ok"):
+        print(f"[OK] คอมเมนต์ลิงก์สำเร็จ: ID {c_res['comment_id']}")
+    else:
+        print(f"[WARN] คอมเมนต์ลิงก์ล้มเหลว: {c_res.get('error')}")
+
     print(f"[NEXT] แชร์ลงกลุ่มต่อ: python bot/run_campaign.py share --post-url \"{post_url}\" "
           f"--groups-file <ไฟล์กลุ่ม>")
     return 0
@@ -230,20 +253,20 @@ def _cmd_share(args) -> int:
     if args.method == "direct" and args.post_url:
         print(f"[INFO] โหมด direct โพสต์ตรงลงกลุ่ม (ไม่แชร์จากเพจ) — ไม่ใช้ --post-url={args.post_url}")
 
-    # รวมรายชื่อกลุ่มจากทุกแหล่ง → (key, is_url, value)
+    # รวมรายชื่อกลุ่มจากทุกแหล่ง → (key, is_url, value, tags)
     entries = []
     for name in (args.group_name or "").split(","):
         name = name.strip()
         if name:
-            entries.append((_entry_key(name), False, name))
+            entries.append((_entry_key(name), False, name, set()))
     for url in (args.group_url or "").split(","):
         url = url.strip()
         if url:
-            entries.append((_entry_key(url), True, url))
+            entries.append((_entry_key(url), True, url, set()))
     if args.groups_file:
-        for value in _read_groups_file(args.groups_file):
+        for value, tags in _read_groups_file(args.groups_file):
             entries.append((_entry_key(value),
-                            value.lower().startswith(("http://", "https://")), value))
+                            value.lower().startswith(("http://", "https://")), value, tags))
     if not entries:
         parser_error = "share ต้องระบุกลุ่มผ่าน --group-name / --group-url / --groups-file"
         print(f"[ERROR] {parser_error}")
@@ -258,18 +281,23 @@ def _cmd_share(args) -> int:
     pending = []
     skipped_shared = 0
     skipped_blacklisted = 0
-    for (k, is_url, v) in entries:
+    skipped_unsafe = 0
+    for (k, is_url, v, tags) in entries:
         if k in blacklist:
             skipped_blacklisted += 1
             print(f"[BLACKLIST] ข้าม '{v}' — {blacklist[k]}")
         elif k in ledger and ledger[k].get("status") == "ok":
             skipped_shared += 1
+        elif args.method == "direct" and "nosafe" in tags and not args.allow_unsafe:
+            skipped_unsafe += 1
+            print(f"[SKIP] '{v}' — แท็ก #nosafe (กลุ่มสินค้า) โพสต์ตรงเสี่ยงโดนลบ → ข้าม "
+                  f"(--allow-unsafe เพื่อบังคับ)")
         else:
-            pending.append((k, is_url, v))
+            pending.append((k, is_url, v, tags))
     if skipped_shared:
         print(f"[STATE] ข้าม {skipped_shared} กลุ่มที่แชร์สำเร็จแล้ว (จาก ledger)")
     if not pending:
-        print("[STATE] ไม่มีกลุ่มที่ต้องแชร์ (แชร์ครบแล้ว / โดน blacklist หมด) → ไม่เปิดเบราว์เซอร์")
+        print("[STATE] ไม่มีกลุ่มที่ต้องแชร์ (แชร์ครบแล้ว / blacklist / #nosafe) → ไม่เปิดเบราว์เซอร์")
         return 0
 
     # โหมด direct: เตรียมภาพโปสเตอร์ + ข้อความคอมเมนต์แรก (ลิงก์ LINE)
@@ -298,7 +326,7 @@ def _cmd_share(args) -> int:
 
         # แปลง URL → ชื่อจริง; โหมด direct ต้องได้ URL (เปิดหน้าโพสต์เอง)
         resolved = []
-        for key, is_url, value in pending:
+        for key, is_url, value, tags in pending:
             if not is_url:
                 if args.method == "direct":
                     print(f"[WARN] โหมด direct ต้องใช้ URL กลุ่ม (เปิดหน้าโพสต์เองได้) "
@@ -315,7 +343,8 @@ def _cmd_share(args) -> int:
 
         interval = args.group_interval if not args.dry_run else 0
         results = {"ok": 0, "fail": 0, "sheet_ok": 0,
-                   "skipped": skipped_shared, "blacklisted": skipped_blacklisted}
+                   "skipped": skipped_shared, "blacklisted": skipped_blacklisted,
+                   "unsafe": skipped_unsafe}
         for i, (key, group_url, group_name) in enumerate(resolved, 1):
             group = group_name or group_url
             comment_ok = True
@@ -374,7 +403,7 @@ def _cmd_share(args) -> int:
         print("\n==========================================")
         print(f"สรุป: สำเร็จ {results['ok']} | ล้ม {results['fail']} | "
               f"บันทึกชีท {results['sheet_ok']} | ข้ามแล้ว {results['skipped']} | "
-              f"blacklist {results['blacklisted']}")
+              f"blacklist {results['blacklisted']} | #nosafe ข้าม {results['unsafe']}")
         print("ดูประวัติกลุ่ม: python bot/run_campaign.py status")
         print("ตรวจยืนยันด้วยตา: เปิดแต่ละกลุ่มดูโพสต์ + คอมเมนต์แรกว่ามีลิงก์ครบไหม")
         return 0
@@ -442,6 +471,8 @@ def main() -> int:
     p_share.add_argument("--group-interval", type=int, default=900,
                          help="เว้นระยะระหว่างกลุ่ม (วินาที, default 900 = 15 นาที — "
                               "คู่มือแนะนำ 15-30 นาที; dry-run = 0 อัตโนมัติ)")
+    p_share.add_argument("--allow-unsafe", action="store_true",
+                         help="โพสต์ตรงลงกลุ่มที่แท็ก #nosafe ด้วย (ข้ามไปก่อนโดย default)")
     p_share.add_argument("--caption", type=str, default=None,
                          help="แคปชั่นโพสต์กลุ่ม (direct: default = หมุนอัตโนมัติ 3 แบบไร้ลิงก์; "
                               "ใส่เองได้ แต่เตือนถ้ามีลิงก์)")
