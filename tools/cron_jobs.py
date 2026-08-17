@@ -5,10 +5,12 @@
     python tools/cron_jobs.py                  # อ่าน CJKEY + CRON_TOKEN จาก backend/.env
     CJKEY=<API key> python tools/cron_jobs.py  # หรือส่ง CJKEY ผ่าน env แทน
     python tools/cron_jobs.py --dry-run        # ตรวจสอบอย่างเดียว (ไม่สร้าง/แก้ job)
+    python tools/cron_jobs.py --save-responses # เก็บ response body ของ job กวาดลิงก์ปลอมไว้ดูย้อนหลัง
 
 - อ่าน CJKEY + CRON_TOKEN จาก backend/.env (fallback เมื่อไม่มีใน os.environ)
 - LIST jobs เดิมก่อน → สร้างเฉพาะตัวที่ยังไม่มี (เทียบด้วย title) → LIST อีกครั้งยืนยัน
-- รันซ้ำได้ปลอดภัย (ไม่สร้างซ้ำ)
+- รันซ้ำได้ปลอดภัย (ไม่สร้างซ้ำ) — และเติมการแจ้งเตือนอีเมลเมื่อ job ล้มเหลว (onFailure)
+  ให้ job เดิมที่ยังไม่ได้ตั้ง (กัน job เงียบตายโดยไม่รู้)
 - API key เป็นความลับ — ไม่ถูกเขียนลงไฟล์/ไม่ขึ้น commit (อ่านจาก env เท่านั้น)
 
 อ้างอิง API: https://api.cron-job.org  (PUT /jobs จำกัด 1 req/s, 5 req/min)
@@ -68,6 +70,16 @@ def jobs(key):
     return out.get("jobs", [])
 
 
+NOTIFICATION = {
+    "onFailure": True,        # แจ้งอีเมลเมื่อ job ล้มเหลว
+    "onFailureCount": 1,      # แจ้งทันทีที่ล้มครั้งแรก
+    "onSuccess": False,
+    "onDisable": False,
+    "onSslCertExpiry": True,  # แจ้งก่อน SSL cert หมดอายุ (default ของ cron-job.org)
+    "onSslCertExpirySeconds": 604800,
+}
+
+
 def make_job(title, url, method, schedule):
     return {
         "title": title,
@@ -78,6 +90,7 @@ def make_job(title, url, method, schedule):
         "requestTimeout": 300,
         "redirectSuccess": False,
         "folderId": 0,
+        "notification": dict(NOTIFICATION),
         "schedule": {
             "timezone": "Asia/Bangkok",
             "expiresAt": 0,
@@ -160,7 +173,52 @@ def main():
     else:
         print(f"\nสร้างใหม่ {created} ตัว, มีอยู่แล้ว {skipped} ตัว")
 
+    # --- เก็บ response body ของ job กวาดลิงก์ปลอม (--save-responses) ---
+    # ใช้ดูย้อนหลังว่าตอนกวาดเจอ/ลบโพสต์ปลอมกี่ตัว (cron-job.org เก็บ body ไว้ให้)
+    if "--save-responses" in sys.argv:
+        target_title = "ป้าเข็ม-กวาดลิงก์ปลอม"
+        target = next((j for j in jobs(key) if j.get("title") == target_title), None)
+        if target is None:
+            print(f"  ❌ ไม่พบ job '{target_title}' — รันสคริปต์สร้างก่อน (หรือเช็คชื่อ job)")
+        elif dry_run:
+            print(f"  🔍 (dry-run) จะตั้ง saveResponses=true ให้: {target_title}")
+        else:
+            code, out = api_call("PATCH", f"/jobs/{target.get('jobId')}", key,
+                                 {"job": {"saveResponses": True}})
+            if code == 200:
+                print(f"  💾 saveResponses=true: {target_title} (jobId={target.get('jobId')}) — "
+                      f"ดู response ย้อนหลัง: GET /jobs/{target.get('jobId')}/history/<identifier>")
+            else:
+                print(f"  ❌ ตั้ง saveResponses ไม่สำเร็จ: HTTP {code}: {out}")
+
+    # --- เติมการแจ้งเตือนล้มเหลว (onFailure) ให้ job เดิมที่ยังไม่ได้ตั้ง ---
+    notified, notify_skip, would_notify = 0, 0, 0
+    for j in jobs(key):
+        notif = j.get("notification") or {}
+        if notif.get("onFailure"):
+            notify_skip += 1
+            continue
+        if dry_run:
+            would_notify += 1
+            print(f"  🔍 (dry-run) จะเปิดแจ้งเตือนล้มเหลว: {j.get('title')}")
+            continue
+        code, out = api_call("PATCH", f"/jobs/{j.get('jobId')}", key,
+                             {"job": {"notification": dict(NOTIFICATION)}})
+        if code == 200:
+            notified += 1
+            print(f"  ✉️  เปิดแจ้งเตือนล้มเหลว: {j.get('title')} (jobId={j.get('jobId')})")
+        else:
+            print(f"  ❌ ตั้งแจ้งเตือนไม่สำเร็จ: {j.get('title')} → HTTP {code}: {out}")
+        time.sleep(0.3)  # PATCH จำกัด 5 req/s
+
+    if dry_run:
+        print(f"(dry-run) จะเปิดแจ้งเตือน {would_notify} ตัว, ตั้งแล้ว {notify_skip} ตัว")
+    else:
+        print(f"\nเปิดแจ้งเตือนล้มเหลว {notified} ตัว, มีอยู่แล้ว {notify_skip} ตัว")
+
     # --- สรุปสถานะทั้งหมด ---
+    # หมายเหตุ: GET /jobs (list) ไม่คืน field notification — สถานะแจ้งเตือนดูจาก
+    # GET /jobs/<id> (jobDetails) หรือจากผลการตั้งในขั้นบน (เปิดแจ้งเตือนล้มเหลว X ตัว)
     print("\n== สรุป job ทั้งหมดในบัญชี ==")
     for j in jobs(key):
         method = "GET" if j.get("requestMethod") == 0 else "POST"

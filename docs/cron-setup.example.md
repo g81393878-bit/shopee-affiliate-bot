@@ -56,6 +56,7 @@ curl -X POST "https://shopee-affiliate-bot-9e9n.onrender.com/api/cron/check-link
 - **hermes-learn** — สมองกลเรียนรู้ (Groq) วิเคราะห์ตลาด 48 ชม.; LLM ล้ม = คืน `learned:false` ไม่เขียนทับ skills เดิม
 - **clean-fake-posts** — กวาดลบโพสต์ลิงก์ปลอมบนเพจ (shope.ee / lazada / ลิงก์ไม่ในคลัง) — กัน mock poster ซ้ำแบบที่เจอ 16/08
 - **facebook-post ไม่ต้องตั้งที่ cron-job.org** — บอทโพสต์เองในตัวผ่าน `FB_AUTO_POST_INTERVAL` (ดู `.env.example`); เอาเข้า cron-job.org ด้วยจะเสี่ยงโพสต์ซ้ำซ้อนกับ scheduler ในตัว
+- **แจ้งเตือนเมื่อ job ล้ม** — ทุก job ตั้ง `onFailure:true` (แจ้งทันทีที่ล้มครั้งแรก) ไปที่อีเมลบัญชี cron-job.org (ตรวจ/แก้ได้ที่ Console → Settings → Notification email); รัน `tools/cron_jobs.py` ซ้ำจะเติมให้อัตโนมัติถ้ายังไม่ตั้ง
 - อยากรู้ว่า job ไหนรันแล้วเป็นยังไง → Render log ดู `POST /api/cron/...` ได้
 
 ---
@@ -74,11 +75,20 @@ CJKEY=<API key จาก cron-job.org>
 ```bash
 python tools/cron_jobs.py            # สร้าง job ที่ยังไม่มี (idempotent — รันซ้ำได้ปลอดภัย)
 python tools/cron_jobs.py --dry-run  # ตรวจสอบอย่างเดียว ไม่สร้าง/แก้อะไร
+python tools/cron_jobs.py --save-responses  # ให้ job กวาดลิงก์ปลอมเก็บ response body ไว้ดูย้อนหลัง
+```
+
+**ดู response body ย้อนหลัง (ต้องตั้ง --save-responses ก่อน แล้วดูรอบที่รันหลังตั้ง):**
+```bash
+curl -s -H "Authorization: Bearer $CJKEY" https://api.cron-job.org/jobs/8277652/history
+# → เอา identifier จาก history แล้ว:
+curl -s -H "Authorization: Bearer $CJKEY" https://api.cron-job.org/jobs/8277652/history/<identifier>
+# → เห็น body เช่น {"scanned":50,"deleted":[...],"kept_count":...} ว่าแต่ละรอบกวาดเจอ/ลบกี่ตัว
 ```
 
 สคริปต์สร้าง 8 job ให้ครบ (keepalive / ตรวจลิงก์ / คอนเทนต์ / ราคา / สมองเรียนรู้ /
 กวาดลิงก์ปลอม / รายงานเช้า / ดึงลูกค้ากลับ) — เทียบชื่อ job เดิมก่อน สร้างเฉพาะตัวที่ยังไม่มี
-แล้วสรุปสถานะทั้งหมด (on/off + next execution) ตอนจบ
+**และเปิดแจ้งเตือนอีเมลเมื่อ job ล้มเหลว (onFailure) ให้ job เดิมที่ยังไม่ได้ตั้ง** แล้วสรุปสถานะทั้งหมดตอนจบ
 
 **ตรวจว่า job ครบ/รันได้:**
 ```bash
