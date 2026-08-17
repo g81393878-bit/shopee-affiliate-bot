@@ -100,5 +100,6 @@ affiliate_open_api_application.json
 
 fb_cookies.json
 fb_shared_state.json
+fb_blacklist.json
 .promo_caption_state.json
 .promo_poster_state.json
