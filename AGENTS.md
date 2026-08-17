@@ -30,7 +30,7 @@
 
 **API/Admin:** `products-and-links` (สินค้า API + link policy) · `admin-dashboard` (/admin + cookie) · `cron-jobs` (ทุก cron + CRON_TOKEN)
 
-**Dev tools:** `product-pipeline` (import-csv/analyze) · `fb-monitor-local` (สแกนกลุ่ม --once) · `mcp-servers` (pkh_mcp + shopee MCP) · `hermes-ai` (สมองกลเรียนรู้ตลาด) · `content-backfill` (เติมคอนเทนต์ template) · `generate-ai-content` (เติมคอนเทนต์ Groq)
+**Dev tools:** `product-pipeline` (import-csv/analyze) · `fb-monitor-local` (สแกนกลุ่ม --once) · `mcp-servers` (pkh_mcp + shopee MCP) · `hermes-ai` (สมองกลเรียนรู้ตลาด) · `content-backfill` (เติมคอนเทนต์ template) · `generate-ai-content` (เติมคอนเทนต์ Groq) · `promo-caption-rotation` (แคปชันอัตโนมัติ+หมุนภาพโปสเตอร์)
 
 **Deploy/Shopee:** `render-supabase-deploy` (ขึ้น production) · `shopee-affiliate` (ลิงก์ผ่านโทรศัพท์) · `facebook-app-config` (ตั้งค่า Meta App)
 
