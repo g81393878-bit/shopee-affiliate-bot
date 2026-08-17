@@ -31,6 +31,18 @@ FB_AUTO_POST_INTERVAL = int(os.getenv("FB_AUTO_POST_INTERVAL", "0") or 0)
 
 
 FB_AUTO_POST_CHECK_SECONDS = 60  # ตรวจทุก 1 นาทีว่าถึงเวลาโพสต์หรือยัง (ไม่ sleep ยาว 4 ชม. รวดเดียว)
+# วินาทีระหว่างกวาดลบโพสต์ลิงก์ปลอมอัตโนมัติ — mock poster "หูฟังลิงก์จริง" โพสต์ลิงก์ปลอม
+# (shope.ee/s.shopee.co.th รหัสปลอม) ขึ้นเพจซ้ำ ๆ; cron-job.org ทุก 6 ชม. ช้าเกินไป → ตรวจเองทุกไม่กี่นาที
+FB_FAKE_POST_CHECK_SECONDS = int(os.getenv("FB_FAKE_POST_CHECK_SECONDS", "300") or 300)
+
+
+def _fb_fake_watcher_enabled() -> bool:
+    """บอทลบโพสต์ปลอมอัตโนมัติ: เปิดเมื่อต่อ production (postgres) + มี FB token
+    — dev/test (sqlite) ไม่ลบของจริงโดยไม่ได้ตั้งใจ"""
+    db_url = (os.getenv("DATABASE_URL") or "").strip().lower()
+    prod = db_url.startswith("postgres") or db_url.startswith("postgresql")
+    token = (os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or "").strip()
+    return prod and bool(token)
 
 
 def _auto_post_due() -> bool:
@@ -85,6 +97,37 @@ async def facebook_auto_post_loop():
         await asyncio.sleep(FB_AUTO_POST_CHECK_SECONDS)
 
 
+async def facebook_fake_post_watcher():
+    """กวาดลบโพสต์ลิงก์ปลอมอัตโนมัติทุก FB_FAKE_POST_CHECK_SECONDS วิ (ทำงานเอง ไม่ต้องรอครอน)
+
+    mock poster "หูฟังลิงก์จริง" (shope.ee / s.shopee.co.th/earbuds_ok) โพสต์ลิงก์ปลอมขึ้นเพจ
+    ซ้ำ ๆ — ถ้ารอ cron-job.org ทุก 6 ชม. โพสต์ใหม่จะค้างได้เป็นชั่วโมง → ตรวจเองในตัวทุกไม่กี่นาที
+    ลบทันทีที่เจอ + แจ้งเจ้าของ (throttle) ทำงานเฉพาะ production + มี FB token
+    """
+    if not _fb_fake_watcher_enabled():
+        logger.info("facebook fake-post watcher disabled (ต้อง prod + FB token)")
+        return
+    logger.info(f"facebook fake-post watcher enabled — ตรวจทุก {FB_FAKE_POST_CHECK_SECONDS} วิ")
+    while True:
+        await asyncio.sleep(FB_FAKE_POST_CHECK_SECONDS)
+        try:
+            from app.api.cron import sweep_fake_posts
+            from app.services.facebook_poster import notify_owner_once
+            # sweep_fake_posts เป็น sync + แตะ DB/เน็ต → ไป thread กันบล็อก event loop
+            result = await asyncio.to_thread(sweep_fake_posts, 100, False)
+            deleted = result.get("deleted") or []
+            if deleted:
+                msgs = [d.get("message", "")[:40] for d in deleted]
+                logger.warning(f"[fb-fake-watcher] ลบโพสต์ปลอม {len(deleted)} ตัว: {msgs}")
+                # แจ้งเจ้าของ (throttle 6 ชม.) — ยังมี mock poster รันอยู่ = ต้องไปหยุดที่ต้นตอ
+                notify_owner_once("fb_fake_post_deleted",
+                                  f"🧹 บอทลบโพสต์ลิงก์ปลอม {len(deleted)} ตัว "
+                                  f"(mock poster ยังรันอยู่?): "
+                                  + "; ".join(msgs[:3]))
+        except Exception as e:
+            logger.warning(f"[fb-fake-watcher] ล้ม: {e}")
+
+
 async def keep_alive_loop():
     """กัน Render free tier หลับ: ping ตัวเองทุก 10 นาที
     ไม่พึ่ง cron-job.org เพียงอย่างเดียว — ถ้า external ping หยุด บอทก็ยังตื่นอยู่
@@ -106,9 +149,11 @@ async def keep_alive_loop():
 async def lifespan(app: FastAPI):
     keep_alive = asyncio.create_task(keep_alive_loop())
     auto_post = asyncio.create_task(facebook_auto_post_loop())
+    fake_watcher = asyncio.create_task(facebook_fake_post_watcher())
     yield
     keep_alive.cancel()
     auto_post.cancel()
+    fake_watcher.cancel()
 
 
 app = FastAPI(

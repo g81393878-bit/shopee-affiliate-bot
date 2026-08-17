@@ -15,6 +15,7 @@ Cron endpoints — ให้บอทดูแลตัวเองเป็น�
 """
 import os
 import logging
+import threading
 import datetime
 from typing import Optional
 
@@ -24,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
 from app import models
-from app.services.link_checker import check_affiliate_link
+from app.services.link_checker import check_affiliate_link, is_valid_shopee_affiliate_url
 from app.services.ai_generator import format_hashtags_text, generate_script_for_product
 from app.services.hermes_brain import analyze_market, market_tone
 from app.services.price_refresh import refresh_price
@@ -37,6 +38,9 @@ from app.services.facebook_poster import (
     delete_page_post,
     is_fake_link_post,
     _normalize_shopee_link,
+    preflight_ready,
+    notify_owner_once,
+    classify_post_error,
 )
 from app.services.facebook_intro import intro_posts, short_bg_posts
 from app.services.facebook_curated import fetch_news_items, item_key, curate_caption
@@ -355,12 +359,14 @@ def _post_next_intro(db) -> Optional[dict]:
     """โพสต์แนะนำตัวป้าเข็มถัดไป (Phase 1 — ให้คนรู้จักก่อน)
 
     กันซ้ำด้วย CampaignLog status='fbintro' (category = index โพสต์) — โพสต์ทีละตัว
-    คืน dict result หรือ None ถ้าโพสต์แนะนำครบทุกตัวแล้ว
+    โพสต์ล้ม (รูปมาสคอตโหลดไม่ได้ ฯลฯ) → ข้ามไปตัวถัดไป อย่าให้ rotation ติดตายที่ตัวเดิม
+    คืน dict result หรือ None ถ้าโพสต์แนะนำครบทุกตัวแล้ว (หรือล้มทุกตัว)
     """
     posts = intro_posts()
     posted_idx = {int(c.category) for c in db.query(models.CampaignLog)
                   .filter(models.CampaignLog.status == "fbintro").all()
                   if str(c.category).isdigit()}
+    last_err = None
     for i, p in enumerate(posts):
         if i in posted_idx:
             continue
@@ -371,8 +377,10 @@ def _post_next_intro(db) -> Optional[dict]:
             log_post_async(_post_sheet_row("intro", p["title"], p["caption"], "", res["post_id"]))
             return {"posted": [{"kind": "intro", "index": i, "title": p["title"],
                                 "posted": True, "post_id": res["post_id"]}]}
-        return {"posted": [{"kind": "intro", "index": i, "title": p["title"],
-                            "posted": False, "error": res["error"]}]}
+        last_err = res["error"]
+        logger.warning(f"[intro] โพสต์ล้ม index {i}: {res['error']}")
+    if last_err:
+        logger.warning(f"[intro] ล้มทุกตัว: {last_err}")
     return None
 
 
@@ -381,12 +389,14 @@ def _post_next_short_bg(db) -> Optional[dict]:
 
     กันซ้ำด้วย CampaignLog status='fbbg' (category = index โพสต์) — โพสต์ทีละตัว
     ข้อความ ≤ 130 ตัวอักษร ส่งผ่าน post_feed(background_preset_id=...) ไม่มีรูป/ลิงก์
-    คืน dict result หรือ None ถ้าโพสต์พื้นสีครบทุกตัวแล้ว
+    โพสต์ล้ม → ข้ามไปตัวถัดไป อย่าให้ rotation ติดตายที่ตัวเดิม
+    คืน dict result หรือ None ถ้าโพสต์พื้นสีครบทุกตัวแล้ว (หรือล้มทุกตัว)
     """
     posts = short_bg_posts()
     posted_idx = {int(c.category) for c in db.query(models.CampaignLog)
                   .filter(models.CampaignLog.status == "fbbg").all()
                   if str(c.category).isdigit()}
+    last_err = None
     for i, p in enumerate(posts):
         if i in posted_idx:
             continue
@@ -398,8 +408,10 @@ def _post_next_short_bg(db) -> Optional[dict]:
             return {"posted": [{"kind": "bg", "index": i, "title": p["title"],
                                 "posted": True, "post_id": res["post_id"],
                                 "preset_id": p["preset_id"]}]}
-        return {"posted": [{"kind": "bg", "index": i, "title": p["title"],
-                            "posted": False, "error": res["error"]}]}
+        last_err = res["error"]
+        logger.warning(f"[bg] โพสต์ล้ม index {i}: {res['error']}")
+    if last_err:
+        logger.warning(f"[bg] ล้มทุกตัว: {last_err}")
     return None
 
 
@@ -441,6 +453,8 @@ def _post_next_product(db, limit: int = 1) -> Optional[dict]:
     # กันโพสต์ซ้ำ/โพสต์หมวดถี่เกิน (เช่น หูฟัง) — ดูทั้ง cron (fbpost) + radar (demand events):
     # - หมวดที่เพิ่งโพสต์ภายใน cooldown_hours → ข้าม (กันหมวดเดียวถี่ติดกัน)
     # - สินค้าที่ radar เพิ่งโพสต์ → ข้าม (cron ไม่โพสต์ซ้ำกับ radar)
+    # หมายเหตุ: นับ 'pending' ของ radar ด้วย (radar commit ก่อน post_feed) — ไม่งั้น
+    # ในหน้าต่างที่ radar กำลังโพสต์ cron มองไม่เห็น → ยิงหมวดเดียวกันซ้ำ (เจอจริง 16/08)
     recent_cats: set = set()
     recent_radar_ids: set = set()
     for c in db.query(models.CampaignLog).filter(
@@ -451,7 +465,7 @@ def _post_next_product(db, limit: int = 1) -> Optional[dict]:
             if p and p.category:
                 recent_cats.add(p.category)
     for e in db.query(models.FacebookDemandEvent).filter(
-            models.FacebookDemandEvent.notification_status.in_(["posted", "sent"]),
+            models.FacebookDemandEvent.notification_status.in_(["posted", "sent", "pending"]),
             models.FacebookDemandEvent.created_at >= cutoff).all():
         if e.matched_product_id:
             recent_radar_ids.add(e.matched_product_id)
@@ -473,8 +487,15 @@ def _post_next_product(db, limit: int = 1) -> Optional[dict]:
                    .limit(max(limit * 20, 20)).all()):
         if p.category and p.category in recent_cats:
             continue
+        # Guard กันลิงก์ปลอม/ของ mock (เช่น s.shopee.co.th/earbuds_ok) หลุดขึ้นโพสต์:
+        # ตัวที่โพสต์แนบรูปจะแปะ affiliate_url ไว้ในแคปชั่น (ไม่ใช่ link param) →
+        # post_feed guard ตรวจ link param ไม่ถึง → กรองที่นี่อีกชั้น (defense-in-depth)
+        if not is_valid_shopee_affiliate_url(p.affiliate_url):
+            logger.warning(f"[product] ข้ามสินค้า {p.id} affiliate_url ไม่ valid: "
+                           f"{str(p.affiliate_url)[:60]!r}")
+            continue
         prods.append(p)
-        if len(prods) >= limit:
+        if len(prods) >= max(limit * 5, 5):  # ลองหลายตัว เผื่อตัวแรกโพสต์ล้ม (กัน rotation ติดตาย)
             break
     if not prods:
         return None
@@ -488,6 +509,14 @@ def _post_next_product(db, limit: int = 1) -> Optional[dict]:
                 p.image_url = image
                 db.commit()
         caption = _build_fb_caption(p)  # สร้างครั้งเดียว (เดิมเรียกซ้ำ 2 รอบ → เผา Groq เปล่า)
+        # จองหมวดก่อนยิงโพสต์ — กัน radar ยิงหมวดเดียวกันซ้ำระหว่างกำลังโพสต์
+        # (เหมือน radar ที่ commit status='pending' ก่อน post_feed แล้วค่อยเปลี่ยน)
+        # โพสต์สำเร็จ → เปลี่ยนเป็น fbpost (dedup ทำงาน) / โพสต์ล้ม → ลบการจอง
+        # (ไม่ให้กันหมวดนี้ไปตลอด cooldown) — ถ้า process ตายคาการจอง จะค้างเป็น
+        # fbpost_pending กัน radar 24 ชม. (self-heal เหมือน radar pending ค้าง)
+        pending = models.CampaignLog(category=str(p.id), recipients=1, status="fbpost_pending")
+        db.add(pending)
+        db.commit()
         if image:
             # โพสต์แนบรูปจริง (ไม่พึ่ง Facebook crawl การ์ดลิงก์) — ลิงก์ affiliate ไปอยู่ในแคปชั่น
             caption = f"{caption}\n\n🛒 {p.affiliate_url or ''}".strip()
@@ -496,17 +525,25 @@ def _post_next_product(db, limit: int = 1) -> Optional[dict]:
             # หารูปไม่ได้ → fallback การ์ดลิงก์เดิม (Facebook crawl เอาเอง)
             res = post_feed(caption, link=p.affiliate_url or "")
         if res["ok"]:
-            db.add(models.CampaignLog(category=str(p.id), recipients=1, status="fbpost"))
+            pending.status = "fbpost"
             db.commit()
             log_post_async(_post_sheet_row("product", p.name[:45],
                                            caption, p.affiliate_url or "",
                                            res["post_id"]))
             results.append({"id": p.id, "name": p.name[:45], "posted": True,
                             "post_id": res["post_id"]})
+            if len(results) >= limit:
+                break
         else:
-            results.append({"id": p.id, "name": p.name[:45], "posted": False,
-                            "error": res["error"]})
-    return {"posted": results}
+            db.delete(pending)
+            db.commit()
+            # โพสต์ล้ม (รูป/ลิงก์โดน Facebook ปฏิเสธ ฯลฯ) → ลองตัวถัดไป อย่าให้ rotation ติดตาย
+            # error รุนแรง (token หมดอายุ/สิทธิ์หาย/rate-limit) → แจ้งเจ้าของด้วย (throttle)
+            if classify_post_error(res.get("error") or ""):
+                notify_owner_once("fb_post_hard_error",
+                                  f"⚠️ โพสต์สินค้าล้ม (error รุนแรง): {res.get('error') or ''}")
+            logger.warning(f"[product] โพสต์ล้ม {p.id} {p.name[:40]}: {res['error']}")
+    return {"posted": results} if results else None
 
 
 def _post_next_local(db) -> Optional[dict]:
@@ -542,9 +579,14 @@ def _post_next_local(db) -> Optional[dict]:
 
 
 def _post_next_curated(db) -> Optional[dict]:
-    """โพสต์คอนเทนต์โลก (RSS) — กันซ้ำด้วย status='fbrss', category=sha1(guid|link)"""
+    """โพสต์คอนเทนต์โลก (RSS) — กันซ้ำด้วย status='fbrss', category=sha1(guid|link)
+
+    โพสต์ล้ม (ลิงก์โดน Facebook ปฏิเสธ ฯลฯ) → ลองข่าวตัวถัดไป อย่าให้คลังติดตาย
+    (พฤติกรรมเดียวกับ _post_next_local — เจอจริง: ลิงก์ facebook.com โพสต์ไม่ได้)
+    """
     posted = {c.category for c in db.query(models.CampaignLog)
               .filter(models.CampaignLog.status == "fbrss").all()}
+    last_err = None
     for it in fetch_news_items():
         key = item_key(it)
         if key in posted:
@@ -559,9 +601,16 @@ def _post_next_curated(db) -> Optional[dict]:
             return {"posted": [{"kind": "rss", "title": (it["title"] or "")[:45],
                                 "posted": True, "post_id": res["post_id"],
                                 "source": it.get("source", "")}]}
-        return {"posted": [{"kind": "rss", "title": (it["title"] or "")[:45],
-                            "posted": False, "error": res["error"]}]}
+        last_err = res["error"]
+        logger.warning(f"[rss] โพสต์ล้ม {it['link'][:60]}: {res['error']}")
+    if last_err:
+        logger.warning(f"[rss] ล้มทุกตัว: {last_err}")
     return None
+
+
+# กัน 2 process/thread ยิงโพสต์พร้อมกัน (scheduler ในตัว + HTTP endpoint + radar) —
+# ถ้าโพสต์ก่อนหน้ายังไม่เสร็จ (slow Groq/fetch รูป > 60s) ให้ข้ามรอบนี้ กันโพสต์ซ้ำ
+_AUTO_POST_LOCK = threading.Lock()
 
 
 def run_facebook_auto_post(limit: int = 1) -> dict:
@@ -571,35 +620,49 @@ def run_facebook_auto_post(limit: int = 1) -> dict:
     - สินค้า (status=fbpost): เปิดเมื่อตั้ง FB_POST_PRODUCTS=1 เท่านั้น
     - คอนเทนต์โลก (status=fbrss): ข่าว/เทรนด์จาก RSS เขียนเสียงป้าเข็ม (Groq)
     - ท้องถิ่น (status=fblocal): ร้านอร่อย/ของฝาก/ของกินจาก Firecrawl ตามจังหวัด
-    กันโพสต์ซ้ำด้วย CampaignLog — เรียกได้ทั้ง HTTP endpoint และ scheduler ในตัว
+    กันโพสต์ซ้ำด้วย CampaignLog + _AUTO_POST_LOCK (กัน concurrent ยิงซ้ำ) —
+    เรียกได้ทั้ง HTTP endpoint และ scheduler ในตัว
     """
-    db = SessionLocal()
+    if not _AUTO_POST_LOCK.acquire(blocking=False):
+        logger.warning("[facebook-post] มีโพสต์กำลังทำงานอยู่ — ข้ามรอบนี้ (กันโพสต์ซ้ำ)")
+        return {"posted": [], "note": "โพสต์กำลังทำงานอยู่ — ข้ามรอบนี้ (กันโพสต์ซ้ำ)"}
     try:
-        brand_n = (db.query(models.CampaignLog)
-                     .filter(models.CampaignLog.status.in_(["fbintro", "fbbg"])).count())
-        prod_n = (db.query(models.CampaignLog)
-                     .filter(models.CampaignLog.status == "fbpost").count())
-        rss_n = (db.query(models.CampaignLog)
-                     .filter(models.CampaignLog.status == "fbrss").count())
-        local_n = (db.query(models.CampaignLog)
-                     .filter(models.CampaignLog.status == "fblocal").count())
-        slot = (brand_n + prod_n + rss_n + local_n) % 4  # 0=แบรนด์, 1=สินค้า, 2=คอนเทนต์โลก, 3=ท้องถิ่น
-        for s in (slot, (slot + 1) % 4, (slot + 2) % 4, (slot + 3) % 4):
-            if s == 0:
-                res = _post_next_brand(db)
-            elif s == 1:
-                res = _post_next_product(db, limit)
-            elif s == 2:
-                res = _post_next_curated(db)
-            else:
-                res = _post_next_local(db)
-            if res is not None:
-                return res
-        if os.getenv("FB_POST_PRODUCTS", "").lower() not in ("1", "true", "yes"):
-            return {"posted": [], "note": "โพสต์แบรนด์ครบแล้ว — ตั้ง FB_POST_PRODUCTS=1 เพื่อโพสต์สินค้า"}
-        return {"posted": [], "note": "ไม่มีคอนเทนต์ใหม่ (สินค้าครบ / รอ RSS feed / รอ Firecrawl)"}
+        # ตรวจความพร้อมก่อนยิงโพสต์ (token ตั้ง/ใช้ได้, page id) — ไม่พร้อม → ข้าม + แจ้งเจ้าของ
+        # (จัดการเป็นขั้นตอน: พร้อมไหม → ไม่พร้อมแจ้ง → พร้อมค่อยโพสต์ กันโพสต์ล้มเงียบ ๆ)
+        ok, reasons = preflight_ready()
+        if not ok:
+            notify_owner_once("fb_preflight_cron",
+                              "⚠️ ข้ามโพสต์เพจ (ยังไม่พร้อม): " + "; ".join(reasons))
+            return {"posted": [], "note": "ยังไม่พร้อมโพสต์: " + "; ".join(reasons)}
+        db = SessionLocal()
+        try:
+            brand_n = (db.query(models.CampaignLog)
+                         .filter(models.CampaignLog.status.in_(["fbintro", "fbbg"])).count())
+            prod_n = (db.query(models.CampaignLog)
+                         .filter(models.CampaignLog.status == "fbpost").count())
+            rss_n = (db.query(models.CampaignLog)
+                         .filter(models.CampaignLog.status == "fbrss").count())
+            local_n = (db.query(models.CampaignLog)
+                         .filter(models.CampaignLog.status == "fblocal").count())
+            slot = (brand_n + prod_n + rss_n + local_n) % 4  # 0=แบรนด์, 1=สินค้า, 2=คอนเทนต์โลก, 3=ท้องถิ่น
+            for s in (slot, (slot + 1) % 4, (slot + 2) % 4, (slot + 3) % 4):
+                if s == 0:
+                    res = _post_next_brand(db)
+                elif s == 1:
+                    res = _post_next_product(db, limit)
+                elif s == 2:
+                    res = _post_next_curated(db)
+                else:
+                    res = _post_next_local(db)
+                if res is not None:
+                    return res
+            if os.getenv("FB_POST_PRODUCTS", "").lower() not in ("1", "true", "yes"):
+                return {"posted": [], "note": "โพสต์แบรนด์ครบแล้ว — ตั้ง FB_POST_PRODUCTS=1 เพื่อโพสต์สินค้า"}
+            return {"posted": [], "note": "ไม่มีคอนเทนต์ใหม่ (สินค้าครบ / รอ RSS feed / รอ Firecrawl)"}
+        finally:
+            db.close()
     finally:
-        db.close()
+        _AUTO_POST_LOCK.release()
 
 
 @router.post("/facebook-post")
@@ -613,18 +676,16 @@ def cron_facebook_post(token: str = "", limit: int = 1):
     return run_facebook_auto_post(limit)
 
 
-@router.post("/clean-fake-posts")
-def cron_clean_fake_posts(token: str = "", limit: int = 100, dry_run: bool = False):
-    """กวาดลบโพสต์ลิงก์ปลอมบนเพจ Facebook — กันสคริปต์ mock โพสต์ลิงก์ปลอมขึ้นเพจ
+def sweep_fake_posts(limit: int = 100, dry_run: bool = False) -> dict:
+    """กวาดโพสต์ลิงก์ปลอมบนเพจ → ลบ (หรือ dry_run ดูตัวอย่าง)
 
     ลบโพสต์ที่มี: shope.ee (ปลอมเสมอ) / lazada.co.th (แพลตฟอร์มอื่น) /
     s.shopee.co.th รหัส format ไม่ valid หรือ **ไม่ใช่ลิงก์ในคลังสินค้า** (เช่น
     s.shopee.co.th/earbudsok ที่ mock poster ใช้ — base62 ผ่าน format แต่ไม่มีใน products)
 
-    เรียกจาก cron-job.org เป็นระยะ (ต้อง ?token=<CRON_TOKEN>); `dry_run=true` = ดูตัวอย่างไม่ลบ
+    ใช้ได้ทั้ง cron endpoint (/cron/clean-fake-posts) และ watcher อัตโนมัติในตัว
+    (main.py) — กัน mock poster โพสต์ลิงก์ปลอมขึ้นเพจแล้วค้างอยู่
     """
-    if not _authorized(token):
-        raise HTTPException(status_code=401, detail="invalid token")
     db = SessionLocal()
     try:
         known = set()
@@ -650,6 +711,18 @@ def cron_clean_fake_posts(token: str = "", limit: int = 100, dry_run: bool = Fal
                 "kept_count": len(kept), "dry_run": dry_run}
     finally:
         db.close()
+
+
+@router.post("/clean-fake-posts")
+def cron_clean_fake_posts(token: str = "", limit: int = 100, dry_run: bool = False):
+    """กวาดลบโพสต์ลิงก์ปลอมบนเพจ Facebook — กันสคริปต์ mock โพสต์ลิงก์ปลอมขึ้นเพจ
+
+    เรียกจาก cron-job.org เป็นระยะ (ต้อง ?token=<CRON_TOKEN>); `dry_run=true` = ดูตัวอย่างไม่ลบ
+    (งานเดียวกันกับ watcher อัตโนมัติในตัว main.py — เก็บ endpoint ไว้เผื่อ manual/ครอน)
+    """
+    if not _authorized(token):
+        raise HTTPException(status_code=401, detail="invalid token")
+    return sweep_fake_posts(limit=limit, dry_run=dry_run)
 
 
 @router.post("/daily-report")

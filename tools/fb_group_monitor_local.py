@@ -31,6 +31,7 @@ Usage Examples:
 """
 from datetime import datetime, timezone
 import argparse
+import hashlib
 import json
 import logging
 import os
@@ -387,8 +388,12 @@ def scrape_real_facebook_posts(
                     post_text = " ".join(content_lines[:10])
                     
                     if len(post_text) > 10:
+                        # ใช้ sha1 (deterministic) แทน hash() — hash() ของ Python ถูก salt
+                        # ต่อ process (PYTHONHASHSEED) → post เดียวกันได้ id ต่างกันทุก run
+                        # → dedup ข้าม run (--state-file) พัง → ส่ง post เดิมซ้ำ → โพสต์ซ้ำได้
+                        _stable = hashlib.sha1(post_text[:20].encode("utf-8", "ignore")).hexdigest()[:10]
                         posts.append({
-                            "fb_post_id": f"{group_id}_{i}_{hash(post_text[:20])}",
+                            "fb_post_id": f"{group_id}_{i}_{_stable}",
                             "group_id": group_id,
                             "group_name": group_name or "Facebook Group",
                             "group_url": url,

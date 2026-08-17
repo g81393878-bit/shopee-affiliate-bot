@@ -32,7 +32,9 @@ from app.services.demand_radar_ai import (
     is_high_demand,
     analyze_facebook_insights,
 )
-from app.services.facebook_poster import log_post_async, post_feed
+from app.services.facebook_poster import (
+    log_post_async, post_feed, preflight_ready, notify_owner_once, classify_post_error,
+)
 from app.services.line_quota import push_guard
 from app.services.product_cards import format_radar_deal_flex_message
 from app.services.product_matcher import match_best_product_for_demand, is_valid_shopee_affiliate_url
@@ -219,8 +221,10 @@ def check_category_cooldown_allowed(
 
     # กัน radar โพสต์หมวดที่ cron rotation เพิ่งโพสต์ (CampaignLog status=fbpost) —
     # ไม่งั้น cron โพสต์หูฟังแล้ว radar ตามโพสต์หูฟังอีกภายใน cooldown (หมวดเดียวถี่เกิน)
+    # นับ 'fbpost_pending' ด้วย = cron จองหมวดก่อนยิงโพสต์ (commit ก่อน post_feed) —
+    # กัน radar ยิงหมวดเดียวกันซ้ำในหน้าต่างที่ cron กำลังโพสต์ (ปิดช่องขัดกันทั้ง 2 ทาง)
     cron_ids = [int(c.category) for c in db.query(models.CampaignLog.category)
-                .filter(models.CampaignLog.status == "fbpost",
+                .filter(models.CampaignLog.status.in_(["fbpost", "fbpost_pending"]),
                         models.CampaignLog.created_at >= cutoff).all()
                 if str(c.category).isdigit()]
     if cron_ids:
@@ -563,62 +567,91 @@ def ingest_facebook_leads(
                 status_str = "ignored"
                 alert_sent = False
             elif matched_product and copy_text:
-                # ผ่าน Safety Guards ทั้งหมด -> โพสต์ขึ้น Facebook Page ทันที
-                demand_event = models.FacebookDemandEvent(
-                    lead_id=lead.id,
-                    intent=intent,
-                    demand_score=demand_score,
-                    urgency=urgency,
-                    budget=budget_text,
-                    product_keyword=product_keyword,
-                    matched_product_id=matched_id,
-                    suggested_reason=suggested_reasons,
-                    ai_comment_draft=copy_text,
-                    notification_status="pending",
-                )
-                db.add(demand_event)
-                db.flush()
-                # Commit ก่อน post_feed — กันบั๊ก "โพสต์ขึ้น FB แล้วแต่ record หาย"
-                # (เคยเจอโพสต์ซ้ำ 4 ตัว: post_feed สำเร็จแต่ db.commit() ท้ายสุดพัง/ถูกฆ่า →
-                #  lead + demand_event ถูก rollback → dedup/cooldown มองไม่เห็นโพสต์ → ยิงซ้ำได้)
-                db.commit()
-
-                image_url = (matched_product.image_url or "").strip()
-                if image_url:
-                    post_res = post_feed(
-                        message=copy_text,
-                        image_url=image_url,
+                # ตรวจความพร้อมก่อนยิงโพสต์ (token ตั้ง/ใช้ได้, page id) — ไม่พร้อม →
+                # ไม่โพสต์ + แจ้งเจ้าของ (จัดการเป็นขั้นตอน: พร้อมไหม → ไม่พร้อมแจ้ง → พร้อมค่อยโพสต์)
+                preflight_ok, preflight_reasons = preflight_ready()
+                if not preflight_ok:
+                    notify_owner_once("fb_preflight_radar",
+                                      "⚠️ ข้ามโพสต์ radar (ยังไม่พร้อม): "
+                                      + "; ".join(preflight_reasons))
+                    demand_event = models.FacebookDemandEvent(
+                        lead_id=lead.id,
+                        intent=intent,
+                        demand_score=demand_score,
+                        urgency=urgency,
+                        budget=budget_text,
+                        product_keyword=product_keyword,
+                        matched_product_id=matched_id,
+                        suggested_reason=suggested_reasons,
+                        ai_comment_draft=copy_text,
+                        notification_status="failed",
                     )
-                else:
-                    post_res = post_feed(
-                        message=copy_text,
-                        link=matched_product.affiliate_url or "",
-                    )
-
-                if post_res.get("ok"):
-                    demand_event.notification_status = "posted"
-                    demand_event.notification_sent_at = datetime.now(timezone.utc)
-                    post_id = str(post_res.get("post_id") or "")
-                    post_url = f"https://www.facebook.com/{post_id}" if post_id else ""
-
-                    # บันทึกประวัติโพสต์ลง Google Sheets ผ่าน POSTS_SHEET_WEBHOOK_URL
-                    log_post_async({
-                        "created_at": datetime.now(timezone.utc).isoformat(),
-                        "kind": "radar",
-                        "title": (matched_product.name or "")[:45],
-                        "message": (copy_text or "")[:1000],
-                        "link": matched_product.affiliate_url or "",
-                        "post_id": post_id,
-                        "post_url": post_url,
-                    })
-                    status_str = "deal_matched_and_posted"
-                else:
-                    demand_event.notification_status = "failed"
+                    db.add(demand_event)
+                    db.flush()
                     status_str = "deal_matched_post_failed"
+                    alert_sent = False
+                else:
+                    # ผ่าน Safety Guards ทั้งหมด -> โพสต์ขึ้น Facebook Page ทันที
+                    demand_event = models.FacebookDemandEvent(
+                        lead_id=lead.id,
+                        intent=intent,
+                        demand_score=demand_score,
+                        urgency=urgency,
+                        budget=budget_text,
+                        product_keyword=product_keyword,
+                        matched_product_id=matched_id,
+                        suggested_reason=suggested_reasons,
+                        ai_comment_draft=copy_text,
+                        notification_status="pending",
+                    )
+                    db.add(demand_event)
+                    db.flush()
+                    # Commit ก่อน post_feed — กันบั๊ก "โพสต์ขึ้น FB แล้วแต่ record หาย"
+                    # (เคยเจอโพสต์ซ้ำ 4 ตัว: post_feed สำเร็จแต่ db.commit() ท้ายสุดพัง/ถูกฆ่า →
+                    #  lead + demand_event ถูก rollback → dedup/cooldown มองไม่เห็นโพสต์ → ยิงซ้ำได้)
+                    db.commit()
 
-                alert_sent = False
-                # อัปเดตสถานะ posted/failed ให้ durable (แยกจาก commit ก่อนโพสต์)
-                db.commit()
+                    image_url = (matched_product.image_url or "").strip()
+                    if image_url:
+                        post_res = post_feed(
+                            message=copy_text,
+                            image_url=image_url,
+                        )
+                    else:
+                        post_res = post_feed(
+                            message=copy_text,
+                            link=matched_product.affiliate_url or "",
+                        )
+
+                    if post_res.get("ok"):
+                        demand_event.notification_status = "posted"
+                        demand_event.notification_sent_at = datetime.now(timezone.utc)
+                        post_id = str(post_res.get("post_id") or "")
+                        post_url = f"https://www.facebook.com/{post_id}" if post_id else ""
+
+                        # บันทึกประวัติโพสต์ลง Google Sheets ผ่าน POSTS_SHEET_WEBHOOK_URL
+                        log_post_async({
+                            "created_at": datetime.now(timezone.utc).isoformat(),
+                            "kind": "radar",
+                            "title": (matched_product.name or "")[:45],
+                            "message": (copy_text or "")[:1000],
+                            "link": matched_product.affiliate_url or "",
+                            "post_id": post_id,
+                            "post_url": post_url,
+                        })
+                        status_str = "deal_matched_and_posted"
+                    else:
+                        demand_event.notification_status = "failed"
+                        status_str = "deal_matched_post_failed"
+                        # error รุนแรง (token หมดอายุ/สิทธิ์หาย/rate-limit) → แจ้งเจ้าของด้วย
+                        if classify_post_error(post_res.get("error") or ""):
+                            notify_owner_once("fb_post_hard_error",
+                                              f"⚠️ โพสต์ radar ล้ม (error รุนแรง): "
+                                              f"{post_res.get('error') or ''}")
+
+                    alert_sent = False
+                    # อัปเดตสถานะ posted/failed ให้ durable (แยกจาก commit ก่อนโพสต์)
+                    db.commit()
             else:
                 # ไม่พบสินค้าที่ตรงกันในคลัง
                 demand_event = models.FacebookDemandEvent(

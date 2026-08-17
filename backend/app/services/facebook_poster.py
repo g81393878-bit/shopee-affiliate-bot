@@ -15,6 +15,9 @@ Graph API:
 import logging
 import os
 import re
+import threading
+import time
+from typing import Optional
 from urllib.parse import parse_qs, urlparse
 
 import httpx
@@ -52,6 +55,144 @@ def log_post_async(row: dict) -> None:
         threading.Thread(target=_push_post_to_sheet, args=(row,), daemon=True).start()
     except Exception:
         pass
+
+
+# ===========================================================================
+# Pre-flight ความพร้อมก่อนโพสต์ + แจ้งเจ้าของ (coordination — อย่าโพสต์เงียบ ๆ)
+# ===========================================================================
+# - ก่อนยิงโพสต์ทุกครั้ง ให้ตรวจว่าพร้อมไหม (token ตั้ง/ใช้ได้, page id ครบ)
+#   → ไม่พร้อม = ข้ามโพสต์ + แจ้งเจ้าของร้าน (throttle กันสแปม)
+# - โพสต์ล้มด้วย error รุนแรง (OAuth หมดอายุ/สิทธิ์หาย/rate-limit) → แจ้งเจ้าของด้วย
+# เฉพาะ production (postgres) ถึงบังคับ/แจ้งจริง — dev/test (sqlite) lenient
+# เพราะ post_feed ถูก mock อยู่แล้ว (กันเทสต์ช้า/flaky + ยิง LINE จริงโดยไม่ตั้งใจ)
+
+_TOKEN_VERIFY_INTERVAL = 3600       # ตรวจ token จริงผ่าน Graph API อย่างมาก 1 ครั้ง/ชม.
+_OWNER_ALERT_INTERVAL = 6 * 3600    # แจ้งเจ้าของซ้ำเหตุผลเดิมอย่างมาก 1 ครั้ง/6 ชม.
+_token_verified_at = 0.0
+_token_ok: Optional[bool] = None
+_owner_alert_at: dict = {}
+_OWNER_ALERT_LOCK = threading.Lock()
+
+
+# error รุนแรงที่เจ้าของต้องรู้ (token/สิทธิ์/rate-limit) — อย่างอื่น (ลิงก์ไม่ valid ฯลฯ) ไม่ต้องกวน
+_HARD_POST_ERROR_MARKERS = (
+    "oauth", "session has expired", "#(190)", "revoke", "permissions error", "#(200)",
+    "rate limit", "too many calls", "user request limit reached",
+    "page access has been removed", "app not installed", "invalid token",
+)
+
+
+def _is_prod() -> bool:
+    """Production = ต่อ Postgres จริง (Render/Supabase) — sqlite = dev/test.
+    (สัญญาณเดียวกับ facebook_radar._is_production — กันเทสต์/เครื่อง dev เข้าใจผิดว่าเป็น prod)"""
+    db_url = (os.getenv("DATABASE_URL") or "").strip().lower()
+    return db_url.startswith("postgres") or db_url.startswith("postgresql")
+
+
+def verify_page_token(force: bool = False) -> Optional[bool]:
+    """ตรวจว่า page token ยังใช้ได้ (GET /{page_id}?fields=id) — cache 1 ชม.
+
+    คืน True=ใช้ได้ / False=ใช้ไม่ได้ชัดเจน (OAuth หมดอายุ/revoke) / None=ยังไม่รู้
+    (transient — ถือว่า ok อย่าไปบล็อกโพสต์เพราะเน็ตสะดุด)
+    dev/test (ไม่ใช่ prod) → คืน True เสมอ ไม่ยิง Graph API จริง (กันเทสต์ช้า/flaky)
+    """
+    if not _is_prod():
+        return True
+    global _token_verified_at, _token_ok
+    now = time.time()
+    if not force and _token_ok is not None and now - _token_verified_at < _TOKEN_VERIFY_INTERVAL:
+        return _token_ok
+    token = (os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or "").strip()
+    if not token:
+        _token_ok = False
+        _token_verified_at = now
+        return False
+    try:
+        r = httpx.get(f"{GRAPH_URL}/{PAGE_ID}",
+                      params={"fields": "id", "access_token": token}, timeout=10)
+        if r.status_code == 200:
+            _token_ok = True
+        else:
+            msg = ""
+            try:
+                msg = ((r.json() or {}).get("error") or {}).get("message", "")
+            except Exception:
+                pass
+            low = msg.lower()
+            if "oauth" in low or "session has expired" in low or "revoke" in low \
+                    or r.status_code == 400:
+                _token_ok = False  # หมดอายุ/ถูก revoke ชัดเจน
+            else:
+                _token_ok = None  # error แปลก ๆ → ไม่ตัดสิน (fail-open)
+    except Exception as e:
+        logger.warning(f"[fb_preflight] verify token ล้ม (transient): {e}")
+        _token_ok = None  # เน็ตสะดุด → ไม่บล็อกโพสต์
+    _token_verified_at = now
+    return _token_ok
+
+
+def preflight_ready() -> tuple:
+    """ตรวจความพร้อมก่อนโพสต์เพจ — คืน (ok: bool, reasons: list[str])
+
+    ไม่พร้อม → caller ต้องข้ามโพสต์ + แจ้งเจ้าของ (notify_owner_once)
+    dev/test (sqlite): ไม่มี token = ปกติ (post_feed ถูก mock) → ไม่บล็อก
+    """
+    reasons = []
+    prod = _is_prod()
+    token = (os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or "").strip()
+    if not token:
+        if prod:
+            reasons.append("FACEBOOK_PAGE_ACCESS_TOKEN ไม่ได้ตั้ง — บอทจะโพสต์ไม่ได้")
+    elif verify_page_token() is False:
+        reasons.append("page token ใช้ไม่ได้ (หมดอายุ/ถูก revoke) — ต้อง refresh ใน Meta dashboard")
+    page_id = (os.getenv("FACEBOOK_PAGE_ID") or "1307380735783361").strip()
+    if not page_id:
+        reasons.append("FACEBOOK_PAGE_ID ไม่ได้ตั้ง")
+    return (not reasons, reasons)
+
+
+def notify_owner_once(key: str, text: str) -> bool:
+    """push LINE แจ้งเจ้าของร้าน (throttle: แจ้งซ้ำ key เดิมอย่างมาก 1 ครั้ง/6 ชม. กันสแปม)
+
+    best-effort — dev/test หรือ push ล้ม ไม่พังโค้ด; คืน True ถ้าพยายามส่ง (หรือโดน throttle)
+    หมายเหตุ: throttle เป็น in-memory (per-process) — Render restart จะรีเซ็ต
+    """
+    if not _is_prod():
+        return False  # dev/test: ไม่ยิง LINE จริง
+    now = time.time()
+    with _OWNER_ALERT_LOCK:
+        last = _owner_alert_at.get(key, 0.0)
+        if now - last < _OWNER_ALERT_INTERVAL:
+            return False  # เพิ่งแจ้งเหตุผลนี้ไป (throttle)
+        _owner_alert_at[key] = now
+    try:
+        from linebot import LineBotApi
+        from linebot.models import TextSendMessage
+        from app.services.line_quota import push_guard
+        from app.db import SessionLocal
+        token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN") or ""
+        if not token or "mock" in token.lower():
+            return False
+        admin_uid = (os.getenv("ADMIN_LINE_USER_ID")
+                     or "Uc88eb3896b0e4bcc5fbaa9b78ac1294e").strip()
+        db = SessionLocal()
+        try:
+            if not push_guard(db):
+                logger.warning("[fb_owner_alert] ข้ามแจ้งเจ้าของ (LINE push quota หมด)")
+                return False
+        finally:
+            db.close()
+        LineBotApi(token).push_message(admin_uid, TextSendMessage(text=text[:1500]))
+        return True
+    except Exception as e:
+        logger.warning(f"[fb_owner_alert] push ล้ม: {e}")
+        return False
+
+
+def classify_post_error(error: str) -> bool:
+    """True = error รุนแรง (token หมดอายุ/สิทธิ์หาย/rate-limit) ควรแจ้งเจ้าของ — False = ปกติ/transient"""
+    e = (error or "").lower()
+    return any(m in e for m in _HARD_POST_ERROR_MARKERS)
 
 
 def post_feed(message: str, link: str = "", image_url: str = "",

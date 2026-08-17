@@ -886,3 +886,234 @@ def test_radar_category_cooldown_counts_cron_fbpost(monkeypatch, db):
     assert radar_api.check_category_cooldown_allowed(db, "หูฟัง") is False
     # หมวดอื่นยังโพสต์ได้
     assert radar_api.check_category_cooldown_allowed(db, "ของใช้") is True
+
+
+def test_post_next_product_skips_radar_pending_category(monkeypatch, db):
+    """radar กำลังจะโพสต์ (demand event status='pending' commit ก่อน post_feed) → cron ต้องข้ามหมวดนั้น
+    (ปิดช่องขัดกัน: เดิม cron อ่านแค่ posted/sent → ในหน้าต่างที่ radar กำลังโพสต์ cron ยิงหมวดซ้ำได้)"""
+    from app import models
+    monkeypatch.setenv("FB_POST_PRODUCTS", "1")
+    _reset_products(db)
+    _add_test_product(db, name="หูฟัง A", category="หูฟัง", commission=999)
+    _add_test_product(db, name="ของใช้ B", category="ของใช้", commission=998)
+    # radar กำลังจะโพสต์หูฟัง (pending ยังไม่จบ post_feed)
+    p = db.query(models.Product).filter(models.Product.name == "หูฟัง A").first()
+    lead = models.FacebookDetectedLead(fb_post_id="radar_pending_x", post_url="https://fb.com/x",
+                                       post_text="อยากได้หูฟัง", status="processed")
+    db.add(lead)
+    db.flush()
+    db.add(models.FacebookDemandEvent(lead_id=lead.id, intent="buy_request", demand_score=90,
+                                      notification_status="pending", matched_product_id=p.id))
+    db.commit()
+    monkeypatch.setattr(cron, "generate_script_for_product",
+                        lambda *a, **k: {"caption": "ป้า", "hashtags": []})
+    monkeypatch.setattr(cron, "fetch_product_image", lambda url: "")
+    monkeypatch.setattr(cron, "post_feed",
+                        lambda msg, link="", **k: {"ok": True, "post_id": "p", "error": None})
+    res = cron._post_next_product(db)
+    assert res is not None and res["posted"][0]["posted"] is True
+    assert res["posted"][0]["name"] == "ของใช้ B"  # ข้ามหูฟัง (radar กำลังโพสต์) เลือกของใช้แทน
+
+
+def test_radar_category_cooldown_counts_cron_pending_reservation(monkeypatch, db):
+    """cron จองหมวดก่อนยิงโพสต์ (CampaignLog status='fbpost_pending') → radar ต้องไม่โพสต์หมวดนั้น
+    (ปิดช่องขัดกันทางกลับ: เดิม radar อ่านแค่ fbpost → ในหน้าต่างที่ cron กำลังโพสต์ radar ยิงซ้ำได้)"""
+    from app import models
+    from app.api import facebook_radar as radar_api
+    _add_test_product(db, name="หูฟัง A", category="หูฟัง")
+    earbuds = db.query(models.Product).filter(models.Product.name == "หูฟัง A").first()
+    db.add(models.CampaignLog(category=str(earbuds.id), recipients=1, status="fbpost_pending"))
+    db.commit()
+    # cron กำลังจะโพสต์หูฟัง → radar ไม่ควรโพสต์หูฟังภายใน cooldown
+    assert radar_api.check_category_cooldown_allowed(db, "หูฟัง") is False
+    # หมวดอื่นยังโพสต์ได้
+    assert radar_api.check_category_cooldown_allowed(db, "ของใช้") is True
+
+
+def test_post_next_product_reservation_removed_on_failure(monkeypatch, db):
+    """โพสต์สินค้าล้ม → ต้องลบการจอง fbpost_pending (ไม่งั้นกันหมวดนี้/กัน radar ไปตลอด cooldown)"""
+    from app import models
+    monkeypatch.setenv("FB_POST_PRODUCTS", "1")
+    _reset_products(db)
+    _add_test_product(db, name="สินค้า C", category="ของใช้")
+    monkeypatch.setattr(cron, "generate_script_for_product",
+                        lambda *a, **k: {"caption": "ป้า", "hashtags": []})
+    monkeypatch.setattr(cron, "fetch_product_image", lambda url: "")
+    monkeypatch.setattr(cron, "post_feed",
+                        lambda msg, link="", **k: {"ok": False, "post_id": None,
+                                                    "error": "HTTP 400"})
+    res = cron._post_next_product(db)
+    assert res is None  # ล้มทุกตัว → คืน None ให้ rotation ไปลองคลังอื่น
+    rows = db.query(models.CampaignLog).filter(models.CampaignLog.status == "fbpost_pending").all()
+    assert len(rows) == 0  # การจองถูกลบ ไม่ค้างกัน radar/กันหมวดไปเรื่อย
+
+
+# ===========================================================================
+# Pre-flight readiness + แจ้งเจ้าของ (coordination — ทำงานเป็นขั้นตอน)
+# ===========================================================================
+
+def test_preflight_ready_dev_no_token_ok(monkeypatch):
+    """dev/test (sqlite) ไม่มี token → ถือว่าพร้อม (post_feed ถูก mock — ไม่บล็อก)"""
+    monkeypatch.setattr(fp, "_is_prod", lambda: False)
+    monkeypatch.delenv("FACEBOOK_PAGE_ACCESS_TOKEN", raising=False)
+    ok, reasons = fp.preflight_ready()
+    assert ok is True and reasons == []
+
+
+def test_preflight_ready_prod_no_token_blocked(monkeypatch):
+    """production (postgres) ไม่มี token → ไม่พร้อม (ต้องแจ้งเจ้าของ)"""
+    monkeypatch.setattr(fp, "_is_prod", lambda: True)
+    monkeypatch.delenv("FACEBOOK_PAGE_ACCESS_TOKEN", raising=False)
+    ok, reasons = fp.preflight_ready()
+    assert ok is False
+    assert any("FACEBOOK_PAGE_ACCESS_TOKEN" in r for r in reasons)
+
+
+def test_preflight_ready_prod_bad_token_blocked(monkeypatch):
+    """production token หมดอายุ (Graph API คืน OAuth error) → ไม่พร้อม"""
+    monkeypatch.setattr(fp, "_is_prod", lambda: True)
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok_old")
+    fp._token_ok = None
+    fp._token_verified_at = 0.0
+
+    class Resp:
+        status_code = 400
+        def json(self):
+            return {"error": {"message": "Error validating access token: Session has expired"}}
+
+    monkeypatch.setattr(fp.httpx, "get", lambda *a, **k: Resp())
+    ok, reasons = fp.preflight_ready()
+    assert ok is False
+    assert any("token" in r for r in reasons)
+
+
+def test_verify_page_token_skipped_in_dev(monkeypatch):
+    """dev/test → verify ไม่ยิง Graph API จริง (กันเทสต์ช้า/flaky) คืน True เสมอ"""
+    monkeypatch.setattr(fp, "_is_prod", lambda: False)
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok_dev")
+    monkeypatch.setattr(fp.httpx, "get",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not call Graph")))
+    assert fp.verify_page_token() is True
+
+
+def test_classify_post_error_detects_hard_errors():
+    assert fp.classify_post_error("(#200) Permissions error") is True
+    assert fp.classify_post_error("Session has expired") is True
+    assert fp.classify_post_error("Rate limit reached") is True
+    assert fp.classify_post_error("HTTP 400") is False
+    assert fp.classify_post_error("") is False
+
+
+def test_notify_owner_once_noop_in_dev(monkeypatch):
+    """dev/test → ไม่ยิง LINE จริง"""
+    monkeypatch.setattr(fp, "_is_prod", lambda: False)
+    assert fp.notify_owner_once("k", "test") is False
+
+
+def test_notify_owner_once_throttles_in_prod(monkeypatch):
+    """production: แจ้งเจ้าของครั้งแรกได้ ครั้งที่สอง (key เดียวกัน) ถูก throttle 6 ชม."""
+    monkeypatch.setattr(fp, "_is_prod", lambda: True)
+    monkeypatch.setenv("LINE_CHANNEL_ACCESS_TOKEN", "real_line_token")
+    monkeypatch.setenv("ADMIN_LINE_USER_ID", "U_test_owner")
+    pushed = []
+    fake_api = type("FakeAPI", (), {"push_message": lambda self, uid, msg: pushed.append((uid, msg.text))})
+    import linebot
+    monkeypatch.setattr(linebot, "LineBotApi", lambda token: fake_api())
+    monkeypatch.setattr("app.services.line_quota.push_guard", lambda db: True)
+    try:
+        assert fp.notify_owner_once("fb_preflight_cron", "ครั้งแรก") is True
+        assert fp.notify_owner_once("fb_preflight_cron", "ครั้งที่สอง") is False  # throttle
+        assert len(pushed) == 1
+        assert pushed[0][0] == "U_test_owner"
+    finally:
+        fp._owner_alert_at.clear()
+
+
+def test_run_facebook_auto_post_blocks_when_preflight_fails(monkeypatch):
+    """ไม่พร้อม (preflight fail) → ข้ามโพสต์ + แจ้งเจ้าของ (ไม่ยิง post_feed) — ทำงานเป็นขั้นตอน"""
+    from app.api import cron as cron_mod
+    notified = []
+    posted = []
+    monkeypatch.setattr(cron_mod, "preflight_ready", lambda: (False, ["token หมดอายุ"]))
+    monkeypatch.setattr(cron_mod, "notify_owner_once",
+                        lambda key, text: notified.append((key, text)) or True)
+    monkeypatch.setattr(cron_mod, "post_feed",
+                        lambda *a, **k: posted.append(a) or {"ok": True, "post_id": "x"})
+    res = cron_mod.run_facebook_auto_post()
+    assert res["posted"] == []
+    assert "ยังไม่พร้อม" in res["note"]
+    assert posted == []  # ไม่ยิงโพสต์
+    assert notified and notified[0][0] == "fb_preflight_cron"  # แจ้งเจ้าของก่อน
+
+
+# ===========================================================================
+# บอทลบโพสต์ปลอมอัตโนมัติ (Facebook fake-post watcher)
+# ===========================================================================
+
+def test_fb_fake_watcher_enabled(monkeypatch):
+    """บอทลบโพสต์ปลอม: เปิดเมื่อ prod (postgres) + มี FB token — dev (sqlite)/ไม่มี token ปิด"""
+    from app import main as main_mod
+    monkeypatch.setenv("DATABASE_URL", "postgresql://x")
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok")
+    assert main_mod._fb_fake_watcher_enabled() is True
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///x")  # dev → ปิด (ไม่ลบของจริงโดยไม่ได้ตั้งใจ)
+    assert main_mod._fb_fake_watcher_enabled() is False
+    monkeypatch.setenv("DATABASE_URL", "postgresql://x")
+    monkeypatch.delenv("FACEBOOK_PAGE_ACCESS_TOKEN", raising=False)  # prod แต่ไม่มี token → ปิด
+    assert main_mod._fb_fake_watcher_enabled() is False
+
+
+def test_facebook_fake_post_watcher_loop_calls_sweep(monkeypatch):
+    """watcher ลบโพสต์ปลอม: วนตรวจทุก FB_FAKE_POST_CHECK_SECONDS + เรียก sweep_fake_posts
+    (ทำงานอัตโนมัติ ไม่ต้องรอครอน 6 ชม.)"""
+    import asyncio
+    import pytest
+    from app import main as main_mod
+    monkeypatch.setattr(main_mod, "_fb_fake_watcher_enabled", lambda: True)
+    monkeypatch.setattr(main_mod, "FB_FAKE_POST_CHECK_SECONDS", 1)
+    calls = []
+
+    class _Stop(Exception):
+        pass
+
+    async def fake_sleep(s):
+        if calls:
+            raise _Stop()
+
+    async def fake_to_thread(fn, *a, **k):
+        return await fn(*a, **k)
+
+    def fake_sweep(limit=100, dry_run=False):
+        calls.append((limit, dry_run))
+        return {"scanned": 1, "deleted": [{"message": "shope.ee"}], "kept_count": 0,
+                "dry_run": False}
+
+    import app.api.cron as cron_mod
+    monkeypatch.setattr(cron_mod, "sweep_fake_posts", fake_sweep)
+    monkeypatch.setattr(main_mod.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(main_mod.asyncio, "to_thread", fake_to_thread)
+    monkeypatch.setattr("app.services.facebook_poster.notify_owner_once", lambda *a, **k: False)
+
+    with pytest.raises(_Stop):
+        asyncio.run(main_mod.facebook_fake_post_watcher())
+    assert calls and calls[0] == (100, False)  # กวาด 100 ตัว ลบจริง (dry_run=False)
+
+
+def test_sweep_fake_posts_keeps_real_deletes_fake(monkeypatch, db):
+    """sweep_fake_posts (ใช้ทั้ง cron endpoint + watcher): ลบโพสต์ปลอม, เก็บโพสต์จริง"""
+    from fastapi.testclient import TestClient
+    from app.main import app
+    monkeypatch.setattr(cron, "_authorized", lambda t: True)
+    fake_posts = [
+        {"id": "pg_fake", "message": "ใจเย็นๆ หูฟังลิงก์จริง", "urls": ["https://shope.ee/abc"]},
+        {"id": "pg_real", "message": "ขายของจริง", "urls": ["https://s.shopee.co.th/test"]},
+    ]
+    monkeypatch.setattr(cron, "fetch_page_posts", lambda limit=100: fake_posts)
+    deleted = []
+    monkeypatch.setattr(cron, "delete_page_post", lambda pid: deleted.append(pid) or True)
+    client = TestClient(app)
+    r = client.post("/api/cron/clean-fake-posts", params={"token": "x"})
+    b = r.json()
+    assert b["scanned"] == 2 and b["kept_count"] == 1
+    assert [d["id"] for d in b["deleted"]] == ["pg_fake"]
+    assert deleted == ["pg_fake"]

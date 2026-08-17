@@ -1,0 +1,20 @@
+{
+  "skill_name": "facebook-post-coordination",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "เพจป้าเข็มเงียบมาหลายวันแล้ว ทั้งที่ FB_AUTO_POST_INTERVAL ตั้งไว้ 240 นาที ตรวจให้หน่อยว่าเป็นเพราะอะไรได้บ้าง และจะตรวจยังไงเป็นขั้นตอน",
+      "expected_output": "ไล่ขั้นตอนตาม workflow: 1) preflight (token หมดอายุ/ไม่ตั้ง) 2) _auto_post_due (โพสต์ล่าสุดยังไม่ครบ interval) 3) rotation ติดตายที่ slot ตัวที่โพสต์ล้ม 4) _AUTO_POST_LOCK ติด 5) cooldown/dedup หมด (สินค้าโพสต์ครบ) 6) FB_POST_PRODUCTS ปิด — ชี้วิธีตรวจ log/DB แต่ละข้อ"
+    },
+    {
+      "id": 2,
+      "prompt": "radar กับ cron โพสต์หูฟังซ้ำกันภายในชั่วโมงเดียว อยากรู้ว่าเป็นไปได้ยังไง และจะกันยังไง",
+      "expected_output": "อธิบาย cross-flow cooldown: cron ต้องนับ radar pending + radar ต้องนับ cron fbpost_pending + cron ต้องจองหมวดก่อนยิง (commit ก่อน post_feed) — ระบุไฟล์/จุดที่ต้องเช็ค"
+    },
+    {
+      "id": 3,
+      "prompt": "อยากเพิ่มบอทโพสต์ตัวใหม่ (เช่น โพสต์โปรโมชันประจำวัน) ต้องทำตามกฎอะไรบ้างให้ไม่ไปชนกับ radar/cron ที่มีอยู่",
+      "expected_output": "รายการกฎ: ใช้ post_feed จุดเดียว + preflight_ready ก่อนยิง + จองหมวด/นับ cooldown ทั้ง 2 ตาราง (CampaignLog fbpost/fbpost_pending + demand_event posted/sent/pending) + dedup CampaignLog + _AUTO_POST_LOCK + แจ้งเจ้าของ notify_owner_once เมื่อล้ม/ไม่พร้อม"
+    }
+  ]
+}
