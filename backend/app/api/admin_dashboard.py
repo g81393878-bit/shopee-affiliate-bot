@@ -20,7 +20,7 @@ import os
 import time
 
 from fastapi import APIRouter, Cookie, Depends, Form, HTTPException, Query
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -38,6 +38,22 @@ STATUS_VALUES = {"ok", "dead", "suspect", "unknown", "none"}
 MIN_SALES = int(os.getenv("MIN_SALES", "2000"))
 SESSION_TTL = 7 * 24 * 3600  # cookie อายุ 7 วัน
 COOKIE_NAME = "pkh_admin"
+
+# ชื่อแพ็กเกจ (ตรงกับ PACKAGES ใน line_bot.py) — ใช้แสดงในหน้ารายการสลิป
+_PACKAGE_LABELS = {
+    "lean": "🟡 Lean",
+    "starter": "🟢 Starter",
+    "business": "🔵 Business",
+    "whitelabel": "🟣 White-Label",
+    "ขายขาด": "🟠 ขายขาด",
+}
+
+_PURCHASE_STATUS_LABELS = {
+    "interested": "สนใจ",
+    "paid_pending": "รอยืนยัน",
+    "confirmed": "ยืนยันแล้ว",
+    "cancelled": "ยกเลิก",
+}
 _ADMIN_HTML = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                            "static", "admin.html")
 
@@ -259,6 +275,81 @@ def admin_products(
                 "created_at": (p.created_at or datetime.datetime.now(datetime.timezone.utc)).isoformat(),
             } for p in rows],
         }
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# ขายบอท: รายการสั่งซื้อ + สลิปโอนเงิน
+# ---------------------------------------------------------------------------
+
+@router.get("/api/admin/purchases")
+def admin_purchases(
+    status: str = "",
+    q: str = "",
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=100),
+    _: None = Depends(require_admin),
+):
+    """รายการสั่งซื้อบอท (bot_purchases) + ชื่อลูกค้า + รูปสลิปล่าสุด — สำหรับหน้า "💰 สลิป"""
+    db = _db()
+    try:
+        query = db.query(models.BotPurchase)
+        if status:
+            query = query.filter(models.BotPurchase.status == status)
+        if q.strip():
+            like = f"%{q.strip()}%"
+            query = query.filter((models.BotPurchase.line_user_id.ilike(like)) |
+                                 (models.BotPurchase.package_key.ilike(like)))
+        total = query.count()
+        rows = (query.order_by(models.BotPurchase.created_at.desc().nullslast())
+                    .offset((page - 1) * per_page).limit(per_page).all())
+        uids = [r.line_user_id for r in rows]
+        users = {u.line_user_id: u for u in db.query(models.User)
+                 .filter(models.User.line_user_id.in_(uids)).all()}
+        # สลิปล่าสุดของแต่ละลูกค้า (คนละ 1 รูป — query ทีละรายการ จำนวนน้อย)
+        slips = {}
+        for uid in uids:
+            s = (db.query(models.BotPurchaseSlip)
+                 .filter(models.BotPurchaseSlip.line_user_id == uid)
+                 .order_by(models.BotPurchaseSlip.id.desc()).first())
+            if s:
+                slips[uid] = s
+        return {
+            "total": total,
+            "page": page,
+            "pages": max(1, (total + per_page - 1) // per_page),
+            "items": [{
+                "id": r.id,
+                "line_user_id": r.line_user_id,
+                "customer": (getattr(users.get(r.line_user_id), "name", None)
+                              or r.line_user_id),
+                "package_key": r.package_key,
+                "package": _PACKAGE_LABELS.get(r.package_key, r.package_key),
+                "status": r.status,
+                "status_label": _PURCHASE_STATUS_LABELS.get(r.status, r.status),
+                "amount": r.amount,
+                "ref_no": r.ref_no,
+                "slip_id": slips.get(r.line_user_id).id if slips.get(r.line_user_id) else None,
+                "slip_size_bytes": slips.get(r.line_user_id).size_bytes if slips.get(r.line_user_id) else 0,
+                "created_at": (r.created_at or datetime.datetime.now(datetime.timezone.utc)).isoformat(),
+                "paid_at": (r.paid_at or "").isoformat() if r.paid_at else None,
+                "confirmed_at": (r.confirmed_at or "").isoformat() if r.confirmed_at else None,
+            } for r in rows],
+        }
+    finally:
+        db.close()
+
+
+@router.get("/api/admin/slips/{slip_id}/image")
+def admin_slip_image(slip_id: int, _: None = Depends(require_admin)):
+    """เสิร์ฟรูปสลิปในแดชบอร์ด — ใช้ admin cookie ไม่ต้องพึ่ง token จาก env"""
+    db = _db()
+    try:
+        slip = db.query(models.BotPurchaseSlip).filter_by(id=slip_id).first()
+        if not slip or not slip.content:
+            raise HTTPException(status_code=404, detail="ไม่พบสลิปนี้")
+        return Response(content=slip.content, media_type=slip.content_type or "image/jpeg")
     finally:
         db.close()
 

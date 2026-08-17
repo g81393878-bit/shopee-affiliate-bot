@@ -955,8 +955,8 @@ def slip_view_url(slip_id: int) -> str:
 
 def _notify_owner_slip(user, purchase, size_bytes: int, content_type: str,
                       expected: str = None, matched: bool = False) -> None:
-    """แจ้งเจ้าของว่าลูกค้าส่งรูปสลิปมา — ยอดจากสลิป (OCR) เทียบยอดคาด + เลขอ้างอิง + ลิงก์ดูสลิป
-    แล้วสั่ง /ยืนยัน <userId> เมื่อเช็คยอดแล้ว"""
+    """แจ้งเจ้าของว่าลูกค้าส่งรูปสลิปมา — ส่งเป็น Flex การ์ด (แตะปุ่มดูสลิปได้ทันทีในแอป LINE
+    ไม่ต้องคัดลอกลิงก์) + ข้อความ /ยืนยัน <userId> สำหรับสั่งยืนยัน"""
     if "mock" in LINE_ACCESS_TOKEN.lower():
         return
     try:
@@ -980,8 +980,48 @@ def _notify_owner_slip(user, purchase, size_bytes: int, content_type: str,
             lines.append(f"🔢 เลขอ้างอิง: {purchase.ref_no}")
         if purchase.slip_url:
             lines.append(f"ดูสลิป: {purchase.slip_url}")
-        lines.append(f"เช็คยอดแล้วยืนยัน: /ยืนยัน {uid}")
-        line_bot_api.push_message(ADMIN_LINE_USER_ID, TextSendMessage(text="\n".join(lines)))
+        alt_text = "\n".join(lines)
+        if purchase.slip_url:
+            # การ์ด Flex — ปุ่ม "เปิดดูสลิป" แตะแล้วเปิดในแอป LINE ได้เลย
+            amount_text = purchase.amount or f"อ่านยอดไม่ได้ (ยอดคาด: {expected})"
+            amount_color = "#27ae60" if matched else "#e74c3c"
+            contents = {
+                "type": "bubble",
+                "header": {
+                    "type": "box", "layout": "vertical", "backgroundColor": "#27ae60",
+                    "contents": [
+                        {"type": "text", "text": f"📸 สลิปจาก {name}", "color": "#FFFFFF",
+                         "weight": "bold", "size": "md", "align": "center"},
+                    ],
+                },
+                "body": {
+                    "type": "box", "layout": "vertical", "spacing": "sm",
+                    "contents": [
+                        {"type": "text", "text": f"ลูกค้า: {name}", "size": "sm", "wrap": True},
+                        {"type": "text", "text": f"{uid} · {content_type} · {size_txt}", "size": "xs",
+                         "color": "#888888", "wrap": True},
+                        {"type": "text", "text": f"แพ็กเกจ: {pkg}", "size": "sm", "wrap": True},
+                        {"type": "text", "text": f"ยอดจากสลิป (OCR): {amount_text}", "size": "sm",
+                         "wrap": True, "color": amount_color, "weight": "bold"},
+                    ],
+                },
+                "footer": {
+                    "type": "box", "layout": "vertical",
+                    "contents": [
+                        {"type": "button", "style": "primary", "color": "#27ae60", "height": "sm",
+                         "action": {"type": "uri", "label": "🔍 เปิดดูสลิปเต็มขนาด",
+                                     "uri": purchase.slip_url}},
+                    ],
+                },
+            }
+            line_bot_api.push_message(ADMIN_LINE_USER_ID, [
+                FlexSendMessage(alt_text=alt_text, contents=contents),
+                TextSendMessage(text=f"เช็คยอดแล้วยืนยัน: /ยืนยัน {uid}"),
+            ])
+        else:
+            # ไม่มีลิงก์สลิป (กันไว้) — ข้อความเดิม
+            alt_text += f"\nเช็คยอดแล้วยืนยัน: /ยืนยัน {uid}"
+            line_bot_api.push_message(ADMIN_LINE_USER_ID, TextSendMessage(text=alt_text))
     except Exception as e:
         logger.warning(f"owner slip notify failed: {e}")
 

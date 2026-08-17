@@ -96,6 +96,7 @@ a.del { color:var(--red); cursor:pointer; text-decoration:underline; margin-left
       <button id="tabRadar" onclick="showTab('radar')">📡 Radar Feed</button>
       <button id="tabCooldown" onclick="showTab('cooldown')">⏰ Cooldown</button>
       <button id="tabGroups" onclick="showTab('groups')">👥 กลุ่ม Facebook</button>
+      <button id="tabSlips" onclick="showTab('slips')">💰 สลิป</button>
     </nav>
     <button id="logout">ออกจากระบบ</button>
   </header>
@@ -239,6 +240,37 @@ a.del { color:var(--red); cursor:pointer; text-decoration:underline; margin-left
         </table>
       </section>
     </div>
+
+    <!-- สลิปโอนเงิน (ขายบอท) -->
+    <div id="viewSlips">
+      <div class="filters" style="margin-bottom:16px">
+        <select id="slipStatus" onchange="loadSlips(1)">
+          <option value="">ทุกสถานะ</option>
+          <option value="interested">สนใจ</option>
+          <option value="paid_pending">รอยืนยัน</option>
+          <option value="confirmed">ยืนยันแล้ว</option>
+          <option value="cancelled">ยกเลิก</option>
+        </select>
+        <input id="slipQ" placeholder="🔍 หา userId / แพ็กเกจ" style="width:220px"
+               onkeydown="if(event.key==='Enter')loadSlips(1)">
+        <button onclick="loadSlips(1)">ค้น</button>
+        <span id="slipTotal" style="color:var(--gray);font-size:13px"></span>
+      </div>
+      <section class="panel">
+        <table>
+          <thead><tr>
+            <th>#</th><th>ลูกค้า</th><th>แพ็กเกจ</th><th>ยอดจากสลิป (OCR)</th><th>Ref No</th>
+            <th>สถานะ</th><th>สลิป</th><th>แจ้งโอน</th>
+          </tr></thead>
+          <tbody id="slipRows"></tbody>
+        </table>
+        <div class="filters" style="margin-top:12px">
+          <button onclick="slipPage(-1)">‹ ก่อนหน้า</button>
+          <span id="slipPageInfo"></span>
+          <button onclick="slipPage(1)">ถัดไป ›</button>
+        </div>
+      </section>
+    </div>
   </main>
 </div>
 
@@ -342,7 +374,7 @@ $('logout').onclick = () => { fetch('/admin/logout', { method: 'POST' }).then(()
 
 // ---- tabs ----
 function showTab(t) {
-  ['stats','products','radar','cooldown','groups'].forEach(n => {
+  ['stats','products','radar','cooldown','groups','slips'].forEach(n => {
     $('view' + n.charAt(0).toUpperCase() + n.slice(1)).classList.toggle('hidden', t !== n);
     $('tab'  + n.charAt(0).toUpperCase() + n.slice(1)).classList.toggle('active', t === n);
   });
@@ -350,6 +382,40 @@ function showTab(t) {
   if (t === 'radar')    { loadRadarFeed(); }
   if (t === 'cooldown') { loadCooldown(); }
   if (t === 'groups')   { loadGroups(); }
+  if (t === 'slips')    { loadSlips(1); }
+}
+
+// ---- สลิป (ขายบอท) ----
+let slipState = { page: 1, pages: 1, total: 0 };
+const SLIP_STATUS_CLS = { interested:'', paid_pending:'none', confirmed:'ok', cancelled:'dead' };
+
+async function loadSlips(page) {
+  try {
+    const st = $('slipStatus').value, q = $('slipQ').value.trim();
+    const url = `/api/admin/purchases?page=${page || 1}&per_page=25&status=${encodeURIComponent(st)}&q=${encodeURIComponent(q)}`;
+    const s = await api(url);
+    slipState = { page: s.page, pages: s.pages, total: s.total };
+    $('slipTotal').textContent = `ทั้งหมด ${s.total.toLocaleString()} รายการ`;
+    $('slipPageInfo').textContent = `หน้า ${s.page} / ${s.pages}`;
+    $('slipRows').innerHTML = s.items.map((r, i) => {
+      const amount = r.amount ? `฿${esc(r.amount)}` : '<span style="color:var(--gray)">—</span>';
+      const ref = esc(r.ref_no || '—');
+      const img = r.slip_id
+        ? `<a href="/api/admin/slips/${r.slip_id}/image" target="_blank" title="เปิดสลิปเต็มขนาด"><img src="/api/admin/slips/${r.slip_id}/image" style="height:52px;border-radius:6px;border:1px solid var(--border)" alt="สลิป"></a>`
+        : '<span style="color:var(--gray)">ไม่มีรูป</span>';
+      const paid = r.paid_at ? new Date(r.paid_at).toLocaleString('th-TH', { dateStyle:'short', timeStyle:'short' }) : '—';
+      return `<tr><td>${(slipState.page-1)*25 + i + 1}</td>` +
+        `<td>${esc(r.customer)}<br><span style="color:var(--gray)">${esc(r.line_user_id)}</span></td>` +
+        `<td>${esc(r.package)}</td><td>${amount}</td><td>${esc(ref)}</td>` +
+        `<td><span class="badge ${SLIP_STATUS_CLS[r.status] || ''}">${esc(r.status_label)}</span></td>` +
+        `<td>${img}</td><td>${paid}</td></tr>`;
+    }).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--gray)">ยังไม่มีรายการ</td></tr>';
+  } catch (e) { alert(e.message); }
+}
+
+function slipPage(d) {
+  const nx = slipState.page + d;
+  if (nx >= 1 && nx <= slipState.pages) loadSlips(nx);
 }
 
 // ---- stats ----

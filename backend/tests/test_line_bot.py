@@ -692,6 +692,45 @@ def test_slip_ocr_match_notifies_owner(sim, db, monkeypatch):
     assert p.ref_no == "REF12345"
 
 
+def test_owner_slip_notify_has_tap_button(sim, db, monkeypatch):
+    # แจ้งเจ้าของเป็น Flex การ์ด + ปุ่มแตะเปิดสลิปในแอป LINE ได้ทันที (ไม่ต้องคัดลอกลิงก์)
+    captured = {}
+    monkeypatch.setattr(lb.line_bot_api, "push_message",
+                        lambda uid, msgs: captured.update(uid=uid, msgs=msgs))
+    monkeypatch.setattr(lb, "extract_slip_info",
+                        lambda data, content_type="image/jpeg": {"amount": "490.00", "ref_no": "REF1"})
+    sim.send("U_cust_1", "ยอด lean")
+    _send_slip(sim, monkeypatch, "U_cust_1", b"slip", "image/jpeg")
+    assert captured["uid"] == lb.ADMIN_LINE_USER_ID
+    msgs = captured["msgs"]
+    assert len(msgs) == 2
+    flex = next(m for m in msgs if isinstance(m, lb.FlexSendMessage))
+    # alt_text = ข้อความสรุป (fallback/accessibility) — ข้อมูลครบเหมือนเดิม
+    assert "ส่งรูปสลิปมาแล้ว" in flex.alt_text
+    assert "✓ ตรงกับยอดคาด" in flex.alt_text
+    footer = flex.contents.footer.contents[0]  # FlexSDK แปลง dict → typed container
+    assert footer.type == "button"
+    assert footer.action.type == "uri"
+    assert footer.action.uri.startswith("https://") and "/api/slips/" in footer.action.uri
+    # ข้อความยืนยันแยกเป็นอีกข้อความ ไม่ปนในการ์ด
+    text = next(m for m in msgs if isinstance(m, lb.TextSendMessage))
+    assert "/ยืนยัน U_cust_1" in text.text
+
+
+def test_owner_slip_notify_flex_external_uri_scheme(sim, db, monkeypatch):
+    # uri ของปุ่มต้องเป็น http(s) — LINE ปฏิเสธ uri อย่างอื่น
+    captured = {}
+    monkeypatch.setattr(lb.line_bot_api, "push_message",
+                        lambda uid, msgs: captured.update(msgs=msgs))
+    monkeypatch.setattr(lb, "extract_slip_info",
+                        lambda data, content_type="image/jpeg": {"amount": None, "ref_no": None})
+    sim.send("U_cust_1", "ยอด lean")
+    _send_slip(sim, monkeypatch, "U_cust_1", b"slip", "image/jpeg")
+    flex = next(m for m in captured["msgs"] if isinstance(m, lb.FlexSendMessage))
+    uri = flex.contents.footer.contents[0].action.uri
+    assert uri.startswith("https://") or uri.startswith("http://")
+
+
 def test_slip_ocr_mismatch_flags_owner(sim, db, monkeypatch):
     # OCR อ่านยอดไม่ตรงยอดคาด → เตือนเจ้าของเช็คให้ดีก่อนยืนยัน
     monkeypatch.setattr(lb, "extract_slip_info",
