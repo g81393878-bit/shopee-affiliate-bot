@@ -17,6 +17,8 @@ class Settings:
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
     # Groq model (OpenAI-compatible API): e.g. llama-3.3-70b-versatile
     GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    # Groq vision model สำหรับ OCR สลิป (อ่านรูป): ต้องเป็น model ที่รองรับภาพ
+    SLIP_OCR_MODEL: str = os.getenv("SLIP_OCR_MODEL", "llama-3.2-11b-vision-preview")
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
     # Claude model ผ่าน OpenAI-compat endpoint (https://api.anthropic.com/v1/): e.g. claude-opus-5
     ANTHROPIC_MODEL: str = os.getenv("ANTHROPIC_MODEL", "claude-opus-5")

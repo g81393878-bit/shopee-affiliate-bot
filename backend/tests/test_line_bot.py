@@ -12,6 +12,7 @@ import pytest
 
 import app.api.line_bot as lb  # noqa: E402
 from app import models  # noqa: E402
+from app.services import slip_ocr  # noqa: E402
 
 
 # ---------- ค้นสินค้าที่ควรเจอ (intent=search) ----------
@@ -562,6 +563,7 @@ def _send_slip(sim, monkeypatch, uid, data=b"fake-slip-image", content_type="ima
 
 def test_slip_image_stored_and_notifies_owner(sim, db, monkeypatch):
     # ลูกค้าสั่งบอทแล้วส่งรูปสลิป → เก็บรูป + ลิงก์ + สถานะรอยืนยัน + แจ้งเจ้าของ
+    # (GROQ key ว่างในเทสต์ → OCR ปิด ยอด/ref เป็น None + แจ้งอ่านยอดไม่ได้)
     monkeypatch.delenv("SLIP_VIEW_TOKEN", raising=False)
     monkeypatch.delenv("CRON_TOKEN", raising=False)
     sim.send("U_cust_1", "ยอด lean")
@@ -569,13 +571,15 @@ def test_slip_image_stored_and_notifies_owner(sim, db, monkeypatch):
     assert "รับรูปสลิปแล้ว" in r["preview"]
     assert len(r["owner_pushes"]) == 1
     assert "ส่งรูปสลิปมาแล้ว" in r["owner_pushes"][0]
+    assert "อ่านยอดจากสลิปไม่ได้" in r["owner_pushes"][0]
+    assert "ยอดคาด: 490 บาท" in r["owner_pushes"][0]
     assert "ดูสลิป:" in r["owner_pushes"][0]
     assert "/api/slips/" in r["owner_pushes"][0]
     assert "/ยืนยัน U_cust_1" in r["owner_pushes"][0]
     p = _purchase(db, "U_cust_1")
     assert p.status == "paid_pending"
     assert p.slip_url and "/api/slips/" in p.slip_url
-    assert p.amount == "490 บาท"  # ยอดคาดจากแพ็กเกจ lean
+    assert p.amount is None  # OCR ปิดในเทสต์
     assert p.ref_no is None
     slip = db.query(models.BotPurchaseSlip).filter_by(line_user_id="U_cust_1").first()
     assert slip is not None
@@ -672,6 +676,77 @@ def test_get_slip_image_unknown_id_404(db, monkeypatch):
     with pytest.raises(lb.HTTPException) as exc:
         lb.get_slip_image(999999, token="")
     assert exc.value.status_code == 404
+
+
+def test_slip_ocr_match_notifies_owner(sim, db, monkeypatch):
+    # OCR อ่านยอดได้ + ตรงยอดคาด → เก็บ amount/ref_no + แจ้งเจ้าของ ✓ ตรง
+    monkeypatch.setattr(lb, "extract_slip_info",
+                        lambda data, content_type="image/jpeg": {"amount": "490.00", "ref_no": "REF12345"})
+    sim.send("U_cust_1", "ยอด lean")
+    r = _send_slip(sim, monkeypatch, "U_cust_1", b"slip", "image/jpeg")
+    assert "✓ ตรงกับยอดคาด" in r["owner_pushes"][0]
+    assert "490.00 บาท" in r["owner_pushes"][0]
+    assert "REF12345" in r["owner_pushes"][0]
+    p = _purchase(db, "U_cust_1")
+    assert p.amount == "490.00"
+    assert p.ref_no == "REF12345"
+
+
+def test_slip_ocr_mismatch_flags_owner(sim, db, monkeypatch):
+    # OCR อ่านยอดไม่ตรงยอดคาด → เตือนเจ้าของเช็คให้ดีก่อนยืนยัน
+    monkeypatch.setattr(lb, "extract_slip_info",
+                        lambda data, content_type="image/jpeg": {"amount": "500.00", "ref_no": None})
+    sim.send("U_cust_1", "ยอด lean")
+    r = _send_slip(sim, monkeypatch, "U_cust_1", b"slip", "image/jpeg")
+    assert "ไม่ตรงกับยอดคาด" in r["owner_pushes"][0]
+    assert "500.00 บาท" in r["owner_pushes"][0]
+    p = _purchase(db, "U_cust_1")
+    assert p.amount == "500.00"
+    assert p.ref_no is None
+
+
+def test_slip_ocr_parsing_helpers():
+    assert slip_ocr.parse_amount("490.00") == 490.0
+    assert slip_ocr.parse_amount("1,990 บาท") == 1990.0
+    assert slip_ocr.parse_amount(None) is None
+    assert slip_ocr.parse_amount("อ่านไม่ออก") is None
+    assert slip_ocr.parse_amount_range("490 บาท") == (490.0, 490.0)
+    assert slip_ocr.parse_amount_range("7,500–12,500 บาท") == (7500.0, 12500.0)
+    assert slip_ocr.parse_amount_range("") is None
+
+
+def test_slip_ocr_amount_matches():
+    assert slip_ocr.amount_matches("490.00", "490 บาท") is True
+    assert slip_ocr.amount_matches("1,990.00", "1,990 บาท") is True
+    assert slip_ocr.amount_matches("10000", "7,500–12,500 บาท") is True
+    assert slip_ocr.amount_matches("500", "490 บาท") is False
+    assert slip_ocr.amount_matches(None, "490 บาท") is False
+
+
+def test_extract_slip_info_no_key_returns_none(monkeypatch):
+    # ไม่มี GROQ_API_KEY (conftest ปิด) → ไม่ยิง network คืน None/None
+    monkeypatch.setattr(slip_ocr.settings, "GROQ_API_KEY", "")
+    assert slip_ocr.extract_slip_info(b"img", "image/png") == {"amount": None, "ref_no": None}
+
+
+def test_extract_slip_info_parses_groq_json(monkeypatch):
+    # Groq vision (OpenAI-compat) คืน JSON → parse เป็น amount/ref_no
+    class _FakeClient:
+        api_key = "gsk_fake123"
+
+        class chat:
+            class completions:
+                @staticmethod
+                def create(**kwargs):
+                    assert kwargs["model"] == slip_ocr.settings.SLIP_OCR_MODEL
+                    assert kwargs["messages"][0]["content"][1]["type"] == "image_url"
+                    return type("R", (), {"choices": [type("C", (), {
+                        "message": type("M", (), {"content": '{"amount": "490.00", "ref_no": "REF456"}'})()
+                    })()]})()
+
+    monkeypatch.setattr(slip_ocr, "groq_clients", lambda: [_FakeClient()])
+    monkeypatch.setattr(slip_ocr.settings, "GROQ_API_KEY", "real_key")
+    assert slip_ocr.extract_slip_info(b"img", "image/png") == {"amount": "490.00", "ref_no": "REF456"}
 
 
 def test_payment_reply_shows_account_numbers_as_text(sim, monkeypatch):

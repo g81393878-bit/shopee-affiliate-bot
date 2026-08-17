@@ -24,6 +24,7 @@ from app.services.web_search import web_search_answer
 from app.services.hermes_brain import load_skills_safe, market_emphasis
 from app.config import settings
 from app.services.bot_profile import BOT_NAME, BOT_SLOGAN, owner_contact_text
+from app.services.slip_ocr import extract_slip_info, amount_matches
 
 logger = logging.getLogger(__name__)
 
@@ -952,8 +953,10 @@ def slip_view_url(slip_id: int) -> str:
     return url
 
 
-def _notify_owner_slip(user, purchase, size_bytes: int, content_type: str) -> None:
-    """แจ้งเจ้าของว่าลูกค้าส่งรูปสลิปมา (ขนาด/ชนิด/ยอดคาด/ลิงก์ดูสลิป) — เช็คยอดแล้ว /ยืนยัน <userId>"""
+def _notify_owner_slip(user, purchase, size_bytes: int, content_type: str,
+                      expected: str = None, matched: bool = False) -> None:
+    """แจ้งเจ้าของว่าลูกค้าส่งรูปสลิปมา — ยอดจากสลิป (OCR) เทียบยอดคาด + เลขอ้างอิง + ลิงก์ดูสลิป
+    แล้วสั่ง /ยืนยัน <userId> เมื่อเช็คยอดแล้ว"""
     if "mock" in LINE_ACCESS_TOKEN.lower():
         return
     try:
@@ -967,7 +970,14 @@ def _notify_owner_slip(user, purchase, size_bytes: int, content_type: str) -> No
         lines = [f"📸 ลูกค้า {name} ({uid}) ส่งรูปสลิปมาแล้ว ({content_type}, {size_txt})!",
                  f"แพ็กเกจ: {pkg}"]
         if purchase.amount:
-            lines.append(f"ยอดที่คาด: {purchase.amount}")
+            if matched:
+                lines.append(f"💵 ยอดจากสลิป: {purchase.amount} บาท ✓ ตรงกับยอดคาด ({expected})")
+            else:
+                lines.append(f"⚠️ ยอดจากสลิป ({purchase.amount} บาท) ไม่ตรงกับยอดคาด ({expected}) — เช็คให้ดีก่อนยืนยัน")
+        else:
+            lines.append(f"💵 อ่านยอดจากสลิปไม่ได้ (ยอดคาด: {expected}) — ดูจากลิงก์ด้านล่าง")
+        if purchase.ref_no:
+            lines.append(f"🔢 เลขอ้างอิง: {purchase.ref_no}")
         if purchase.slip_url:
             lines.append(f"ดูสลิป: {purchase.slip_url}")
         lines.append(f"เช็คยอดแล้วยืนยัน: /ยืนยัน {uid}")
@@ -3408,15 +3418,20 @@ def image_slip(event):
                 logger.warning(f"slip download failed: {e}")
                 reply = TextSendMessage(text=SLIP_REPLY_ERROR)
             else:
+                ocr = extract_slip_info(data, content_type)  # best-effort — ล้มไม่บล็อก flow
+                expected = _expected_amount(purchase.package_key)
                 slip = models.BotPurchaseSlip(line_user_id=line_user_id, content=data,
                                               content_type=content_type, size_bytes=len(data))
                 db.add(slip)
                 db.flush()  # ได้ slip.id สำหรับทำลิงก์เปิดดูสลิป
                 purchase.status = "paid_pending"
                 purchase.slip_url = slip_view_url(slip.id)
-                purchase.amount = _expected_amount(purchase.package_key)
+                purchase.amount = ocr.get("amount")
+                purchase.ref_no = ocr.get("ref_no")
                 db.commit()
-                _notify_owner_slip(user, purchase, len(data), content_type)
+                _notify_owner_slip(user, purchase, len(data), content_type,
+                                   expected=expected,
+                                   matched=amount_matches(purchase.amount, expected))
                 reply = TextSendMessage(text=SLIP_REPLY_WITH_ORDER)
     except Exception as e:
         logger.error(f"Error processing slip image: {e}")

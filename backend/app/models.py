@@ -55,8 +55,8 @@ class BotPurchase(Base):
     paid_at = Column(DateTime(timezone=True), nullable=True)       # ลูกค้าแจ้งโอนเงินเมื่อไหร่
     confirmed_at = Column(DateTime(timezone=True), nullable=True)  # เจ้าของยืนยันรับเงิน (เริ่มทำ) เมื่อไหร่
     slip_url = Column(Text, nullable=True)      # ลิงก์เปิดดูรูปสลิป (แจ้งเจ้าของในแชท)
-    amount = Column(String(50), nullable=True)  # ยอดที่คาดว่าจะโอนตามแพ็กเกจ (OCR ทับด้วยยอดจริงจากสลิป)
-    ref_no = Column(String(50), nullable=True)  # เลขอ้างอิงจากสลิป (OCR เติม)
+    amount = Column(String(50), nullable=True)  # ยอดเงินจากสลิป (OCR) — เทียบกับยอดคาดจากแพ็กเกจ
+    ref_no = Column(String(50), nullable=True)  # เลขอ้างอิง/Ref No จากสลิป (OCR)
 
 
 class BotPurchaseSlip(Base):
