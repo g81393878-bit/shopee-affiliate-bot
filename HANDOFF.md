@@ -8,11 +8,13 @@
 > - **เมื่องานเสร็จและ commit ครบ:** ให้ล้างเนื้อหาในส่วน 1–5 กลับเป็นสถานะว่าง แล้ว commit
 >   ไฟล์นี้ — เพื่อไม่ให้ AI ตัวถัดไปเข้าใจผิดว่างานยังค้าง
 
-## สถานะ: 🟢 ว่าง — งานล่าสุด (กันลิงก์สั้นปลอม format ขึ้นโพสต์ FB) เสร็จ — ยังไม่ push/deploy
+## สถานะ: 🟢 ว่าง — งานล่าสุด (guard กันลิงก์ปลอมใน post_feed เอง) เสร็จ — ยังไม่ push/deploy
 
 ---
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
+
+- ✅ fix(facebook): **guard กันลิงก์ affiliate ปลอมใน `post_feed` เอง (ชั้นสุดท้ายก่อนยิงขึ้นเพจ)** — เจ้าของสั่งหลังสืบ mock poster "หูฟังลิงก์จริง" (โพสต์ลิงก์ปลอม `s.shopee.co.th/earbuds_ok`/`shope.ee` 24 ตัว 16/08 จากสคริปต์ local ที่โพสต์ตรงขึ้นเพจ — ไม่อยู่ใน repo/process/task แล้ว หยุดเองหลัง 00:28); แก้ `facebook_poster.py`: ถ้า `link` มี `s.shopee.co.th` หรือ `shope.ee` → ต้องผ่าน `is_valid_shopee_affiliate_url()` (base62) เท่านั้น ไม่งั้น block ก่อนเรียก Graph API (`error="ลิงก์ Shopee ไม่ valid..."`) + กัน `shope.ee` ที่แปะใน `message` ด้วย (shope.ee = ปลอมเสมอ); ลิงก์อื่น (ข่าว/ท้องถิ่น/คอนเทนต์ curated) ผ่านตามเดิม — ไม่พังโพสต์คอนเทนต์; กันได้แม้ถูกเรียกจากสคริปต์ไหนก็ตาม (defense-in-depth ชั้นสุดท้าย ต่อจาก DB rule + matcher + guard radar); อัปเดต test เดิมที่ใช้ `shope.ee` เป็นลิงก์ valid + เพิ่มเทสต์ใหม่ 4 ตัว (block `earbuds_ok` / block `shope.ee` / block ใน message / allow ลิงก์ข่าว) → รวม **1057 passed** — **ยังไม่ push/deploy**
 
 - ✅ fix(radar): **กันลิงก์สั้นปลอม format ขึ้นโพสต์ FB — `is_valid_shopee_affiliate_url()` ตรวจรหัสสั้นเป็น base62 (ไม่มี `_`/`-`/อักขระพิเศษ)** — เจ้าของเจอเพจถูกโพสต์ "หูฟังลิงก์จริง" (ลิงก์ปลอม `s.shopee.co.th/earbuds_ok`) ซ้ำเป็นคู่ ๆ ทุก ~20 นาที; สืบพบ: โพสต์นั้น**ไม่มาจาก production** (ตรวจครบ: ไม่มีสินค้า/ไม่มี demand_event ใน Supabase, ไม่ใช่ rotation/campaign_logs, render env = DB เดียวกัน, process local = monitor ที่ submit lead อย่างเดียว) → เป็น script ทดสอบที่โพสต์ตรงขึ้นเพจด้วย mock (ข้อมูลตรงกับ test fixture เป๊ะ) แล้วหยุดเองตอน 23:53; สาเหตุที่ `earbuds_ok` ผ่านได้ = `is_valid_shopee_affiliate_url` ตรวจแค่ prefix `s.shopee.co.th` ไม่ตรวจ format รหัสสั้น (Shopee จริงเป็น base62 9-11 ตัว ไม่มี `_`); แก้: `link_checker.py` ตรวจรหัสสั้นเป็น `[A-Za-z0-9]+` (ตัด query/trailing slash) → `earbuds_ok`/`maternity_ok`/`earphone-budget` ฯลฯ ถูก reject ครอบทุกจุดที่ใช้ helper เดียวกัน (DB rule insert/update + matcher + guard หน้า post_feed); อัปเดต test fixtures ที่ใช้ url mock `_ok`/`-link` เป็น base62 ล้วน + เพิ่มเทสต์ใหม่ `test_is_valid_shopee_affiliate_url_rejects_mock_short_codes` → รวม **1053 passed** — **ยังไม่ push/deploy**
 

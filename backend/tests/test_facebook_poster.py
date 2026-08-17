@@ -83,10 +83,10 @@ def test_post_feed_passes_link(monkeypatch):
         return Resp()
 
     monkeypatch.setattr(fp.httpx, "post", fake_post)
-    res = fp.post_feed("ข้อความโปรโมท", link="https://shope.ee/test")
+    res = fp.post_feed("ข้อความโปรโมท", link="https://s.shopee.co.th/9pdS1rMwH8")
     assert res["ok"] is True and res["post_id"] == "post_999"
     assert captured["data"]["message"] == "ข้อความโปรโมท"
-    assert captured["data"]["link"] == "https://shope.ee/test"
+    assert captured["data"]["link"] == "https://s.shopee.co.th/9pdS1rMwH8"
 
 
 def test_post_feed_image_url_uses_photos_endpoint(monkeypatch):
@@ -172,13 +172,67 @@ def test_post_feed_background_preset_ignores_link_and_image(monkeypatch):
         return Resp()
 
     monkeypatch.setattr(fp.httpx, "post", fake_post)
-    res = fp.post_feed("โปรพื้นสี", link="https://shope.ee/test",
+    res = fp.post_feed("โปรพื้นสี", link="https://s.shopee.co.th/9pdS1rMwH8",
                        image_url="https://example.com/mascot.png",
                        background_preset_id="219266485227663")
     assert res["ok"] is True
     assert "link" not in captured["data"]
     assert "url" not in captured["data"]  # ไม่ส่ง image_url (media จะทำให้พื้นสีถูก ignore)
     assert captured["data"]["text_format_preset_id"] == "219266485227663"
+
+
+def test_post_feed_blocks_fake_shopee_short_link(monkeypatch):
+    """ลิงก์สั้น Shopee format ปลอม (mock อย่าง s.shopee.co.th/earbuds_ok) → block ไม่ยิงขึ้นเพจ
+    (กันสคริปต์เทสต์/ของ mock ที่เคยโพสต์ 'หูฟังลิงก์จริง' 24 ตัว 16/08)"""
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    called = []
+    monkeypatch.setattr(fp.httpx, "post", lambda *a, **k: called.append(a))
+    res = fp.post_feed("โปรโมทหูฟัง", link="https://s.shopee.co.th/earbuds_ok")
+    assert res["ok"] is False
+    assert "ลิงก์" in res["error"]
+    assert called == []  # ไม่ยิง Graph API เลย
+
+
+def test_post_feed_blocks_shope_ee_link(monkeypatch):
+    """shope.ee = ลิงก์ปลอม (กด 404) — block เสมอ ไม่ว่าใครเรียก"""
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    called = []
+    monkeypatch.setattr(fp.httpx, "post", lambda *a, **k: called.append(a))
+    res = fp.post_feed("โปรโมท", link="https://shope.ee/earbuds_ok")
+    assert res["ok"] is False
+    assert "ลิงก์" in res["error"]
+    assert called == []
+
+
+def test_post_feed_blocks_message_with_shope_ee(monkeypatch):
+    """แปะ shope.ee ไว้ในข้อความ (ไม่ใช่ link param) → block ด้วย"""
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    called = []
+    monkeypatch.setattr(fp.httpx, "post", lambda *a, **k: called.append(a))
+    res = fp.post_feed("แนะนำสินค้าจ้า https://shope.ee/abc ดูเพิ่มเติม")
+    assert res["ok"] is False
+    assert "shope.ee" in res["error"]
+    assert called == []
+
+
+def test_post_feed_allows_non_shopee_content_link(monkeypatch):
+    """ลิงก์คอนเทนต์ (ข่าว/ท้องถิ่น) ที่ไม่ใช่ Shopee → ผ่านได้ตามเดิม"""
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    captured = {}
+
+    class Resp:
+        status_code = 200
+        def json(self):
+            return {"id": "post_news"}
+
+    def fake_post(url, params=None, data=None, timeout=None):
+        captured["data"] = data
+        return Resp()
+
+    monkeypatch.setattr(fp.httpx, "post", fake_post)
+    res = fp.post_feed("ป้าเล่าข่าว", link="https://news.example/1")
+    assert res["ok"] is True
+    assert captured["data"]["link"] == "https://news.example/1"
 
 
 def test_post_feed_rejects_empty_message_and_no_image(monkeypatch):

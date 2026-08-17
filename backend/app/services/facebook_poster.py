@@ -17,6 +17,7 @@ import os
 
 import httpx
 
+from app.services.link_checker import is_valid_shopee_affiliate_url
 from app.services.text_cleaner import sanitize_post_text
 
 logger = logging.getLogger(__name__)
@@ -71,9 +72,27 @@ def post_feed(message: str, link: str = "", image_url: str = "",
     message = sanitize_post_text(message or "")
     image_url = (image_url or "").strip()
     background_preset_id = (background_preset_id or "").strip()
+    link = (link or "").strip()
     if not message and not image_url and not background_preset_id:
         return {"ok": False, "post_id": None,
                 "error": "ต้องมี message หรือ image_url อย่างใดอย่างหนึ่ง"}
+
+    # ── Guard กันลิงก์ affiliate ปลอม/ของ mock หลุดขึ้นเพจ ─────────────────────
+    # (เจอจริง 16/08: สคริปต์เทสต์โพสต์ 'หูฟังลิงก์จริง' ด้วย s.shopee.co.th/earbuds_ok
+    #  + shope.ee รวม 24 ตัว — กันที่ post_feed เอง แม้ถูกเรียกจากสคริปต์ไหนก็ตาม)
+    # - ลิงก์ที่ดูเหมือนลิงก์สั้น Shopee (s.shopee.co.th / shope.ee) → ต้องผ่าน format
+    #   จริง (base62) เท่านั้น ไม่งั้น block ไม่ให้ยิงขึ้นเพจ
+    # - ลิงก์อื่น (ข่าว/ท้องถิ่น/คอนเทนต์ curated) ผ่านได้ตามเดิม
+    if link and ("s.shopee.co.th" in link.lower() or "shope.ee" in link.lower()):
+        if not is_valid_shopee_affiliate_url(link):
+            logger.warning(f"[facebook_poster] BLOCKED fake shopee link: {link[:80]}")
+            return {"ok": False, "post_id": None,
+                    "error": f"ลิงก์ Shopee ไม่ valid (ลิงก์ปลอม/ของ mock): {link[:80]}"}
+    # shope.ee ในข้อความ = ลิงก์ปลอมเสมอ (Shopee จริงใช้ s.shopee.co.th) — กันแปะใน message
+    if "shope.ee" in (message or "").lower():
+        logger.warning("[facebook_poster] BLOCKED message containing fake shope.ee link")
+        return {"ok": False, "post_id": None,
+                "error": "ข้อความมีลิงก์ shope.ee (ปลอม) — ไม่อนุญาต"}
 
     if background_preset_id:
         # พื้นสี (text-only): Facebook กำหนดให้โพสต์ข้อความล้วน (ไม่มี media/link)
