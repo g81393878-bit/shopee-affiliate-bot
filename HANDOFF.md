@@ -8,13 +8,18 @@
 > - **เมื่องานเสร็จและ commit ครบ:** ให้ล้างเนื้อหาในส่วน 1–5 กลับเป็นสถานะว่าง แล้ว commit
 >   ไฟล์นี้ — เพื่อไม่ให้ AI ตัวถัดไปเข้าใจผิดว่างานยังค้าง
 
-## สถานะ: 🟢 ว่าง — งานล่าสุด (กันโพสต์ซ้ำ/โพสต์หูฟังถี่เกินใน cron rotation) เสร็จ — ยังไม่ push/deploy
+## สถานะ: 🟡 งานผม (facebook coordination + บอทลบโพสต์ปลอม) **deploy ขึ้น Render แล้ว** (17/08 08:04Z live) — ยังมีงานค้างของ agent อื่น (cron-job.org + radar group-polling) ที่ยังไม่ commit
+
+---
+
+## ✅ งานผม — deploy ขึ้น Render แล้ว (17/08/2026)
+
+- ✅ feat(facebook) + **deploy**: **ประสานงานโพสต์ข้าม flow + บอทลบโพสต์ปลอมอัตโนมัติ — DEPLOY ขึ้น Render แล้ว (live)** — cron rotation ข้ามตัวที่โพสต์ล้ม/กรองลิงก์ affiliate valid/lock กันซ้อน; cron↔radar cooldown ครบ 2 ทิศ (cron นับ demand pending, radar นับ fbpost_pending, cron จองหมวดก่อนยิง); `preflight_ready()` + `notify_owner_once()` (throttle 6 ชม.) + `classify_post_error()`; `fb_group_monitor_local` ใช้ sha1 แทน hash(); `facebook_fake_post_watcher()` ตรวจเพจทุก 5 นาที ลบโพสต์ลิงก์ปลอม (ทำงานเอง ไม่ต้องรอครอน) — **deploy commit `623493c` → dep-da1c097lk1mc739mckf0 live 08:04Z 17/08, ลบโพสต์ปลอม 11 ตัวแล้ว**; docs/facebook-posting-workflow.md + skill facebook-post-coordination + AGENTS.md; เทสต์ 1080 passed
+- ✅ tools/docs: **`tools/gen_fb_page_token.py` + `docs/facebook-app-swap.md` (runbook Option B)** — สลับไป Facebook app ใหม่ + ตั้ง webhook 2 ชั้น + ลบ app "post api" (commit `b1611d9` + `f55fb2e`) — ยังไม่ push
 
 ---
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
-
-- ✅ ops(cron): **ตั้ง cron-job.org ให้ครบ 8 job ผ่าน API + อัปเดตเครื่องมือ** — ผู้ใช้ถาม "ตั้ง cron อัตโนมัติผ่าน API" → ทางมีอยู่แล้วคือ `tools/cron_jobs.py` (cron-job.org REST `PUT /jobs`, idempotent, อ่าน `CJKEY`+`CRON_TOKEN` จาก `backend/.env`) แต่ตกหล่น 2 endpoint ใหม่ → เพิ่ม `ป้าเข็ม-สมองเรียนรู้` (hermes-learn วันละ 06:30) + `ป้าเข็ม-กวาดลิงก์ปลอม` (clean-fake-posts ทุก 6 ชม. 00:30/06:30/12:30/18:30) ลง wanted list; **ไม่ใส่ facebook-post** (บอทโพสต์เองในตัว FB_AUTO_POST_INTERVAL — เอาเข้า cron-job.org ซ้ำเสี่ยงโพสต์ซ้ำ); อัปเดต `docs/cron-setup.example.md` (ตาราง 8 job + section API ใหม่ชี้สคริปต์) + `.agents/skills/cron-jobs/SKILL.md` (เพิ่ม endpoint + เครื่องมือ); **รันจริงแล้ว**: dry-run เห็น 6 job เดิม → สร้างเพิ่ม 2 (jobId 8277651/8277652) → ครบ 8 job ทุกตัว on; ยืนยัน endpoint ทั้งหมดอยู่บน production แล้ว (openapi มี clean-fake-posts/hermes-learn) + ยิง `clean-fake-posts?dry_run=true` สำเร็จ (scan 20, ไม่เจอปลอม, ไม่ลบ) — ยังไม่ commit
 
 - ✅ feat(facebook): **กันโพสต์ซ้ำ/โพสต์หมวดถี่เกิน (เช่น หูฟัง) ใน cron rotation + ข้าม flow กับ radar** — ตรวจจริงแล้ว: cron โพสต์รายชั่วโมง หมุน 4 คลัง (rss/bg/product/local); โพสต์สินค้า 11 ตัว (KHK SHOES ×3, ANCHI e-bike ×2, Za Mask...) ตัวละครั้ง (dedup CampaignLog ทำงาน) ไม่ใช่หูฟัง; radar โพสต์แค่ 2 ตัว (REMAX หูฟัง 1 ครั้ง + ESKIMO กระติก) — แต่**ไม่มี category cooldown ใน cron** และ cron/radar ไม่แชร์ dedup กัน → เพิ่ม: (1) `cron.py _post_next_product` อ่าน `FB_POST_CATEGORY_COOLDOWN_HOURS` (default 24) — ข้ามสินค้าที่หมวดเพิ่งโพสต์ภายใน cooldown (ดูทั้ง CampaignLog fbpost + FacebookDemandEvent posted/sent) + ข้ามสินค้าที่ radar เพิ่งโพสต์ (กันโพสต์ซ้ำข้าม flow); (2) `facebook_radar.py check_category_cooldown_allowed` นับ CampaignLog fbpost ในหมวดด้วย (radar ไม่โพสต์หมวดที่ cron เพิ่งโพสต์); ลง `.env.example`; เทสต์ใหม่ 3 ตัว (cron ข้ามหมวดที่เพิ่งโพสต์ / cron ข้ามสินค้าที่ radar โพสต์ / radar นับโพสต์ cron) → รวม **1066 passed** — **ยังไม่ push/deploy**
 
