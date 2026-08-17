@@ -1,28 +1,23 @@
 # -*- coding: utf-8 -*-
 """
-แคมเปญบอทป้าเข็ม — สคริปต์เดียวครบวงจร (เอาองค์ประกอบมารวมกัน)
+แคมเปญบอทป้าเข็ม — แยก 2 คำสั่งให้ขาดจากกัน (ไม่ปนกันในรันเดียว)
 
-โฟลว์:
-  1. สร้างแคปชั่นจากองค์ประกอบ (hook / จุดขาย / ราคา / CTA + ลิงก์ LINE)
-  2. สุ่มภาพโปสเตอร์จากโฟลเดอร์ assets (ข้าม avatar/icon)
-  3. โพสต์ลงเพจป้าเข็มผ่าน Graph API → ได้ post_url
-  4. เปิด browser + ฉีดคุกกี้ Facebook → แชร์ post_url ลงกลุ่มเป้าหมายทีละกลุ่ม
-     (ยืนยันผลด้วยการเช็คว่า dialog แชร์ปิด)
-  5. บันทึกผลรายกลุ่มลง Google ชีท + เขียน state กันแชร์ซ้ำ
+  post   — โพสต์ "แนะนำป้าเข็ม" ลงเพจ (แคปชั่นอัตโนมัติ + ภาพจาก assets)
+           ไม่เปิด browser ไม่แตะกลุ่มเลย
+  share  — แชร์ post URL ที่มีอยู่แล้วลงกลุ่มเป้าหมาย (browser + คุกกี้ + dedup + ชีท)
+           ไม่โพสต์ ไม่สร้างแคปชั่น
 
 ใช้งาน:
-  # ครบวงจรจริง (โพสต์ + แชร์ + บันทึกชีท)
-  python bot/run_campaign.py --groups-file groups.txt
+  # 1) โพสต์แนะนำป้าเข็มลงเพจ (ได้ post URL)
+  python bot/run_campaign.py post [--caption "..." ] [--poster "D:\\...\\assets"]
+  python bot/run_campaign.py post --dry-run        # โชว์แคปชั่น+ภาพ ไม่โพสต์
 
-  # อ่านกลุ่มจาก CLI (หลาย URL คั่น ,)
-  python bot/run_campaign.py --group-url "https://www.facebook.com/groups/123/,https://www.facebook.com/groups/456/"
-
-  # dry-run เฉพาะขั้นแชร์ (ใช้โพสต์ที่มีอยู่แล้ว — ตรวจ locator)
-  python bot/run_campaign.py --post-url "https://www.facebook.com/<page>/posts/<id>" \
-      --group-url "https://www.facebook.com/groups/123/" --dry-run
-
-  # dry-run เฉพาะขั้นโพสต์ (โชว์แคปชั่น+ภาพ ไม่โพสต์ ไม่เปิด browser)
-  python bot/run_campaign.py --groups-file groups.txt --dry-run
+  # 2) แชร์โพสต์นั้นลงกลุ่ม (ใช้ post URL จากขั้น 1)
+  python bot/run_campaign.py share --post-url "https://www.facebook.com/<page>/posts/<id>" \
+      --groups-file groups.txt
+  python bot/run_campaign.py share --post-url "..." --groups-file groups.txt --dry-run
+  python bot/run_campaign.py share --post-url "..." \
+      --group-url "https://www.facebook.com/groups/123/,https://www.facebook.com/groups/456/"
 
 ต้องรันด้วย system python (มีทั้ง backend deps + selenium/undetected_chromedriver)
 บนเครื่องบ้าน/IP จริง · Chrome version_main=151 · fb_cookies.json ที่ repo root
@@ -49,7 +44,7 @@ DEFAULT_STATE_FILE = ROOT / "fb_shared_state.json"
 
 
 # ===========================================================================
-# องค์ประกอบที่ 1: แคปชั่น (ประกอบจากชิ้นส่วน)
+# องค์ประกอบโพสต์: แคปชั่น (ประกอบจากชิ้นส่วน)
 # ===========================================================================
 def build_caption(line_oa_url: Optional[str] = None) -> str:
     """ประกอบแคปชั่นจากองค์ประกอบย่อย ๆ — แก้จุดขาย/ราคา/CTA ได้จากที่เดียว."""
@@ -61,7 +56,7 @@ def build_caption(line_oa_url: Optional[str] = None) -> str:
 
 
 # ===========================================================================
-# องค์ประกอบที่ 2: ภาพโปสเตอร์ (สุ่มหมุนเวียนจาก assets)
+# องค์ประกอบโพสต์: ภาพโปสเตอร์ (สุ่มหมุนเวียนจาก assets)
 # ===========================================================================
 def resolve_poster_image(path: Optional[str]) -> Optional[str]:
     """ไฟล์ → ใช้เลย; โฟลเดอร์ → สุ่มภาพ (ข้าม avatar/icon) กันภาพเดิมซ้ำ."""
@@ -84,7 +79,7 @@ def resolve_poster_image(path: Optional[str]) -> Optional[str]:
 
 
 # ===========================================================================
-# องค์ประกอบที่ 3: รายชื่อกลุ่ม + dedup (กันแชร์ซ้ำ)
+# องค์ประกอบแชร์: รายชื่อกลุ่ม + dedup (กันแชร์ซ้ำ)
 # ===========================================================================
 def _entry_key(value: str) -> str:
     """คีย์ dedup: URL → normalize ตัด query/trailing slash; ชื่อ → strip + lowercase."""
@@ -131,32 +126,38 @@ def _save_state(path: Path, keys: set) -> None:
 
 
 # ===========================================================================
-# Main
+# Subcommand: post — โพสต์แนะนำป้าเข็มลงเพจอย่างเดียว (ไม่แตะกลุ่ม)
 # ===========================================================================
-def main() -> int:
-    parser = argparse.ArgumentParser(description="แคมเปญบอทป้าเข็ม: โพสต์เพจ → แชร์กลุ่ม → บันทึกชีท")
-    parser.add_argument("--caption", type=str, default=None,
-                        help="แคปชั่นโพสต์ (default = ประกอบอัตโนมัติจาก build_caption)")
-    parser.add_argument("--poster", type=str, default=DEFAULT_POSTER_DIR,
-                        help="พาธโฟลเดอร์/ไฟล์ภาพโปสเตอร์ (default โฟลเดอร์ assets)")
-    parser.add_argument("--post-url", type=str, default=None,
-                        help="URL โพสต์บนเพจ (ถ้าระบุ → ข้ามขั้นโพสต์ แชร์เลย)")
-    parser.add_argument("--group-name", type=str, default=None,
-                        help="ชื่อกลุ่มเป้าหมาย (หลายกลุ่มคั่น ,)")
-    parser.add_argument("--group-url", type=str, default=None,
-                        help="URL กลุ่มเป้าหมาย (หลาย URL คั่น ,)")
-    parser.add_argument("--groups-file", type=str, default=None,
-                        help="ไฟล์รายชื่อกลุ่ม: บรรทัดละ 1 กลุ่ม (ชื่อ หรือ URL, # = คอมเมนต์)")
-    parser.add_argument("--state-file", type=str, default=str(DEFAULT_STATE_FILE),
-                        help="state file กันแชร์ซ้ำ (default fb_shared_state.json)")
-    parser.add_argument("--cookies", type=str, default=None,
-                        help="พาธคุกกี้ (default fb_cookies.json)")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="จำลอง: ไม่โพสต์ ไม่แชร์ ไม่บันทึกชีท ไม่เขียน state")
-    args = parser.parse_args()
-
+def _cmd_post(args) -> int:
     caption = args.caption or build_caption()
-    state_path = Path(args.state_file)
+    poster = resolve_poster_image(args.poster)
+
+    if args.dry_run:
+        print("[POST][DRY-RUN] (ไม่โพสต์จริง) จะโพสต์แนะนำป้าเข็ม:")
+        print(f"[POST][DRY-RUN] caption:\n{caption}")
+        print(f"[POST][DRY-RUN] ภาพ: {poster or '(ไม่มี — ข้อความล้วน)'}")
+        print("[POST][DRY-RUN] เสร็จ — ใช้ --dry-run ไม่ได้ post URL (รันจริงเพื่อโพสต์)")
+        return 0
+
+    print("[POST] กำลังโพสต์แนะนำป้าเข็มลงเพจ ...")
+    res = post_photo(caption, file_path=poster) if poster else post_feed(caption)
+    if not res.get("ok"):
+        print(f"[ERROR] โพสต์ล้ม: {res.get('error')}")
+        return 1
+    post_url = f"https://www.facebook.com/{res['post_id']}"
+    print(f"[OK] โพสต์แนะนำป้าเข็มสำเร็จ: {post_url}")
+    print(f"[NEXT] แชร์ลงกลุ่มต่อ: python bot/run_campaign.py share --post-url \"{post_url}\" "
+          f"--groups-file <ไฟล์กลุ่ม>")
+    return 0
+
+
+# ===========================================================================
+# Subcommand: share — แชร์ post URL ที่มีอยู่แล้วลงกลุ่มอย่างเดียว (ไม่โพสต์)
+# ===========================================================================
+def _cmd_share(args) -> int:
+    if not args.post_url:
+        print("[ERROR] share ต้องระบุ --post-url (URL โพสต์บนเพจที่แชร์ไปยังกลุ่ม)")
+        return 2
 
     # รวมรายชื่อกลุ่มจากทุกแหล่ง → (key, is_url, value)
     entries = []
@@ -173,39 +174,21 @@ def main() -> int:
             entries.append((_entry_key(value),
                             value.lower().startswith(("http://", "https://")), value))
     if not entries:
-        parser.error("ต้องระบุกลุ่มผ่าน --group-name / --group-url / --groups-file")
+        parser_error = "share ต้องระบุกลุ่มผ่าน --group-name / --group-url / --groups-file"
+        print(f"[ERROR] {parser_error}")
+        return 2
 
     # Dedup: ข้ามกลุ่มที่แชร์สำเร็จแล้ว
+    state_path = Path(args.state_file)
     state = _load_state(state_path)
     pending = [(k, is_url, v) for (k, is_url, v) in entries if k not in state]
     skipped = len(entries) - len(pending)
     if skipped:
         print(f"[STATE] ข้าม {skipped} กลุ่มที่แชร์สำเร็จแล้ว (จาก state file)")
     if not pending:
-        print("[STATE] ไม่มีกลุ่มที่ต้องแชร์ (แชร์ครบแล้ว) → ไม่โพสต์ ไม่เปิดเบราว์เซอร์")
+        print("[STATE] ไม่มีกลุ่มที่ต้องแชร์ (แชร์ครบแล้ว) → ไม่เปิดเบราว์เซอร์")
         return 0
 
-    post_url = args.post_url
-
-    # ขั้น 1: โพสต์ลงเพจ
-    if not post_url:
-        poster = resolve_poster_image(args.poster)
-        if args.dry_run:
-            print("[POST][DRY-RUN] (ไม่โพสต์จริง) จะโพสต์:")
-            print(f"[POST][DRY-RUN] caption:\n{caption}")
-            print(f"[POST][DRY-RUN] ภาพ: {poster or '(ไม่มี — ข้อความล้วน)'}")
-            print("[POST][DRY-RUN] ไม่มี post URL จากการ dry-run → จบ"
-                  " (ถ้าจะ dry-run ขั้นแชร์ ให้ส่ง --post-url มาด้วย)")
-            return 0
-        print("[POST] กำลังโพสต์ลงเพจป้าเข็ม ...")
-        res = post_photo(caption, file_path=poster) if poster else post_feed(caption)
-        if not res.get("ok"):
-            print(f"[ERROR] โพสต์ล้ม: {res.get('error')}")
-            return 1
-        post_url = f"https://www.facebook.com/{res['post_id']}"
-        print(f"[OK] โพสต์สำเร็จ: {post_url}")
-
-    # ขั้น 2: แชร์ลงกลุ่ม
     cookie_path = Path(args.cookies) if args.cookies else ROOT / "fb_cookies.json"
     print(f"[SHARE] เปิดเบราว์เซอร์ + ฉีดคุกกี้ (แชร์ {len(pending)} กลุ่ม)")
     driver = share_group._launch_driver()
@@ -228,7 +211,7 @@ def main() -> int:
         for i, (key, group) in enumerate(resolved, 1):
             print(f"\n👉 [{i}/{len(resolved)}] แชร์โพสต์เพจ → กลุ่ม '{group}'")
             ok, note = share_group.share_post_to_group(
-                driver, post_url, group, caption, args.dry_run)
+                driver, args.post_url, group, args.caption or "", args.dry_run)
 
             if args.dry_run:
                 print(f"[DRY-RUN] {note} — ไม่บันทึกชีท ไม่เขียน state (โหมดจำลอง)")
@@ -242,14 +225,15 @@ def main() -> int:
                     results["fail"] += 1
                     print(f"[FAIL] {note}")
                 if share_group._log_to_sheet(
-                        share_group._sheet_row(post_url, group, caption, ok)):
+                        share_group._sheet_row(args.post_url, group,
+                                               args.caption or "", ok)):
                     results["sheet_ok"] += 1
 
             if i < len(resolved):
                 time.sleep(10)
 
         print("\n==========================================")
-        print(f"โพสต์เพจ: {post_url}")
+        print(f"โพสต์เพจ: {args.post_url}")
         print(f"สรุป: แชร์สำเร็จ {results['ok']} | ล้ม {results['fail']} | "
               f"บันทึกชีท {results['sheet_ok']} | ข้ามแล้ว {results['skipped']}")
         print("ตรวจยืนยันด้วยตา: เปิด post_url บนเพจ + เปิดแต่ละกลุ่มดูโพสต์ที่แชร์")
@@ -259,6 +243,48 @@ def main() -> int:
             driver.quit()
         except Exception:
             pass
+
+
+# ===========================================================================
+# Main — 2 subcommands แยกกันชัดเจน
+# ===========================================================================
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="แคมเปญบอทป้าเข็ม — แยกโพสต์แนะนำป้าเข็ม กับ แชร์กลุ่ม ออกจากกัน")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    # --- post: โพสต์แนะนำป้าเข็มลงเพจ (ไม่แตะกลุ่ม) ---
+    p_post = sub.add_parser("post", help="โพสต์แนะนำป้าเข็มลงเพจ (แคปชั่น+ภาพจาก assets)")
+    p_post.add_argument("--caption", type=str, default=None,
+                        help="แคปชั่นโพสต์ (default = ประกอบอัตโนมัติจาก build_caption)")
+    p_post.add_argument("--poster", type=str, default=DEFAULT_POSTER_DIR,
+                        help="พาธโฟลเดอร์/ไฟล์ภาพโปสเตอร์ (default โฟลเดอร์ assets)")
+    p_post.add_argument("--dry-run", action="store_true",
+                        help="จำลอง: โชว์แคปชั่น+ภาพ ไม่โพสต์จริง")
+    p_post.set_defaults(func=_cmd_post)
+
+    # --- share: แชร์ post URL ลงกลุ่ม (ไม่โพสต์) ---
+    p_share = sub.add_parser("share", help="แชร์ post URL ที่มีอยู่แล้วลงกลุ่มเป้าหมาย")
+    p_share.add_argument("--post-url", type=str, default=None,
+                         help="URL โพสต์บนเพจที่ต้องการแชร์ (บังคับ)")
+    p_share.add_argument("--caption", type=str, default=None,
+                         help="แคปชั่นแนบตอนแชร์ (ถ้าใส่ — แชร์พร้อมข้อความ)")
+    p_share.add_argument("--group-name", type=str, default=None,
+                         help="ชื่อกลุ่มเป้าหมาย (หลายกลุ่มคั่น ,)")
+    p_share.add_argument("--group-url", type=str, default=None,
+                         help="URL กลุ่มเป้าหมาย (หลาย URL คั่น ,)")
+    p_share.add_argument("--groups-file", type=str, default=None,
+                         help="ไฟล์รายชื่อกลุ่ม: บรรทัดละ 1 กลุ่ม (ชื่อ หรือ URL, # = คอมเมนต์)")
+    p_share.add_argument("--state-file", type=str, default=str(DEFAULT_STATE_FILE),
+                         help="state file กันแชร์ซ้ำ (default fb_shared_state.json)")
+    p_share.add_argument("--cookies", type=str, default=None,
+                         help="พาธคุกกี้ (default fb_cookies.json)")
+    p_share.add_argument("--dry-run", action="store_true",
+                         help="จำลอง: ไม่แชร์ ไม่บันทึกชีท ไม่เขียน state (ตรวจ locator)")
+    p_share.set_defaults(func=_cmd_share)
+
+    args = parser.parse_args()
+    return args.func(args)
 
 
 if __name__ == "__main__":

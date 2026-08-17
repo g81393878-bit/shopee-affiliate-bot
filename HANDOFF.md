@@ -21,6 +21,8 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- ✅ feat(bot): **แยก `bot/run_campaign.py` เป็น 2 subcommand ไม่ปนกัน** — `post` = โพสต์แนะนำป้าเข็มลงเพจอย่างเดียว (แคปชั่น+ภาพ assets, ไม่เปิด browser/ไม่แตะกลุ่ม) · `share` = แชร์ `--post-url` ที่มีอยู่แล้วลงกลุ่มอย่างเดียว (browser+คุกกี้+dedup state+ชีท, ต้องมี `--post-url` — ไม่มี → error exit 2); ใช้: `python bot/run_campaign.py post` → `python bot/run_campaign.py share --post-url <url> --groups-file groups.txt`; ยังไม่ commit
+
 - ✅ feat(bot)+docs: **แคปชันโปรโมทอัตโนมัติ + หมุนภาพโปสเตอร์ round-robin + skill** — `bot_profile.promo_captions()` 4 แบบ + `pick_promo_caption(advance)` หมุน (state `backend/.promo_caption_state.json` gitignored); `bot/post_page.py` เปลี่ยน random→round-robin ภาพ (`backend/.promo_poster_state.json`); `tools/post_fb_video.py` ไม่ระบุ --caption→ใช้แคปชันหมุนอัตโนมัติ; `tools/generate_posters.py` สร้างโปสเตอร์ 1080×1350 (Pillow+Tahoma) 4 ภาพลง assets; เพิ่ม skill `.agents/skills/promo-caption-rotation/` + AGENTS.md index; เทสต์ 1082 passed / 9 failed (radar เดิม); commit `36296bb`+`f15a2f1`
 
 - ✅ feat(facebook)+deploy: **แยก scheduler โพสต์สินค้า/คอนเทนต์ + campaign runner + post_photo — DEPLOY live `bab3e89` (13:22Z 17/08)** — `cron.py`/`main.py` แยก `run_facebook_product_post` (FB_AUTO_POST_INTERVAL, สินค้า) กับ `run_facebook_content_post` (FB_CONTENT_POST_INTERVAL, แนะนำ/ข่าว/ร้าน) เป็น 2 loop; `facebook_poster.post_photo()` (multipart/url) + `bot/run_campaign.py` (แคปชัน+ภาพ assets→โพสต์เพจ→แชร์กลุ่ม dedup state/--groups-file/sheet) + share_group/post_page + legacy bots; โพสต์รูป+คลิปจริงยืนยันผ่าน Graph API; production ตั้ง FB_AUTO_POST_INTERVAL=60 (สินค้าทุกชม.) แต่ FB_CONTENT_POST_INTERVAL ยังไม่ตั้ง (คอนเทนต์ปิด); commit `06c9049`+`bab3e89`
