@@ -28,7 +28,7 @@ description: >-
    anthropic SDK; `response_format` ถูก **ignore** → ต้องสั่งให้ model คืน JSON ล้วนใน prompt เอง
 3. **Mock key**: เงื่อนไขทุก provider ตรวจ `"mock" not in key.lower()` — ถ้า key มี "mock"
    (หรือว่าง) ข้าม provider ไป fallback ทันที (เทสต์ใช้เทคนิคนี้บังคับ fallback)
-4. อย่าเขียน `llama-3.3-70b-versatile` ฮาร์ดโค้ด — ใช้ `settings.GROQ_MODEL` (เจอในของเก่าแล้วแก้)
+4. อย่าเขียน `openai/gpt-oss-120b` ฮาร์ดโค้ด — ใช้ `settings.GROQ_MODEL` (เจอในของเก่าแล้วแก้; `llama-3.3-70b-versatile` ถูกถอด 16/08/26)
 5. Gemini package โดน deprecate (FutureWarning ในเทสต์) — ยังใช้ได้ แต่ห้ามพึ่งเป็น provider หลัก
 
 ## ไฟล์

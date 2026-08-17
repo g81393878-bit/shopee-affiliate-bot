@@ -15,8 +15,9 @@ class Settings:
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
-    # Groq model (OpenAI-compatible API): e.g. llama-3.3-70b-versatile
-    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    # Groq model (OpenAI-compatible API): e.g. openai/gpt-oss-120b
+    # (llama-3.3-70b-versatile ถูกถอดออก 16/08/2026 — ตาม docs deprecation ของ Groq)
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
     # Groq vision model สำหรับ OCR สลิป (อ่านรูป): ต้องเป็น model ที่รองรับภาพ
     SLIP_OCR_MODEL: str = os.getenv("SLIP_OCR_MODEL", "llama-3.2-11b-vision-preview")
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
