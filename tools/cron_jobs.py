@@ -104,17 +104,22 @@ def main():
 
     every_10_min = {"hours": [-1], "minutes": [0, 10, 20, 30, 40, 50]}
     every_2_hours = {"hours": list(range(0, 24, 2)), "minutes": [0]}
-    def daily(h):
-        return {"hours": [h], "minutes": [0]}
+    every_6_hours = {"hours": [0, 6, 12, 18], "minutes": [30]}  # กวาดลิงก์ปลอมวันละ 4 รอบ
+    def daily(h, m=0):
+        return {"hours": [h], "minutes": [m]}
 
     wanted = [
         ("ป้าเข็ม-keepalive", f"{BASE}/health", GET, every_10_min),
         ("ป้าเข็ม-ตรวจลิงก์", f"{BASE}/api/cron/check-links?token={token}", POST, daily(7)),
         ("ป้าเข็ม-คอนเทนต์", f"{BASE}/api/cron/analyze?token={token}&limit=30", POST, every_2_hours),
         ("ป้าเข็ม-ราคา", f"{BASE}/api/cron/refresh-prices?token={token}", POST, daily(5)),
+        ("ป้าเข็ม-สมองเรียนรู้", f"{BASE}/api/cron/hermes-learn?token={token}", POST, daily(6, 30)),
+        ("ป้าเข็ม-กวาดลิงก์ปลอม", f"{BASE}/api/cron/clean-fake-posts?token={token}", POST, every_6_hours),
         ("ป้าเข็ม-รายงานเช้า", f"{BASE}/api/cron/daily-report?token={token}", POST, daily(8)),
         ("ป้าเข็ม-ดึงลูกค้ากลับ", f"{BASE}/api/cron/re-engage?token={token}", POST, daily(9)),
     ]
+    # หมายเหตุ: ไม่มี facebook-post ที่นี่ — บอทโพสต์เองในตัว (FB_AUTO_POST_INTERVAL) อยู่แล้ว
+    # เอาเข้า cron-job.org ด้วยจะเสี่ยงโพสต์ซ้ำซ้อนกับ scheduler ในตัว (ดู AGENTS.md)
 
     dry_run = "--dry-run" in sys.argv
     if dry_run:

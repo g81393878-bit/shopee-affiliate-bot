@@ -17,9 +17,18 @@ description: >-
   caption + format_hashtags_text; เรียง ai_score สูงก่อน; limit default 5) |
 | `refresh-prices` | เปิดหน้าเว็บอ่านราคาจริง → อัปเดต products.price + บันทึก price_history +
   แจ้งราคาตก (ลด ≥ PRICE_DROP_PCT default 5%) หาลูกค้าที่สนใจหมวดนั้น |
+| `hermes-learn` | สมองกลเรียนรู้ตลาด 48 ชม. (Groq ปรับ skills, hot-reload; LLM ล้ม = ไม่แตะของเดิม) |
 | `re-engage` | push ของใหม่หมวดที่เคยสนใจให้ลูกค้าเงียบ ≥7 วัน (จำกัด limit/รอบ กันสแปม) |
-| `facebook-post` | โพสต์คอนเทนต์ขึ้นเพจ (intro/curated/local หมุนเวียน) |
+| `facebook-post` | โพสต์คอนเทนต์ขึ้นเพจ (intro/curated/local หมุนเวียน) — **ปกติบอทโพสต์เองในตัว
+  (`FB_AUTO_POST_INTERVAL`) อย่าเอาเข้า cron-job.org ซ้ำ** |
+| `clean-fake-posts` | กวาดลบโพสต์ลิงก์ปลอมบนเพจ (shope.ee/lazada/ลิงก์ไม่ในคลัง) — `dry_run=true` ดูตัวอย่าง |
 | `daily-report` | สรุปยอด/สินค้า/ลูกค้า 24 ชม. ให้เจ้าของร้าน |
+
+## ตั้งอัตโนมัติผ่าน API (cron-job.org REST)
+- `tools/cron_jobs.py` สร้าง 8 job ให้ครบ (keepalive + 7 cron) ผ่าน `PUT https://api.cron-job.org/jobs`
+  (idempotent — เทียบชื่อ job เดิม สร้างเฉพาะตัวที่ยังไม่มี; `--dry-run` ตรวจอย่างเดียว)
+- ต้องมี `CJKEY` (API key จาก cron-job.org → Settings) + `CRON_TOKEN` ใน `backend/.env`
+- รัน: `python tools/cron_jobs.py` — ดูตาราง/curl ทางเลือกได้ใน `docs/cron-setup.example.md`
 
 ## Auth
 - ตั้ง `CRON_TOKEN` → ทุก endpoint ต้อง `?token=...` (401 ไม่งั้น); **ไม่ตั้ง** → รัน unauthenticated
