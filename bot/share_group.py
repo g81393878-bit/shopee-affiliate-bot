@@ -475,32 +475,52 @@ def _share_post_to_groups_batch(driver, post_url: str, group_names: List[str],
     if not search:
         return False, last_err, []
 
-    # 3. เลือกหลายกลุ่มตรงจากรายการ (ไม่พิมพ์ค้นหา — รายการสมาชิกโผล่มาแล้ว)
+    # 3. เลือกหลายกลุ่มตรงจากรายการ — ไม่พิมพ์ค้นหาเลย (เลื่อนรายการแล้วคลิกกลุ่มโดยตรง)
+    #    Facebook กลุ่ม picker โชว์กลุ่มสมาชิกไม่ครบ 20 กลุ่มในทีเดียว → ต้องเลื่อน scroll ลงเรื่อย ๆ
     def _find_group(name):
         return _find_first(driver, [
             (By.XPATH, f'//div[@role="dialog"]//div[@role="button"][contains(normalize-space(.), "{name}")]'),
             (By.XPATH, f'//div[@role="dialog"]//*[contains(normalize-space(text()), "{name}")]'),
         ])
 
+    def _scroll_group_list():
+        """เลื่อน scroller ของรายการกลุ่มใน dialog ลง (ให้ render กลุ่มที่ยังไม่โผล่)."""
+        try:
+            driver.execute_script(
+                "var dlg = document.querySelector('div[role=dialog]');"
+                "if(!dlg) return;"
+                "var els = dlg.querySelectorAll('div');"
+                "for (var i=0;i<els.length;i++){"
+                "  if (els[i].scrollHeight > els[i].clientHeight + 80){ els[i].scrollTop = els[i].scrollHeight; return; }"
+                "}"
+                "dlg.scrollTop = dlg.scrollHeight;"
+            )
+        except Exception:
+            pass
+
+    def _click_group_row(name, max_scrolls: int = 20) -> bool:
+        """เลื่อนรายการจนเจอกลุ่มแล้วคลิกโดยตรง (ไม่พิมพ์ค้นหา) — คืน True ถ้ากดติด."""
+        for _ in range(max_scrolls):
+            item = _find_group(name)
+            if item:
+                try:
+                    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", item)
+                    time.sleep(0.5)
+                except Exception:
+                    pass
+                return _click(driver, item)
+            _scroll_group_list()
+            time.sleep(1)
+        return False
+
     selected: List[str] = []
     for name in group_names:
-        item = _find_group(name)
-        if not item:
-            # fallback: พิมพ์ชื่อค้นหา
-            try:
-                search.clear()
-            except Exception:
-                pass
-            _type_like_human(search, name)
-            time.sleep(3)
-            item = _find_group(name)
-        if item:
-            _click(driver, item)
-            time.sleep(2)
+        if _click_group_row(name):
             selected.append(name)
             print(f"[GROUP] เลือก '{name}' แล้ว")
         else:
             print(f"[SKIP] ไม่พบกลุ่ม '{name}' ในรายการ (บัญชีต้องเป็นสมาชิกกลุ่มนั้นด้วย)")
+        time.sleep(2)
 
     if not selected:
         return False, "ไม่พบกลุ่มเป้าหมายในรายการ (บัญชีต้องเป็นสมาชิกกลุ่มนั้นด้วย)", []
