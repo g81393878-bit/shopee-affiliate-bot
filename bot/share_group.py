@@ -159,10 +159,16 @@ def _type_like_human(element, text: str):
 
 
 def _click(driver, element):
+    """กด element — ไม่ throw (FB re-render ทำให้ element stale ระหว่างหา/กด → ลอง JS แล้วยอมแพ้เงียบ ๆ)"""
     try:
         element.click()
+        return True
     except Exception:
-        driver.execute_script("arguments[0].click();", element)
+        try:
+            driver.execute_script("arguments[0].click();", element)
+            return True
+        except Exception:
+            return False
 
 
 def _find_first(driver, locators):
@@ -218,23 +224,58 @@ def share_post_to_group(driver, post_url: str, group_name: str,
     _click(driver, share_btn)
     time.sleep(2)
 
-    # 2. กดตัวเลือก "กลุ่ม" (ใน section "แชร์ไปยัง") — FB 2026 เหลือคำว่า "กลุ่ม" เฉย ๆ
-    group_opt = _find_first(driver, [
+    # 2+3. เปิด panel แชร์ → กด "กลุ่ม" → รอช่องค้นหากลุ่ม
+    #    FB 2026 UI ไม่เสถียร (เจอจริง 18/08): กด "กลุ่ม" แล้ว panel ไม่เปิดบางรอบ /
+    #    บางรอบกดแชร์แล้วได้ panel variant ที่ไม่มีตัวเลือก "กลุ่ม" → วนสูงสุด 4 รอบ:
+    #    หา search box → กด "กลุ่ม" → ถ้าไม่มีทั้งคู่ ปิด dialog แล้วกดปุ่มแชร์ใหม่
+    search_locators = [
+        (By.XPATH, '//input[contains(@placeholder, "ค้นหากลุ่ม")] | //input[contains(@aria-label, "ค้นหากลุ่ม")]'),
+        (By.XPATH, '//input[contains(@placeholder, "Search for groups")] | //input[contains(@aria-label, "Search for groups")]'),
+        (By.XPATH, '//div[@role="dialog"]//input[@role="combobox"][contains(@placeholder, "ค้นหา") or contains(@placeholder, "Search")]'),
+        (By.XPATH, '//div[@role="dialog"]//input[contains(@placeholder, "ค้นหา") or contains(@placeholder, "Search")]'),
+    ]
+    group_locators = [
         (By.XPATH, '//div[@role="dialog"]//span[normalize-space(text())="กลุ่ม"]'),
         (By.XPATH, '//div[@role="dialog"]//*[normalize-space(text())="Groups"]'),
         (By.XPATH, '//*[normalize-space(text())="แชร์ไปยังกลุ่ม" or normalize-space(text())="แชร์ในกลุ่ม"]'),
         (By.XPATH, '//*[contains(text(), "Share to a group") or contains(text(), "Share in a group")]'),
-    ])
-    if not group_opt:
-        return False, "ไม่พบตัวเลือก 'กลุ่ม' (แชร์ไปยังกลุ่ม)"
-    _click(driver, group_opt)
-    time.sleep(5)
-
-    # 3. ค้นหากลุ่มเป้าหมาย
-    search = _find_first(driver, [
-        (By.XPATH, '//input[@placeholder="ค้นหากลุ่ม"] | //input[@aria-label="ค้นหากลุ่ม"]'),
-        (By.XPATH, '//input[@placeholder="Search for groups"] | //input[@aria-label="Search for groups"]'),
-    ])
+    ]
+    search = None
+    last_err = "ไม่พบช่องค้นหากลุ่ม"
+    for _attempt in range(4):
+        # หา search box ก่อน (บาง variant เปิดมาให้เลย) — ตรวจสั้น ๆ 3 วิ/ตัว
+        for by, sel in search_locators:
+            try:
+                search = WebDriverWait(driver, 3).until(
+                    EC.element_to_be_clickable((by, sel)))
+                break
+            except Exception:
+                continue
+        if search:
+            break
+        # ยังไม่มี → หา "กลุ่ม" ใหม่ทุกรอบ (panel re-render ทำให้ element เก่า stale) แล้วกด
+        group_opt = _find_first(driver, group_locators)
+        if group_opt:
+            _click(driver, group_opt)
+            time.sleep(3)
+            continue
+        # ไม่มี "กลุ่ม" = panel เปิด variant ผิด/ไม่เปิด → ปิด dialog แล้วกดแชร์ใหม่
+        last_err = "ไม่พบตัวเลือก 'กลุ่ม' (แชร์ไปยังกลุ่ม)"
+        try:
+            driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+        except Exception:
+            pass
+        time.sleep(1)
+        share_btn = _find_first(driver, [
+            (By.XPATH, '//div[@role="button"][contains(@aria-label, "ส่งลิงก์") or contains(@aria-label, "โพสต์ลงในโปรไฟล์ของคุณ")]'),
+            (By.XPATH, '//div[@role="button"][contains(@aria-label, "Send this") or contains(@aria-label, "post on your profile") or contains(@aria-label, "post on your timeline")]'),
+            (By.XPATH, '//div[@role="button"][contains(@aria-label, "แชร์") or contains(@aria-label, "Share")]'),
+            (By.XPATH, '//div[@aria-label="แชร์โพสต์นี้"] | //div[@aria-label="Share this"]'),
+        ])
+        if not share_btn:
+            return False, last_err
+        _click(driver, share_btn)
+        time.sleep(3)
     if not search:
         return False, "ไม่พบช่องค้นหากลุ่ม"
     try:
@@ -245,33 +286,50 @@ def share_post_to_group(driver, post_url: str, group_name: str,
     time.sleep(3)
 
     # 4. เลือกกลุ่มจากผลลัพธ์ (รายการเป็น div ธรรมดา ไม่มี role — ใช้ text ภายใน dialog)
-    group_item = _find_first(driver, [
-        (By.XPATH, f'//div[@role="dialog"]//*[contains(normalize-space(text()), "{group_name}")]'),
-        (By.XPATH, f'//div[@role="dialog"]//div[contains(normalize-space(.), "{group_name}")]'),
-        (By.XPATH, f'//*[normalize-space(text())="{group_name}"]'),
-    ])
-    if not group_item:
-        return False, f"ไม่พบกลุ่ม '{group_name}' ในผลลัพธ์ (บัญชีต้องเป็นสมาชิกกลุ่มนั้นด้วย)"
-    _click(driver, group_item)
-    time.sleep(3)
-
-    # 5. ใส่แคปชั่น (ถ้ามี)
-    if message:
-        box = _find_first(driver, [
-            (By.XPATH, '//div[@role="dialog"]//div[@role="textbox" or @contenteditable="true"]'),
-            (By.XPATH, '//div[@aria-label="เขียนข้อความ" or @aria-label="เขียนอะไรบางอย่าง"]'),
+    #    + ยืนยันว่าเข้าหน้าคอมโพสแล้ว (มีช่องแคปชั่น) — บางรอบกดแล้วไม่ติด (เจอจริง 18/08:
+    #    กดเลือกกลุ่มแล้วยังอยู่ในหน้ารายการ → หาแคปชั่น/ปุ่มโพสต์ไม่เจอ)
+    caption_locators = [
+        (By.XPATH, '//div[@role="dialog"]//div[@role="textbox" or @contenteditable="true"]'),
+        (By.XPATH, '//div[@aria-label="เขียนข้อความ" or @aria-label="เขียนอะไรบางอย่าง"]'),
+    ]
+    # ปุ่มยืนยัน — ใช้ normalize-space(.) รองรับปุ่มที่มี span ซ้อน
+    #    (normalize-space(text()) จะว่างถ้าข้อความอยู่ใน element ลูก)
+    post_btn_locators = [
+        (By.XPATH, '//div[@role="dialog"]//div[@role="button"][normalize-space(.)="โพสต์" or normalize-space(.)="Post"]'),
+        (By.XPATH, '//*[@role="button"][normalize-space(.)="โพสต์" or normalize-space(.)="Post"]'),
+        (By.XPATH, '//div[@role="dialog"]//div[@role="button"][normalize-space(.)="แชร์" or normalize-space(.)="Share"]'),
+        (By.XPATH, '//*[@role="button"][normalize-space(.)="แชร์" or normalize-space(.)="Share"]'),
+    ]
+    selected = False
+    for _sel in range(3):
+        group_item = _find_first(driver, [
+            (By.XPATH, f'//div[@role="dialog"]//*[contains(normalize-space(text()), "{group_name}")]'),
+            (By.XPATH, f'//div[@role="dialog"]//div[contains(normalize-space(.), "{group_name}")]'),
+            (By.XPATH, f'//*[normalize-space(text())="{group_name}"]'),
         ])
+        if not group_item:
+            return False, f"ไม่พบกลุ่ม '{group_name}' ในผลลัพธ์ (บัญชีต้องเป็นสมาชิกกลุ่มนั้นด้วย)"
+        _click(driver, group_item)
+        time.sleep(3)
+        # ยืนยันว่าเลือกติด: หน้าการแชร์โพสต์ลงกลุ่มไม่มีช่องแคปชั่น (มีแต่ปุ่มโพสต์) →
+        # สัญญาณ = มีช่องแคปชั่น หรือ มีปุ่มโพสต์/แชร์ (เจอจริง 18/08: รอบแรกเช็คแคปชั่นอย่างเดียว → พลาด)
+        if _find_first(driver, caption_locators) or _find_first(driver, post_btn_locators):
+            selected = True
+            break
+    if not selected:
+        return False, "เลือกกลุ่มแล้วแต่ไม่เข้าหน้าคอมโพส (ลอง 3 รอบไม่สำเร็จ)"
+
+    # 5. ใส่แคปชั่น (ถ้ามี — โหมด direct เท่านั้น; การแชร์โพสต์ลงกลุ่มส่วนใหญ่ไม่มีช่อง)
+    if message:
+        box = _find_first(driver, caption_locators)
         if box:
             _type_like_human(box, message)
             time.sleep(2)
         else:
             print("[WARNING] ไม่พบช่องแคปชั่น → แชร์โดยไม่มีข้อความ")
 
-    # 6. กดปุ่ม "โพสต์" (Post)
-    post_btn = _find_first(driver, [
-        (By.XPATH, '//div[@role="dialog"]//div[@role="button"][normalize-space(text())="โพสต์" or normalize-space(text())="Post"]'),
-        (By.XPATH, '//*[@role="button"][normalize-space(text())="โพสต์" or normalize-space(text())="Post"]'),
-    ])
+    # 6. กดปุ่มยืนยัน
+    post_btn = _find_first(driver, post_btn_locators)
     if not post_btn:
         return False, "ไม่พบปุ่มโพสต์"
     if dry_run:
