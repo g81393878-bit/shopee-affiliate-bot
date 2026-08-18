@@ -20,7 +20,8 @@ from app.services.llm_clients import call_with_backoff, groq_clients
 logger = logging.getLogger(__name__)
 
 # Groq vision model — ใช้ SLIP_OCR_MODEL ถ้าตั้ง env ไว้ (override ได้)
-_SLIP_OCR_MODEL = "llama-3.2-11b-vision-preview"
+# (llama-3.2-11b-vision-preview ถูก decommission แล้ว 16/08/26 — เหลือ qwen3.6-27b ที่รับภาพได้)
+_SLIP_OCR_MODEL = "qwen/qwen3.6-27b"
 
 _SLIP_OCR_PROMPT = (
     "อ่านรูปสลิปโอนเงินธนาคารไทยนี้ แล้วตอบเป็น JSON เท่านั้น ไม่มีข้อความอื่น:\n"
@@ -75,6 +76,8 @@ def _parse_json(text) -> Optional[dict]:
     if not text:
         return None
     text = str(text).strip()
+    # ตัด <think>...</think> (qwen3.6 เป็น reasoning model คืนบล็อกคิดมาด้วย — ไม่งั้นดักด้วย regex { } ไม่เจอ)
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
     try:
         return json.loads(text)
     except (TypeError, ValueError):

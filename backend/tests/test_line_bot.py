@@ -788,6 +788,34 @@ def test_extract_slip_info_parses_groq_json(monkeypatch):
     assert slip_ocr.extract_slip_info(b"img", "image/png") == {"amount": "490.00", "ref_no": "REF456"}
 
 
+def test_slip_ocr_parse_json_strips_think_block():
+    # qwen3.6 เป็น reasoning model — ตัด <think>...</think> ก่อน parse JSON
+    assert slip_ocr._parse_json("<think>คิดก่อนตอบ</think>\n{\"amount\": \"490\"}") == {"amount": "490"}
+    assert slip_ocr._parse_json("<think>คิด</think><think>คิดอีก</think>{\"ref_no\": \"A1\"}") == {"ref_no": "A1"}
+
+
+def test_extract_slip_info_parses_qwen_think_json(monkeypatch):
+    # qwen3.6 คืน <think>...</think> + JSON → ยังได้ amount/ref_no ครบ
+    class _FakeClient:
+        api_key = "gsk_fake123"
+
+        class chat:
+            class completions:
+                @staticmethod
+                def create(**kwargs):
+                    assert kwargs["model"] == slip_ocr.settings.SLIP_OCR_MODEL
+                    return type("R", (), {"choices": [type("C", (), {
+                        "message": type("M", (), {"content": (
+                            "<think>สลิปมีเลข 490 บาท</think>\n\n"
+                            '{\"amount\": \"490.00\", \"ref_no\": \"REF789\"}'
+                        )})()
+                    })()]})()
+
+    monkeypatch.setattr(slip_ocr, "groq_clients", lambda: [_FakeClient()])
+    monkeypatch.setattr(slip_ocr.settings, "GROQ_API_KEY", "real_key")
+    assert slip_ocr.extract_slip_info(b"img", "image/png") == {"amount": "490.00", "ref_no": "REF789"}
+
+
 def test_payment_reply_shows_account_numbers_as_text(sim, monkeypatch):
     # ตั้งเลขพร้อมเพย์ + บัญชีธนาคาร → ข้อความโชว์เลขให้ลูกค้าจดได้ (นอกเหนือจาก QR)
     monkeypatch.setattr(lb, "OWNER_PROMPTPAY", "089-999-8888")
