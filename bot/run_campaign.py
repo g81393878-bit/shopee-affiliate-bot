@@ -22,6 +22,11 @@
   python bot/run_campaign.py share --method share --post-url "https://www.facebook.com/<page>/posts/<id>" \
       --groups-file groups.txt
 
+  # 2c) อัตโนมัติ: ดึงโพสต์เพจที่เพิ่งโพสต์จากคิว (สินค้า/แนะนำบอท/ข่าว/ร้าน) → แชร์ทีละโพสต์
+  #     แล้วรายงานสถานะกลับ (ต้อง --token = CRON_TOKEN ของระบบ)
+  python bot/run_campaign.py share --method share --from-queue --groups-file groups.txt \
+      --token <CRON_TOKEN> [--api-base https://shopee-affiliate-bot-9e9n.onrender.com]
+
   # 3) ดูสถานะกลุ่ม: กลุ่มไหนเขียว (แชร์สำเร็จ) / แดง (ล้ม) / โดน blacklist
   python bot/run_campaign.py status
 
@@ -341,71 +346,222 @@ def _cmd_share(args) -> int:
             print("[ERROR] ไม่มีกลุ่มที่รันได้ (โหมด direct ต้องการ URL กลุ่ม)")
             return 1
 
-        interval = args.group_interval if not args.dry_run else 0
-        results = {"ok": 0, "fail": 0, "sheet_ok": 0,
-                   "skipped": skipped_shared, "blacklisted": skipped_blacklisted,
-                   "unsafe": skipped_unsafe}
-        for i, (key, group_url, group_name) in enumerate(resolved, 1):
-            group = group_name or group_url
-            comment_ok = True
-            if args.method == "direct":
-                caption = args.caption or _pick_group_caption(i - 1)
-                print(f"\n👉 [{i}/{len(resolved)}] โพสต์ตรงลงกลุ่ม '{group}'")
-                if any(u in caption for u in ("http://", "https://")):
-                    print("[WARN] แคปชั่นมีลิงก์! Admin Assist หลายกลุ่มลบโพสต์ที่มีลิงก์ในตัวโพสต์ "
-                          "— คู่มือแนะนำให้ลิงก์อยู่ในคอมเมนต์แรก (--comment-link)")
-                ok, comment_ok, note = share_group.post_to_group(
-                    driver, group_url, caption, poster, comment, args.dry_run)
-                if ok and comment and not comment_ok:
-                    note += " · คอมเมนต์ลิงก์ไม่สำเร็จ (วางเอง)"
-            else:  # method share (ปุ่มแชร์จากเพจ — ทางสำรอง)
-                caption = args.caption or share_group._default_caption()
-                print(f"\n👉 [{i}/{len(resolved)}] แชร์โพสต์เพจ → กลุ่ม '{group}'")
-                ok, note = share_group.share_post_to_group(
-                    driver, args.post_url, group, caption, args.dry_run)
+        results = _share_post_to_groups(
+            driver, args, args.post_url, resolved, ledger, blacklist,
+            state_path, blacklist_path, poster, comment,
+            skipped_shared, skipped_blacklisted, skipped_unsafe)
+        return 0
+    finally:
+        try:
+            driver.quit()
+        except Exception:
+            pass
 
-            if args.dry_run:
-                print(f"[DRY-RUN] {note} — ไม่บันทึกชีท ไม่เขียน ledger/blacklist (โหมดจำลอง)")
+
+def _share_post_to_groups(driver, args, post_url, resolved, ledger, blacklist,
+                          state_path, blacklist_path, poster=None, comment=None,
+                          skipped_shared=0, skipped_blacklisted=0, skipped_unsafe=0) -> dict:
+    """แชร์ 1 โพสต์ (post_url) ลงกลุ่ม resolved ทั้งหมด — วนกลุ่ม + เว้นระยะ + บันทึก ledger/blacklist/ชีท.
+
+    คืน results dict {ok, fail, sheet_ok, skipped, blacklisted, unsafe} —
+    ใช้ทั้ง flow เดิม (share --post-url) และ queue mode (แชร์ทีละโพสต์จากคิว)
+    """
+    interval = args.group_interval if not args.dry_run else 0
+    results = {"ok": 0, "fail": 0, "sheet_ok": 0,
+               "skipped": skipped_shared, "blacklisted": skipped_blacklisted,
+               "unsafe": skipped_unsafe}
+    for i, (key, group_url, group_name) in enumerate(resolved, 1):
+        group = group_name or group_url
+        comment_ok = True
+        if args.method == "direct":
+            caption = args.caption or _pick_group_caption(i - 1)
+            print(f"\n👉 [{i}/{len(resolved)}] โพสต์ตรงลงกลุ่ม '{group}'")
+            if any(u in caption for u in ("http://", "https://")):
+                print("[WARN] แคปชั่นมีลิงก์! Admin Assist หลายกลุ่มลบโพสต์ที่มีลิงก์ในตัวโพสต์ "
+                      "— คู่มือแนะนำให้ลิงก์อยู่ในคอมเมนต์แรก (--comment-link)")
+            ok, comment_ok, note = share_group.post_to_group(
+                driver, group_url, caption, poster, comment, args.dry_run)
+            if ok and comment and not comment_ok:
+                note += " · คอมเมนต์ลิงก์ไม่สำเร็จ (วางเอง)"
+        else:  # method share (ปุ่มแชร์จากเพจ — ทางสำรอง)
+            caption = args.caption or share_group._default_caption()
+            print(f"\n👉 [{i}/{len(resolved)}] แชร์โพสต์เพจ → กลุ่ม '{group}'")
+            ok, note = share_group.share_post_to_group(
+                driver, post_url, group, caption, args.dry_run)
+
+        if args.dry_run:
+            print(f"[DRY-RUN] {note} — ไม่บันทึกชีท ไม่เขียน ledger/blacklist (โหมดจำลอง)")
+        else:
+            now = time.strftime("%Y-%m-%d %H:%M:%S")
+            prev = ledger.get(key, {})
+            if ok:
+                results["ok"] += 1
+                ledger[key] = {"status": "ok",
+                               "count": prev.get("count", 0) + 1,
+                               "fails": 0, "last": now, "note": note}
+                print(f"[OK] {note}")
             else:
-                now = time.strftime("%Y-%m-%d %H:%M:%S")
-                prev = ledger.get(key, {})
-                if ok:
-                    results["ok"] += 1
-                    ledger[key] = {"status": "ok",
-                                   "count": prev.get("count", 0) + 1,
-                                   "fails": 0, "last": now, "note": note}
-                    print(f"[OK] {note}")
-                else:
-                    results["fail"] += 1
-                    fails = prev.get("fails", 0) + 1
-                    ledger[key] = {"status": "fail",
-                                   "count": prev.get("count", 0) + 1,
-                                   "fails": fails, "last": now, "note": note}
-                    print(f"[FAIL] {note}")
-                    if fails >= args.fail_threshold:
-                        blacklist[key] = (f"โพสต์/แชร์ล้ม {fails} ครั้งติด "
-                                          f"(≥ {args.fail_threshold}) — {note}")
-                        print(f"[BLACKLIST] ขึ้นบัญชีดำ '{group}' อัตโนมัติ "
-                              f"(ล้ม {fails} ครั้ง) — ครั้งหน้าไม่ลองอีก "
-                              f"(ลบออกจาก {blacklist_path.name} เพื่อลองใหม่)")
-                _save_state(state_path, ledger)   # กันแชร์ซ้ำแม้โปรแกรมล้มกลางทาง
-                _save_blacklist(blacklist_path, blacklist)
-                if share_group._log_to_sheet(
-                        share_group._sheet_row(group_url or args.post_url, group,
-                                               caption, ok)):
-                    results["sheet_ok"] += 1
+                results["fail"] += 1
+                fails = prev.get("fails", 0) + 1
+                ledger[key] = {"status": "fail",
+                               "count": prev.get("count", 0) + 1,
+                               "fails": fails, "last": now, "note": note}
+                print(f"[FAIL] {note}")
+                if fails >= args.fail_threshold:
+                    blacklist[key] = (f"โพสต์/แชร์ล้ม {fails} ครั้งติด "
+                                      f"(≥ {args.fail_threshold}) — {note}")
+                    print(f"[BLACKLIST] ขึ้นบัญชีดำ '{group}' อัตโนมัติ "
+                          f"(ล้ม {fails} ครั้ง) — ครั้งหน้าไม่ลองอีก "
+                          f"(ลบออกจาก {blacklist_path.name} เพื่อลองใหม่)")
+            _save_state(state_path, ledger)   # กันแชร์ซ้ำแม้โปรแกรมล้มกลางทาง
+            _save_blacklist(blacklist_path, blacklist)
+            if share_group._log_to_sheet(
+                    share_group._sheet_row(group_url or post_url, group,
+                                           caption, ok)):
+                results["sheet_ok"] += 1
 
-            if i < len(resolved) and interval > 0:
-                print(f"[WAIT] เว้น {interval} วินาที ({interval / 60:.0f} นาที) "
-                      f"ก่อนกลุ่มถัดไป (คู่มือแนะนำ 15-30 นาที/กลุ่ม) ...")
-                time.sleep(interval)
+        if i < len(resolved) and interval > 0:
+            print(f"[WAIT] เว้น {interval} วินาที ({interval / 60:.0f} นาที) "
+                  f"ก่อนกลุ่มถัดไป (คู่มือแนะนำ 15-30 นาที/กลุ่ม) ...")
+            time.sleep(interval)
 
-        print("\n==========================================")
-        print(f"สรุป: สำเร็จ {results['ok']} | ล้ม {results['fail']} | "
-              f"บันทึกชีท {results['sheet_ok']} | ข้ามแล้ว {results['skipped']} | "
-              f"blacklist {results['blacklisted']} | #nosafe ข้าม {results['unsafe']}")
-        print("ดูประวัติกลุ่ม: python bot/run_campaign.py status")
-        print("ตรวจยืนยันด้วยตา: เปิดแต่ละกลุ่มดูโพสต์ + คอมเมนต์แรกว่ามีลิงก์ครบไหม")
+    print("\n==========================================")
+    print(f"สรุป: สำเร็จ {results['ok']} | ล้ม {results['fail']} | "
+          f"บันทึกชีท {results['sheet_ok']} | ข้ามแล้ว {results['skipped']} | "
+          f"blacklist {results['blacklisted']} | #nosafe ข้าม {results['unsafe']}")
+    print("ดูประวัติกลุ่ม: python bot/run_campaign.py status")
+    print("ตรวจยืนยันด้วยตา: เปิดแต่ละกลุ่มดูโพสต์ + คอมเมนต์แรกว่ามีลิงก์ครบไหม")
+    return results
+
+
+# ===========================================================================
+# Subcommand: share --from-queue — ดึงโพสต์เพจที่เพิ่งโพสต์จากคิว → แชร์ลงกลุ่ม → รายงาน
+# ===========================================================================
+def _fetch_pending_share_tasks(args) -> list:
+    """GET /api/admin/group-shares/pending — คืน [{task_id, post_url, kind, post_id}]"""
+    import requests
+    url = f"{args.api_base.rstrip('/')}/api/admin/group-shares/pending"
+    try:
+        r = requests.get(url, params={"token": args.token or ""}, timeout=15)
+        r.raise_for_status()
+        return r.json() or []
+    except Exception as e:
+        print(f"[ERROR] ดึงคิวแชร์ไม่สำเร็จ: {e}")
+        return []
+
+
+def _report_share_task(args, task_id, status, note="") -> bool:
+    """POST /api/admin/group-shares/{id}/status — รายงาน shared/failed/skipped"""
+    import requests
+    url = f"{args.api_base.rstrip('/')}/api/admin/group-shares/{task_id}/status"
+    try:
+        r = requests.post(url, params={"token": args.token or "",
+                                       "status": status, "note": note}, timeout=15)
+        r.raise_for_status()
+        return True
+    except Exception as e:
+        print(f"[WARN] รายงานสถานะงาน {task_id} ไม่สำเร็จ: {e}")
+        return False
+
+
+def _cmd_share_from_queue(args) -> int:
+    """--from-queue: ดึงงานแชร์โพสต์เพจค้างจากคิว → แชร์ทีละโพสต์ลงกลุ่ม → รายงานสถานะกลับ.
+
+    ต่างจาก share ปกติ: ไม่ข้ามกลุ่มที่แชร์โพสต์อื่นไปแล้ว (ทุกโพสต์ต้องถึงทุกกลุ่ม)
+    """
+    tasks = _fetch_pending_share_tasks(args)
+    if not tasks:
+        print("[QUEUE] ไม่มีงานแชร์ค้างในคิว (โพสต์เพจทั้งหมดแชร์ครบแล้ว)")
+        return 0
+    print(f"[QUEUE] พบงานแชร์ {len(tasks)} โพสต์: " +
+          ", ".join(f"{t['kind']}#{t['task_id']}" for t in tasks))
+
+    # รวมกลุ่มจากทุกแหล่ง (เหมือน share ปกติ) — กรอง blacklist/#nosafe แต่ไม่ข้ามกลุ่มที่แชร์แล้ว
+    entries = []
+    for name in (args.group_name or "").split(","):
+        name = name.strip()
+        if name:
+            entries.append((_entry_key(name), False, name, set()))
+    for url in (args.group_url or "").split(","):
+        url = url.strip()
+        if url:
+            entries.append((_entry_key(url), True, url, set()))
+    if args.groups_file:
+        for value, tags in _read_groups_file(args.groups_file):
+            entries.append((_entry_key(value),
+                            value.lower().startswith(("http://", "https://")), value, tags))
+    if not entries:
+        print("[ERROR] share ต้องระบุกลุ่มผ่าน --group-name / --group-url / --groups-file")
+        return 2
+
+    state_path = Path(args.state_file)
+    blacklist_path = Path(args.blacklist_file)
+    ledger = _load_state(state_path)
+    blacklist = _load_blacklist(blacklist_path)
+    pending = []
+    for (k, is_url, v, tags) in entries:
+        if k in blacklist:
+            print(f"[BLACKLIST] ข้าม '{v}' — {blacklist[k]}")
+        elif args.method == "direct" and "nosafe" in tags and not args.allow_unsafe:
+            print(f"[SKIP] '{v}' — แท็ก #nosafe โพสต์ตรงเสี่ยงโดนลบ → ข้าม (--allow-unsafe เพื่อบังคับ)")
+        else:
+            pending.append((k, is_url, v, tags))
+    if not pending:
+        print("[STATE] ไม่มีกลุ่มที่แชร์ได้ (blacklist / #nosafe หมด) → ไม่เปิดเบราว์เซอร์")
+        return 0
+
+    # โหมด direct: เตรียมภาพโปสเตอร์ + คอมเมนต์แรก (ลิงก์ LINE)
+    poster = None
+    comment = None
+    if args.method == "direct":
+        poster = resolve_poster_image(args.poster)
+        if args.comment_link is None:
+            comment = _default_comment_link()
+        elif args.comment_link != "":
+            comment = args.comment_link
+        if comment:
+            print(f"[COMMENT] จะวางลิงก์ในคอมเมนต์แรก: {comment[:70]}")
+        else:
+            print("[COMMENT] ปิดคอมเมนต์ลิงก์ (--comment-link \"\") — ต้องมีลิงก์ในแคปชั่นเอง")
+
+    cookie_path = Path(args.cookies) if args.cookies else ROOT / "fb_cookies.json"
+    print(f"[SHARE] เปิดเบราว์เซอร์ + ฉีดคุกกี้ (โหมด {args.method}, {len(pending)} กลุ่ม, {len(tasks)} โพสต์)")
+    driver = share_group._launch_driver()
+    try:
+        if not share_group.inject_cookies(driver, cookie_path):
+            print("[ERROR] ตั้งค่าล็อกอิน Facebook ไม่สำเร็จ → ยกเลิก")
+            return 1
+
+        # แปลง URL → ชื่อจริง (ทำครั้งเดียว — กลุ่มชุดเดียวกันทุกโพสต์)
+        resolved = []
+        for key, is_url, value, tags in pending:
+            if not is_url:
+                if args.method == "direct":
+                    print(f"[WARN] โหมด direct ต้องใช้ URL กลุ่ม — ข้าม '{value}' (แก้ groups.txt เป็น URL)")
+                    continue
+                resolved.append((key, None, value))
+            else:
+                name = share_group._resolve_group_name(driver, value)
+                print(f"[GROUP] {value} → '{name}'")
+                resolved.append((key, value, name))
+        if not resolved:
+            print("[ERROR] ไม่มีกลุ่มที่รันได้ (โหมด direct ต้องการ URL กลุ่ม)")
+            return 1
+
+        total_ok = 0
+        for idx, t in enumerate(tasks, 1):
+            print(f"\n{'=' * 60}\nงาน {idx}/{len(tasks)}: kind={t.get('kind')} "
+                  f"task_id={t.get('task_id')} post={t.get('post_url')}\n{'=' * 60}")
+            results = _share_post_to_groups(
+                driver, args, t.get("post_url") or "", resolved, ledger, blacklist,
+                state_path, blacklist_path, poster, comment)
+            ok = results["ok"] > 0
+            if ok:
+                total_ok += 1
+            _report_share_task(args, t.get("task_id"),
+                               "shared" if ok else "failed",
+                               note=f"โพสต์ {t.get('kind')} — สำเร็จ {results['ok']} กลุ่ม / ล้ม {results['fail']} กลุ่ม")
+        print(f"\n[QUEUE] แชร์สำเร็จ {total_ok}/{len(tasks)} โพสต์ (ดูรายละเอียดแต่ละโพสต์ด้านบน)")
         return 0
     finally:
         try:
@@ -490,6 +646,14 @@ def main() -> int:
                          help="ล้มติดต่อกันกี่ครั้งถึงขึ้น blacklist (default 2)")
     p_share.add_argument("--cookies", type=str, default=None,
                          help="พาธคุกกี้ (default fb_cookies.json)")
+    p_share.add_argument("--from-queue", action="store_true",
+                         help="ดึงโพสต์เพจที่เพิ่งโพสต์จากคิว (/api/admin/group-shares/pending) "
+                              "→ แชร์ทีละโพสต์ลงกลุ่ม แล้วรายงานสถานะกลับ (ใช้ --method share เสมอ)")
+    p_share.add_argument("--api-base", type=str,
+                         default="https://shopee-affiliate-bot-9e9n.onrender.com",
+                         help="ฐาน URL ระบบ (ใช้กับ --from-queue)")
+    p_share.add_argument("--token", type=str, default=None,
+                         help="token แอดมิน = CRON_TOKEN (ใช้กับ --from-queue)")
     p_share.add_argument("--dry-run", action="store_true",
                          help="จำลอง: ไม่แชร์ ไม่บันทึกชีท ไม่เขียน ledger/blacklist (ตรวจ locator)")
     p_share.set_defaults(func=_cmd_share)
@@ -503,6 +667,14 @@ def main() -> int:
     p_status.set_defaults(func=_cmd_status)
 
     args = parser.parse_args()
+    if getattr(args, "from_queue", False):
+        if args.method != "share":
+            print("[ERROR] --from-queue ใช้กับ --method share เท่านั้น (แชร์โพสต์เพจจากคิว)")
+            return 2
+        if not args.token:
+            print("[ERROR] --from-queue ต้องระบุ --token (CRON_TOKEN ของระบบ)")
+            return 2
+        return _cmd_share_from_queue(args)
     return args.func(args)
 
 

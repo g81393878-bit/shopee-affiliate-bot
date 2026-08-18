@@ -27,6 +27,7 @@ def test_build_fb_caption_fallback(monkeypatch):
     out = cron._build_fb_caption(_prod())
     assert "หูฟังบลูทูธ" in out
     assert "shope.ee" not in out  # ลิงก์แยกเป็น link param (ไม่ติดในข้อความ)
+    assert out.startswith("🛍️ โพสต์ขายสินค้า")  # ป้ายกำกับแยกจากโพสต์แนะนำบอท
 
 
 def test_build_fb_caption_with_tags(monkeypatch):
@@ -36,6 +37,7 @@ def test_build_fb_caption_with_tags(monkeypatch):
     assert "#ของดีบอกต่อ" in out
     assert "#คุ้มมาก" in out
     assert "shope.ee" not in out
+    assert out.startswith("🛍️ โพสต์ขายสินค้า")  # ป้ายกำกับชัดเจนทุกโพสต์สินค้า
 
 
 def test_push_post_to_sheet_sends_row(monkeypatch):
@@ -690,10 +692,13 @@ def test_intro_posts_have_badge_and_image_url(monkeypatch):
     monkeypatch.delenv("INTRO_IMAGE_URL", raising=False)
     posts = facebook_intro.intro_posts()
     assert len(posts) == 12
-    assert posts[0]["caption"].startswith("🏷️ เรื่องป้า")
+    assert posts[0]["caption"].startswith("👵 โพสต์แนะนำบอท")
+    assert "🏷️ เรื่องป้า" in posts[0]["caption"]  # badge เดิมยังอยู่ข้างใน
     for p in posts:
         assert p["title"] and p["caption"]
-        assert p["caption"].startswith("🏷️ ")  # badge เป็นป้ายข้อความนำหน้าเสมอ
+        # ป้ายกำกับชัดเจน: แยกโพสต์แนะนำบอทจากโพสต์ขายสินค้า
+        assert p["caption"].startswith("👵 โพสต์แนะนำบอท")
+        assert "🏷️ " in p["caption"]  # badge ธีมของแต่ละโพสต์ยังอยู่
         assert p["image_url"].endswith("/static/pa-khem-avatar.png")
 
 
@@ -1059,6 +1064,71 @@ def test_post_next_product_skips_recent_category(monkeypatch, db):
     res = cron._post_next_product(db)
     assert res is not None and res["posted"][0]["posted"] is True
     assert res["posted"][0]["name"] == "ของใช้ B"  # ข้ามหูฟัง (เพิ่งโพสต์) เลือกของใช้แทน
+
+
+def test_post_next_product_picks_below_top20_when_top_categories_in_cooldown(monkeypatch, db):
+    """ท็อป 20 (คอมสูง) ติด cooldown หมด → ต้องเลือกสินค้าหมวดอื่นที่พร้อม (อันดับ 21+)
+
+    เจอจริง 18/08: โพสต์ 14 หมวด/24 ชม. หมวดคอมสูงติด cooldown หมด →
+    ระบบเงียบทั้งที่มีสินค้าพร้อม 1,000+ ตัว (โค้ดเดิมดึงแค่ 20 ตัวแล้วกรองใน Python)
+    """
+    from app import models
+    monkeypatch.setenv("FB_POST_PRODUCTS", "1")
+    monkeypatch.delenv("FB_POST_CATEGORY_COOLDOWN_HOURS", raising=False)  # default 24h
+    _reset_products(db)
+    # 20 ตัวคอมสูงสุด หมวดหูฟัง (เพิ่งโพสต์ → ติด cooldown)
+    for i in range(20):
+        _add_test_product(db, name=f"หูฟัง {i}", category="หูฟัง", commission=1000 - i)
+    # ตัวอันดับ 21 หมวดของใช้ (ไม่ติด cooldown) — ต้องถูกเลือก
+    _add_test_product(db, name="ของใช้ ดี", category="ของใช้", commission=900)
+    earbuds = db.query(models.Product).filter(models.Product.name == "หูฟัง 0").first()
+    db.add(models.CampaignLog(category=str(earbuds.id), recipients=1, status="fbpost"))
+    db.commit()
+    monkeypatch.setattr(cron, "generate_script_for_product",
+                        lambda *a, **k: {"caption": "ป้า", "hashtags": []})
+    monkeypatch.setattr(cron, "fetch_product_image", lambda url: "")
+    posted = {}
+    monkeypatch.setattr(cron, "post_feed",
+                        lambda msg, link="", **k: posted.update(name=msg) or
+                        {"ok": True, "post_id": "p1", "error": None})
+    res = cron._post_next_product(db)
+    assert res is not None and res["posted"][0]["posted"] is True
+    assert res["posted"][0]["name"] == "ของใช้ ดี"  # ข้าม 20 ตัว cooldown เลือกตัวที่พร้อม
+
+
+def test_post_next_product_enqueues_group_share(monkeypatch, db):
+    """โพสต์สินค้าสำเร็จ → เข้าคิวแชร์ลงกลุ่ม (GroupShareTask kind=product + post_url)"""
+    from app import models
+    monkeypatch.setenv("FB_POST_PRODUCTS", "1")
+    _reset_products(db)
+    _add_test_product(db)
+    monkeypatch.setattr(cron, "generate_script_for_product",
+                        lambda *a, **k: {"caption": "ป้า", "hashtags": []})
+    monkeypatch.setattr(cron, "fetch_product_image", lambda url: "")
+    monkeypatch.setattr(cron, "post_feed",
+                        lambda msg, link="", **k: {"ok": True, "post_id": "123_456",
+                                                    "error": None})
+    res = cron._post_next_product(db)
+    assert res["posted"][0]["posted"] is True
+    task = db.query(models.GroupShareTask).order_by(models.GroupShareTask.id.desc()).first()
+    assert task is not None
+    assert task.kind == "product"
+    assert task.status == "pending"
+    assert task.post_url == "https://www.facebook.com/123_456"
+
+
+def test_post_next_intro_enqueues_group_share(monkeypatch, db):
+    """โพสต์แนะนำบอทสำเร็จ → เข้าคิวแชร์ (kind=intro)"""
+    from app import models
+    monkeypatch.setattr(cron, "post_feed",
+                        lambda msg, image_url="", **k: {"ok": True, "post_id": "intro_1",
+                                                         "error": None})
+    res = cron._post_next_intro(db)
+    assert res is not None and res["posted"][0]["posted"] is True
+    task = db.query(models.GroupShareTask).order_by(models.GroupShareTask.id.desc()).first()
+    assert task is not None
+    assert task.kind == "intro"
+    assert task.post_url == "https://www.facebook.com/intro_1"
 
 
 def test_post_next_product_skips_radar_posted_product(monkeypatch, db):

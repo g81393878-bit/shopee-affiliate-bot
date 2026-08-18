@@ -71,6 +71,30 @@
 **กันซ้ำ:** `posted_ids` = CampaignLog `fbpost` ทั้งหมด (สินค้าโพสต์ครั้งเดียว) + `fbpost_pending` = การจอง
 (ไม่นับเป็นโพสต์สำเร็จ — `_auto_post_due`/slot count ไม่มอง)
 
+### ป้ายกำกับโพสต์ (แยกชนิดชัดเจน)
+
+ทุกโพสต์ขึ้นเพจมีป้ายหัวชัดเจน แยกคนละชนิด (เจ้าของสั่ง 18/08):
+
+| ชนิดโพสต์ | ป้ายหัว | ที่ตั้งโค้ด |
+|---|---|---|
+| ขายสินค้า | `🛍️ โพสต์ขายสินค้า` | `_build_fb_caption()` (cron.py) |
+| แนะนำบอท (fbintro) | `👵 โพสต์แนะนำบอท | 🏷️ <badge>` | `intro_posts()` (facebook_intro.py) |
+
+### คิวแชร์ลงกลุ่ม (Group Share Queue)
+
+โพสต์เพจสำเร็จทุกชนิด (สินค้า/แนะนำ/ข่าว/ร้าน/พื้นสี) → เข้าคิวอัตโนมัติในตาราง `group_share_tasks`
+(status `pending`) — บอท local แชร์ลงกลุ่มทีหลัง:
+
+1. **โพสต์เพจสำเร็จ** → `_enqueue_group_share(db, kind, post_id)` เก็บ `post_url = https://www.facebook.com/{post_id}`
+2. **บอท local (IP บ้าน) รัน:** `python bot/run_campaign.py share --method share --from-queue --groups-file groups.txt --token <CRON_TOKEN>`
+   - poll `GET /api/admin/group-shares/pending` (claim กัน poll ซ้ำ; งานค้าง >30 นาที self-heal กลับคิว)
+   - แชร์ทีละโพสต์ลงกลุ่ม (Selenium `share_group.py` เดิม + ledger/blacklist/เว้นระยะ) — **ไม่ข้าม**
+     กลุ่มที่แชร์โพสต์อื่นไปแล้ว (ทุกโพสต์ต้องถึงทุกกลุ่ม)
+   - รายงาน `POST /api/admin/group-shares/{id}/status` → `shared` / `failed` (+ note)
+3. **ดูคิว:** `GET /api/admin/group-shares?status=pending` (admin cookie) หรือหน้าแอดมิน
+
+> ⚠️ บอทแชร์ต้องรันบนเครื่องบ้าน/IP จริง (คุกกี้ + Selenium) — ห้ามยิงจาก Render (IP คลาวด์เสี่ยงโดนจำกัด)
+
 ---
 
 ## บอท 3: Local Monitor — สแกนกลุ่มส่ง lead

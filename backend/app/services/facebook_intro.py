@@ -242,8 +242,12 @@ def intro_posts() -> list:
     for p in _POSTS:
         caption = p["caption"].replace(_LINE_PLACEHOLDER, line_oa)
         badge = (p.get("badge") or "").strip()
+        # หัวโพสต์แนะนำทุกตัว: ป้ายกำกับชัดเจน แยกจากโพสต์ขายสินค้า (เจ้าของสั่ง 18/08)
+        label = "👵 โพสต์แนะนำบอท"
         if badge:
-            caption = f"🏷️ {badge}\n\n{caption}"
+            caption = f"{label} | 🏷️ {badge}\n\n{caption}"
+        else:
+            caption = f"{label}\n\n{caption}"
         out.append({"title": p["title"], "caption": caption, "image_url": image_url})
     return out
 

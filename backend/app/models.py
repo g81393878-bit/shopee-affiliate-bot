@@ -229,6 +229,25 @@ class CampaignLog(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 
 
+class GroupShareTask(Base):
+    """คิวแชร์โพสต์เพจลงกลุ่ม — โพสต์เพจสำเร็จ (สินค้า/แนะนำบอท/ข่าว/ร้าน) → เข้าคิวรอ
+    บอท local poll `GET /api/admin/group-shares/pending` → แชร์ลงกลุ่ม → รายงานสถานะ
+    (แยกจาก radar tasks — งานนี้คือ "แชร์โพสต์เพจที่เพิ่งโพสต์" ไม่ใช่แชร์ lead)
+    """
+    __tablename__ = "group_share_tasks"
+
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    post_url = Column(Text, nullable=False)
+    kind = Column(String(20), default="product", nullable=False)  # product | intro | bg | content
+    post_id = Column(String(50), nullable=True)
+    status = Column(String(20), default="pending", nullable=False, index=True)
+    # pending → claimed (บอท local claim กัน poll ซ้ำ) → shared / failed / skipped
+    note = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, nullable=False, index=True)
+    claimed_at = Column(DateTime(timezone=True), nullable=True)
+    shared_at = Column(DateTime(timezone=True), nullable=True)
+
+
 class PerformanceLog(Base):
     __tablename__ = "performance_logs"
 
