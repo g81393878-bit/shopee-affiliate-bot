@@ -638,7 +638,8 @@ def _cmd_share_from_queue(args) -> int:
                     total_ok += 1
                     if not args.dry_run and max_per_day > 0:
                         _incr_daily_share(daily_path)
-                _report_share_task(args, t.get("task_id"), "shared" if ok else "failed", note=note)
+                if not args.dry_run:
+                    _report_share_task(args, t.get("task_id"), "shared" if ok else "failed", note=note)
             else:
                 results = _share_post_to_groups(
                     driver, args, t.get("post_url") or "", resolved, ledger, blacklist,
