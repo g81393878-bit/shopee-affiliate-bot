@@ -812,6 +812,13 @@ OWNER_CONFIRM_HELP = (
 )
 # เจ้าของดูคิวงานสั่งบอท: /คิว
 OWNER_QUEUE_PREFIX = "/คิว"
+# เจ้าของดูสลิปของลูกค้า: /สลิป <userId>
+OWNER_SLIP_PREFIX = "/สลิป"
+OWNER_SLIP_HELP = (
+    "วิธีดูสลิปของลูกค้าจ๊ะ:\n"
+    "/สลิป <userId>\n\n"
+    "userId อยู่ในข้อความแจ้งเตือนตอนลูกค้าส่งสลิปมา"
+)
 
 
 def _purchase_package_name(key: str) -> str:
@@ -1169,6 +1176,28 @@ def handle_owner_confirm(raw: str):
         except Exception as e:
             logger.warning(f"owner confirm push fail: {e}")
             return TextSendMessage(text=f"✅ ยืนยัน {target_uid} แล้ว แต่ push ถึงลูกค้าล้ม ({e})")
+    finally:
+        db.close()
+
+
+def handle_owner_slip(raw: str):
+    """เจ้าของดูสลิป: /สลิป <userId> → ส่งรูปสลิปล่าสุดของลูกค้ากลับในแชท (ใช้ลิงก์ /api/slips ที่มีอยู่)"""
+    rest = (raw or "").strip()
+    if rest.startswith(OWNER_SLIP_PREFIX):
+        rest = rest[len(OWNER_SLIP_PREFIX):].strip()
+    target_uid = rest.split(" ", 1)[0].strip()
+    if not target_uid.startswith("U"):
+        return TextSendMessage(text=OWNER_SLIP_HELP)
+    db = SessionLocal()
+    try:
+        slip = (db.query(models.BotPurchaseSlip)
+                  .filter(models.BotPurchaseSlip.line_user_id == target_uid)
+                  .order_by(models.BotPurchaseSlip.id.desc())
+                  .first())
+        if not slip:
+            return TextSendMessage(text=f"ไม่พบสลิปของ {target_uid} จ๊ะ — ยังไม่มีใครส่งรูปมา")
+        url = slip_view_url(slip.id)
+        return ImageSendMessage(original_content_url=url, preview_image_url=url)
     finally:
         db.close()
 
@@ -3076,6 +3105,30 @@ def _web_search_text(raw: str) -> str:
     return t.strip()
 
 
+def _send_reply(reply_token: str, reply, label: str = ""):
+    """ส่ง reply ผ่าน LINE API พร้อม log สำเร็จ/ล้ม — เห็นใน log ทันทีว่า reply ถึง LINE หรือไม่
+    (ตอนนี้บอทตอบ webhook 200 เสมอ แม้ reply ล้ม → LINE ไม่ยิงซ้ำ ข้อความหายเงียบ ๆ)
+
+    - สำเร็จ: [reply] OK label=... token=... types=[...]
+    - ล้ม:    [reply] FAIL label=... token=... <Exception>: <msg> แล้ว re-raise
+              (re-raise เก็บพฤติกรรมเดิม: webhook คืน 500 → LINE ยิง webhook ซ้ำ กันข้อความหาย)
+    - mock:   [reply] MOCK ... (dev/test ไม่มี token จริง)
+    """
+    msgs = _ensure_menu(reply)
+    tag = f"label={label} " if label else ""
+    if "mock" in LINE_ACCESS_TOKEN.lower():
+        logger.info(f"[reply] MOCK {tag}token={reply_token[:10]} (ไม่ส่งจริง)")
+        return None
+    try:
+        result = line_bot_api.reply_message(reply_token, msgs)
+        types = ",".join(type(m).__name__ for m in (msgs if isinstance(msgs, list) else [msgs]))
+        logger.info(f"[reply] OK {tag}token={reply_token[:10]} types=[{types}]")
+        return result
+    except Exception as e:
+        logger.error(f"[reply] FAIL {tag}token={reply_token[:10]}: {type(e).__name__}: {e}")
+        raise
+
+
 @handler.add(MessageEvent, message=TextMessage)
 def message_text(event):
     user_text = event.message.text.strip()
@@ -3242,6 +3295,10 @@ def message_text(event):
         elif is_owner and normalized_text.startswith(OWNER_QUEUE_PREFIX):
             # เจ้าของดูคิวงานสั่งบอท: /คิว → รายการงานค้างเรียงตามลำดับ (FIFO)
             reply = TextSendMessage(text=admin_queue_list(db))
+            intent = 'admin'
+        elif is_owner and normalized_text.startswith(OWNER_SLIP_PREFIX):
+            # เจ้าของดูสลิป: /สลิป <userId> → ส่งรูปสลิปกลับในแชท
+            reply = handle_owner_slip(normalized_text)
             intent = 'admin'
         elif is_greeting(normalized_text):
             # แนวสากล: ทักทาย + ปุ่มทางเลือก — ไม่ยิงสินค้าจนกว่าลูกค้าจะบอกความต้องการ
@@ -3420,21 +3477,12 @@ def message_text(event):
                 logger.warning(f"log_chat failed: {e}")
         db.close()
         
-    if "mock" in LINE_ACCESS_TOKEN.lower():
-        logger.info(f"Mock reply sent. ReplyToken: {event.reply_token}, Message: {getattr(reply, 'text', reply)}")
-    else:
-        line_bot_api.reply_message(event.reply_token, _ensure_menu(reply))
+    _send_reply(event.reply_token, reply, label="message_text")
 
 
 @handler.add(MessageEvent, message=StickerMessage)
 def sticker_text(event):
-    if "mock" in LINE_ACCESS_TOKEN.lower():
-        logger.info(f"Mock sticker reply sent. ReplyToken: {event.reply_token}")
-    else:
-        line_bot_api.reply_message(
-            event.reply_token,
-            StickerSendMessage(package_id='6136', sticker_id='10551379')
-        )
+    _send_reply(event.reply_token, StickerSendMessage(package_id='6136', sticker_id='10551379'), label="sticker")
 
 
 @handler.add(MessageEvent, message=ImageMessage)
@@ -3479,10 +3527,7 @@ def image_slip(event):
     finally:
         db.close()
 
-    if "mock" in LINE_ACCESS_TOKEN.lower():
-        logger.info(f"Mock slip reply sent. ReplyToken: {event.reply_token}")
-    else:
-        line_bot_api.reply_message(event.reply_token, _ensure_menu(reply))
+    _send_reply(event.reply_token, reply, label="image_slip")
 
 
 @handler.add(FollowEvent)

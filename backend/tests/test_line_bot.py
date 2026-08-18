@@ -7,6 +7,7 @@
 3. ค้นสินค้า/เงื่อนไขราคา/สเปค/พิมพ์ผิด ต้องหาเจอ
 """
 import datetime
+import logging
 
 import pytest
 
@@ -622,6 +623,89 @@ def test_slip_download_failure_replies_error(sim, db, monkeypatch):
     assert "ไม่สำเร็จ" in sim.replies[0]
     assert _purchase(db, "U_cust_1").status == "interested"  # ยังไม่เปลี่ยนเป็นรอยืนยัน
     assert sim.pushes == []
+
+
+# ---------- _send_reply: log สำเร็จ/ล้ม (เช็คได้ทันทีใน Render log ว่า reply ถึง LINE หรือไม่) ----------
+def test_send_reply_logs_ok(monkeypatch, caplog):
+    # ส่งสำเร็จ → log [reply] OK พร้อม label + ชนิดข้อความ
+    calls = []
+    monkeypatch.setattr(lb.line_bot_api, "reply_message",
+                        lambda token, msgs: calls.append((token, msgs)))
+    with caplog.at_level(logging.INFO, logger="app.api.line_bot"):
+        lb._send_reply("tok_123", lb.TextSendMessage(text="สวัสดี"), label="message_text")
+    text = "\n".join(r.message for r in caplog.records)
+    assert "[reply] OK" in text
+    assert "label=message_text" in text
+    assert "token=tok_123" in text
+    assert "types=[TextSendMessage]" in text
+    assert calls and calls[0][0] == "tok_123"
+
+
+def test_send_reply_logs_fail_and_reraises(monkeypatch, caplog):
+    # ส่งล้ม → log [reply] FAIL + re-raise (webhook คืน 500 → LINE ยิงซ้ำ กันข้อความหาย)
+    def boom(token, msgs):
+        raise RuntimeError("Invalid reply token")
+
+    monkeypatch.setattr(lb.line_bot_api, "reply_message", boom)
+    with caplog.at_level(logging.ERROR, logger="app.api.line_bot"):
+        with pytest.raises(RuntimeError, match="Invalid reply token"):
+            lb._send_reply("tok_456", lb.TextSendMessage(text="สวัสดี"), label="message_text")
+    text = "\n".join(r.message for r in caplog.records)
+    assert "[reply] FAIL" in text
+    assert "label=message_text" in text
+    assert "RuntimeError: Invalid reply token" in text
+
+
+def test_send_reply_mock_token_skips_api(monkeypatch, caplog):
+    # dev/test (token mock) → log [reply] MOCK ไม่ยิง API จริง
+    monkeypatch.setattr(lb, "LINE_ACCESS_TOKEN", "mock_line_channel_token")
+    calls = []
+    monkeypatch.setattr(lb.line_bot_api, "reply_message",
+                        lambda token, msgs: calls.append(token))
+    with caplog.at_level(logging.INFO, logger="app.api.line_bot"):
+        r = lb._send_reply("tok_789", lb.TextSendMessage(text="x"), label="sticker")
+    assert r is None
+    assert calls == []
+    text = "\n".join(r.message for r in caplog.records)
+    assert "[reply] MOCK" in text
+    assert "label=sticker" in text
+
+
+# ---------- /สลิป <userId>: เจ้าของดึงรูปสลิปจาก DB กลับมาในแชท ----------
+def test_owner_slip_command_returns_latest_slip_image(sim, db, monkeypatch):
+    # ลูกค้าส่งสลิป → เจ้าของสั่ง /สลิป U_cust_1 → ได้รูปสลิป (ImageSendMessage) กลับในแชท
+    monkeypatch.delenv("SLIP_VIEW_TOKEN", raising=False)
+    monkeypatch.delenv("CRON_TOKEN", raising=False)
+    sim.send("U_cust_1", "ยอด lean")
+    _send_slip(sim, monkeypatch, "U_cust_1", b"\x89PNG slip", "image/png")
+    r = sim.send(lb.ADMIN_LINE_USER_ID, "/สลิป U_cust_1")
+    assert r["intent"] == "admin"
+    assert r["preview"] == "<ImageSendMessage>"  # reply เป็นรูป
+    # ตรวจ URL จริงว่าเป็นลิงก์ /api/slips/ ของสลิปล่าสุด
+    msgs = lb.handle_owner_slip("/สลิป U_cust_1")
+    assert isinstance(msgs, lb.ImageSendMessage)
+    assert "/api/slips/" in msgs.original_content_url
+    assert msgs.preview_image_url == msgs.original_content_url
+
+
+def test_owner_slip_command_no_slip_guides(sim, db):
+    # ยังไม่มีสลิปของลูกค้าคนนี้ → ตอบบอกไม่พบ ไม่ crash
+    r = sim.send(lb.ADMIN_LINE_USER_ID, "/สลิป U_cust_1")
+    assert r["intent"] == "admin"
+    assert "ไม่พบสลิปของ U_cust_1" in r["preview"]
+
+
+def test_owner_slip_command_help_without_uid(sim, db):
+    # พิมพ์ /สลิป ไม่มี userId → สอนวิธีใช้
+    r = sim.send(lb.ADMIN_LINE_USER_ID, "/สลิป")
+    assert r["intent"] == "admin"
+    assert "/สลิป <userId>" in r["preview"]
+
+
+def test_owner_slip_command_customer_cannot_use(sim, db):
+    # ลูกค้าธรรมดาพิมพ์ /สลิป → ไม่เป็น admin (ไม่หลุดข้อมูลสลิปคนอื่น)
+    r = sim.send("U_cust_1", "/สลิป U_other")
+    assert r["intent"] != "admin"
 
 
 def test_slip_view_url_embeds_token(monkeypatch):
