@@ -210,6 +210,44 @@ def _save_blacklist(path: Path, blacklist: dict) -> None:
 
 
 # ===========================================================================
+# ตัวนับแชร์รายวัน (กัน FB แบน — แชร์ลงกลุ่มเยอะเกิน/วันจะโดนบล็อกบัญชี)
+# ===========================================================================
+def _load_daily_share(path: Path) -> dict:
+    """โหลดตัวนับแชร์รายวัน {date: count} — กันแชร์เกินโควต้าต่อวัน."""
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return {str(k): int(v) for k, v in data.items() if str(v).lstrip("-").isdigit()}
+    except Exception:
+        pass
+    return {}
+
+
+def _save_daily_share(path: Path, data: dict) -> None:
+    """เขียนตัวนับแชร์รายวัน — best-effort ไม่พังแคมเปญ."""
+    try:
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True),
+                        encoding="utf-8")
+    except Exception as e:
+        print(f"[DAILY] เขียนตัวนับรายวันล้ม: {e}")
+
+
+def _today_share_count(path: Path) -> int:
+    """จำนวนโพสต์ที่แชร์ลงกลุ่มแล้ววันนี้ (key = YYYY-MM-DD)."""
+    return _load_daily_share(path).get(time.strftime("%Y-%m-%d"), 0)
+
+
+def _incr_daily_share(path: Path, n: int = 1) -> None:
+    """บวกตัวนับแชร์วันนี้ +n (เรียกหลังแชร์สำเร็จเท่านั้น)."""
+    data = _load_daily_share(path)
+    today = time.strftime("%Y-%m-%d")
+    data[today] = data.get(today, 0) + n
+    _save_daily_share(path, data)
+
+
+# ===========================================================================
 # Subcommand: post — โพสต์แนะนำป้าเข็มลงเพจอย่างเดียว (ไม่แตะกลุ่ม)
 # ===========================================================================
 def _cmd_post(args) -> int:
@@ -469,10 +507,28 @@ def _cmd_share_from_queue(args) -> int:
 
     ต่างจาก share ปกติ: ไม่ข้ามกลุ่มที่แชร์โพสต์อื่นไปแล้ว (ทุกโพสต์ต้องถึงทุกกลุ่ม)
     """
+    # โควต้าแชร์รายวัน (กัน FB แบน — แนะนำ ≤3 โพสต์/วัน) + จำกัดต่อรอบ (กระจาย 1 โพสต์/รอบ)
+    # เช็คก่อนดึงคิว เพื่อไม่ไป claim งานคิวทิ้งไว้โดยไม่แชร์
+    daily_path = Path(args.daily_share_file)
+    max_per_day = args.max_posts_per_day
+    max_per_run = args.max_posts_per_run
+    remaining = None  # None = ไม่จำกัด
+    if max_per_day > 0:
+        done_today = _today_share_count(daily_path)
+        remaining = max_per_day - done_today
+        if remaining <= 0:
+            print(f"[DAILY] แชร์ครบโควต้าวันนี้แล้ว ({done_today}/{max_per_day} โพสต์) → ไม่แชร์เพิ่ม (เริ่มใหม่พรุ่งนี้)")
+            return 0
+    if max_per_run > 0 and (remaining is None or remaining > max_per_run):
+        remaining = max_per_run
+
     tasks = _fetch_pending_share_tasks(args)
     if not tasks:
         print("[QUEUE] ไม่มีงานแชร์ค้างในคิว (โพสต์เพจทั้งหมดแชร์ครบแล้ว)")
         return 0
+    if remaining is not None and len(tasks) > remaining:
+        print(f"[DAILY] โควต้าครั้งนี้จำกัด {remaining} โพสต์ → ตัดคิวจาก {len(tasks)} เหลือ {remaining}")
+        tasks = tasks[:remaining]
     print(f"[QUEUE] พบงานแชร์ {len(tasks)} โพสต์: " +
           ", ".join(f"{t['kind']}#{t['task_id']}" for t in tasks))
 
@@ -580,6 +636,8 @@ def _cmd_share_from_queue(args) -> int:
                                                ", ".join(selected) or "ไม่มีกลุ่ม", caption, ok))
                 if ok:
                     total_ok += 1
+                    if not args.dry_run and max_per_day > 0:
+                        _incr_daily_share(daily_path)
                 _report_share_task(args, t.get("task_id"), "shared" if ok else "failed", note=note)
             else:
                 results = _share_post_to_groups(
@@ -686,6 +744,12 @@ def main() -> int:
                          help="token แอดมิน = CRON_TOKEN (ใช้กับ --from-queue)")
     p_share.add_argument("--dry-run", action="store_true",
                          help="จำลอง: ไม่แชร์ ไม่บันทึกชีท ไม่เขียน ledger/blacklist (ตรวจ locator)")
+    p_share.add_argument("--max-posts-per-day", type=int, default=3,
+                         help="โควต้าแชร์ลงกลุ่มสูงสุดต่อวัน (default 3 — กัน FB แบน; 0 = ไม่จำกัด)")
+    p_share.add_argument("--max-posts-per-run", type=int, default=1,
+                         help="จำกัดจำนวนโพสต์ต่อการรัน 1 ครั้ง (default 1 — กระจายเช้า/กลางวัน/เย็น; 0 = ไม่จำกัด)")
+    p_share.add_argument("--daily-share-file", type=str, default=str(ROOT / "fb_daily_share.json"),
+                         help="ไฟล์ตัวนับแชร์รายวัน (default fb_daily_share.json)")
     p_share.set_defaults(func=_cmd_share)
 
     # --- status: ดูประวัติกลุ่ม + blacklist ---

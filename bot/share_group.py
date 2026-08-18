@@ -366,17 +366,42 @@ def share_post_to_group(driver, post_url: str, group_name: str,
         return False, "กดโพสต์แล้ว แต่ dialog ไม่ปิด (ไม่ยืนยัน — ตรวจที่กลุ่ม)"
 
 
+MAX_GROUPS_PER_SHARE = 10   # Facebook จำกัดเลือกได้ไม่เกิน 10 กลุ่ม/การแชร์ 1 ครั้ง (ฟอรั่ม/คู่มือ)
+
+
 def share_post_to_groups_multi(driver, post_url: str, group_names: List[str],
                                message: Optional[str] = None,
                                dry_run: bool = False) -> Tuple[bool, str, List[str]]:
-    """แชร์โพสต์ลงหลายกลุ่มในครั้งเดียว (multi-select) — กดโพสต์ครั้งเดียว.
+    """แชร์โพสต์ลงหลายกลุ่มในครั้งเดียว — ถ้าเกิน 10 กลุ่ม จะแยกเป็นรอบละ ≤10 อัตโนมัติ.
 
-    Facebook หน้า "แชร์ไปยังกลุ่ม" เลือกได้หลายกลุ่มพร้อมกัน (ฟอรั่ม/คู่มือยืนยัน
-    เลือกได้ถึง 3-10 กลุ่ม) → ลดการกด "โพสต์" จาก N ครั้งเหลือ 1 ครั้ง
-    → ไม่โดน FB rate-limit (ต้นเหตุของข้อความ "เกิดข้อผิดพลาด").
+    Facebook หน้า "แชร์ไปยังกลุ่ม" เลือกได้หลายกลุ่มพร้อมกันสูงสุด 10 กลุ่ม
+    → ลดการกด "โพสต์" จาก N ครั้งเหลือ 1 ครั้ง/รอบ → ไม่โดน FB rate-limit.
 
     คืน (ok, note, selected_names)
     """
+    if not group_names:
+        return False, "ไม่มีกลุ่มเป้าหมาย", []
+    selected_all: List[str] = []
+    rounds = (len(group_names) + MAX_GROUPS_PER_SHARE - 1) // MAX_GROUPS_PER_SHARE
+    for r in range(rounds):
+        batch = group_names[r * MAX_GROUPS_PER_SHARE:(r + 1) * MAX_GROUPS_PER_SHARE]
+        if rounds > 1:
+            print(f"[BATCH] รอบ {r + 1}/{rounds}: {len(batch)} กลุ่ม")
+        ok, note, selected = _share_post_to_groups_batch(driver, post_url, batch, message, dry_run)
+        selected_all.extend(selected)
+        if not ok:
+            return False, note, selected_all
+        if r + 1 < rounds:
+            print("[BATCH] พัก 8 วินาทีก่อนแชร์รอบถัดไป (กัน FB rate-limit)")
+            time.sleep(8)
+    return True, (f"แชร์สำเร็จ {len(selected_all)} กลุ่ม "
+                  f"({'ครั้งเดียว' if rounds == 1 else f'แยก {rounds} รอบ'})"), selected_all
+
+
+def _share_post_to_groups_batch(driver, post_url: str, group_names: List[str],
+                                message: Optional[str] = None,
+                                dry_run: bool = False) -> Tuple[bool, str, List[str]]:
+    """แชร์ 1 รอบ (≤10 กลุ่ม) — เปิดโพสต์ → แชร์ → แชร์ไปยังกลุ่ม → เลือกหลายกลุ่ม → โพสต์ครั้งเดียว."""
     if not group_names:
         return False, "ไม่มีกลุ่มเป้าหมาย", []
 

@@ -102,5 +102,6 @@ fb_cookies.json
 fb_shared_state.json
 fb_blacklist.json
 groups_status.json
+fb_daily_share.json
 .promo_caption_state.json
 .promo_poster_state.json
