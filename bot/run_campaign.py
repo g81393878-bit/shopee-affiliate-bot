@@ -549,18 +549,48 @@ def _cmd_share_from_queue(args) -> int:
             return 1
 
         total_ok = 0
+        group_names = [name or url for (_, url, name) in resolved]
         for idx, t in enumerate(tasks, 1):
             print(f"\n{'=' * 60}\nงาน {idx}/{len(tasks)}: kind={t.get('kind')} "
                   f"task_id={t.get('task_id')} post={t.get('post_url')}\n{'=' * 60}")
-            results = _share_post_to_groups(
-                driver, args, t.get("post_url") or "", resolved, ledger, blacklist,
-                state_path, blacklist_path, poster, comment)
-            ok = results["ok"] > 0
-            if ok:
-                total_ok += 1
-            _report_share_task(args, t.get("task_id"),
-                               "shared" if ok else "failed",
-                               note=f"โพสต์ {t.get('kind')} — สำเร็จ {results['ok']} กลุ่ม / ล้ม {results['fail']} กลุ่ม")
+            if args.method == "share":
+                # multi-select: เลือกหลายกลุ่มใน dialog เดียว → กดโพสต์ครั้งเดียว (กัน rate-limit)
+                caption = args.caption or share_group._default_caption()
+                ok, note, selected = share_group.share_post_to_groups_multi(
+                    driver, t.get("post_url") or "", group_names, caption, args.dry_run)
+                if args.dry_run:
+                    print(f"[DRY-RUN] {note}")
+                else:
+                    now = time.strftime("%Y-%m-%d %H:%M:%S")
+                    for key, url, name in resolved:
+                        gname = name or url
+                        prev = ledger.get(key, {})
+                        if ok and gname in selected:
+                            ledger[key] = {"status": "ok", "count": prev.get("count", 0) + 1,
+                                           "fails": 0, "last": now, "note": note}
+                        else:
+                            fails = prev.get("fails", 0) + 1
+                            ledger[key] = {"status": "fail", "count": prev.get("count", 0) + 1,
+                                           "fails": fails, "last": now,
+                                           "note": note if not ok else "ไม่พบกลุ่มในรายการ (บัญชีต้องเป็นสมาชิก)"}
+                    _save_state(state_path, ledger)
+                    _save_blacklist(blacklist_path, blacklist)
+                    share_group._log_to_sheet(
+                        share_group._sheet_row(t.get("post_url") or "",
+                                               ", ".join(selected) or "ไม่มีกลุ่ม", caption, ok))
+                if ok:
+                    total_ok += 1
+                _report_share_task(args, t.get("task_id"), "shared" if ok else "failed", note=note)
+            else:
+                results = _share_post_to_groups(
+                    driver, args, t.get("post_url") or "", resolved, ledger, blacklist,
+                    state_path, blacklist_path, poster, comment)
+                ok = results["ok"] > 0
+                if ok:
+                    total_ok += 1
+                _report_share_task(args, t.get("task_id"),
+                                   "shared" if ok else "failed",
+                                   note=f"โพสต์ {t.get('kind')} — สำเร็จ {results['ok']} กลุ่ม / ล้ม {results['fail']} กลุ่ม")
         print(f"\n[QUEUE] แชร์สำเร็จ {total_ok}/{len(tasks)} โพสต์ (ดูรายละเอียดแต่ละโพสต์ด้านบน)")
         return 0
     finally:
