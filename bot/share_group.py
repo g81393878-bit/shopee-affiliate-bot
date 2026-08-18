@@ -26,7 +26,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import requests
 from selenium.webdriver.common.by import By
@@ -121,14 +121,55 @@ def _log_to_sheet(row: Dict[str, Any]) -> bool:
         return False
 
 
+def _line_oa_url() -> str:
+    return os.getenv("LINE_OA_URL", "https://lin.ee/o9Kjp1N")
+
+
+# แคปชั่นแชร์แบบ spintax — คู่ hook+benefit (5 คู่) × CTA (3 แบบ) = 15 แบบไม่ซ้ำ
+_SHARE_CAPTION_PAIRS = [
+    (
+        "อยากใช้บอทช่วยขายของ Shopee (บอทป้าเข็ม) ป้าจัดการระบบให้พร้อมใช้ทันทีจ้า 😊",
+        "🛠️ ปลอดภัยรันบนบัญชี/คีย์คุณเอง แอดมินดูแลหลังบ้านให้หมด ไม่ต้องเซ็ตค่าเองให้ปวดหัวจ้า",
+    ),
+    (
+        "อยากมีบอทอัจฉริยะในแบรนด์ตัวเองไหมจ๊ะ? 🤖",
+        "บอทป้าเข็มตัวนี้สามารถเปลี่ยนชื่อบอท เปลี่ยนสโลแกน และตั้งเป็นชื่อร้านของคุณเองได้ทันทีเลยนะจ๊ะ!",
+    ),
+    (
+        "แม่ค้าออนไลน์ตอบแชทไม่ทันบ้างไหมจ๊ะ? 😅",
+        "ป้าเข็มมีบอทช่วยตอบลูกค้าอัตโนมัติ + ช่วยหาคนอยากซื้อให้ถึงเพจ ตอบไวไม่ตกหล่น",
+    ),
+    (
+        "ขายของออนไลน์อยากมีตัวช่วยสักคนไหมจ๊ะ? 🛒",
+        "บอทป้าเข็มดูแลหลังบ้านให้หมด ทั้งตอบแชท หาคนซื้อ และตั้งชื่อแบรนด์ตัวเองได้",
+    ),
+    (
+        "อยากให้ร้านมีบอทตอบลูกค้าเองอัตโนมัติ ไม่ต้องจ้างพนักงานไหมจ๊ะ? 💼",
+        "ป้าเข็มเซ็ตระบบให้พร้อมใช้ รันบนบัญชี/คีย์คุณเอง ปลอดภัย ไม่ต้องนั่งเซ็ตเอง",
+    ),
+]
+
+_SHARE_CAPTION_CTAS = [
+    "💼 เริ่มต้น 490.- แอดไลน์คุยรายละเอียดแพ็กเกจกับป้าเลยจ้า 👉 @@LINE@@",
+    "💬 ทักไลน์คุยรายละเอียดกับป้าเข็มได้เลยจ้า 👉 @@LINE@@",
+    "เริ่มต้นเบา ๆ คุยกันก่อนได้ ทักไลน์หาป้าเข็มเลยจ้า 👉 @@LINE@@",
+]
+
+
+def _share_caption_variants() -> List[str]:
+    """แคปชั่นแชร์หลายแบบ (spintax: hook/benefit × CTA สลับกัน) — หมุนเวียนกันแต่ละกลุ่ม
+    ข้อความไม่ซ้ำกันทุกกลุ่ม กัน Facebook จับว่าเป็นสแปม."""
+    line = _line_oa_url()
+    variants = []
+    for hook, benefit in _SHARE_CAPTION_PAIRS:
+        for cta in _SHARE_CAPTION_CTAS:
+            variants.append(f"{hook}\n{benefit}\n{cta}".replace("@@LINE@@", line))
+    return variants
+
+
 def _default_caption() -> str:
-    """แคปชั่นตอนแชร์ (โปรโมทบอทป้าเข็ม — ไม่มีลิงก์สินค้า)"""
-    line_oa_url = os.getenv("LINE_OA_URL", "https://lin.ee/o9Kjp1N")
-    return (
-        "อยากใช้บอทช่วยขายของ Shopee (บอทป้าเข็ม) ป้าจัดการระบบให้พร้อมใช้ทันทีจ้า 😊\n"
-        "🛠️ ปลอดภัยรันบนบัญชี/คีย์คุณเอง แอดมินดูแลหลังบ้านให้หมด ไม่ต้องเซ็ตค่าเองให้ปวดหัวจ้า\n"
-        f"💼 เริ่มต้น 490.- แอดไลน์คุยรายละเอียดแพ็กเกจกับป้าเลยจ้า 👉 {line_oa_url}"
-    )
+    """แคปชั่นแชร์แบบแรก (โปรโมทบอทป้าเข็ม — ไม่มีลิงก์สินค้า) — ใช้เมื่อต้องการข้อความเดียว."""
+    return _share_caption_variants()[0]
 
 
 def _sheet_row(post_url: str, group_name: str, caption: str, ok: bool) -> Dict[str, Any]:
@@ -476,7 +517,7 @@ def share_post_to_group_os(driver, post_url: str, group_name: str,
 
 
 def share_post_to_groups_multi(driver, post_url: str, group_names: List[str],
-                               message: Optional[str] = None,
+                               message: Optional[Union[str, List[str]]] = None,
                                dry_run: bool = False) -> Tuple[bool, str, List[str]]:
     """แชร์โพสต์ลงหลายกลุ่ม — ใช้ flow จริงที่พิสูจน์แล้ว (แชร์ → กด 'กลุ่ม' → เลือกชื่อกลุ่ม → โพสต์)
     ด้วยเมาส์จริง (img_click) เพราะ Facebook กัน DOM/synthetic click ที่ปุ่ม 'กลุ่ม' และแถวกลุ่ม.
@@ -484,14 +525,20 @@ def share_post_to_groups_multi(driver, post_url: str, group_names: List[str],
     แชร์ทีละ 1 กลุ่มต่อ 1 ครั้ง (flow เดียวที่พิสูจน์ว่าแชร์สำเร็จจริง) แล้วเว้นระยะสั้น ๆ
     กัน FB rate-limit.
 
+    message: str = ใช้ข้อความเดียวทุกกลุ่ม; list[str] = หมุนแคปชั่นกันแต่ละกลุ่ม (กันข้อความซ้ำ)
+
     คืน (ok, note, selected_names)
     """
     if not group_names:
         return False, "ไม่มีกลุ่มเป้าหมาย", []
     selected_all: List[str] = []
     for i, name in enumerate(group_names, 1):
+        if isinstance(message, (list, tuple)) and message:
+            msg = message[(i - 1) % len(message)]  # หมุนแคปชั่นกันแต่ละกลุ่ม
+        else:
+            msg = message
         print(f"[GROUP] ({i}/{len(group_names)}) แชร์ไปยัง '{name}'")
-        ok, note = share_post_to_group_os(driver, post_url, name, message, dry_run)
+        ok, note = share_post_to_group_os(driver, post_url, name, msg, dry_run)
         if ok:
             selected_all.append(name)
             print(f"[OK] '{name}' → {note}")

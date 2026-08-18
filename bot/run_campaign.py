@@ -79,17 +79,51 @@ def build_comment_link(line_oa_url: Optional[str] = None) -> str:
 # ===========================================================================
 # แคปชั่นโพสต์กลุ่ม (ตามคู่มือ: ไม่มีลิงก์ + เลี่ยงคำแบล็คลิสต์แอดไลน์/ราคา/สมัคร)
 # ===========================================================================
-GROUP_CAPTIONS = [
-    "แม่ค้าออนไลน์ที่อยากขายของใน Shopee ให้ง่ายขึ้น แวะมาคุยกับป้าเข็มได้นะคะ 😊\n"
-    "ป้าช่วยจัดการระบบให้พร้อมใช้ทันที ดูแลหลังบ้านให้หมด ไม่ต้องมานั่งเซ็ตเอง\n"
+# แคปชั่นโพสต์กลุ่มแบบ spintax — คู่ hook+benefit (6 คู่) × CTA (3 แบบ) = 18 แบบไม่ซ้ำ
+_GROUP_CAPTION_PAIRS = [
+    (
+        "แม่ค้าออนไลน์ที่อยากขายของใน Shopee ให้ง่ายขึ้น แวะมาคุยกับป้าเข็มได้นะคะ 😊",
+        "ป้าช่วยจัดการระบบให้พร้อมใช้ทันที ดูแลหลังบ้านให้หมด ไม่ต้องมานั่งเซ็ตเอง",
+    ),
+    (
+        "ขายของออนไลน์อยู่หรือเปล่าคะ ตอบแชทลูกค้าไม่ทันบ้างไหม 😅",
+        "ป้าเข็มมีตัวช่วยจัดการให้ สบาย ๆ คุยกันก่อนได้",
+    ),
+    (
+        "แวะมาชวนแม่ค้าออนไลน์คุยหน่อยค่า 😊",
+        "อยากให้ร้านตอบแชทลูกค้าอัตโนมัติ หาคนซื้อให้ ลองคุยกับป้าเข็มดู",
+    ),
+    (
+        "อยากมีบอทอัจฉริยะในแบรนด์ตัวเองไหมจ๊ะ? 🤖",
+        "บอทป้าเข็มตัวนี้สามารถเปลี่ยนชื่อบอท เปลี่ยนสโลแกน และตั้งเป็นชื่อร้านของคุณเองได้ทันทีเลยนะจ๊ะ!",
+    ),
+    (
+        "อยากให้ร้านมีบอทตอบลูกค้าอัตโนมัติ ไม่ต้องจ้างพนักงานไหมจ๊ะ? 💼",
+        "ป้าเข็มเซ็ตระบบให้พร้อมใช้ รันบนบัญชี/คีย์คุณเอง ปลอดภัย",
+    ),
+    (
+        "ขายของออนไลน์คนเดียว เหนื่อยตอบแชททั้งวันไหมจ๊ะ? 🛒",
+        "ป้าเข็มมีบอทช่วยตอบ + ช่วยหาคนอยากซื้อให้ถึงเพจ เหนื่อยน้อยลงเยอะเลยจ้า",
+    ),
+]
+
+_GROUP_CAPTION_CTAS = [
     "รายละเอียดเพิ่มเติมปักหมุดไว้ที่คอมเมนต์แรกจ้า 👇",
-    "ขายของออนไลน์อยู่หรือเปล่าคะ ตอบแชทลูกค้าไม่ทันบ้างไหม 😅\n"
-    "ป้าเข็มมีตัวช่วยจัดการให้ สบาย ๆ คุยกันก่อนได้\n"
     "ทักไลน์มาคุยกับป้าได้เลย รายละเอียดอยู่ในคอมเมนต์แรกนะคะ",
-    "แวะมาชวนแม่ค้าออนไลน์คุยหน่อยค่า 😊\n"
-    "อยากให้ร้านตอบแชทลูกค้าอัตโนมัติ หาคนซื้อให้ ลองคุยกับป้าเข็มดู\n"
     "ค่าขนมป้าเบา ๆ คุยได้เลย ปักหมุดรายละเอียดไว้ที่คอมเมนต์แรกจ้า 👇",
 ]
+
+
+def _build_group_captions() -> list:
+    """สร้างแคปชั่นกลุ่ม (spintax) — hook/benefit × CTA สลับกันได้ 18 แบบหมุนเวียน."""
+    captions = []
+    for hook, benefit in _GROUP_CAPTION_PAIRS:
+        for cta in _GROUP_CAPTION_CTAS:
+            captions.append(f"{hook}\n{benefit}\n{cta}")
+    return captions
+
+
+GROUP_CAPTIONS = _build_group_captions()
 
 
 def _pick_group_caption(index: int) -> str:
@@ -422,7 +456,9 @@ def _share_post_to_groups(driver, args, post_url, resolved, ledger, blacklist,
             if ok and comment and not comment_ok:
                 note += " · คอมเมนต์ลิงก์ไม่สำเร็จ (วางเอง)"
         else:  # method share (ปุ่มแชร์จากเพจ — ทางสำรอง)
-            caption = args.caption or share_group._default_caption()
+            captions = ([args.caption] if args.caption
+                        else share_group._share_caption_variants())
+            caption = captions[(i - 1) % len(captions)]
             print(f"\n👉 [{i}/{len(resolved)}] แชร์โพสต์เพจ → กลุ่ม '{group}'")
             ok, note = share_group.share_post_to_group(
                 driver, post_url, group, caption, args.dry_run)
@@ -611,9 +647,11 @@ def _cmd_share_from_queue(args) -> int:
                   f"task_id={t.get('task_id')} post={t.get('post_url')}\n{'=' * 60}")
             if args.method == "share":
                 # multi-select: เลือกหลายกลุ่มใน dialog เดียว → กดโพสต์ครั้งเดียว (กัน rate-limit)
-                caption = args.caption or share_group._default_caption()
+                # แคปชั่นหมุนเวียนหลายแบบ (ถ้าไม่ระบุ --caption) — กันข้อความซ้ำ ๆ โดน FB จับสแปม
+                captions = ([args.caption] if args.caption
+                            else share_group._share_caption_variants())
                 ok, note, selected = share_group.share_post_to_groups_multi(
-                    driver, t.get("post_url") or "", group_names, caption, args.dry_run)
+                    driver, t.get("post_url") or "", group_names, captions, args.dry_run)
                 if args.dry_run:
                     print(f"[DRY-RUN] {note}")
                 else:
@@ -631,9 +669,12 @@ def _cmd_share_from_queue(args) -> int:
                                            "note": note if not ok else "ไม่พบกลุ่มในรายการ (บัญชีต้องเป็นสมาชิก)"}
                     _save_state(state_path, ledger)
                     _save_blacklist(blacklist_path, blacklist)
+                    caption_label = (args.caption
+                                     or f"หมุนเวียน {len(captions)} แบบ (แคปชั่นโปรโมทบอท)")
                     share_group._log_to_sheet(
                         share_group._sheet_row(t.get("post_url") or "",
-                                               ", ".join(selected) or "ไม่มีกลุ่ม", caption, ok))
+                                               ", ".join(selected) or "ไม่มีกลุ่ม",
+                                               caption_label, ok))
                 if ok:
                     total_ok += 1
                     if not args.dry_run and max_per_day > 0:
