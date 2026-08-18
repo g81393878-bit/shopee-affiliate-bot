@@ -480,13 +480,16 @@ def _post_next_product(db, limit: int = 1) -> Optional[dict]:
         query = query.filter(~models.Product.id.in_(posted_ids))
     if recent_radar_ids:
         query = query.filter(~models.Product.id.in_(recent_radar_ids))
-    # เรียงคอมสูงก่อน แล้วกรองหมวดที่เพิ่งโพสต์ออก (ดึงเผื่อ limit*20 เผื่อโดนกรองหมด)
+    # กรองหมวดที่เพิ่งโพสต์ (cooldown) ใน SQL ก่อน limit — เดิมกรองหลังดึงแค่ 20 ตัว
+    # → ถ้า 20 ตัวแรก (คอมสูง) ติด cooldown หมด จะไม่เห็นสินค้าหมวดอื่นที่พร้อม
+    # (เจอจริง 18/08: โพสต์ 14 หมวด/24 ชม. หมวดคอมสูงติด cooldown หมด → เงียบทั้งที่มีของ)
+    if recent_cats:
+        query = query.filter(models.Product.category.is_(None)
+                             | ~models.Product.category.in_(recent_cats))
     prods = []
     for p in (query.order_by(models.Product.commission.desc(),
                              models.Product.ai_score.desc())
                    .limit(max(limit * 20, 20)).all()):
-        if p.category and p.category in recent_cats:
-            continue
         # Guard กันลิงก์ปลอม/ของ mock (เช่น s.shopee.co.th/earbuds_ok) หลุดขึ้นโพสต์:
         # ตัวที่โพสต์แนบรูปจะแปะ affiliate_url ไว้ในแคปชั่น (ไม่ใช่ link param) →
         # post_feed guard ตรวจ link param ไม่ถึง → กรองที่นี่อีกชั้น (defense-in-depth)
