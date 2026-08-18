@@ -767,7 +767,8 @@ def main() -> int:
                         help="ชื่อกลุ่มเป้าหมาย (หลายกลุ่มคั่นด้วย ,)")
     parser.add_argument("--group-url", type=str, default=None,
                         help="URL กลุ่มเป้าหมาย (หลาย URL คั่นด้วย ,) — เปิดอ่านชื่อจริงเอง")
-    parser.add_argument("--caption", type=str, default=None, help="แคปชั่นตอนแชร์ (default = โปรโมทบอทป้าเข็ม)")
+    parser.add_argument("--caption", type=str, default=None,
+                        help="แคปชั่นตอนแชร์ (ถ้าไม่ระบุ → หมุน 15 แบบ spintax กันแต่ละกลุ่ม)")
     parser.add_argument("--cookies", type=str, default=None, help="พาธคุกกี้ (default fb_cookies.json)")
     parser.add_argument("--dry-run", action="store_true", help="จำลอง: ไม่แชร์ + ไม่บันทึกชีท")
     args = parser.parse_args()
@@ -778,7 +779,7 @@ def main() -> int:
         parser.error("ต้องระบุ --group-name หรือ --group-url อย่างใดอย่างหนึ่ง")
 
     cookie_path = Path(args.cookies) if args.cookies else ROOT / "fb_cookies.json"
-    caption = args.caption or _default_caption()
+    captions = [args.caption] if args.caption else _share_caption_variants()
 
     print(f"[BROWSER] เปิดเบราว์เซอร์ + ฉีดคุกกี้ (จะแชร์ {len(groups) + len(group_urls)} กลุ่ม)")
     driver = _launch_driver()
@@ -795,6 +796,7 @@ def main() -> int:
 
         results = {"ok": 0, "fail": 0, "sheet_ok": 0}
         for i, group in enumerate(groups, 1):
+            caption = captions[(i - 1) % len(captions)]
             print(f"\n👉 [{i}/{len(groups)}] แชร์โพสต์เพจ → กลุ่ม '{group}'")
             ok, note = share_post_to_group(driver, args.post_url, group, caption, args.dry_run)
 
