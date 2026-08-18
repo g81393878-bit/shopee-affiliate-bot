@@ -369,33 +369,139 @@ def share_post_to_group(driver, post_url: str, group_name: str,
 MAX_GROUPS_PER_SHARE = 10   # Facebook จำกัดเลือกได้ไม่เกิน 10 กลุ่ม/การแชร์ 1 ครั้ง (ฟอรั่ม/คู่มือ)
 
 
+def _scroll_picker_list(driver) -> None:
+    """เลื่อน scroller ของรายการกลุ่มใน dialog ลง (ให้ render กลุ่มที่ยังไม่โผล่)."""
+    try:
+        driver.execute_script(
+            "var d=document.querySelector('div[role=dialog]');"
+            "if(!d) return;"
+            "var els=d.querySelectorAll('div');"
+            "for(var i=0;i<els.length;i++){if(els[i].scrollHeight>els[i].clientHeight+80){els[i].scrollTop=els[i].scrollHeight;return;}}"
+            "d.scrollTop=d.scrollHeight;"
+        )
+    except Exception:
+        pass
+
+
+def share_post_to_group_os(driver, post_url: str, group_name: str,
+                           caption: Optional[str] = None,
+                           dry_run: bool = False) -> Tuple[bool, str]:
+    """แชร์โพสต์ลงกลุ่มเดียว — flow จริงที่พิสูจน์แล้ว (FB 2026):
+    แชร์ → พิมพ์แคป → กด 'แชร์ไปยังกลุ่ม' (คลิกเมาส์จริง) → เลื่อนเลือกชื่อกลุ่ม → โพสต์.
+
+    ใช้ pyautogui คลิกเมาส์จริงที่พิกัดจอ (img_click) เพราะ FB กัน DOM/synthetic click
+    ที่ปุ่ม 'แชร์ไปยังกลุ่ม' และแถวกลุ่ม.
+    """
+    import img_click  # noqa: F401  (รันบนเครื่องที่มีจอ + Chrome เปิดเต็มจอ)
+
+    print(f"[INFO] เปิดโพสต์ต้นทาง (os): {post_url}")
+    try:
+        driver.get(post_url)
+    except Exception as e:
+        print(f"[WARNING] โหลดโพสต์: {e}")
+    time.sleep(5)
+    try:
+        driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+        time.sleep(1)
+    except Exception:
+        pass
+
+    # 1. กด "แชร์" (DOM click ใช้ได้)
+    share_btn = _find_first(driver, [
+        (By.XPATH, '//div[@role="button"][contains(@aria-label, "ส่งลิงก์") or contains(@aria-label, "โพสต์ลงในโปรไฟล์ของคุณ")]'),
+        (By.XPATH, '//div[@role="button"][contains(@aria-label, "Send this") or contains(@aria-label, "post on your profile")]'),
+        (By.XPATH, '//div[@role="button"][contains(@aria-label, "แชร์") or contains(@aria-label, "Share")]'),
+    ])
+    if not share_btn:
+        return False, "ไม่พบปุ่มแชร์"
+    _click(driver, share_btn)
+    time.sleep(3)
+
+    # 2. พิมพ์แคปชัน (_type_like_human ตัด emoji นอก BMP ให้เอง — ChromeDriver รับเฉพาะ BMP)
+    if caption:
+        box = _find_first(driver, [
+            (By.XPATH, '//div[@role="dialog"]//div[@role="textbox"]'),
+            (By.XPATH, '//div[@role="dialog"]//*[contains(@aria-label, "บอกอะไรสักหน่อย")]'),
+        ])
+        if box:
+            _type_like_human(box, caption)
+            time.sleep(1)
+
+    # 3. กด "กลุ่ม" (ปุ่มในแถบ "แชร์ไปยัง" — บางเวอร์ชัน aria-label="แชร์ไปยังกลุ่ม") ด้วยเมาส์จริง
+    group_btn = _find_first(driver, [
+        (By.XPATH, '//div[@role="dialog"]//div[@role="button"][contains(@aria-label, "แชร์ไปยังกลุ่ม") or contains(@aria-label, "Share to a group")]'),
+        (By.XPATH, '//div[@role="dialog"]//*[contains(@aria-label, "แชร์ไปยังกลุ่ม") or contains(@aria-label, "Share to a group")]'),
+        (By.XPATH, '//div[@role="dialog"]//div[@role="button"][normalize-space(.)="กลุ่ม"]'),
+        (By.XPATH, '//div[@role="dialog"]//*[normalize-space(.)="กลุ่ม"]'),
+    ])
+    if not group_btn:
+        return False, "ไม่พบปุ่ม 'กลุ่ม' (แชร์ไปยังกลุ่ม)"
+    img_click.click_element_coord(driver, group_btn)
+    time.sleep(4)
+
+    # 4. เลื่อนรายการจนเจอชื่อกลุ่ม แล้วคลิก (เมาส์จริง)
+    row = None
+    for _ in range(25):
+        try:
+            row = driver.find_element(
+                By.XPATH,
+                f'//div[@role="dialog"]//div[@role="button"][contains(normalize-space(.), "{group_name}")]')
+            break
+        except Exception:
+            _scroll_picker_list(driver)
+            time.sleep(1)
+    if not row:
+        return False, f"ไม่พบกลุ่ม '{group_name}' ในรายการ (บัญชีต้องเป็นสมาชิกกลุ่มนั้นด้วย)"
+    img_click.click_element_coord(driver, row)
+    time.sleep(4)
+
+    # 5. กดปุ่มยืนยัน ("โพสต์" / "แชร์เลย" / "แชร์") ด้วยเมาส์จริง
+    post_btn = _find_first(driver, [
+        (By.XPATH, '//*[@role="button"][normalize-space(.)="โพสต์" or normalize-space(.)="Post"]'),
+        (By.XPATH, '//div[@role="dialog"]//*[normalize-space(text())="โพสต์" or normalize-space(text())="Post"]'),
+        (By.XPATH, '//*[@role="button"][normalize-space(.)="แชร์เลย" or normalize-space(.)="Share now"]'),
+        (By.XPATH, '//div[@role="dialog"]//*[normalize-space(text())="แชร์เลย" or normalize-space(text())="Share now"]'),
+        (By.XPATH, '//*[@role="button"][normalize-space(.)="แชร์" or normalize-space(.)="Share"]'),
+        (By.XPATH, '//div[@role="dialog"]//*[normalize-space(text())="แชร์" or normalize-space(text())="Share"]'),
+    ])
+    if not post_btn:
+        return False, "ไม่พบปุ่มโพสต์/แชร์เลย"
+    if dry_run:
+        return True, f"dry-run — เลือก '{group_name}' แล้ว แต่ไม่กดโพสต์"
+    img_click.click_element_coord(driver, post_btn)
+    time.sleep(4)
+    if _share_dialog_closed(driver, timeout=8):
+        return True, "แชร์สำเร็จ (dialog ปิด)"
+    return False, "กดโพสต์แล้ว แต่ dialog ไม่ปิด (ตรวจที่กลุ่ม)"
+
+
 def share_post_to_groups_multi(driver, post_url: str, group_names: List[str],
                                message: Optional[str] = None,
                                dry_run: bool = False) -> Tuple[bool, str, List[str]]:
-    """แชร์โพสต์ลงหลายกลุ่มในครั้งเดียว — ถ้าเกิน 10 กลุ่ม จะแยกเป็นรอบละ ≤10 อัตโนมัติ.
+    """แชร์โพสต์ลงหลายกลุ่ม — ใช้ flow จริงที่พิสูจน์แล้ว (แชร์ → กด 'กลุ่ม' → เลือกชื่อกลุ่ม → โพสต์)
+    ด้วยเมาส์จริง (img_click) เพราะ Facebook กัน DOM/synthetic click ที่ปุ่ม 'กลุ่ม' และแถวกลุ่ม.
 
-    Facebook หน้า "แชร์ไปยังกลุ่ม" เลือกได้หลายกลุ่มพร้อมกันสูงสุด 10 กลุ่ม
-    → ลดการกด "โพสต์" จาก N ครั้งเหลือ 1 ครั้ง/รอบ → ไม่โดน FB rate-limit.
+    แชร์ทีละ 1 กลุ่มต่อ 1 ครั้ง (flow เดียวที่พิสูจน์ว่าแชร์สำเร็จจริง) แล้วเว้นระยะสั้น ๆ
+    กัน FB rate-limit.
 
     คืน (ok, note, selected_names)
     """
     if not group_names:
         return False, "ไม่มีกลุ่มเป้าหมาย", []
     selected_all: List[str] = []
-    rounds = (len(group_names) + MAX_GROUPS_PER_SHARE - 1) // MAX_GROUPS_PER_SHARE
-    for r in range(rounds):
-        batch = group_names[r * MAX_GROUPS_PER_SHARE:(r + 1) * MAX_GROUPS_PER_SHARE]
-        if rounds > 1:
-            print(f"[BATCH] รอบ {r + 1}/{rounds}: {len(batch)} กลุ่ม")
-        ok, note, selected = _share_post_to_groups_batch(driver, post_url, batch, message, dry_run)
-        selected_all.extend(selected)
-        if not ok:
-            return False, note, selected_all
-        if r + 1 < rounds:
-            print("[BATCH] พัก 8 วินาทีก่อนแชร์รอบถัดไป (กัน FB rate-limit)")
-            time.sleep(8)
-    return True, (f"แชร์สำเร็จ {len(selected_all)} กลุ่ม "
-                  f"({'ครั้งเดียว' if rounds == 1 else f'แยก {rounds} รอบ'})"), selected_all
+    for i, name in enumerate(group_names, 1):
+        print(f"[GROUP] ({i}/{len(group_names)}) แชร์ไปยัง '{name}'")
+        ok, note = share_post_to_group_os(driver, post_url, name, message, dry_run)
+        if ok:
+            selected_all.append(name)
+            print(f"[OK] '{name}' → {note}")
+        else:
+            print(f"[SKIP] '{name}' → {note}")
+        if i < len(group_names):
+            time.sleep(6)  # เว้นระหว่างกลุ่ม กัน FB rate-limit
+    if not selected_all:
+        return False, "ไม่มีกลุ่มที่แชร์สำเร็จ (บัญชีต้องเป็นสมาชิกกลุ่มนั้นด้วย)", []
+    return True, f"แชร์สำเร็จ {len(selected_all)}/{len(group_names)} กลุ่ม", selected_all
 
 
 def _share_post_to_groups_batch(driver, post_url: str, group_names: List[str],
