@@ -15,9 +15,9 @@
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
 - **`4aa60bb` feat(bot): ระบบคิวสั่งบอท + ราคาบอทสรุปย่อ + บันทึกเวลารับเรื่อง/เริ่มทำ** — `ราคาบอท` ตอบสรุปย่อ 5 แพ็กเกจ + ปุ่มเลือก, keyword `ระยะเวลา` เดี่ยวตอบได้, ลูกค้าดูเลขคิวตอนสั่ง + พิมพ์ `คิวของฉัน`, เจ้าของพิมพ์ `/คิว`, บันทึก `paid_at`/`confirmed_at` (มี migration `supabase/migrations/20260818000000_bot_purchases_timestamps.sql` + auto-migrate ตอน startup) — **deploy ขึ้น production แล้ว**
-- **`7168190` feat(bot): รับสลิปโอนเงินผ่าน LINE + OCR อ่านยอด/เลขอ้างอิงด้วย Groq แล้วแจ้งเจ้าของเทียบยอดคาดก่อนยืนยัน** (commit โดยเจ้าของ 05:25 +07) — **deploy live แล้ว** (เป็น commit ปัจจุบันของ production)
+- **`7168190` feat(bot): รับสลิปโอนเงินผ่าน LINE + OCR อ่านยอด/เลขอ้างอิงด้วย Groq แล้วแจ้งเจ้าของเทียบยอดคาดก่อนยืนยัน** (commit โดยเจ้าของ 05:25 +07) — **deploy live แล้ว**
 - **Auto-deploy ผ่าน GitHub Action + Render Deploy Hook** — `.github/workflows/auto-deploy.yml` push ขึ้น `main` → POST ไป Deploy Hook (`RENDER_DEPLOY_HOOK_URL` secret) · ข้าม deploy ด้วย `[skip deploy]` ใน commit message · ใช้ `[skip deploy]` ต้องมีเครื่องหมายวงเล็บเหลี่ยมทั้งคู่ใน message ด้วย (รอบแรกโดน skip เองเพราะข้อความ commit มีคำนี้)
-- **`a1d0aaf` feat(admin+bot): หน้าแอดมินดูสลิป (💰 สลิป) + แจ้งเจ้าของเป็น Flex การ์ดปุ่มแตะเปิดสลิป** — /api/admin/purchases, /api/admin/slips/{id}/image, แท็บ 💰 สลิป, _notify_owner_slip ส่ง Flex การ์ด + ปุ่ม uri — **deploy รอ trigger (GH Action ยังรอ secret)**
+- **`a1d0aaf` feat(admin+bot): หน้าแอดมินดูสลิป (💰 สลิป) + แจ้งเจ้าของเป็น Flex การ์ดปุ่มแตะเปิดสลิป** — /api/admin/purchases, /api/admin/slips/{id}/image, แท็บ 💰 สลิป, _notify_owner_slip ส่ง Flex การ์ด + ปุ่ม uri — **deploy live แล้ว**
 - **`808270f` fix(ocr): เปลี่ยนโมเดล OCR สลิปเป็น `qwen/qwen3.6-27b`** — `llama-3.2-11b-vision-preview` ถูก decommission 16/08/26 (400 ทุก key → amount/ref เป็น None); qwen3.6 เป็น vision model ตัวเดียวที่เหลือบน Groq (gpt-oss เป็น text-only) + ตัด `<think>...</think>` ก่อน parse JSON (โมเดล reasoning คืนบล็อกคิดมาด้วย)
 - **`dd52e12` feat(bot): log ส่ง reply สำเร็จ/ล้ม (`[reply] OK/FAIL/MOCK` ใน `_send_reply`) + คำสั่ง `/สลิป <userId>` (เจ้าของดึงรูปสลิปจาก DB ส่งกลับในแชทได้) — เทสต์รวม 1144 passed**
 
@@ -36,6 +36,6 @@
 ## 5. หมายเหตุ
 
 - **Render Auto-Deploy (native):** flag เป็ข `yes` (ผ่าน API) แต่ push จริงไม่ trigger (repo ไม่มี webhook เลย `[]` — สงสัย GitHub integration หลุดตอน rollback) → จึงเปลี่ยนเป็น **GitHub Action + Deploy Hook** (route stable กว่า); ถ้าอยากลองกลับไปใช้ native อีก ให้ reconnect GitHub ใน Dashboard
-- **secret `RENDER_DEPLOY_HOOK_URL` ยังไม่ตั้ง** — ต้องตั้งที่ repo Settings → Secrets and variables → Actions (`RENDER_DEPLOY_HOOK_URL` = Render Dashboard → service → Settings → Deploy Hook URL) — workflow จะรัน warning ถ้ายังไม่ตั้ง (ไม่ fail)
-- **Deploy ปัจจุบัน (production):** commit `7168190` live (deploy `dep-da1olaojo6nc73f9q5bg`) — มีฟีเจอร์ระบบคิว + รับสลิป OCR ครบ
+- **secret `RENDER_DEPLOY_HOOK_URL` ตั้งแล้ว + auto-deploy ทำงานจริง** — GH Action `auto-deploy to render` รัน success ทุก push ล่าสุด (รวม `3f9ddad`) · trigger deploy hook จาก API เองก็ได้ (curl POST ไป Deploy Hook URL)
+- **Deploy ปัจจุบัน (production):** commit `3f9ddad` live (deploy `dep-da1snbmi8c9s73akrqk0`) — มีฟีเจอร์สลิปครบ (รับรูป → OCR qwen → เทียบยอด → แจ้งเจ้าของ Flex → หน้าแอดมิน → `/สลิป`)
 - **เวลาในตาราง `bot_purchases`:** `created_at` (รับเรื่อง) · `paid_at` (โอน) · `confirmed_at` (เริ่มทำ) — แสดงเป็นเวลาไทย UTC+7
