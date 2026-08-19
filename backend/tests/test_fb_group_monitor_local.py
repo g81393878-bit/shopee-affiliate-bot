@@ -10,6 +10,7 @@ Verifies:
 6. End-to-End Monitor Iteration: Dry-run and live integration with FastAPI TestClient and social demand radar endpoint.
 7. Main CLI Execution: Clean exit code on single run (--once) and keyboard interrupt.
 8. Single-Instance Lock: Acquire/release, block live holder, overwrite stale lock.
+9. Process Cleanup: _kill_chrome_tree / _sweep_orphan_drivers with mocked subprocess.
 """
 from datetime import datetime, timezone
 import json
@@ -439,3 +440,86 @@ def test_acquire_monitor_lock_overwrites_stale_lock():
         assert ok is True
         assert Path(lock).read_text(encoding="utf-8").strip() == str(os.getpid())
         monitor._release_monitor_lock(lock)
+
+
+# ===========================================================================
+# 9. Test Process Cleanup (_kill_chrome_tree / _sweep_orphan_drivers)
+# ===========================================================================
+def test_sweep_orphan_drivers_kills_matching_processes():
+    """Windows: every undetected_chromedriver.exe row is force-killed via taskkill /T /F."""
+    fake_tasklist = (
+        '"undetected_chromedriver.exe","1111","Console","1","10,000 K"\r\n'
+        '"undetected_chromedriver.exe","2222","Console","1","10,000 K"\r\n'
+    )
+    with patch.object(os, "name", "nt"), patch("subprocess.run") as mock_run:
+        # 1st call = tasklist enumeration; 2nd/3rd = taskkill per matching PID.
+        mock_run.side_effect = [MagicMock(stdout=fake_tasklist), MagicMock(), MagicMock()]
+
+        killed = monitor._sweep_orphan_drivers()
+
+        assert killed == 2
+        assert mock_run.call_count == 3
+        assert mock_run.call_args_list[0].args[0][0] == "tasklist"
+        kill_pids = [c.args[0][2] for c in mock_run.call_args_list[1:]]
+        assert kill_pids == ["1111", "2222"]
+        for c in mock_run.call_args_list[1:]:
+            assert c.args[0][:2] == ["taskkill", "/PID"]
+            assert c.args[0][3:] == ["/T", "/F"]
+
+
+def test_sweep_orphan_drivers_ignores_non_driver_processes():
+    """chrome.exe (the user's own browser) must never be killed."""
+    fake_tasklist = '"chrome.exe","3333","Console","1","10,000 K"\r\n'
+    with patch.object(os, "name", "nt"), patch("subprocess.run") as mock_run:
+        mock_run.side_effect = [MagicMock(stdout=fake_tasklist)]
+
+        killed = monitor._sweep_orphan_drivers()
+
+        assert killed == 0
+        assert mock_run.call_count == 1  # only the tasklist call, no taskkill
+
+
+def test_sweep_orphan_drivers_noop_on_non_windows():
+    """Non-Windows platforms skip the sweep entirely."""
+    with patch.object(os, "name", "posix"), patch("subprocess.run") as mock_run:
+        killed = monitor._sweep_orphan_drivers()
+
+        assert killed == 0
+        mock_run.assert_not_called()
+
+
+def test_kill_chrome_tree_windows_force_kills_driver_tree():
+    """Windows: quit the browser, then taskkill /PID <driver> /T /F."""
+    driver = MagicMock()
+    driver.service.process.pid = 4242
+
+    with patch.object(os, "name", "nt"), patch("subprocess.run") as mock_run:
+        monitor._kill_chrome_tree(driver)
+
+    driver.quit.assert_called_once()
+    mock_run.assert_called_once_with(
+        ["taskkill", "/PID", "4242", "/T", "/F"],
+        capture_output=True,
+        timeout=10,
+    )
+
+
+def test_kill_chrome_tree_unix_terminates_driver_process():
+    """Unix: quit the browser, then terminate the chromedriver process."""
+    driver = MagicMock()
+    with patch.object(os, "name", "posix"):
+        monitor._kill_chrome_tree(driver)
+
+    driver.quit.assert_called_once()
+    driver.service.process.terminate.assert_called_once()
+
+
+def test_kill_chrome_tree_without_pid_does_not_crash():
+    """A driver without a usable PID still gets quit, and never reaches taskkill."""
+    driver = MagicMock()
+    driver.service.process.pid = None
+    with patch.object(os, "name", "nt"), patch("subprocess.run") as mock_run:
+        monitor._kill_chrome_tree(driver)  # must not raise
+
+    driver.quit.assert_called_once()
+    mock_run.assert_not_called()
