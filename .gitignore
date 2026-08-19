@@ -105,3 +105,5 @@ groups_status.json
 fb_daily_share.json
 .promo_caption_state.json
 .promo_poster_state.json
+.fb_monitor.lock
+.fb_monitor_seen.json

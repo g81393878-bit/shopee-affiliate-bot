@@ -9,6 +9,7 @@ Verifies:
 5. API Submission & Error Handling: Success 200, HTTP 401 Unauthorized, HTTP 500 Server Error, ConnectionError, and TimeoutError.
 6. End-to-End Monitor Iteration: Dry-run and live integration with FastAPI TestClient and social demand radar endpoint.
 7. Main CLI Execution: Clean exit code on single run (--once) and keyboard interrupt.
+8. Single-Instance Lock: Acquire/release, block live holder, overwrite stale lock.
 """
 from datetime import datetime, timezone
 import json
@@ -396,3 +397,45 @@ def test_main_cli_keyboard_interrupt():
     with patch("fb_group_monitor_local.run_monitor_iteration", side_effect=KeyboardInterrupt):
         exit_code = monitor.main(["--sample", "--once"])
         assert exit_code == 0
+
+
+# ===========================================================================
+# 8. Test Single-Instance Lock
+# ===========================================================================
+def test_acquire_monitor_lock_and_release():
+    """Lock can be acquired, then released by its owner."""
+    with tempfile.TemporaryDirectory() as tmp:
+        lock = os.path.join(tmp, "monitor.lock")
+        ok, msg = monitor._acquire_monitor_lock(lock)
+        assert ok is True
+        assert msg == ""
+        assert os.path.exists(lock)
+
+        # Releasing a lock owned by the current PID removes it.
+        monitor._release_monitor_lock(lock)
+        assert not os.path.exists(lock)
+
+
+def test_acquire_monitor_lock_blocks_live_holder():
+    """A lock held by a live PID is refused and left untouched."""
+    with tempfile.TemporaryDirectory() as tmp:
+        lock = os.path.join(tmp, "monitor.lock")
+        Path(lock).write_text(str(os.getpid()), encoding="utf-8")
+
+        ok, msg = monitor._acquire_monitor_lock(lock)
+        assert ok is False
+        assert "PID" in msg
+        # The original lock file must not be overwritten.
+        assert Path(lock).read_text(encoding="utf-8").strip() == str(os.getpid())
+
+
+def test_acquire_monitor_lock_overwrites_stale_lock():
+    """A lock held by a dead PID is treated as stale and overwritten."""
+    with tempfile.TemporaryDirectory() as tmp:
+        lock = os.path.join(tmp, "monitor.lock")
+        Path(lock).write_text("999999999", encoding="utf-8")  # not a valid/possible PID
+
+        ok, _ = monitor._acquire_monitor_lock(lock)
+        assert ok is True
+        assert Path(lock).read_text(encoding="utf-8").strip() == str(os.getpid())
+        monitor._release_monitor_lock(lock)

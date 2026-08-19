@@ -53,6 +53,7 @@ DEFAULT_API_URL = os.getenv("FASTAPI_URL") or os.getenv("BACKEND_URL") or "http:
 DEFAULT_INTERVAL_SECONDS = 300
 DEFAULT_TIMEOUT_SECONDS = 60
 DEFAULT_STATE_FILE = ".fb_monitor_seen.json"
+DEFAULT_LOCK_FILE = ".fb_monitor.lock"
 
 # ===========================================================================
 # Curated Realistic Thai Sample Posts for Testing & Demonstrations
@@ -361,6 +362,75 @@ def _sweep_orphan_drivers() -> int:
         except Exception:
             pass
     return killed
+
+
+def _is_pid_alive(pid: int) -> bool:
+    """True if a process with the given PID is still running (cross-platform).
+
+    On Windows `os.kill(pid, 0)` would actually *terminate* the process, so we
+    query `tasklist` instead — same technique used by `_sweep_orphan_drivers`.
+    """
+    if os.name != "nt":
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+    import subprocess
+    try:
+        proc = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except Exception:
+        return False
+    return f'"{pid}"' in proc.stdout
+
+
+def _acquire_monitor_lock(lock_file: Optional[str]) -> Tuple[bool, str]:
+    """Acquire a single-instance lock so only one monitor runs at a time.
+
+    Returns `(acquired, message)`. If another live monitor already holds the lock,
+    `acquired` is False and `message` explains why. A stale lock (dead PID) is
+    overwritten; a lock we cannot write is non-fatal (we continue unlocked).
+    """
+    if not lock_file:
+        return True, ""
+    path = Path(lock_file)
+
+    if path.exists():
+        try:
+            raw = path.read_text(encoding="utf-8").strip()
+            old_pid = int(raw) if raw.isdigit() else None
+        except Exception:
+            old_pid = None
+        if old_pid and _is_pid_alive(old_pid):
+            return False, (
+                f"❌ บอทสแกนอีกตัวกำลังรันอยู่แล้ว (PID {old_pid})\n"
+                f"   หยุดตัวนั้นก่อน หรือลบ {path} ถ้าแน่ใจว่าไม่มีตัวไหนรันจริง"
+            )
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(str(os.getpid()), encoding="utf-8")
+        return True, ""
+    except Exception as e:
+        return True, f"⚠️ เขียน lock file ไม่ได้ ({e}) — รันต่อโดยไม่ล็อก"
+
+
+def _release_monitor_lock(lock_file: Optional[str]) -> None:
+    """Release the single-instance lock, but only if we still own it."""
+    if not lock_file:
+        return
+    path = Path(lock_file)
+    try:
+        if path.exists():
+            if path.read_text(encoding="utf-8").strip() == str(os.getpid()):
+                path.unlink()
+    except Exception:
+        pass
 
 
 def scrape_real_facebook_posts(
@@ -889,6 +959,12 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help=f"Path to JSON file storing seen post IDs (default: memory only, or {DEFAULT_STATE_FILE}).",
     )
     parser.add_argument(
+        "--lock-file",
+        type=str,
+        default=DEFAULT_LOCK_FILE,
+        help=f"Path to single-instance PID lock file (default: {DEFAULT_LOCK_FILE}; pass '' to disable).",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=None,
@@ -913,6 +989,14 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     token = load_env_token(args.token)
     tracker = SeenPostTracker(state_file=args.state_file)
+
+    # Single-instance lock: refuse to start if another monitor is already scanning.
+    lock_ok, lock_msg = _acquire_monitor_lock(args.lock_file)
+    if not lock_ok:
+        print(lock_msg, file=sys.stderr)
+        return 1
+    if lock_msg:
+        print(lock_msg)
 
     print("=" * 70)
     print("🎯  SOCIAL DEMAND RADAR V1 (บอทป้าเข็ม) — Facebook Group Monitor")
@@ -985,11 +1069,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("\n🛑 Monitor stopped by user (KeyboardInterrupt). Exiting cleanly.")
         if args.state_file:
             tracker.save_state()
+        _release_monitor_lock(args.lock_file)
         return 0
     except Exception as e:
         print(f"\n❌ Unexpected error in monitor loop: {e}", file=sys.stderr)
+        _release_monitor_lock(args.lock_file)
         return 1
 
+    _release_monitor_lock(args.lock_file)
     return 0
 
 
