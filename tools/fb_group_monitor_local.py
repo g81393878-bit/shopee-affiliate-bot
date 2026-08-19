@@ -277,6 +277,51 @@ def get_sample_posts(
     return posts
 
 
+def _kill_chrome_tree(driver: Any) -> None:
+    """Close the browser and force-kill the whole chromedriver process tree.
+
+    `driver.quit()` alone can leave orphaned `chrome.exe` / `undetected_chromedriver.exe`
+    processes behind (especially after a crash or a hard kill), which is what keeps a
+    "dead" monitor visibly running. On Windows we capture the driver PID *before*
+    quitting, then `taskkill /T /F` the whole tree so no Chrome child survives.
+    """
+    # 1. Capture the driver PID while it is still alive (needed for tree-kill after quit).
+    pid = None
+    proc = None
+    try:
+        service = getattr(driver, "service", None)
+        proc = getattr(service, "process", None) if service else None
+        pid = getattr(proc, "pid", None) if proc else None
+    except Exception:
+        pid = None
+
+    # 2. Graceful shutdown first (closes the browser window cleanly).
+    try:
+        driver.quit()
+    except Exception:
+        pass
+
+    # 3. Then force-kill whatever survived (chromedriver + its Chrome children).
+    if not pid:
+        return
+    try:
+        if os.name == "nt":
+            import subprocess
+            subprocess.run(
+                ["taskkill", "/PID", str(pid), "/T", "/F"],
+                capture_output=True,
+                timeout=10,
+            )
+        else:
+            if proc is not None:
+                try:
+                    proc.terminate()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
 def scrape_real_facebook_posts(
     group_id: Optional[str] = None,
     group_name: Optional[str] = None,
@@ -409,11 +454,8 @@ def scrape_real_facebook_posts(
     except Exception as e:
         print(f"   ↳ ❌ Error scraping Facebook: {e}")
     finally:
-        try:
-            driver.quit()
-        except:
-            pass
-            
+        _kill_chrome_tree(driver)
+
     return posts
 
 
