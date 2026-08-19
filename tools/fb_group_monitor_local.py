@@ -427,6 +427,41 @@ def _process_age_seconds(pid: int) -> Optional[float]:
         return None
 
 
+def _is_monitor_process(pid: int) -> Optional[bool]:
+    """Whether the given PID is actually running our monitor script.
+
+    Returns True if the command line contains `fb_group_monitor_local.py`, False if
+    the command line is readable but doesn't (PID reused by an unrelated program),
+    or None if it can't be determined (treat as unknown → don't break the lock).
+    """
+    import subprocess
+    if os.name != "nt":
+        try:
+            out = subprocess.run(
+                ["ps", "-o", "command=", "-p", str(pid)],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            ).stdout
+        except Exception:
+            return None
+        return "fb_group_monitor_local.py" in out if out.strip() else None
+
+    try:
+        ps_cmd = (
+            "(Get-CimInstance Win32_Process -Filter \"ProcessId={pid}\").CommandLine"
+        ).format(pid=pid)
+        out = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        ).stdout
+    except Exception:
+        return None
+    return "fb_group_monitor_local.py" in out if out.strip() else None
+
+
 def _acquire_monitor_lock(lock_file: Optional[str], pid_timeout_minutes: int = 0) -> Tuple[bool, str]:
     """Acquire a single-instance lock so only one monitor runs at a time.
 
@@ -450,8 +485,17 @@ def _acquire_monitor_lock(lock_file: Optional[str], pid_timeout_minutes: int = 0
         except Exception:
             old_pid = None
         if old_pid and _is_pid_alive(old_pid):
-            # Hung-monitor override: break locks held by processes older than the timeout.
-            if pid_timeout_minutes and pid_timeout_minutes > 0:
+            # Only a process really running our monitor can hold the lock. If the PID
+            # was reused by an unrelated program, the original monitor is gone → stale.
+            # Unknown (can't read cmdline) → stay conservative and refuse.
+            is_monitor = _is_monitor_process(old_pid)
+            if is_monitor is False:
+                message = (
+                    f"⚠️ lock ของ PID {old_pid} ถูกใช้งานโดย process อื่น (ไม่ใช่ monitor) "
+                    f"— ถือเป็น lock ค้าง เขียนทับ"
+                )
+            elif is_monitor is True and pid_timeout_minutes and pid_timeout_minutes > 0:
+                # Hung-monitor override: break locks held by processes older than the timeout.
                 age = _process_age_seconds(old_pid)
                 if age is not None and age > pid_timeout_minutes * 60:
                     message = (
@@ -468,7 +512,7 @@ def _acquire_monitor_lock(lock_file: Optional[str], pid_timeout_minutes: int = 0
                     f"❌ บอทสแกนอีกตัวกำลังรันอยู่แล้ว (PID {old_pid})\n"
                     f"   หยุดตัวนั้นก่อน หรือลบ {path} ถ้าแน่ใจว่าไม่มีตัวไหนรันจริง"
                 )
-        # Dead PID or timed-out hung PID → fall through and overwrite.
+        # Dead PID, non-monitor PID, or timed-out hung monitor → fall through and overwrite.
 
     try:
         path.parent.mkdir(parents=True, exist_ok=True)

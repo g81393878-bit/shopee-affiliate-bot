@@ -418,16 +418,19 @@ def test_acquire_monitor_lock_and_release():
 
 
 def test_acquire_monitor_lock_blocks_live_holder():
-    """A lock held by a live PID is refused and left untouched."""
+    """A lock held by a live monitor process is refused and left untouched."""
     with tempfile.TemporaryDirectory() as tmp:
         lock = os.path.join(tmp, "monitor.lock")
-        Path(lock).write_text(str(os.getpid()), encoding="utf-8")
+        Path(lock).write_text("4242", encoding="utf-8")
 
-        ok, msg = monitor._acquire_monitor_lock(lock)
+        with patch("fb_group_monitor_local._is_pid_alive", return_value=True), \
+             patch("fb_group_monitor_local._is_monitor_process", return_value=True):
+            ok, msg = monitor._acquire_monitor_lock(lock)
+
         assert ok is False
         assert "PID" in msg
         # The original lock file must not be overwritten.
-        assert Path(lock).read_text(encoding="utf-8").strip() == str(os.getpid())
+        assert Path(lock).read_text(encoding="utf-8").strip() == "4242"
 
 
 def test_acquire_monitor_lock_overwrites_stale_lock():
@@ -449,6 +452,7 @@ def test_acquire_monitor_lock_pid_timeout_breaks_hung_lock():
         Path(lock).write_text("4242", encoding="utf-8")
 
         with patch("fb_group_monitor_local._is_pid_alive", return_value=True), \
+             patch("fb_group_monitor_local._is_monitor_process", return_value=True), \
              patch("fb_group_monitor_local._process_age_seconds", return_value=7200.0):  # 2h old
             ok, msg = monitor._acquire_monitor_lock(lock, pid_timeout_minutes=10)
 
@@ -466,6 +470,7 @@ def test_acquire_monitor_lock_pid_timeout_keeps_young_lock():
         Path(lock).write_text("4242", encoding="utf-8")
 
         with patch("fb_group_monitor_local._is_pid_alive", return_value=True), \
+             patch("fb_group_monitor_local._is_monitor_process", return_value=True), \
              patch("fb_group_monitor_local._process_age_seconds", return_value=60.0):  # 1 min old
             ok, msg = monitor._acquire_monitor_lock(lock, pid_timeout_minutes=10)
 
@@ -480,6 +485,59 @@ def test_process_age_seconds_returns_positive_for_live_process():
     age = monitor._process_age_seconds(os.getpid())
     assert age is not None
     assert age > 0
+
+
+def test_acquire_monitor_lock_overwrites_lock_held_by_non_monitor():
+    """A live PID that is NOT our monitor (PID reused) means the lock is stale → overwrite."""
+    with tempfile.TemporaryDirectory() as tmp:
+        lock = os.path.join(tmp, "monitor.lock")
+        Path(lock).write_text("4242", encoding="utf-8")
+
+        with patch("fb_group_monitor_local._is_pid_alive", return_value=True), \
+             patch("fb_group_monitor_local._is_monitor_process", return_value=False):
+            ok, msg = monitor._acquire_monitor_lock(lock, pid_timeout_minutes=10)
+
+        assert ok is True
+        assert "ไม่ใช่ monitor" in msg
+        assert Path(lock).read_text(encoding="utf-8").strip() == str(os.getpid())
+        monitor._release_monitor_lock(lock)
+
+
+def test_acquire_monitor_lock_unknown_monitor_stays_conservative():
+    """If we can't tell whether the PID is a monitor, refuse instead of breaking."""
+    with tempfile.TemporaryDirectory() as tmp:
+        lock = os.path.join(tmp, "monitor.lock")
+        Path(lock).write_text("4242", encoding="utf-8")
+
+        with patch("fb_group_monitor_local._is_pid_alive", return_value=True), \
+             patch("fb_group_monitor_local._is_monitor_process", return_value=None), \
+             patch("fb_group_monitor_local._process_age_seconds", return_value=7200.0):
+            ok, msg = monitor._acquire_monitor_lock(lock, pid_timeout_minutes=10)
+
+        assert ok is False
+        assert "PID" in msg
+        assert Path(lock).read_text(encoding="utf-8").strip() == "4242"
+
+
+def test_is_monitor_process_detects_monitor():
+    """A command line containing fb_group_monitor_local.py is recognized as our monitor."""
+    with patch.object(os, "name", "nt"), patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(stdout='"python","tools/fb_group_monitor_local.py","--once"')
+        assert monitor._is_monitor_process(4242) is True
+
+
+def test_is_monitor_process_rejects_other_process():
+    """A command line without our script (PID reused) is not a monitor."""
+    with patch.object(os, "name", "nt"), patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(stdout='"python","-m","pytest"')
+        assert monitor._is_monitor_process(4242) is False
+
+
+def test_is_monitor_process_unknown_on_empty_output():
+    """Empty/unreadable command line → None (unknown), so we stay conservative."""
+    with patch.object(os, "name", "nt"), patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(stdout="")
+        assert monitor._is_monitor_process(4242) is None
 
 
 # ===========================================================================
