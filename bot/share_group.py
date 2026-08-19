@@ -224,10 +224,17 @@ def _find_first(driver, locators):
 
 
 def _img_click(driver, element, confidence: float = 0.65) -> bool:
-    """คลิกด้วยเมาส์จริง — ใช้ template match (ครอปพิกเซลจริงของ element แล้วหาบนจอ) ก่อน
-    เพราะ `click_element_coord` (คำนวณพิกัด) พลาดเมื่อจอสเกล dpr>1 → คลิกตกนอกหน้าต่าง
-    → Facebook ถือว่าคลิกนอก dialog → ปิด dialog (บั๊กเจอจริง dpr=1.25).
-    ถ้า template match ไม่เจอ → fallback พิกัดกลาง element."""
+    """คลิกด้วยเมาส์จริง — ลำดับ: ActionChains (native input ผ่าน CDP = isTrusted จริง
+    ไม่พึ่งพิกัดจอ/สกรีนช็อต ไม่พลาดตอนจอสเกล) → template match (ครอปพิกเซลจริง) →
+    พิกัดกลาง element. เพราะ FB กัน DOM/synthetic click และพิกัดจอพลาดตอน dpr>1."""
+    from selenium.webdriver.common.action_chains import ActionChains
+    try:
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", element)
+        time.sleep(0.5)
+        ActionChains(driver).move_to_element(element).pause(0.2).click().perform()
+        return True
+    except Exception as e:
+        print(f"[CLICK] ActionChains ล้ม: {str(e)[:90]}")
     import img_click
     tpl = ROOT / "tools" / "_click_tpl.png"
     try:
@@ -251,6 +258,15 @@ def _share_dialog_closed(driver, timeout: int = 10) -> bool:
         return True
     except Exception:
         return False
+
+
+def _close_dialog(driver) -> None:
+    """ปิด dialog ด้วย ESC (กัน state ค้างก่อนลองใหม่)."""
+    try:
+        driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+    except Exception:
+        pass
+    time.sleep(1)
 
 
 def share_post_to_group(driver, post_url: str, group_name: str,
@@ -463,80 +479,112 @@ def share_post_to_group_os(driver, post_url: str, group_name: str,
     except Exception:
         pass
 
-    # 1. กด "แชร์" (DOM click ใช้ได้)
-    share_btn = _find_first(driver, [
-        (By.XPATH, '//div[@role="button"][contains(@aria-label, "ส่งลิงก์") or contains(@aria-label, "โพสต์ลงในโปรไฟล์ของคุณ")]'),
-        (By.XPATH, '//div[@role="button"][contains(@aria-label, "Send this") or contains(@aria-label, "post on your profile")]'),
-        (By.XPATH, '//div[@role="button"][contains(@aria-label, "แชร์") or contains(@aria-label, "Share")]'),
-    ])
-    if not share_btn:
-        return False, "ไม่พบปุ่มแชร์"
-    _click(driver, share_btn)
-    time.sleep(3)
-
-    # 2. พิมพ์แคปชัน (_type_like_human ตัด emoji นอก BMP ให้เอง — ChromeDriver รับเฉพาะ BMP)
-    if caption:
-        box = _find_first(driver, [
-            (By.XPATH, '//div[@role="dialog"]//div[@role="textbox"]'),
-            (By.XPATH, '//div[@role="dialog"]//*[contains(@aria-label, "บอกอะไรสักหน่อย")]'),
-        ])
-        if box:
-            _type_like_human(box, caption)
-            time.sleep(1)
-
-    # 3. กด "กลุ่ม" (ปุ่มในแถบ "แชร์ไปยัง" — บางเวอร์ชัน aria-label="แชร์ไปยังกลุ่ม") ด้วยเมาส์จริง
-    group_btn = _find_first(driver, [
-        (By.XPATH, '//div[@role="dialog"]//div[@role="button"][contains(@aria-label, "แชร์ไปยังกลุ่ม") or contains(@aria-label, "Share to a group")]'),
-        (By.XPATH, '//div[@role="dialog"]//*[contains(@aria-label, "แชร์ไปยังกลุ่ม") or contains(@aria-label, "Share to a group")]'),
-        (By.XPATH, '//div[@role="dialog"]//div[@role="button"][normalize-space(.)="กลุ่ม"]'),
-        (By.XPATH, '//div[@role="dialog"]//*[normalize-space(.)="กลุ่ม"]'),
-    ])
-    if not group_btn:
-        return False, "ไม่พบปุ่ม 'กลุ่ม' (แชร์ไปยังกลุ่ม)"
-    _img_click(driver, group_btn)
-    time.sleep(4)
-
-    # 4+5. เลื่อนรายการจนเจอชื่อกลุ่ม → คลิกแถว (เมาส์จริง) → รอปุ่มยืนยัน
-    #    เด็ดขาด: ถ้าคลิกแถวแล้วไม่มีปุ่มยืนยัน (FB บางรอบไม่รับคลิกแรก — เจอจริง) →
-    #    ลองคลิกแถวใหม่สูงสุด 3 รอบ (หาแถวใหม่ทุกครั้งกัน element stale)
-    post_btn = None
-    row = None
+    # วนสูงสุด 3 รอบ — เด็ดขาด: ถ้าขั้นไหนพลาด (picker ไม่เปิด / หาแถวไม่เจอ /
+    # ไม่มีปุ่มยืนยัน) → ปิด dialog แล้วกดแชร์ใหม่ทั้ง flow (FB UI แปรปรวน — เจอจริง)
+    last_err = "ไม่ทราบสาเหตุ"
     for attempt in range(3):
-        if row is None:
-            for _ in range(25):
-                try:
-                    row = driver.find_element(
-                        By.XPATH,
-                        f'//div[@role="dialog"]//div[@role="button"][contains(normalize-space(.), "{group_name}")]')
-                    break
-                except Exception:
-                    _scroll_picker_list(driver)
-                    time.sleep(1)
-            if not row:
-                return False, f"ไม่พบกลุ่ม '{group_name}' ในรายการ (บัญชีต้องเป็นสมาชิกกลุ่มนั้นด้วย)"
-        _img_click(driver, row)
-        time.sleep(3)
-        post_btn = _find_first(driver, [
-            (By.XPATH, '//*[@role="button"][normalize-space(.)="โพสต์" or normalize-space(.)="Post"]'),
-            (By.XPATH, '//div[@role="dialog"]//*[normalize-space(text())="โพสต์" or normalize-space(text())="Post"]'),
-            (By.XPATH, '//*[@role="button"][normalize-space(.)="แชร์เลย" or normalize-space(.)="Share now"]'),
-            (By.XPATH, '//div[@role="dialog"]//*[normalize-space(text())="แชร์เลย" or normalize-space(text())="Share now"]'),
-            (By.XPATH, '//*[@role="button"][normalize-space(.)="แชร์" or normalize-space(.)="Share"]'),
-            (By.XPATH, '//div[@role="dialog"]//*[normalize-space(text())="แชร์" or normalize-space(text())="Share"]'),
+        # 1. กด "แชร์" (DOM click ใช้ได้)
+        share_btn = _find_first(driver, [
+            (By.XPATH, '//div[@role="button"][contains(@aria-label, "ส่งลิงก์") or contains(@aria-label, "โพสต์ลงในโปรไฟล์ของคุณ")]'),
+            (By.XPATH, '//div[@role="button"][contains(@aria-label, "Send this") or contains(@aria-label, "post on your profile")]'),
+            (By.XPATH, '//div[@role="button"][contains(@aria-label, "แชร์") or contains(@aria-label, "Share")]'),
         ])
-        if post_btn:
+        if not share_btn:
+            last_err = "ไม่พบปุ่มแชร์"
             break
-        print(f"[RETRY] คลิกแถวกลุ่มไม่ติด (รอบ {attempt + 1}/3) — ลองใหม่")
-        row = None  # re-find ใหม่ (dialog อาจ re-render)
-    if not post_btn:
-        return False, "ไม่พบปุ่มโพสต์/แชร์เลย"
-    if dry_run:
-        return True, f"dry-run — เลือก '{group_name}' แล้ว แต่ไม่กดโพสต์"
-    _img_click(driver, post_btn)
-    time.sleep(4)
-    if _share_dialog_closed(driver, timeout=8):
-        return True, "แชร์สำเร็จ (dialog ปิด)"
-    return False, "กดโพสต์แล้ว แต่ dialog ไม่ปิด (ตรวจที่กลุ่ม)"
+        _click(driver, share_btn)
+        time.sleep(3)
+
+        # 2. พิมพ์แคปชัน (_type_like_human ตัด emoji นอก BMP ให้เอง — ChromeDriver รับเฉพาะ BMP)
+        if caption:
+            box = _find_first(driver, [
+                (By.XPATH, '//div[@role="dialog"]//div[@role="textbox"]'),
+                (By.XPATH, '//div[@role="dialog"]//*[contains(@aria-label, "บอกอะไรสักหน่อย")]'),
+            ])
+            if box:
+                _type_like_human(box, caption)
+                time.sleep(1)
+
+        # 3. กด "กลุ่ม" (ปุ่มในแถบ "แชร์ไปยัง" — บางเวอร์ชัน aria-label="แชร์ไปยังกลุ่ม") ด้วยเมาส์จริง
+        group_btn = _find_first(driver, [
+            (By.XPATH, '//div[@role="dialog"]//div[@role="button"][contains(@aria-label, "แชร์ไปยังกลุ่ม") or contains(@aria-label, "Share to a group")]'),
+            (By.XPATH, '//div[@role="dialog"]//*[contains(@aria-label, "แชร์ไปยังกลุ่ม") or contains(@aria-label, "Share to a group")]'),
+            (By.XPATH, '//div[@role="dialog"]//div[@role="button"][normalize-space(.)="กลุ่ม"]'),
+            (By.XPATH, '//div[@role="dialog"]//*[normalize-space(.)="กลุ่ม"]'),
+        ])
+        if not group_btn:
+            last_err = "ไม่พบปุ่ม 'กลุ่ม' (แชร์ไปยังกลุ่ม)"
+            _close_dialog(driver)
+            continue
+        _img_click(driver, group_btn)
+        time.sleep(4)
+
+        # 4. เลื่อนรายการจนเจอชื่อกลุ่ม (เลื่อน 25 ครั้ง)
+        row = None
+        for _ in range(25):
+            try:
+                row = driver.find_element(
+                    By.XPATH,
+                    f'//div[@role="dialog"]//div[@role="button"][contains(normalize-space(.), "{group_name}")]')
+                break
+            except Exception:
+                _scroll_picker_list(driver)
+                time.sleep(1)
+        if not row:
+            last_err = f"ไม่พบกลุ่ม '{group_name}' ในรายการ (บัญชีต้องเป็นสมาชิกกลุ่มนั้นด้วย)"
+            _close_dialog(driver)
+            continue
+
+        # 5. คลิกแถว (เมาส์จริง) → รอปุ่มยืนยัน — ถ้าคลิกแรกไม่ติด (FB บางรอบไม่รับ) ลองใหม่ 3 รอบ
+        post_btn = None
+        for _ in range(3):
+            _img_click(driver, row)
+            time.sleep(3)
+            post_btn = _find_first(driver, [
+                (By.XPATH, '//*[@role="button"][normalize-space(.)="โพสต์" or normalize-space(.)="Post"]'),
+                (By.XPATH, '//div[@role="dialog"]//*[normalize-space(text())="โพสต์" or normalize-space(text())="Post"]'),
+                (By.XPATH, '//*[@role="button"][normalize-space(.)="แชร์เลย" or normalize-space(.)="Share now"]'),
+                (By.XPATH, '//div[@role="dialog"]//*[normalize-space(text())="แชร์เลย" or normalize-space(text())="Share now"]'),
+                (By.XPATH, '//*[@role="button"][normalize-space(.)="แชร์" or normalize-space(.)="Share"]'),
+                (By.XPATH, '//div[@role="dialog"]//*[normalize-space(text())="แชร์" or normalize-space(text())="Share"]'),
+            ])
+            if post_btn:
+                break
+            print(f"[RETRY] คลิกแถวกลุ่มไม่ติด (รอบ {attempt + 1}/3) — ลองใหม่")
+            try:
+                row = driver.find_element(
+                    By.XPATH,
+                    f'//div[@role="dialog"]//div[@role="button"][contains(normalize-space(.), "{group_name}")]')
+            except Exception:
+                row = None
+        if not post_btn:
+            last_err = "ไม่พบปุ่มโพสต์/แชร์เลย"
+            _close_dialog(driver)
+            continue
+
+        # 6. ยืนยัน ("โพสต์" / "แชร์เลย" / "แชร์") ด้วยเมาส์จริง — กดแล้วรอ dialog ปิด
+        #    ถ้าไม่ปิด = คลิกพลาด/กดไม่ติด → ลองกดยืนยันใหม่สูงสุด 3 รอบ (ก่อน restart flow)
+        if dry_run:
+            return True, f"dry-run — เลือก '{group_name}' แล้ว แต่ไม่กดโพสต์"
+        for _ in range(3):
+            _img_click(driver, post_btn)
+            time.sleep(4)
+            if _share_dialog_closed(driver, timeout=12):
+                return True, "แชร์สำเร็จ (dialog ปิด)"
+            print(f"[RETRY] กดยืนยันแล้ว dialog ไม่ปิด (รอบ {attempt + 1}/3) — ลองกดยืนยันใหม่")
+            post_btn = _find_first(driver, [
+                (By.XPATH, '//*[@role="button"][normalize-space(.)="โพสต์" or normalize-space(.)="Post"]'),
+                (By.XPATH, '//div[@role="dialog"]//*[normalize-space(text())="โพสต์" or normalize-space(text())="Post"]'),
+                (By.XPATH, '//*[@role="button"][normalize-space(.)="แชร์เลย" or normalize-space(.)="Share now"]'),
+                (By.XPATH, '//div[@role="dialog"]//*[normalize-space(text())="แชร์เลย" or normalize-space(text())="Share now"]'),
+                (By.XPATH, '//*[@role="button"][normalize-space(.)="แชร์" or normalize-space(.)="Share"]'),
+                (By.XPATH, '//div[@role="dialog"]//*[normalize-space(text())="แชร์" or normalize-space(text())="Share"]'),
+            ])
+            if not post_btn:
+                break
+        last_err = "กดโพสต์แล้ว แต่ dialog ไม่ปิด (ตรวจที่กลุ่ม)"
+        _close_dialog(driver)
+    return False, last_err
 
 
 def share_post_to_groups_multi(driver, post_url: str, group_names: List[str],
