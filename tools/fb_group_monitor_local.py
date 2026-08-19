@@ -389,17 +389,60 @@ def _is_pid_alive(pid: int) -> bool:
     return f'"{pid}"' in proc.stdout
 
 
-def _acquire_monitor_lock(lock_file: Optional[str]) -> Tuple[bool, str]:
+def _process_age_seconds(pid: int) -> Optional[float]:
+    """Elapsed seconds since the given PID was created, or None if unknown.
+
+    Used by `--pid-timeout` to detect hung monitors: a live lock holder that has
+    been running longer than the timeout is treated as stuck and its lock is broken.
+    """
+    import subprocess
+    if os.name != "nt":
+        try:
+            out = subprocess.run(
+                ["ps", "-o", "etimes=", "-p", str(pid)],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            ).stdout.strip()
+            return float(out) if out.isdigit() else None
+        except Exception:
+            return None
+
+    # Windows: PowerShell CIM (wmic is deprecated). Output elapsed seconds in
+    # invariant culture so a Thai/other locale can't break the number parsing.
+    try:
+        ps_cmd = (
+            "((Get-Date) - (Get-CimInstance Win32_Process -Filter "
+            "\"ProcessId={pid}\").CreationDate).TotalSeconds."
+            "ToString([System.Globalization.CultureInfo]::InvariantCulture)"
+        ).format(pid=pid)
+        out = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        ).stdout.strip()
+        return float(out) if out else None
+    except Exception:
+        return None
+
+
+def _acquire_monitor_lock(lock_file: Optional[str], pid_timeout_minutes: int = 0) -> Tuple[bool, str]:
     """Acquire a single-instance lock so only one monitor runs at a time.
 
     Returns `(acquired, message)`. If another live monitor already holds the lock,
     `acquired` is False and `message` explains why. A stale lock (dead PID) is
     overwritten; a lock we cannot write is non-fatal (we continue unlocked).
+
+    `pid_timeout_minutes` (from `--pid-timeout`) breaks the lock when the holding
+    process has been alive longer than that — a hung monitor that would otherwise
+    block restarts forever.
     """
     if not lock_file:
         return True, ""
     path = Path(lock_file)
 
+    message = ""
     if path.exists():
         try:
             raw = path.read_text(encoding="utf-8").strip()
@@ -407,15 +450,30 @@ def _acquire_monitor_lock(lock_file: Optional[str]) -> Tuple[bool, str]:
         except Exception:
             old_pid = None
         if old_pid and _is_pid_alive(old_pid):
-            return False, (
-                f"❌ บอทสแกนอีกตัวกำลังรันอยู่แล้ว (PID {old_pid})\n"
-                f"   หยุดตัวนั้นก่อน หรือลบ {path} ถ้าแน่ใจว่าไม่มีตัวไหนรันจริง"
-            )
+            # Hung-monitor override: break locks held by processes older than the timeout.
+            if pid_timeout_minutes and pid_timeout_minutes > 0:
+                age = _process_age_seconds(old_pid)
+                if age is not None and age > pid_timeout_minutes * 60:
+                    message = (
+                        f"⏰ lock ของ PID {old_pid} อายุเกิน {pid_timeout_minutes} นาที "
+                        f"(คาดว่า hung) — เขียนทับและเริ่มใหม่"
+                    )
+                else:
+                    return False, (
+                        f"❌ บอทสแกนอีกตัวกำลังรันอยู่แล้ว (PID {old_pid})\n"
+                        f"   หยุดตัวนั้นก่อน หรือลบ {path} ถ้าแน่ใจว่าไม่มีตัวไหนรันจริง"
+                    )
+            else:
+                return False, (
+                    f"❌ บอทสแกนอีกตัวกำลังรันอยู่แล้ว (PID {old_pid})\n"
+                    f"   หยุดตัวนั้นก่อน หรือลบ {path} ถ้าแน่ใจว่าไม่มีตัวไหนรันจริง"
+                )
+        # Dead PID or timed-out hung PID → fall through and overwrite.
 
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(str(os.getpid()), encoding="utf-8")
-        return True, ""
+        return True, message
     except Exception as e:
         return True, f"⚠️ เขียน lock file ไม่ได้ ({e}) — รันต่อโดยไม่ล็อก"
 
@@ -965,6 +1023,12 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help=f"Path to single-instance PID lock file (default: {DEFAULT_LOCK_FILE}; pass '' to disable).",
     )
     parser.add_argument(
+        "--pid-timeout",
+        type=int,
+        default=0,
+        help="Break a lock held by a process alive for more than this many minutes (0 = never; กัน monitor ค้างบล็อกการเริ่มใหม่).",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=None,
@@ -991,7 +1055,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     tracker = SeenPostTracker(state_file=args.state_file)
 
     # Single-instance lock: refuse to start if another monitor is already scanning.
-    lock_ok, lock_msg = _acquire_monitor_lock(args.lock_file)
+    lock_ok, lock_msg = _acquire_monitor_lock(args.lock_file, pid_timeout_minutes=args.pid_timeout)
     if not lock_ok:
         print(lock_msg, file=sys.stderr)
         return 1

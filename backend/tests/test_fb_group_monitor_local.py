@@ -9,7 +9,7 @@ Verifies:
 5. API Submission & Error Handling: Success 200, HTTP 401 Unauthorized, HTTP 500 Server Error, ConnectionError, and TimeoutError.
 6. End-to-End Monitor Iteration: Dry-run and live integration with FastAPI TestClient and social demand radar endpoint.
 7. Main CLI Execution: Clean exit code on single run (--once) and keyboard interrupt.
-8. Single-Instance Lock: Acquire/release, block live holder, overwrite stale lock.
+8. Single-Instance Lock: Acquire/release, block live holder, overwrite stale lock, pid-timeout hung-lock break.
 9. Process Cleanup: _kill_chrome_tree / _sweep_orphan_drivers with mocked subprocess.
 """
 from datetime import datetime, timezone
@@ -440,6 +440,46 @@ def test_acquire_monitor_lock_overwrites_stale_lock():
         assert ok is True
         assert Path(lock).read_text(encoding="utf-8").strip() == str(os.getpid())
         monitor._release_monitor_lock(lock)
+
+
+def test_acquire_monitor_lock_pid_timeout_breaks_hung_lock():
+    """A lock held by a long-running (hung) process is broken when --pid-timeout is set."""
+    with tempfile.TemporaryDirectory() as tmp:
+        lock = os.path.join(tmp, "monitor.lock")
+        Path(lock).write_text("4242", encoding="utf-8")
+
+        with patch("fb_group_monitor_local._is_pid_alive", return_value=True), \
+             patch("fb_group_monitor_local._process_age_seconds", return_value=7200.0):  # 2h old
+            ok, msg = monitor._acquire_monitor_lock(lock, pid_timeout_minutes=10)
+
+        assert ok is True
+        assert "hung" in msg or "เกิน" in msg
+        # The lock now belongs to us.
+        assert Path(lock).read_text(encoding="utf-8").strip() == str(os.getpid())
+        monitor._release_monitor_lock(lock)
+
+
+def test_acquire_monitor_lock_pid_timeout_keeps_young_lock():
+    """A lock held by a recent process is still refused even with --pid-timeout."""
+    with tempfile.TemporaryDirectory() as tmp:
+        lock = os.path.join(tmp, "monitor.lock")
+        Path(lock).write_text("4242", encoding="utf-8")
+
+        with patch("fb_group_monitor_local._is_pid_alive", return_value=True), \
+             patch("fb_group_monitor_local._process_age_seconds", return_value=60.0):  # 1 min old
+            ok, msg = monitor._acquire_monitor_lock(lock, pid_timeout_minutes=10)
+
+        assert ok is False
+        assert "PID" in msg
+        # The original lock file must be left untouched.
+        assert Path(lock).read_text(encoding="utf-8").strip() == "4242"
+
+
+def test_process_age_seconds_returns_positive_for_live_process():
+    """The current (live) process has a positive age in seconds."""
+    age = monitor._process_age_seconds(os.getpid())
+    assert age is not None
+    assert age > 0
 
 
 # ===========================================================================
