@@ -110,14 +110,19 @@ def click_template(template_path, confidence=0.70, timeout=8):
 
 
 def element_screen_center(driver, element):
-    """คืนพิกัดจอจริง (physical px) ของจุดกลาง element — ใช้ get_window_rect() (แม่นกว่า template match)."""
+    """คืนพิกัดจอจริง (physical px) ของจุดกลาง element — ใช้ get_window_rect() (แม่นกว่า template match).
+
+    ระวัง: win['x']/win['y']/chrome_h เป็น physical px อยู่แล้ว (get_window_rect) —
+    ต้องคูณ dpr เฉพาะส่วน CSS px (element.rect) เท่านั้น ไม่งั้นจอสเกล >100% (dpr>1)
+    จะคลิกตกนอกหน้าต่าง (พิกัดเกิน) → Facebook ถือว่าคลิกนอก dialog → ปิด dialog (บั๊กเจอจริง dpr=1.25).
+    """
     dpr = driver.execute_script("return window.devicePixelRatio") or 1
     win = driver.get_window_rect()
     inner_h = driver.execute_script("return window.innerHeight") or win["height"]
     chrome_h = max(0, win["height"] - inner_h)
     r = element.rect
-    cx = int((win["x"] + r["x"] + r["width"] / 2) * dpr)
-    cy = int((win["y"] + chrome_h + r["y"] + r["height"] / 2) * dpr)
+    cx = int(win["x"] + (r["x"] + r["width"] / 2) * dpr)
+    cy = int(win["y"] + chrome_h + (r["y"] + r["height"] / 2) * dpr)
     return cx, cy
 
 
