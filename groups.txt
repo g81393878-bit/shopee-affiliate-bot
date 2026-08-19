@@ -15,45 +15,39 @@
 # แนะนำจริง: ไม่เกิน 5-10 กลุ่ม — ยิ่งเยอะยิ่งเสี่ยงโดน FB rate-limit / แบนบัญชี
 # กลุ่มที่แชร์ได้ = ต้องเป็นกลุ่มที่บัญชีใน fb_cookies.json เป็นสมาชิกแล้ว (ไม่งั้นแชร์ไม่เข้า)
 
+# ============================================================
+# กลุ่มที่ใช้งาน (19/08) — 25 กลุ่ม
+#   แคปชั่นเลือกอัตโนมัติตามแท็ก:
+#     #promo   → แคปชั่นโปรโมทบอท (15 แบบ)
+#     #product → แคปชั่นแบบสินค้า ไม่โปรโมทบอท (9 แบบ — กันโดนกลุ่มเข้มงวดปฏิเสธ)
+#   กลุ่ม #product กลับมาใช้งานแล้ว 19/08 เพราะแคปชั่นเป็นแบบสินค้าแล้ว
+# ============================================================
+
 # ===== กลุ่มโปรโมท/ฝากร้าน — ปลอดภัยโพสต์ตรง =====
-# (ตัวอย่าง — เปลี่ยนเป็น URL กลุ่มจริงของคุณ)
-# https://www.facebook.com/groups/xxxxx #promo #safe
-
-# ===== กลุ่มสินค้า/ป้ายยา — โพสต์ตรงเสี่ยงโดนลบ =====
-# (ตัวอย่าง — เปลี่ยนเป็น URL กลุ่มจริงของคุณ)
-# https://www.facebook.com/groups/yyyyy #product #nosafe
-
-# ============================================================
-# กลุ่มที่ใช้งาน (เฉพาะกลุ่ม #promo ที่รับโพสต์ฝากร้าน — 19/08)
-#   กลุ่ม #product ทั้งหมดถูกตัดออก 19/08 เพราะเข้มงวดเรื่องฝากร้าน
-#   (แคปชั่นโปรโมทบอทโดนผู้ดูแล/ระบบกลั่นกรองปฏิเสธ — เจอจริงที่
-#   'ส่งต่อของใช้เด็กมือ2' 503319360055178) — เก็บเป็น comment ไว้
-#   เอากลุ่มไหนกลับมา = ลบ # หน้าบรรทัดนั้น
-# ============================================================
 https://www.facebook.com/groups/3481853378706364?locale=th_TH #promo #safe
 
-# ===== ตัดออก 19/08 (กลุ่ม #product — เข้มงวดฝากร้าน / โดนปฏิเสธ) =====
-# https://www.facebook.com/groups/984343641981437?locale=th_TH #product #nosafe
-# https://www.facebook.com/groups/749870519044879?locale=th_TH #product #nosafe
-# https://www.facebook.com/groups/1682328988670233?locale=th_TH #product #safe
-# https://www.facebook.com/groups/2484957515066550?locale=th_TH #product #safe
-# https://www.facebook.com/groups/808735239766433?locale=th_TH #product #safe
-# https://www.facebook.com/groups/1967654323350877?locale=th_TH #product #safe
-# https://www.facebook.com/groups/290820435736176?locale=th_TH #product #safe
-# https://www.facebook.com/groups/405764602840829?locale=th_TH #product #safe
-# https://www.facebook.com/groups/2451258304904103?locale=th_TH #product #safe
-# https://www.facebook.com/groups/267370345044217?locale=th_TH #product #safe
-# https://www.facebook.com/groups/2693683650694208?locale=th_TH #product #safe
-# https://www.facebook.com/groups/2207641402879265?locale=th_TH #product #safe
-# https://www.facebook.com/groups/750969211736714?locale=th_TH #product #safe
-# https://www.facebook.com/groups/1915338558700707?locale=th_TH #product #safe
-# https://www.facebook.com/groups/164388790710809?locale=th_TH #product #safe
-# https://www.facebook.com/groups/Basic.Coach?locale=th_TH #product #safe
-# https://www.facebook.com/groups/2778763822236720?locale=th_TH #product #safe
-# https://www.facebook.com/groups/2381516808561738?locale=th_TH #product #safe
-# https://www.facebook.com/groups/682409318614628?locale=th_TH #product #safe
-# https://www.facebook.com/groups/1503652943234878?locale=th_TH #product #safe
-# https://www.facebook.com/groups/402771414350390?locale=th_TH #product #safe
-# https://www.facebook.com/groups/1613645369475727?locale=th_TH #product #safe
-# https://www.facebook.com/groups/503319360055178?locale=th_TH #product #safe
-# https://www.facebook.com/groups/2517172171977640?locale=th_TH #product #safe
+# ===== กลุ่มสินค้า/ป้ายยา — แคปชั่นสินค้า ไม่โปรโมทบอท =====
+https://www.facebook.com/groups/984343641981437?locale=th_TH #product #nosafe
+https://www.facebook.com/groups/749870519044879?locale=th_TH #product #nosafe
+https://www.facebook.com/groups/1682328988670233?locale=th_TH #product #safe
+https://www.facebook.com/groups/2484957515066550?locale=th_TH #product #safe
+https://www.facebook.com/groups/808735239766433?locale=th_TH #product #safe
+https://www.facebook.com/groups/1967654323350877?locale=th_TH #product #safe
+https://www.facebook.com/groups/290820435736176?locale=th_TH #product #safe
+https://www.facebook.com/groups/405764602840829?locale=th_TH #product #safe
+https://www.facebook.com/groups/2451258304904103?locale=th_TH #product #safe
+https://www.facebook.com/groups/267370345044217?locale=th_TH #product #safe
+https://www.facebook.com/groups/2693683650694208?locale=th_TH #product #safe
+https://www.facebook.com/groups/2207641402879265?locale=th_TH #product #safe
+https://www.facebook.com/groups/750969211736714?locale=th_TH #product #safe
+https://www.facebook.com/groups/1915338558700707?locale=th_TH #product #safe
+https://www.facebook.com/groups/164388790710809?locale=th_TH #product #safe
+https://www.facebook.com/groups/Basic.Coach?locale=th_TH #product #safe
+https://www.facebook.com/groups/2778763822236720?locale=th_TH #product #safe
+https://www.facebook.com/groups/2381516808561738?locale=th_TH #product #safe
+https://www.facebook.com/groups/682409318614628?locale=th_TH #product #safe
+https://www.facebook.com/groups/1503652943234878?locale=th_TH #product #safe
+https://www.facebook.com/groups/402771414350390?locale=th_TH #product #safe
+https://www.facebook.com/groups/1613645369475727?locale=th_TH #product #safe
+https://www.facebook.com/groups/503319360055178?locale=th_TH #product #safe
+https://www.facebook.com/groups/2517172171977640?locale=th_TH #product #safe
