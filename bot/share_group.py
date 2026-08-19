@@ -167,6 +167,40 @@ def _share_caption_variants() -> List[str]:
     return variants
 
 
+# แคปชั่นแชร์แบบสินค้า (สำหรับกลุ่ม #product) — เน้นเนื้อหาสินค้าในโพสต์ ไม่โปรโมทบอท
+# (กลุ่ม #product เข้มงวดเรื่องฝากร้านบริการ — แคปชั่นโปรโมทบอทโดนปฏิเสธ เจอจริง 19/08)
+_SHARE_PRODUCT_PAIRS = [
+    (
+        "🛍️ เจอของดีราคาเป็นมิตรมาแชร์ให้ดูกันจ้า",
+        "สินค้าคุณภาพ ดูรายละเอียดเพิ่มเติมในโพสต์ได้เลย",
+    ),
+    (
+        "✨ ของใช้ดี ๆ ราคาเบา ๆ มาอัปเดตให้ดูกัน",
+        "กดดูรูปเพิ่ม + รายละเอียดสินค้าในโพสต์ได้เลยนะคะ",
+    ),
+    (
+        "🛒 มีของน่าสนใจมาแนะนำ",
+        "ดูรายละเอียดสินค้าได้ในโพสต์ สนใจทักได้เลยจ้า",
+    ),
+]
+
+_SHARE_PRODUCT_CTAS = [
+    "👉 ดูรายละเอียดสินค้าเต็ม ๆ ได้ในโพสต์นี้เลยจ้า",
+    "📦 สนใจดูเพิ่มเติมกดเข้าไปที่โพสต์ได้เลยนะคะ",
+    "👍 ถูกใจอย่าลืมกดติดตามเพจไว้ เดี๋ยวมาอัปเดตของใหม่ให้เรื่อย ๆ จ้า",
+]
+
+
+def _share_product_captions() -> List[str]:
+    """แคปชั่นแชร์แบบสินค้า (hook/benefit × CTA = 9 แบบ) — ใช้กับกลุ่ม #product
+    ไม่โปรโมทบอท ไม่มีลิงก์ LINE เน้นชวนดูสินค้าในโพสต์ (กันกลุ่มเข้มงวดปฏิเสธ)."""
+    variants = []
+    for hook, benefit in _SHARE_PRODUCT_PAIRS:
+        for cta in _SHARE_PRODUCT_CTAS:
+            variants.append(f"{hook}\n{benefit}\n{cta}")
+    return variants
+
+
 def _default_caption() -> str:
     """แคปชั่นแชร์แบบแรก (โปรโมทบอทป้าเข็ม — ไม่มีลิงก์สินค้า) — ใช้เมื่อต้องการข้อความเดียว."""
     return _share_caption_variants()[0]
@@ -597,6 +631,8 @@ def share_post_to_groups_multi(driver, post_url: str, group_names: List[str],
     กัน FB rate-limit.
 
     message: str = ใช้ข้อความเดียวทุกกลุ่ม; list[str] = หมุนแคปชั่นกันแต่ละกลุ่ม (กันข้อความซ้ำ)
+             dict {group_name: list[str]} = เลือกชุดแคปชั่นตามแท็กกลุ่ม
+             (เช่น #product → แคปชั่นสินค้า, #promo → แคปชั่นโปรโมทบอท)
 
     คืน (ok, note, selected_names)
     """
@@ -604,7 +640,10 @@ def share_post_to_groups_multi(driver, post_url: str, group_names: List[str],
         return False, "ไม่มีกลุ่มเป้าหมาย", []
     selected_all: List[str] = []
     for i, name in enumerate(group_names, 1):
-        if isinstance(message, (list, tuple)) and message:
+        if isinstance(message, dict):
+            variants = message.get(name) or message.get("default") or []
+            msg = variants[(i - 1) % len(variants)] if variants else None
+        elif isinstance(message, (list, tuple)) and message:
             msg = message[(i - 1) % len(message)]  # หมุนแคปชั่นกันแต่ละกลุ่ม
         else:
             msg = message

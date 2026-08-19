@@ -631,32 +631,39 @@ def _cmd_share_from_queue(args) -> int:
                 if args.method == "direct":
                     print(f"[WARN] โหมด direct ต้องใช้ URL กลุ่ม — ข้าม '{value}' (แก้ groups.txt เป็น URL)")
                     continue
-                resolved.append((key, None, value))
+                resolved.append((key, None, value, tags))
             else:
                 name = share_group._resolve_group_name(driver, value)
                 print(f"[GROUP] {value} → '{name}'")
-                resolved.append((key, value, name))
+                resolved.append((key, value, name, tags))
         if not resolved:
             print("[ERROR] ไม่มีกลุ่มที่รันได้ (โหมด direct ต้องการ URL กลุ่ม)")
             return 1
 
         total_ok = 0
-        group_names = [name or url for (_, url, name) in resolved]
+        group_names = [name or url for (_, url, name, _tags) in resolved]
         for idx, t in enumerate(tasks, 1):
             print(f"\n{'=' * 60}\nงาน {idx}/{len(tasks)}: kind={t.get('kind')} "
                   f"task_id={t.get('task_id')} post={t.get('post_url')}\n{'=' * 60}")
             if args.method == "share":
-                # multi-select: เลือกหลายกลุ่มใน dialog เดียว → กดโพสต์ครั้งเดียว (กัน rate-limit)
-                # แคปชั่นหมุนเวียนหลายแบบ (ถ้าไม่ระบุ --caption) — กันข้อความซ้ำ ๆ โดน FB จับสแปม
-                captions = ([args.caption] if args.caption
-                            else share_group._share_caption_variants())
+                # แคปชั่นตามแท็กกลุ่ม: #product → แคปชั่นสินค้า (ไม่โปรโมทบอท),
+                # กลุ่มอื่น → แคปชั่นโปรโมทบอท; หมุนเวียนหลายแบบกัน FB จับสแปม
+                if args.caption:
+                    captions = [args.caption]
+                else:
+                    captions = {}
+                    for (_key, _url, name, tags) in resolved:
+                        gname = name or _url
+                        captions[gname] = (share_group._share_product_captions()
+                                           if "product" in tags
+                                           else share_group._share_caption_variants())
                 ok, note, selected = share_group.share_post_to_groups_multi(
                     driver, t.get("post_url") or "", group_names, captions, args.dry_run)
                 if args.dry_run:
                     print(f"[DRY-RUN] {note}")
                 else:
                     now = time.strftime("%Y-%m-%d %H:%M:%S")
-                    for key, url, name in resolved:
+                    for key, url, name, _tags in resolved:
                         gname = name or url
                         prev = ledger.get(key, {})
                         if ok and gname in selected:
@@ -670,7 +677,9 @@ def _cmd_share_from_queue(args) -> int:
                     _save_state(state_path, ledger)
                     _save_blacklist(blacklist_path, blacklist)
                     caption_label = (args.caption
-                                     or f"หมุนเวียน {len(captions)} แบบ (แคปชั่นโปรโมทบอท)")
+                                     or ("แคปชั่นตามแท็กกลุ่ม (สินค้า #product / โปรโมทบอท)"
+                                         if isinstance(captions, dict)
+                                         else f"หมุนเวียน {len(captions)} แบบ (แคปชั่นโปรโมทบอท)"))
                     share_group._log_to_sheet(
                         share_group._sheet_row(t.get("post_url") or "",
                                                ", ".join(selected) or "ไม่มีกลุ่ม",
