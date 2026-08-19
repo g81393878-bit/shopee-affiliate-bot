@@ -322,6 +322,47 @@ def _kill_chrome_tree(driver: Any) -> None:
         pass
 
 
+def _sweep_orphan_drivers() -> int:
+    """Kill leftover `undetected_chromedriver.exe` processes from a previous run.
+
+    A hard-killed monitor (`taskkill //F`) never reaches its `finally`, so its
+    chromedriver + Chrome children survive as zombies and keep "scanning" in the
+    background. Sweep them at startup so every real run starts clean. Only the
+    uniquely-named driver binary is targeted — never the user's own Chrome.
+    """
+    if os.name != "nt":
+        return 0
+    import subprocess
+    killed = 0
+    try:
+        out = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq undetected_chromedriver.exe", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stdout
+    except Exception:
+        return 0
+
+    for line in out.splitlines():
+        parts = [p.strip().strip('"') for p in line.split(",")]
+        if len(parts) < 2 or parts[0].lower() != "undetected_chromedriver.exe":
+            continue
+        pid = parts[1]
+        if not pid.isdigit():
+            continue
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", pid, "/T", "/F"],
+                capture_output=True,
+                timeout=10,
+            )
+            killed += 1
+        except Exception:
+            pass
+    return killed
+
+
 def scrape_real_facebook_posts(
     group_id: Optional[str] = None,
     group_name: Optional[str] = None,
@@ -886,6 +927,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.state_file:
         print(f"💾 State File  : {args.state_file} ({tracker.count} posts tracked)")
     print("=" * 70)
+
+    # Sweep zombie drivers from a previous hard-killed run (real scrape mode only).
+    if not args.sample and not args.dry_run:
+        swept = _sweep_orphan_drivers()
+        if swept:
+            print(f"🧹 Cleaned up {swept} orphaned monitor Chrome process(es) from a previous run.")
+
+    # Loud warning for continuous loop mode — the #1 cause of "why is it still scanning?".
+    if not args.once:
+        print(f"⚠️  LOOP MODE: วิ่งวนไม่หยุดทุก {args.interval} วินาที จนกว่าจะกด Ctrl+C")
+        print("   (ถ้าอยากรันครั้งเดียวแล้วจบ ให้เพิ่ม --once ด้วย)")
 
     try:
         while True:
