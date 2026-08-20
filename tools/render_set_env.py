@@ -31,6 +31,8 @@
   - GET /v1/services/{id}/env-vars: ปัจจุบันคืน envVar เป็น dict; เวอร์ชันเก่าเคย
     double-encode เป็น string แบบ python-dict ("{'key': ...}") — decode_env_var()
     รองรับทั้งสองแบบ (json.loads → แยกด้วย regex เอง) กัน ast.literal_eval พัง
+  - API paginate 20 ตัว/หน้า — fetch_env_vars() ตาม cursor เก็บทุกหน้า (เดิม
+    list/get/diff อ่านแค่หน้าแรก → env vars หน้า 2+ หายจากผลลัพธ์)
   - ไม่ print ค่า secret เต็ม (mask ให้ เห็นแค่หัว/ท้าย) — ยกเว้น `get KEY`
     ที่สั่งชัดว่าดูตัวเดียว → แสดงค่าเต็ม (ระวัง share หน้าจอ/terminal history)
 
@@ -45,6 +47,7 @@ import os
 import re
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 try:  # กัน Windows console ใช้ cp874 แล้ว print emoji พัง
@@ -179,12 +182,36 @@ def decode_env_var(env_var):
     return _extract_quoted_field(s, "key"), _extract_quoted_field(s, "value")
 
 
+def fetch_env_vars() -> list:
+    """GET /services/{id}/env-vars ทุกหน้า (API paginate 20 ตัว/หน้า ตาม cursor).
+
+    เดิม cmd_list/get/diff อ่านแค่หน้าแรก → env vars หน้า 2+ หายจากผลลัพธ์
+    (เจอจริงตอน env vars เกิน 20 ตัว)."""
+    items = []
+    cursor = None
+    seen = set()
+    while True:
+        path = f"/services/{SERVICE_ID}/env-vars"
+        if cursor:
+            path += "?" + urllib.parse.urlencode({"cursor": cursor})
+        status, resp = request("GET", path)
+        if status != 200:
+            raise SystemExit(f"❌ GET env-vars ล้ม: HTTP {status} → {resp}")
+        page = resp if isinstance(resp, list) else []
+        if not page:
+            break
+        items.extend(page)
+        last = page[-1] if isinstance(page[-1], dict) else {}
+        next_cursor = last.get("cursor")
+        if not next_cursor or next_cursor in seen:
+            break
+        seen.add(next_cursor)
+        cursor = next_cursor
+    return items
+
+
 def cmd_list() -> None:
-    status, resp = request("GET", f"/services/{SERVICE_ID}/env-vars")
-    if status != 200:
-        print(f"❌ list env-vars ล้ม: HTTP {status} → {resp}")
-        sys.exit(1)
-    items = resp if isinstance(resp, list) else []
+    items = fetch_env_vars()
     if not items:
         print("(ไม่มี env vars)")
         return
@@ -199,11 +226,7 @@ def cmd_list() -> None:
 
 
 def cmd_get(key: str) -> None:
-    status, resp = request("GET", f"/services/{SERVICE_ID}/env-vars")
-    if status != 200:
-        print(f"❌ get env-vars ล้ม: HTTP {status} → {resp}")
-        sys.exit(1)
-    items = resp if isinstance(resp, list) else []
+    items = fetch_env_vars()
     for item in items:
         env_var = item.get("envVar") if isinstance(item, dict) else item
         k, value = decode_env_var(env_var)
@@ -244,11 +267,7 @@ def cmd_unset(key: str, deploy: bool) -> None:
 
 
 def cmd_diff() -> None:
-    status, resp = request("GET", f"/services/{SERVICE_ID}/env-vars")
-    if status != 200:
-        print(f"❌ diff ล้ม: HTTP {status} → {resp}")
-        sys.exit(1)
-    items = resp if isinstance(resp, list) else []
+    items = fetch_env_vars()
     remote = {}
     for item in items:
         env_var = item.get("envVar") if isinstance(item, dict) else item
