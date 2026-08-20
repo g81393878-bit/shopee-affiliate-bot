@@ -17,6 +17,7 @@
        python tools/render_set_env.py set KEY VALUE --deploy  # upsert แล้ว trigger deploy
        python tools/render_set_env.py unset KEY               # ลบ env var ตัวเดียว (ยังไม่ deploy)
        python tools/render_set_env.py unset KEY --deploy      # ลบ แล้ว trigger deploy
+       python tools/render_set_env.py diff                    # เทียบ remote กับ VARS/render_env.local.json
        python tools/render_set_env.py deploy                  # trigger deploy
 
 รายละเอียด:
@@ -218,6 +219,52 @@ def cmd_unset(key: str, deploy: bool) -> None:
               "`python tools/render_set_env.py deploy`)")
 
 
+def cmd_diff() -> None:
+    status, resp = request("GET", f"/services/{SERVICE_ID}/env-vars")
+    if status != 200:
+        print(f"❌ diff ล้ม: HTTP {status} → {resp}")
+        sys.exit(1)
+    items = resp if isinstance(resp, list) else []
+    remote = {}
+    for item in items:
+        env_var = item.get("envVar") if isinstance(item, dict) else item
+        k, v = decode_env_var(env_var)
+        if k is not None:
+            remote[k] = v
+
+    desired = {k: v for k, v in VARS.items() if str(v).strip()}
+    desired.update(load_local_values())
+    if not desired:
+        print(f"❌ ไม่มีค่าที่จะเทียบ — เติม {LOCAL_FILE} หรือ VARS แล้วรันใหม่")
+        sys.exit(1)
+
+    differs, missing = [], []
+    for k, want in desired.items():
+        if k not in remote:
+            missing.append(k)
+        elif str(remote[k]) != str(want):
+            differs.append((k, want, remote[k]))
+    extra = [k for k in remote if k not in desired]
+
+    same = len(desired) - len(differs) - len(missing)
+    print(f"ตรงกัน {same} · ต่างกัน {len(differs)} · ขาดบน Render {len(missing)} · "
+          f"มีเฉพาะบน Render {len(extra)}\n")
+    if differs:
+        print("— ต่างกัน (local → remote):")
+        for k, want, got in differs:
+            print(f"  {k}: {mask(str(want))} → {mask(str(got))}")
+    if missing:
+        print("— ยังไม่มีบน Render:")
+        for k in missing:
+            print(f"  {k}")
+    if extra:
+        print("— มีบน Render แต่ไม่ track ในเครื่อง:")
+        for k in extra:
+            print(f"  {k}")
+    if not differs and not missing and not extra:
+        print("✅ ทุกตัวที่ track ตรงกับ Render")
+
+
 def cmd_deploy() -> None:
     print("กำลัง trigger deploy…")
     status, resp = request("POST", f"/services/{SERVICE_ID}/deploys", {})
@@ -254,6 +301,9 @@ def main() -> None:
             print("usage: python tools/render_set_env.py unset KEY [--deploy]")
             sys.exit(2)
         cmd_unset(args[1], deploy="--deploy" in args[2:])
+        return
+    if args and args[0] == "diff":
+        cmd_diff()
         return
     if args and args[0] == "deploy":
         cmd_deploy()
