@@ -15,6 +15,8 @@
        python tools/render_set_env.py get KEY                 # แสดงค่าเต็มของตัวเดียว (ไม่ mask)
        python tools/render_set_env.py set KEY VALUE           # upsert ตัวเดียว (ยังไม่ deploy)
        python tools/render_set_env.py set KEY VALUE --deploy  # upsert แล้ว trigger deploy
+       python tools/render_set_env.py unset KEY               # ลบ env var ตัวเดียว (ยังไม่ deploy)
+       python tools/render_set_env.py unset KEY --deploy      # ลบ แล้ว trigger deploy
        python tools/render_set_env.py deploy                  # trigger deploy
 
 รายละเอียด:
@@ -22,6 +24,7 @@
     แล้ว fallback ไป ~/.render/cli.yaml (CLI token — หมดอายุเป็นระยะ)
   - ค่าจาก render_env.local.json ชนะค่า default ใน VARS (ใช้กับค่าสาธารณะ เช่น APP_ID)
   - PUT /v1/services/{id}/env-vars/{key} ทีละตัว (upsert — ไม่แตะตัวอื่น ปลอดภัย)
+  - DELETE /v1/services/{id}/env-vars/{key} (unset) ลบตัวเดียว — ต้อง deploy ถึงจะมีผล
   - POST /v1/services/{id}/deploys เพื่อ deploy โค้ดที่ set env ใหม่
   - GET /v1/services/{id}/env-vars: ปัจจุบันคืน envVar เป็น dict; เวอร์ชันเก่าเคย
     double-encode เป็น string แบบ python-dict ("{'key': ...}") — decode_env_var()
@@ -201,6 +204,20 @@ def cmd_set(key: str, value: str, deploy: bool) -> None:
               "`python tools/render_set_env.py deploy`)")
 
 
+def cmd_unset(key: str, deploy: bool) -> None:
+    status, resp = request("DELETE", f"/services/{SERVICE_ID}/env-vars/{key}")
+    if status in (200, 202, 204):
+        print(f"✅ ลบ {key} สำเร็จ (HTTP {status})")
+    else:
+        print(f"❌ ลบ {key} ล้ม: HTTP {status} → {resp}")
+        sys.exit(1)
+    if deploy:
+        cmd_deploy()
+    else:
+        print("(ยังไม่ deploy — ต่อท้าย --deploy หรือรัน "
+              "`python tools/render_set_env.py deploy`)")
+
+
 def cmd_deploy() -> None:
     print("กำลัง trigger deploy…")
     status, resp = request("POST", f"/services/{SERVICE_ID}/deploys", {})
@@ -231,6 +248,12 @@ def main() -> None:
             print("usage: python tools/render_set_env.py set KEY VALUE [--deploy]")
             sys.exit(2)
         cmd_set(args[1], args[2], deploy="--deploy" in args[3:])
+        return
+    if args and args[0] == "unset":
+        if len(args) < 2:
+            print("usage: python tools/render_set_env.py unset KEY [--deploy]")
+            sys.exit(2)
+        cmd_unset(args[1], deploy="--deploy" in args[2:])
         return
     if args and args[0] == "deploy":
         cmd_deploy()
