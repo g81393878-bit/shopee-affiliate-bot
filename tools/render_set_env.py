@@ -12,6 +12,7 @@
 
 วิธีใช้ (คำสั่งเดี่ยว):
        python tools/render_set_env.py list                    # แสดง env vars ทั้งหมด (mask ค่า)
+       python tools/render_set_env.py get KEY                 # แสดงค่าเต็มของตัวเดียว (ไม่ mask)
        python tools/render_set_env.py set KEY VALUE           # upsert ตัวเดียว (ยังไม่ deploy)
        python tools/render_set_env.py set KEY VALUE --deploy  # upsert แล้ว trigger deploy
        python tools/render_set_env.py deploy                  # trigger deploy
@@ -25,7 +26,8 @@
   - GET /v1/services/{id}/env-vars: ปัจจุบันคืน envVar เป็น dict; เวอร์ชันเก่าเคย
     double-encode เป็น string แบบ python-dict ("{'key': ...}") — decode_env_var()
     รองรับทั้งสองแบบ (json.loads → แยกด้วย regex เอง) กัน ast.literal_eval พัง
-  - ไม่ print ค่า secret เต็ม (mask ให้ เห็นแค่หัว/ท้าย)
+  - ไม่ print ค่า secret เต็ม (mask ให้ เห็นแค่หัว/ท้าย) — ยกเว้น `get KEY`
+    ที่สั่งชัดว่าดูตัวเดียว → แสดงค่าเต็ม (ระวัง share หน้าจอ/terminal history)
 
 หมายเหตุ:
   - ได้ HTTP 401 = token ใน cli.yaml หมดอายุ → รัน `renderctl whoami` (หรือ
@@ -168,6 +170,22 @@ def cmd_list() -> None:
         print(f"{key} = {mask(str(value))}")
 
 
+def cmd_get(key: str) -> None:
+    status, resp = request("GET", f"/services/{SERVICE_ID}/env-vars")
+    if status != 200:
+        print(f"❌ get env-vars ล้ม: HTTP {status} → {resp}")
+        sys.exit(1)
+    items = resp if isinstance(resp, list) else []
+    for item in items:
+        env_var = item.get("envVar") if isinstance(item, dict) else item
+        k, value = decode_env_var(env_var)
+        if k == key:
+            print(f"{k} = {value}")  # get ต้องสั่งชัด → แสดงค่าเต็ม ไม่ mask
+            return
+    print(f"❌ ไม่พบ env var: {key}")
+    sys.exit(1)
+
+
 def cmd_set(key: str, value: str, deploy: bool) -> None:
     status, resp = request("PUT", f"/services/{SERVICE_ID}/env-vars/{key}",
                            {"value": value})
@@ -201,6 +219,12 @@ def main() -> None:
     # --- คำสั่งเดี่ยว ---
     if args and args[0] == "list":
         cmd_list()
+        return
+    if args and args[0] == "get":
+        if len(args) < 2:
+            print("usage: python tools/render_set_env.py get KEY")
+            sys.exit(2)
+        cmd_get(args[1])
         return
     if args and args[0] == "set":
         if len(args) < 3:
