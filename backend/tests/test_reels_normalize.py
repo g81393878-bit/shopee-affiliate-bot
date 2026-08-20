@@ -7,6 +7,8 @@ import importlib.util
 import subprocess
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 UPLOADER = ROOT / "uploader.py"
 
@@ -19,7 +21,9 @@ def _load_uploader():
 
 
 def _ffmpeg() -> str:
-    import imageio_ffmpeg
+    # imageio_ffmpeg ติดตั้งเฉพาะ venv ท้องถิ่น (ไม่เข้า requirements.txt) —
+    # บน CI ไม่มี → skip integration test แทนการ fail
+    imageio_ffmpeg = pytest.importorskip("imageio_ffmpeg")
     return imageio_ffmpeg.get_ffmpeg_exe()
 
 
