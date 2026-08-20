@@ -686,12 +686,12 @@ def test_post_next_product_fetches_and_caches_image(monkeypatch, db):
 
 
 def test_intro_posts_have_badge_and_image_url(monkeypatch):
-    """คลังแคปชั่น 12 ตัว — ทุกตัวต้องมีป้ายข้อความ (badge) + รูปมาสคอต image_url"""
+    """คลังแคปชั่น 27 ตัว — ทุกตัวต้องมีป้ายข้อความ (badge) + รูปมาสคอต image_url"""
     from app.services import facebook_intro
     monkeypatch.delenv("LINE_OA_URL", raising=False)
     monkeypatch.delenv("INTRO_IMAGE_URL", raising=False)
     posts = facebook_intro.intro_posts()
-    assert len(posts) == 12
+    assert len(posts) == 27
     assert posts[0]["caption"].startswith("👵 โพสต์แนะนำบอท")
     assert "🏷️ เรื่องป้า" in posts[0]["caption"]  # badge เดิมยังอยู่ข้างใน
     for p in posts:

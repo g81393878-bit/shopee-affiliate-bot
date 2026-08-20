@@ -3,9 +3,11 @@
 """uploader.py — Facebook Reels auto-uploader (FIFO + AI caption + normalize + pacing)
 
 ดึงคลิป .mp4 จาก pending_videos/ (FIFO) → แปลงให้ตรง spec Reels อัตโนมัติ
-(9:16/1080p/30fps/≤90s ด้วย ffmpeg — ไม่ต้องตั้งขนาดเอง) → เขียนแคปชั่น AI (Groq)
-+ แปะลิงก์ Shopee ตาม products.json → อัปโหลด Reels ผ่าน 3-step video upload session
-(init → upload → publish) → ย้ายคลิปไป posted/ แล้วบันทึกเวลาล่าสุด (pacing)
+(9:16/1080p/30fps/≤90s ด้วย ffmpeg — ไม่ต้องตั้งขนาดเอง) → เขียนแคปชั่น:
+คลิปสินค้า (มีใน products.json) = AI (Groq) + ลิงก์ Shopee · คลิปที่ไม่ใช่สินค้า =
+แคปชั่นแนะนำป้าเข็มจากคลัง (facebook_intro) หมุนเวียนอัตโนมัติ → อัปโหลด Reels
+ผ่าน 3-step video upload session (init → upload → publish) → ย้ายคลิปไป posted/
+แล้วบันทึกเวลาล่าสุด (pacing)
 
 ใช้งาน:
   python uploader.py                  # โพสต์คลิปถัดไป 1 ตัว (ถ้าถึงเวลา spacing)
@@ -47,12 +49,16 @@ from dotenv import load_dotenv  # noqa: E402
 load_dotenv(BACKEND / ".env")
 
 from app.services.facebook_poster import PAGE_ID, post_reel  # noqa: E402
+from app.services.facebook_intro import intro_posts  # noqa: E402
+from app.services.bot_profile import LINE_OA_URL  # noqa: E402
+
 
 PENDING_DIR = ROOT / "pending_videos"
 POSTED_DIR = ROOT / "posted"
 PRODUCTS_JSON = ROOT / "products.json"
 LAST_POST_FILE = ROOT / "last_post_time.txt"
 DAILY_COUNT_FILE = ROOT / "posts_today.txt"
+INTRO_STATE_FILE = ROOT / ".uploader_intro_state.json"
 LOG_FILE = ROOT / "uploader_execution.log"
 
 DEFAULT_SPACING_HOURS = 3.0
@@ -176,8 +182,40 @@ def bump_daily_count() -> None:
     DAILY_COUNT_FILE.write_text(f"{today} {count}", encoding="utf-8")
 
 
+def _read_intro_idx() -> int:
+    """ตำแหน่งแคปชั่นแนะนำป้าเข็มล่าสุด (round-robin กันโพสต์ซ้ำติดกัน)."""
+    try:
+        return int(json.loads(INTRO_STATE_FILE.read_text(encoding="utf-8")).get("idx", 0))
+    except Exception:
+        return 0
+
+
+def _write_intro_idx(idx: int) -> None:
+    try:
+        INTRO_STATE_FILE.write_text(json.dumps({"idx": idx}), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def build_intro_caption(advance: bool = True) -> str:
+    """แคปชั่นแนะนำป้าเข็มจากคลัง (facebook_intro) หมุนเวียน — ใช้กับคลิปที่ไม่ใช่สินค้า.
+
+    advance=True เลื่อนตำแหน่ง (ใช้ตอนโพสต์สำเร็จ) — advance=False แค่ peek (dry-run).
+    ลิงก์ LINE OA ที่ยังเป็น placeholder (@xxxxx) จะถูกแทนด้วยลิงก์จริงจาก bot_profile.
+    """
+    posts = intro_posts()
+    idx = _read_intro_idx() % len(posts)
+    caption = posts[idx]["caption"]
+    if advance:
+        _write_intro_idx((idx + 1) % len(posts))
+    return caption.replace("https://line.me/R/ti/p/@xxxxx", LINE_OA_URL)
+
+
 def build_caption(product: dict) -> str:
-    """เขียนแคปชั่น Reels — AI (Groq) ถ้ามี key, ไม่งั้น template"""
+    """เขียนแคปชั่น Reels — คลิปสินค้า (มีใน products.json) ใช้ AI/template,
+    คลิปที่ไม่ใช่สินค้าใช้แคปชั่นแนะนำป้าเข็มจากคลัง (หมุนเวียน)."""
+    if not product:
+        return build_intro_caption(advance=False)
     name = (product or {}).get("product_name") or "สินค้าเด็ดจากป้าเข็ม"
     price = (product or {}).get("price") or ""
     link = (product or {}).get("affiliate_link") or ""
@@ -284,6 +322,8 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
         shutil.move(str(video), str(dst))
         LAST_POST_FILE.write_text(str(time.time()), encoding="utf-8")
         bump_daily_count()
+        if not product:
+            build_intro_caption(advance=True)  # เลื่อนแคปชั่นแนะนำป้าเข็ม (กันโพสต์ซ้ำติดกัน)
         log(f"[OK] Reels โพสต์สำเร็จ video_id={res['video_id']} → {dst.name}")
         return 0
 

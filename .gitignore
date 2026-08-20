@@ -110,3 +110,4 @@ posted/*
 last_post_time.txt
 posts_today.txt
 uploader_execution.log
+.uploader_intro_state.json
