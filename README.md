@@ -61,6 +61,7 @@ Only the LINE webhook URL (`POST /api/webhooks/line`) points at Render directly 
 ## 📁 Project Structure
 
 ```
+uploader.py            # Facebook Reels auto-uploader — see docs/facebook-reels-uploader.md
 backend/
   app/
     main.py            # FastAPI app, keep-alive loop, /health, /privacy
@@ -156,6 +157,7 @@ Register them on cron-job.org automatically with `python tools/cron_jobs.py`.
 | `tools/sheet_apps_script.gs` | Google Apps Script webhook for chat logging |
 | `tools/mcp_server.py` | MCP server exposing product/catalog tools |
 | `deploy_to_github.ps1` | One-click GitHub push helper |
+| `uploader.py` | Facebook Reels auto-uploader — see [docs/facebook-reels-uploader.md](docs/facebook-reels-uploader.md) |
 
 ---
 
