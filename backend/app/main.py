@@ -54,7 +54,33 @@ def _migrate_schema():
         logger.warning(f"migrate bot_purchases columns failed: {e}")
 
 
+def _drop_group_sharing_schema():
+    """ลบซากฟีเจอร์แชร์ลงกลุ่ม Facebook อัตโนมัติตอน deploy (idempotent — รันซ้ำได้ไม่พัง)
+
+    Meta ปิด Groups API ถาวร (เม.ย. 2024) → โค้ด/ตารางแชร์ลงกลุ่มถูกลบออกจาก repo แล้ว แต่
+    create_all() สร้างอย่างเดียว ไม่ drop ของเดิม → ตาราง group_share_tasks, facebook_groups_monitor
+    และคอลัมน์ facebook_detected_leads.group_id จะค้างอยู่บน env ที่เคยรันโค้ดเก่า (เช่น Supabase prod)
+    ถ้าไม่ลบตรงนี้ ต้องไป drop มือใน SQL Editor — ใส่ไว้ตอน startup รอบเดียวกับ create_all()
+    เพื่อให้ทุก deploy ล้างซากกลุ่มให้อัตโนมัติ.
+
+    รันเฉพาะ Postgres (production/deploy) เท่านั้น: SQLite เป็น dev db แบบใช้แล้วทิ้ง + ALTER
+    DROP COLUMN ของ SQLite ติดข้อจำกัด FK (ต้อง rebuild ตารางทั้งใบ) ไม่คุ้มทำ — dev ยังไงก็
+    ลบทิ้ง/สร้างใหม่ได้. ลำดับสำคัญ: drop group_id (ถอด FK ที่ชี้ facebook_groups_monitor)
+    ก่อน drop ตารางหลัง ไม่งั้น FK constraint จะติด."""
+    if is_sqlite:
+        return
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS group_share_tasks"))
+            conn.execute(text("ALTER TABLE facebook_detected_leads DROP COLUMN IF EXISTS group_id"))
+            conn.execute(text("DROP TABLE IF EXISTS facebook_groups_monitor"))
+        logger.info("group sharing schema cleanup: done (idempotent)")
+    except Exception as e:
+        logger.warning(f"drop group sharing schema failed: {e}")
+
+
 _migrate_schema()
+_drop_group_sharing_schema()
 
 KEEP_ALIVE_URL = (os.getenv("RENDER_EXTERNAL_URL") or "").rstrip("/")
 KEEP_ALIVE_INTERVAL = int(os.getenv("KEEP_ALIVE_INTERVAL", "600"))
