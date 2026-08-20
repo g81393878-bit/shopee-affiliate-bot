@@ -14,7 +14,7 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
-- **ลบฟีเจอร์แชร์ลงกลุ่ม + เศษโค้ดทั้งหมด 100% (20/08)** — Meta ปิด Groups API ถาวร เม.ย. 2024 → ลบ feature code ไปแล้วใน commit `cb0e847` แล้วรอบนี้เก็บกวาดเศษที่เหลือจนหมดตามคำสั่งเจ้าของ “ไม่ให้เหลือแม้แต่เศษโค้ด”: ลบ `_drop_group_sharing_schema()` + call ใน `backend/app/main.py` · ลบ migration `supabase/migrations/20260820000000_remove_group_sharing.sql` · ล้างคอมเมนต์/`--out-file`/ถ้อยคำที่อ้างแชร์ใน `facebook_radar.py`, `run_campaign.py`, `post_page.py`, `.agents/skills/facebook-post-coordination/SKILL.md` — เหลือเฉพาะซากตารางบน prod ที่ต้อง drop มือครั้งเดียว (ดู หมายเหตุ) — **committed `f1bae46` (ยังไม่ push/deploy)**
+- **ลบฟีเจอร์แชร์ลงกลุ่ม + เศษโค้ดทั้งหมด 100% (20/08)** — Meta ปิด Groups API ถาวร เม.ย. 2024 → ลบ feature code ไปแล้วใน commit `cb0e847` แล้วรอบนี้เก็บกวาดเศษที่เหลือจนหมดตามคำสั่งเจ้าของ “ไม่ให้เหลือแม้แต่เศษโค้ด”: ลบ `_drop_group_sharing_schema()` + call ใน `backend/app/main.py` · ลบ migration `supabase/migrations/20260820000000_remove_group_sharing.sql` · ล้างคอมเมนต์/`--out-file`/ถ้อยคำที่อ้างแชร์ใน `facebook_radar.py`, `run_campaign.py`, `post_page.py`, `.agents/skills/facebook-post-coordination/SKILL.md` — เหลือเฉพาะซากตารางบน prod ที่ต้อง drop มือครั้งเดียว (ดู หมายเหตุ) — **deploy live แล้ว (push `107f509`) + drop ซากตาราง prod + ลบ Task Scheduler 4 ตัว เรียบร้อย**
 - **push `3126b7f..446e296` (19/08) — งาน radar/monitor 7 commits** — แตะเฉพาะ `bot/`, `tools/`, `backend/tests/` — **ไม่มีการแก้ `backend/app/` → production (Render) runtime ไม่เปลี่ยน** (รายละเอียดแต่ละ commit ด้านล่าง)
 - **`446e296` test(radar): เทสต์ `_kill_chrome_tree` + `_sweep_orphan_drivers` 6 ตัว (mock subprocess/tasklist)** — ฆ่า undetected_chromedriver ด้วย taskkill /T /F · ไม่แตะ chrome.exe ของ user · no-op บน non-Windows · no-PID ไม่ crash — `test_fb_group_monitor_local.py` 28 passed, รวม radar 54 passed
 - **`3893f51` feat(radar): single-instance lock กันรัน monitor ซ้อนกัน** — `.fb_monitor.lock` เก็บ PID · เจอ lock ของ process ที่ยังมีชีวิต → refuse + exit 1 · lock ค้างจาก PID ตายเขียนทับอัตโนมัติ · ปลด lock ทุกทางออก (Ctrl+C/error/จบ) · `--lock-file ''` ปิดได้ · gitignore `.fb_monitor.lock` + `.fb_monitor_seen.json`
@@ -45,13 +45,8 @@
 
 - **Render Auto-Deploy (native):** flag เป็ข `yes` (ผ่าน API) แต่ push จริงไม่ trigger (repo ไม่มี webhook เลย `[]` — สงสัย GitHub integration หลุดตอน rollback) → จึงเปลี่ยนเป็น **GitHub Action + Deploy Hook** (route stable กว่า); ถ้าอยากลองกลับไปใช้ native อีก ให้ reconnect GitHub ใน Dashboard
 - **secret `RENDER_DEPLOY_HOOK_URL` ตั้งแล้ว + auto-deploy ทำงานจริง** — GH Action `auto-deploy to render` รัน success ทุก push ล่าสุด (รวม `3f9ddad`) · trigger deploy hook จาก API เองก็ได้ (curl POST ไป Deploy Hook URL)
-- **Deploy ปัจจุบัน (production):** commit `ce69986` live (deploy `dep-da1vgmmgekts73ethgog`) — มีฟีเจอร์สลิปครบ + ป้ายกำกับโพสต์ (งานลบฟีเจอร์แชร์ยังไม่ deploy)
+- **Deploy ปัจจุบัน (production):** push `107f509` → GH Action `auto-deploy to render` success → Render deploy Live (verify: `/api/admin/group-shares/pending` = 404, `/health` = 200, radar route = 401)
 - **`FB_CONTENT_POST_INTERVAL=1440` ตั้งบน Render แล้ว (โพสต์คอนเทนต์ 1 ครั้ง/วัน)** — โพสต์แนะนำบอท/ข่าว/ร้านสลับกัน วันละ 1 ตัว · `FB_AUTO_POST_INTERVAL=60` = โพสต์สินค้า 1 ตัว/ชม.
 - **เวลาในตาราง `bot_purchases`:** `created_at` (รับเรื่อง) · `paid_at` (โอน) · `confirmed_at` (เริ่มทำ) — แสดงเป็นเวลาไทย UTC+7
-- **ซากตารางบน prod ต้อง drop มือครั้งเดียว (หลัง deploy):** โค้ดล้างอัตโนมัติ + migration ถูกลบออกหมดตามคำสั่งเจ้าของแล้ว → หลัง deploy โค้ดใหม่ ให้รันใน Supabase SQL Editor (ลำดับสำคัญ: drop column ก่อนถอด FK):
-  ```sql
-  ALTER TABLE facebook_detected_leads DROP COLUMN IF EXISTS group_id;
-  DROP TABLE IF EXISTS group_share_tasks;
-  DROP TABLE IF EXISTS facebook_groups_monitor;
-  ```
-- **หลัง deploy:** ลบ Task Scheduler `PaKhem Share Morning/Noon/Evening` บนเครื่องเจ้าของ (`schtasks /delete /tn "PaKhem Share Morning"` + Noon/Evening) — ไฟล์ log/state ของแชร์ (`bot/share_auto.log`, `share_run_now.log`, `_share_run.log`, `_dryrun.log`, `fb_shared_state.json`, `fb_blacklist.json`, `fb_daily_share.json`) เป็นซาก runtime (gitignored) ลบทิ้งได้
+- **drop ซากตารางบน prod แล้ว (20/08):** ลบ `facebook_detected_leads.group_id` + `group_share_tasks` (48 แถว) + `facebook_groups_monitor` (14 แถว) ผ่าน pooler URL (port 5432) — verify แล้วไม่มีเหลือ · `facebook_detected_leads` ยังอยู่ครบ 1,117 แถว
+- **ลบ Task Scheduler แล้ว (20/08):** ลบ `PaKhem Share Morning/Noon/Evening` + `PaKhem FB Group Monitor` (4 ตัว — ทุกตัวชี้ script ที่ลบไปแล้ว) · ไฟล์ log/state ของแชร์ถูกลบจากเครื่องแล้ว (gitignored)
