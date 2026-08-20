@@ -12,6 +12,7 @@ Graph API:
   - POST /{page-id}/photos — โพสต์รูป (image_url + caption)
   - POST /{page-id}/videos — โพสต์วิดีโอ MP4 (file_url หรือ multipart source)
 """
+import json
 import logging
 import os
 import re
@@ -195,6 +196,30 @@ def classify_post_error(error: str) -> bool:
     return any(m in e for m in _HARD_POST_ERROR_MARKERS)
 
 
+def _log_rate_limit_usage(r) -> None:
+    """อ่าน header X-App-Usage / X-Business-Use-Case แล้ว log % usage ของ Graph API
+
+    Meta ส่ง header เหล่านี้เมื่อ endpoint ถูกเรียกพอสมควร — ค่าเป็น JSON เปอร์เซ็นต์
+    (เช่น {"call_count": 28, "total_time": 25, "total_cputime": 25}) → log ไว้ให้เห็น
+    ล่วงหน้าก่อนชน rate limit; ถ้า call_count >= 80% → warning (ควรชะลอ/ตรวจ).
+    Header ไม่มี / parse ไม่ได้ → ข้ามเงียบ ๆ ไม่รบกวน log ปกติ.
+    """
+    for header in ("X-App-Usage", "X-Business-Use-Case"):
+        raw = (getattr(r, "headers", {}) or {}).get(header)
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except Exception:
+            continue
+        call_count = data.get("call_count")
+        try:
+            high = isinstance(call_count, (int, float)) and float(call_count) >= 80
+        except (TypeError, ValueError):
+            high = False
+        (logger.warning if high else logger.info)(f"[fb_rate_usage] {header}: {data}")
+
+
 def post_feed(message: str, link: str = "", image_url: str = "",
               background_preset_id: str = "") -> dict:
     """โพสต์ลง feed เพจ — คืน {ok, post_id, error}
@@ -265,6 +290,7 @@ def post_feed(message: str, link: str = "", image_url: str = "",
     except Exception as e:
         logger.warning(f"[facebook_poster] post failed: {e}")
         return {"ok": False, "post_id": None, "error": str(e)[:200]}
+    _log_rate_limit_usage(r)
     try:
         body = r.json()
     except Exception:
@@ -300,12 +326,12 @@ def post_comment(post_id: str, message: str) -> dict:
     except Exception as e:
         logger.warning(f"[facebook_poster] comment failed: {e}")
         return {"ok": False, "comment_id": None, "error": str(e)[:200]}
-        
+    _log_rate_limit_usage(r)
     try:
         body = r.json()
     except Exception:
         body = {}
-        
+
     cid = body.get("id")
     if r.status_code == 200 and cid:
         return {"ok": True, "comment_id": str(cid), "error": None}
@@ -361,6 +387,7 @@ def post_photo(message: str = "", file_path: str = "", image_url: str = "") -> d
     except Exception as e:
         logger.warning(f"[facebook_poster] photo post failed: {e}")
         return {"ok": False, "post_id": None, "error": str(e)[:200]}
+    _log_rate_limit_usage(r)
     try:
         body = r.json()
     except Exception:
@@ -555,6 +582,7 @@ def post_video(description: str = "", file_url: str = "", file_path: str = "",
     except Exception as e:
         logger.warning(f"[facebook_poster] video post failed: {e}")
         return {"ok": False, "video_id": None, "error": str(e)[:200]}
+    _log_rate_limit_usage(r)
     try:
         body = r.json()
     except Exception:

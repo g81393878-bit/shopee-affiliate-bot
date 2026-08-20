@@ -1257,6 +1257,36 @@ def test_classify_post_error_detects_hard_errors():
     assert fp.classify_post_error("") is False
 
 
+def test_log_rate_limit_usage(caplog):
+    """_log_rate_limit_usage อ่าน header X-App-Usage/X-Business-Use-Case แล้ว log — ไม่ crash ถ้าไม่มี/parse ไม่ได้"""
+    import json
+    import logging
+
+    class Resp:
+        def __init__(self, headers=None):
+            self.headers = headers or {}
+
+    # ไม่มี header → ข้ามเงียบ ๆ
+    with caplog.at_level(logging.INFO):
+        fp._log_rate_limit_usage(Resp())
+    assert "fb_rate_usage" not in caplog.text
+
+    # header ปกติ (28%) → log info
+    with caplog.at_level(logging.INFO):
+        fp._log_rate_limit_usage(Resp({"X-App-Usage": json.dumps({"call_count": 28, "total_time": 25})}))
+    assert "fb_rate_usage" in caplog.text
+    assert "X-App-Usage" in caplog.text
+
+    # call_count สูง (95%) → warning
+    with caplog.at_level(logging.WARNING):
+        fp._log_rate_limit_usage(Resp({"X-App-Usage": json.dumps({"call_count": 95})}))
+    assert any(r.levelname == "WARNING" for r in caplog.records)
+
+    # JSON ผิด → ข้าม ไม่ crash
+    with caplog.at_level(logging.INFO):
+        fp._log_rate_limit_usage(Resp({"X-App-Usage": "not-json"}))
+
+
 def test_notify_owner_once_noop_in_dev(monkeypatch):
     """dev/test → ไม่ยิง LINE จริง"""
     monkeypatch.setattr(fp, "_is_prod", lambda: False)
