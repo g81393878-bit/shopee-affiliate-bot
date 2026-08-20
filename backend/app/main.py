@@ -27,31 +27,59 @@ Base.metadata.create_all(bind=engine)
 
 
 def _migrate_schema():
-    """เพิ่มคอลัมน์ใหม่ให้ตารางที่มีอยู่แล้ว (create_all สร้างแต่ตาราง ไม่ ALTER ตารางเดิม)
-    - paid_at / confirmed_at ของ bot_purchases: บันทึกเวลารับเรื่อง/เริ่มทำ กันระยะเวลาเลื่อนไปเรื่อย ๆ
-    - slip_url / amount / ref_no ของ bot_purchases: เก็บหลักฐานสลิปโอนเงิน (ลิงก์เปิดดู + ยอด + เลขอ้างอิง)"""
+    """Self-heal สกีมาที่ดริฟท์ — create_all สร้างแต่ตาราง ไม่ ALTER ตารางเดิม.
+
+    เทียบคอลัมน์จริงของทุกตารางใน Base.metadata กับ model แล้ว ADD COLUMN ตัวที่ขาด
+    (SQLite: PRAGMA table_info; Postgres: information_schema). เจอจริงจาก dev SQLite
+    ที่ products ขาด image_url/link_status/ai_score/price_checked_at, contents ขาด
+    hook/problem/solution/cta → endpoint 500 "no such column"."""
+    from sqlalchemy.dialects import sqlite as sa_sqlite
+    from sqlalchemy.dialects import postgresql as sa_pg
+
+    dialect = sa_sqlite.dialect() if is_sqlite else sa_pg.dialect()
+
+    def _default_sql(column):
+        """ค่า DEFAULT สำหรับ ALTER คอลัมน์ NOT NULL ที่ไม่มีค่า (None = ปล่อย nullable)."""
+        if column.server_default is not None:
+            a = column.server_default.arg
+            return repr(a) if isinstance(a, str) else str(a)
+        if column.default is not None and not callable(column.default.arg):
+            a = column.default.arg
+            if isinstance(a, bool):
+                return "1" if a else "0"
+            return repr(a)
+        return None
+
     try:
         with engine.begin() as conn:
-            if is_sqlite:
-                cols = [row[1] for row in conn.execute(text("PRAGMA table_info(bot_purchases)"))]
-                if "paid_at" not in cols:
-                    conn.execute(text("ALTER TABLE bot_purchases ADD COLUMN paid_at TIMESTAMP"))
-                if "confirmed_at" not in cols:
-                    conn.execute(text("ALTER TABLE bot_purchases ADD COLUMN confirmed_at TIMESTAMP"))
-                if "slip_url" not in cols:
-                    conn.execute(text("ALTER TABLE bot_purchases ADD COLUMN slip_url TEXT"))
-                if "amount" not in cols:
-                    conn.execute(text("ALTER TABLE bot_purchases ADD COLUMN amount VARCHAR(50)"))
-                if "ref_no" not in cols:
-                    conn.execute(text("ALTER TABLE bot_purchases ADD COLUMN ref_no VARCHAR(50)"))
-            else:
-                conn.execute(text("ALTER TABLE bot_purchases ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ"))
-                conn.execute(text("ALTER TABLE bot_purchases ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ"))
-                conn.execute(text("ALTER TABLE bot_purchases ADD COLUMN IF NOT EXISTS slip_url TEXT"))
-                conn.execute(text("ALTER TABLE bot_purchases ADD COLUMN IF NOT EXISTS amount VARCHAR(50)"))
-                conn.execute(text("ALTER TABLE bot_purchases ADD COLUMN IF NOT EXISTS ref_no VARCHAR(50)"))
+            for table in Base.metadata.sorted_tables:
+                tname = table.name
+                if is_sqlite:
+                    actual = {r[1] for r in conn.execute(
+                        text(f'PRAGMA table_info("{tname}")')).fetchall()}
+                else:
+                    actual = {r[0] for r in conn.execute(
+                        text("SELECT column_name FROM information_schema.columns "
+                             "WHERE table_name = :t"), {"t": tname}).fetchall()}
+                if not actual:
+                    continue  # ตารางยังไม่มี (ไม่ควรเกิดหลัง create_all)
+                for column in table.columns:
+                    if column.name in actual:
+                        continue
+                    ddl = column.type.compile(dialect=dialect)
+                    if not column.nullable:
+                        d = _default_sql(column)
+                        if d is not None:
+                            ddl += f" NOT NULL DEFAULT {d}"
+                    if is_sqlite:
+                        stmt = f'ALTER TABLE "{tname}" ADD COLUMN "{column.name}" {ddl}'
+                    else:
+                        stmt = (f'ALTER TABLE "{tname}" ADD COLUMN IF NOT EXISTS '
+                                f'"{column.name}" {ddl}')
+                    conn.execute(text(stmt))
+                    logger.info(f"migrate: +{tname}.{column.name} {ddl}")
     except Exception as e:
-        logger.warning(f"migrate bot_purchases columns failed: {e}")
+        logger.warning(f"migrate schema columns failed: {e}")
 
 
 _migrate_schema()
