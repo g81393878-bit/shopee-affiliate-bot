@@ -18,7 +18,7 @@
        python tools/render_set_env.py unset KEY               # ลบ env var ตัวเดียว (ยังไม่ deploy)
        python tools/render_set_env.py unset KEY --deploy      # ลบ แล้ว trigger deploy
        python tools/render_set_env.py diff                    # เทียบ remote กับ VARS/render_env.local.json
-       python tools/render_set_env.py deploy                  # trigger deploy
+       python tools/render_set_env.py deploy                  # trigger deploy (retry 503 อัตโนมัติ)
 
 รายละเอียด:
   - อ่าน API key ตามลำดับ: env RENDER_API_KEY → ~/.bashrc (export ตัวเดียวกัน) →
@@ -39,6 +39,8 @@
 หมายเหตุ:
   - ได้ HTTP 401 = token ใน cli.yaml หมดอายุ → รัน `renderctl whoami` (หรือ
     `renderctl login`) เพื่อ refresh แล้วรันใหม่
+  - deploy ได้ HTTP 503 = incident ฝั่ง Render/Google Cloud (ชั่วคราว) — cmd_deploy
+    retry อัตโนมัติ (env DEPLOY_RETRY_MAX default 12, DEPLOY_RETRY_DELAY default 300 วิ)
   - หลัง deploy รอสถานะ "live" ที่
     https://dashboard.render.com/web/srv-d9tknl2d0e5s739ebo40/deploys (~3 นาที)
 """
@@ -46,6 +48,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -309,15 +312,31 @@ def cmd_diff() -> None:
 
 
 def cmd_deploy() -> None:
-    print("กำลัง trigger deploy…")
-    status, resp = request("POST", f"/services/{SERVICE_ID}/deploys", {})
-    if status in (200, 201):
-        print(f"✅ trigger deploy สำเร็จ (id={resp.get('id') if isinstance(resp, dict) else resp})")
-        print("   รอสถานะ 'live' ที่ https://dashboard.render.com/web/"
-              f"{SERVICE_ID}/deploys (~3 นาที)")
-    else:
+    """Trigger deploy — retry อัตโนมัติเมื่อได้ 503 (incident ฝั่ง Render/Google Cloud).
+
+    ควบคุมด้วย env: DEPLOY_RETRY_MAX (จำนวนครั้ง, default 12) และ
+    DEPLOY_RETRY_DELAY (วินาทีระหว่างครั้ง, default 300)."""
+    max_attempts = int(os.getenv("DEPLOY_RETRY_MAX", "12") or 12)
+    delay = int(os.getenv("DEPLOY_RETRY_DELAY", "300") or 300)
+    for attempt in range(1, max_attempts + 1):
+        print(f"กำลัง trigger deploy… (ครั้งที่ {attempt}/{max_attempts})")
+        status, resp = request("POST", f"/services/{SERVICE_ID}/deploys", {})
+        if status in (200, 201):
+            print(f"✅ trigger deploy สำเร็จ (id={resp.get('id') if isinstance(resp, dict) else resp})")
+            print("   รอสถานะ 'live' ที่ https://dashboard.render.com/web/"
+                  f"{SERVICE_ID}/deploys (~3 นาที)")
+            return
+        if status == 503:
+            if attempt >= max_attempts:
+                break
+            print(f"⏳ HTTP 503 (Render ยังปิด deploy ชั่วคราว) — รอ {delay} วิ แล้วลองใหม่")
+            time.sleep(delay)
+            continue
         print(f"❌ trigger deploy ล้ม: HTTP {status} → {resp}")
         sys.exit(1)
+    print(f"❌ retry ครบ {max_attempts} ครั้งแล้ว deploy ยังไม่ผ่าน "
+          f"(Render incident ยังไม่หาย — ดู status.render.com)")
+    sys.exit(1)
 
 
 def main() -> None:
