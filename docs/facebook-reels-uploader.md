@@ -4,7 +4,7 @@
 พร้อมเขียนแคปชั่นป้ายยาภาษาไทยด้วย AI (Groq) และแปะลิงก์ Shopee Affiliate
 
 ระบบประกอบด้วย 2 ส่วน:
-- **`uploader.py`** (root) — orchestrator: คิว FIFO + แคปชั่น + pacing + guard โควต้า/วัน
+- **`uploader.py`** (root) — orchestrator: คิว FIFO + **แปลงคลิป 9:16 อัตโนมัติ** + แคปชั่น + pacing + guard โควต้า/วัน
 - **`backend/app/services/facebook_poster.py`** — `post_reel()` ทำ 3-step video upload session จริงผ่าน Graph API (reuse token + rate-limit logging ตัวเดียวกับ `post_feed`)
 
 ---
@@ -13,7 +13,7 @@
 
 ```
 (project root)/
-├── uploader.py                  # orchestrator (FIFO + AI caption + pacing + daily guard)
+├── uploader.py                  # orchestrator (FIFO + normalize 9:16 + AI caption + pacing + daily guard)
 ├── products.json                # จับคู่ชื่อไฟล์วิดีโอ → ข้อมูลสินค้า Shopee
 ├── pending_videos/              # 📥 คลิป .mp4 รอโพสต์ (FIFO ตามชื่อไฟล์) — ใส่ .gitkeep ไว้ commit
 ├── posted/                      # 📤 คลิปที่โพสต์สำเร็จถูกย้ายมา (กันโพสต์ซ้ำ)
@@ -71,6 +71,25 @@
 
 ---
 
+## แปลงคลิปอัตโนมัติ (normalize) — ไม่ต้องตั้งขนาดเอง
+
+ก่อนโพสต์ `uploader.py` จะรัน ffmpeg (binary ที่ติดมากับ `imageio_ffmpeg` ใน venv)
+แปลงคลิปให้ตรง spec Reels อัตโนมัติ:
+
+- **9:16 1080×1920** (แนวตั้ง) — ถ้าคลิปเป็นแนวนอน/จัตุรัส จะเติม**พื้นหลังเบลอ**แทนแถบดำ
+- **30fps**
+- ตัดไม่เกิน **90 วินาที**
+- H.264 + AAC (`+faststart`) — มีเสียงก็เก็บ ไม่มีก็ผ่าน
+
+> แปลงเสร็จเป็นไฟล์ temp → โพสต์แล้วลบทิ้ง ไฟล์ต้นฉบับใน `pending_videos/` ไม่ถูกแก้
+
+ถ้าคลิปตรง spec อยู่แล้วและอยากข้ามการแปลง (เร็วกว่า ไม่ re-encode):
+```bash
+python uploader.py --no-normalize
+```
+
+---
+
 ## `products.json` (จับคู่คลิป → สินค้า)
 
 ```json
@@ -101,6 +120,9 @@ python uploader.py --dry-run
 
 # ข้าม pacing โพสต์ทันที (ยังนับ daily limit อยู่)
 python uploader.py --force
+
+# ไม่แปลงคลิป (ใช้ไฟล์เดิม — คลิปต้องตรง spec Reels อยู่แล้ว)
+python uploader.py --no-normalize
 ```
 
 **Pacing:** บันทึกเวลาสำเร็จล่าสุดใน `last_post_time.txt` — ถ้ารันก่อนครบ
@@ -114,9 +136,9 @@ spacing ระบบจะโพสต์คลิปถัดไปให้เ
 
 ---
 
-## ข้อกำหนดคลิป (ไม่งั้นโดน error `1363xxx`)
+## ข้อกำหนดคลิป
 
-- สัดส่วน **9:16** (แนวตั้ง)
-- ความยาว **3–90 วินาที**
-- ความละเอียดขั้นต่ำ **540p** (แนะนำ 1080p)
-- Frame rate **24–60 FPS**
+ปกติ**ไม่ต้องทำเอง** — `normalize` แปลงให้อัตโนมัติแล้ว แต่ควรรู้ไว้ (กรณีใช้ `--no-normalize`):
+
+- สัดส่วน **9:16** (แนวตั้ง) · ความยาว **3–90 วินาที** · ความละเอียดขั้นต่ำ **540p** (แนะนำ 1080p) · Frame rate **24–60 FPS**
+- ไม่งั้นโดน error `1363xxx` (โค้ดถอดความหมายให้ใน log แล้ว)

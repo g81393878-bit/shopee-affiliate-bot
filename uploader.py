@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""uploader.py — Facebook Reels auto-uploader (FIFO + AI caption + pacing)
+"""uploader.py — Facebook Reels auto-uploader (FIFO + AI caption + normalize + pacing)
 
-ดึงคลิป .mp4 จาก pending_videos/ (FIFO) → เขียนแคปชั่น AI (Groq) + แปะลิงก์
-Shopee ตาม products.json → อัปโหลด Reels ผ่าน 3-step video upload session
+ดึงคลิป .mp4 จาก pending_videos/ (FIFO) → แปลงให้ตรง spec Reels อัตโนมัติ
+(9:16/1080p/30fps/≤90s ด้วย ffmpeg — ไม่ต้องตั้งขนาดเอง) → เขียนแคปชั่น AI (Groq)
++ แปะลิงก์ Shopee ตาม products.json → อัปโหลด Reels ผ่าน 3-step video upload session
 (init → upload → publish) → ย้ายคลิปไป posted/ แล้วบันทึกเวลาล่าสุด (pacing)
 
 ใช้งาน:
   python uploader.py                  # โพสต์คลิปถัดไป 1 ตัว (ถ้าถึงเวลา spacing)
   python uploader.py --dry-run        # จำลอง: โชว์คลิป + แคปชั่น ไม่โพสต์จริง
   python uploader.py --force          # ข้าม pacing (โพสต์ทันที) — ยังนับ daily limit
+  python uploader.py --no-normalize   # ไม่แปลงคลิป (ใช้ไฟล์เดิมที่ตรง spec อยู่แล้ว)
 
 env (อ่านจาก backend/.env):
   FACEBOOK_PAGE_ACCESS_TOKEN / FACEBOOK_PAGE_ID
@@ -23,14 +25,19 @@ import argparse
 import json
 import os
 import shutil
+import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 # บังคับ stdout UTF-8 (กัน emoji/ไทย พังบน Windows console ที่ใช้ cp874/850)
 if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass  # ตอนถูก import ใน pytest stdout เป็น capture object ที่ reconfigure ไม่ได้
 
 ROOT = Path(__file__).resolve().parent
 BACKEND = ROOT / "backend"
@@ -68,6 +75,50 @@ def _env_float(key: str, default: float) -> float:
         return float(os.getenv(key) or default)
     except (TypeError, ValueError):
         return default
+
+
+def _ffmpeg_exe() -> str:
+    """path ffmpeg — ใช้ binary ที่ติดมากับ imageio_ffmpeg (ใน venv) ก่อน fallback เป็น 'ffmpeg' ใน PATH"""
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return "ffmpeg"
+
+
+def normalize_video(src: Path, dst: Path, ffmpeg: str | None = None) -> bool:
+    """แปลงคลิปให้ตรง spec Reels อัตโนมัติ (ไม่ต้องตั้งขนาดเอง):
+
+    9:16 1080x1920 (แนวตั้ง) · เติมพื้นหลังเบลอแทนแถบดำ · 30fps · ตัดไม่เกิน 90 วิ
+    · H.264 + AAC (มี audio ก็เก็บ ไม่มีก็ผ่าน) · faststart เปิดเล่นเร็ว
+    คืน True = ได้ไฟล์ dst ที่ใช้ได้; False = แปลงไม่สำเร็จ (caller ใช้ต้นฉบับแทน)
+    """
+    if not src.exists():
+        return False
+    ffmpeg = ffmpeg or _ffmpeg_exe()
+    filter_complex = (
+        "[0:v]split=2[bg][fg];"
+        "[bg]scale=1080:1920:force_original_aspect_ratio=increase,"
+        "crop=1080:1920,boxblur=20:5[bg2];"
+        "[fg]scale=1080:1920:force_original_aspect_ratio=decrease[fg2];"
+        "[bg2][fg2]overlay=(W-w)/2:(H-h)/2[v]"
+    )
+    cmd = [
+        ffmpeg, "-y", "-i", str(src),
+        "-filter_complex", filter_complex,
+        "-map", "[v]", "-map", "0:a?",
+        "-r", "30", "-t", "90",
+        "-c:v", "libx264", "-preset", "medium", "-crf", "23",
+        "-c:a", "aac", "-b:a", "128k",
+        "-movflags", "+faststart",
+        str(dst),
+    ]
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, timeout=900)
+        return dst.exists() and dst.stat().st_size > 0
+    except Exception as e:
+        log(f"[WARN] normalize_video ล้ม ({e}) — จะใช้ไฟล์ต้นฉบับแทน")
+        return False
 
 
 def load_products() -> dict:
@@ -175,7 +226,7 @@ def build_caption(product: dict) -> str:
         return template
 
 
-def post_next(dry_run: bool, force: bool) -> int:
+def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
     pending = list_pending()
     if not pending:
         log("ไม่มีคลิปใน pending_videos/ — จบ")
@@ -197,12 +248,34 @@ def post_next(dry_run: bool, force: bool) -> int:
 
     if dry_run:
         log(f"[DRY-RUN] จะโพสต์ Reels: {video.name} (PAGE_ID={PAGE_ID})")
+        log(f"[DRY-RUN] normalize: {'ON (แปลง 9:16 อัตโนมัติ)' if normalize else 'OFF (ใช้ไฟล์เดิม)'}")
         log(f"[DRY-RUN] caption:\n{caption}")
         return 0
 
-    log(f"[POST] กำลังอัปโหลด Reels: {video.name} → เพจ {PAGE_ID} ...")
-    res = post_reel(description=caption, file_path=str(video),
-                    title=(product or {}).get("product_name", "") or "")
+    # แปลงคลิปให้ตรง spec Reels ก่อนโพสต์ (9:16/1080p/30fps/≤90s) — ถ้าไม่สั่ง --no-normalize
+    upload_path = str(video)
+    tmp = None
+    if normalize:
+        fd, tmp_path = tempfile.mkstemp(suffix=".mp4", prefix="reels_norm_")
+        os.close(fd)
+        tmp = Path(tmp_path)
+        log(f"[NORM] แปลงคลิปเป็น 9:16/1080p/30fps: {video.name} ...")
+        if normalize_video(video, tmp):
+            upload_path = str(tmp)
+        else:
+            tmp = None  # แปลงล้ม → ใช้ไฟล์ต้นฉบับแทน
+
+    try:
+        log(f"[POST] กำลังอัปโหลด Reels: {video.name} → เพจ {PAGE_ID} ...")
+        res = post_reel(description=caption, file_path=upload_path,
+                        title=(product or {}).get("product_name", "") or "")
+    finally:
+        if tmp is not None:
+            try:
+                tmp.unlink(missing_ok=True)
+            except Exception:
+                pass
+
     if res["ok"]:
         POSTED_DIR.mkdir(parents=True, exist_ok=True)
         dst = POSTED_DIR / video.name
@@ -222,8 +295,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Facebook Reels auto-uploader (FIFO + AI caption + pacing)")
     ap.add_argument("--dry-run", action="store_true", help="จำลอง: โชว์คลิป + แคปชั่น ไม่โพสต์จริง")
     ap.add_argument("--force", action="store_true", help="ข้าม pacing (โพสต์ทันที) — ยังนับ daily limit")
+    ap.add_argument("--no-normalize", action="store_true",
+                    help="ไม่แปลงคลิป (ใช้ไฟล์เดิม — คลิปต้องตรง spec Reels อยู่แล้ว)")
     args = ap.parse_args()
-    return post_next(dry_run=args.dry_run, force=args.force)
+    return post_next(dry_run=args.dry_run, force=args.force, normalize=not args.no_normalize)
 
 
 if __name__ == "__main__":
