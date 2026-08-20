@@ -1249,6 +1249,10 @@ def test_classify_post_error_detects_hard_errors():
     assert fp.classify_post_error("(#200) Permissions error") is True
     assert fp.classify_post_error("Session has expired") is True
     assert fp.classify_post_error("Rate limit reached") is True
+    # Graph API rate-limit errors (doc: rate-limiting) — code 32/4/17
+    assert fp.classify_post_error("(#32) Page request limit reached") is True
+    assert fp.classify_post_error("(#4) Application request limit reached") is True
+    assert fp.classify_post_error("(#17) User request limit reached") is True
     assert fp.classify_post_error("HTTP 400") is False
     assert fp.classify_post_error("") is False
 

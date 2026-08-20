@@ -77,7 +77,7 @@ _OWNER_ALERT_LOCK = threading.Lock()
 # error รุนแรงที่เจ้าของต้องรู้ (token/สิทธิ์/rate-limit) — อย่างอื่น (ลิงก์ไม่ valid ฯลฯ) ไม่ต้องกวน
 _HARD_POST_ERROR_MARKERS = (
     "oauth", "session has expired", "#(190)", "revoke", "permissions error", "#(200)",
-    "rate limit", "too many calls", "user request limit reached",
+    "rate limit", "too many calls", "request limit reached",
     "page access has been removed", "app not installed", "invalid token",
 )
 
