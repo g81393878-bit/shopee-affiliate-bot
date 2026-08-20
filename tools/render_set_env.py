@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""tools/render_set_env.py — ตั้ง env vars บน Render (Management API) + trigger deploy.
+"""tools/render_set_env.py — Render Management API helper (env vars + deploys).
 
-วิธีใช้:
+วิธีใช้ (batch — จากไฟล์ local):
   1. เติมค่าจริงลงในไฟล์ tools/render_env.local.json (gitignored — ไม่ commit ขึ้น GitHub)
      ตัวอย่าง: {"FACEBOOK_APP_SECRET": "...", "FACEBOOK_PAGE_ACCESS_TOKEN": "...", ...}
      ช่องที่เว้นว่าง "" จะถูกข้าม ไม่ set
@@ -10,18 +10,32 @@
        python tools/render_set_env.py             # set env ทีละตัว แล้ว trigger deploy
        python tools/render_set_env.py --no-deploy # set env อย่างเดียว ยังไม่ deploy
 
+วิธีใช้ (คำสั่งเดี่ยว):
+       python tools/render_set_env.py list                    # แสดง env vars ทั้งหมด (mask ค่า)
+       python tools/render_set_env.py set KEY VALUE           # upsert ตัวเดียว (ยังไม่ deploy)
+       python tools/render_set_env.py set KEY VALUE --deploy  # upsert แล้ว trigger deploy
+       python tools/render_set_env.py deploy                  # trigger deploy
+
 รายละเอียด:
-  - อ่าน API key จาก ~/.render/cli.yaml (บรรทัด "    key: ...")
+  - อ่าน API key จาก env RENDER_API_KEY ก่อน (dashboard key แบบ no-expiry)
+    แล้ว fallback ไป ~/.render/cli.yaml (CLI token — หมดอายุเป็นระยะ)
   - ค่าจาก render_env.local.json ชนะค่า default ใน VARS (ใช้กับค่าสาธารณะ เช่น APP_ID)
   - PUT /v1/services/{id}/env-vars/{key} ทีละตัว (upsert — ไม่แตะตัวอื่น ปลอดภัย)
   - POST /v1/services/{id}/deploys เพื่อ deploy โค้ดที่ set env ใหม่
+  - GET /v1/services/{id}/env-vars: ปัจจุบันคืน envVar เป็น dict; เวอร์ชันเก่าเคย
+    double-encode เป็น string แบบ python-dict ("{'key': ...}") — decode_env_var()
+    รองรับทั้งสองแบบ (json.loads → แยกด้วย regex เอง) กัน ast.literal_eval พัง
   - ไม่ print ค่า secret เต็ม (mask ให้ เห็นแค่หัว/ท้าย)
 
-หมายเหตุ: หลัง deploy รอสถานะ "live" ที่
-https://dashboard.render.com/web/srv-d9tknl2d0e5s739ebo40/deploys (~3 นาที)
+หมายเหตุ:
+  - ได้ HTTP 401 = token ใน cli.yaml หมดอายุ → รัน `renderctl whoami` (หรือ
+    `renderctl login`) เพื่อ refresh แล้วรันใหม่
+  - หลัง deploy รอสถานะ "live" ที่
+    https://dashboard.render.com/web/srv-d9tknl2d0e5s739ebo40/deploys (~3 นาที)
 """
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -60,6 +74,11 @@ def load_local_values() -> dict:
 
 
 def get_api_key() -> str:
+    # RENDER_API_KEY (dashboard key แบบ no-expiry) ชนะ CLI token ใน cli.yaml
+    # เพราะ CLI token หมดอายุเป็นระยะ (~6 วัน) — ตั้ง env นี้ไว้กัน workflow พังเงียบ ๆ
+    env = os.environ.get("RENDER_API_KEY", "").strip()
+    if env:
+        return env
     p = os.path.expanduser("~/.render/cli.yaml")
     try:
         with open(p, encoding="utf-8") as f:
@@ -82,6 +101,11 @@ def request(method: str, path: str, payload=None):
         with urllib.request.urlopen(req) as r:
             return r.status, json.loads(r.read() or b"{}")
     except urllib.error.HTTPError as e:
+        if e.code == 401:
+            return e.code, ("401 Unauthorized — key/token หมดอายุหรือถูก revoke\n"
+                            "   → ใช้ API key แบบ no-expiry ผ่าน RENDER_API_KEY หรือ\n"
+                            "   → รัน `renderctl whoami` (หรือ `renderctl login`) "
+                            "เพื่อ refresh แล้วรันใหม่")
         return e.code, e.read().decode("utf-8", "replace")[:400]
 
 
@@ -89,8 +113,107 @@ def mask(v: str) -> str:
     return (v[:4] + "…" + v[-2:]) if len(v) > 8 else "***"
 
 
+def _extract_quoted_field(s: str, field: str):
+    """แยก field ออกจาก python-dict-repr string เช่น "{'key': 'X', 'value': 'Y'}".
+
+    ใช้ regex + backreference (จับคู่ quote เดิม) แทน ast.literal_eval ซึ่งพังกับ
+    บางค่า (ตามที่บันทึกใน AGENTS.md) — value ที่มี quote ต่างชนิดยังผ่านได้.
+    """
+    pat = re.compile(
+        r"(?P<oq>['\"])" + re.escape(field) + r"(?P=oq)\s*:\s*"
+        r"(?P<vq>['\"])(?P<val>.*?)(?P=vq)",
+        re.DOTALL,
+    )
+    m = pat.search(s)
+    return m.group("val") if m else None
+
+
+def decode_env_var(env_var):
+    """Normalize envVar → (key, value).
+
+    API ปัจจุบันคืน dict {"key": ..., "value": ...}; เวอร์ชันเก่าเคย double-encode
+    เป็น string แบบ python-dict (single-quote, ไม่ใช่ JSON) ซึ่ง ast.literal_eval
+    พังกับบางค่า → แยกเองด้วย _extract_quoted_field เป็น fallback.
+    """
+    if isinstance(env_var, dict):
+        return env_var.get("key"), env_var.get("value")
+    if not isinstance(env_var, str):
+        return None, None
+    s = env_var.strip()
+    try:  # JSON แท้ (double-quoted) เผื่อ API เปลี่ยนรูปแบบกลับมา
+        d = json.loads(s)
+        if isinstance(d, dict):
+            return d.get("key"), d.get("value")
+    except (ValueError, TypeError):
+        pass
+    return _extract_quoted_field(s, "key"), _extract_quoted_field(s, "value")
+
+
+def cmd_list() -> None:
+    status, resp = request("GET", f"/services/{SERVICE_ID}/env-vars")
+    if status != 200:
+        print(f"❌ list env-vars ล้ม: HTTP {status} → {resp}")
+        sys.exit(1)
+    items = resp if isinstance(resp, list) else []
+    if not items:
+        print("(ไม่มี env vars)")
+        return
+    print(f"{len(items)} env vars:\n")
+    for item in items:
+        env_var = item.get("envVar") if isinstance(item, dict) else item
+        key, value = decode_env_var(env_var)
+        if key is None:
+            print(f"⚠️  decode ไม่ได้: {item!r}")
+            continue
+        print(f"{key} = {mask(str(value))}")
+
+
+def cmd_set(key: str, value: str, deploy: bool) -> None:
+    status, resp = request("PUT", f"/services/{SERVICE_ID}/env-vars/{key}",
+                           {"value": value})
+    if status in (200, 201):
+        print(f"✅ {key}: HTTP {status} (value={mask(value)})")
+    else:
+        print(f"❌ {key}: HTTP {status} → {resp}")
+        sys.exit(1)
+    if deploy:
+        cmd_deploy()
+    else:
+        print("(ยังไม่ deploy — ต่อท้าย --deploy หรือรัน "
+              "`python tools/render_set_env.py deploy`)")
+
+
+def cmd_deploy() -> None:
+    print("กำลัง trigger deploy…")
+    status, resp = request("POST", f"/services/{SERVICE_ID}/deploys", {})
+    if status in (200, 201):
+        print(f"✅ trigger deploy สำเร็จ (id={resp.get('id') if isinstance(resp, dict) else resp})")
+        print("   รอสถานะ 'live' ที่ https://dashboard.render.com/web/"
+              f"{SERVICE_ID}/deploys (~3 นาที)")
+    else:
+        print(f"❌ trigger deploy ล้ม: HTTP {status} → {resp}")
+        sys.exit(1)
+
+
 def main() -> None:
-    no_deploy = "--no-deploy" in sys.argv
+    args = sys.argv[1:]
+
+    # --- คำสั่งเดี่ยว ---
+    if args and args[0] == "list":
+        cmd_list()
+        return
+    if args and args[0] == "set":
+        if len(args) < 3:
+            print("usage: python tools/render_set_env.py set KEY VALUE [--deploy]")
+            sys.exit(2)
+        cmd_set(args[1], args[2], deploy="--deploy" in args[3:])
+        return
+    if args and args[0] == "deploy":
+        cmd_deploy()
+        return
+
+    # --- batch mode (เดิม) ---
+    no_deploy = "--no-deploy" in args
     todo = {k: v for k, v in VARS.items() if str(v).strip()}
     todo.update(load_local_values())  # ค่าจริงจากไฟล์ local ชนะ default
     if not todo:
@@ -111,14 +234,7 @@ def main() -> None:
         print("\n(ข้าม deploy — ใช้ flag --no-deploy)")
         return
 
-    print("\nกำลัง trigger deploy…")
-    status, resp = request("POST", f"/services/{SERVICE_ID}/deploys", {})
-    if status in (200, 201):
-        print(f"✅ trigger deploy สำเร็จ (id={resp.get('id')})")
-        print("   รอสถานะ 'live' ที่ https://dashboard.render.com/web/"
-              f"{SERVICE_ID}/deploys (~3 นาที)")
-    else:
-        print(f"❌ trigger deploy ล้ม: HTTP {status} → {resp}")
+    cmd_deploy()
 
 
 if __name__ == "__main__":
