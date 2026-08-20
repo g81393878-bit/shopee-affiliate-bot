@@ -1287,6 +1287,86 @@ def test_log_rate_limit_usage(caplog):
         fp._log_rate_limit_usage(Resp({"X-App-Usage": "not-json"}))
 
 
+def test_post_reel_three_step_upload(monkeypatch, tmp_path):
+    """post_reel: init→upload→publish 3-step (mock httpx.post ทั้ง 3 calls)"""
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"fake-video-bytes")
+    calls = []
+
+    class Resp:
+        def __init__(self, status_code, payload):
+            self.status_code = status_code
+            self._payload = payload
+        def json(self):
+            return self._payload
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, "kwargs": kwargs})
+        if "rupload.facebook.com" in url:
+            return Resp(200, {"success": True})
+        if url.endswith("/video_reels"):
+            phase = ((kwargs.get("json") or {}).get("upload_phase")
+                     or (kwargs.get("data") or {}).get("upload_phase"))
+            if phase == "start":
+                return Resp(200, {"video_id": "v123",
+                                  "upload_url": "https://rupload.facebook.com/video-upload/v123"})
+            if phase == "finish":
+                return Resp(200, {"success": True})
+        raise AssertionError(f"unexpected call: {url} {list(kwargs)}")
+
+    monkeypatch.setattr(fp.httpx, "post", fake_post)
+    res = fp.post_reel(description="แคปชั่น", file_path=str(video), title="ชื่อคลิป")
+
+    assert res["ok"] is True
+    assert res["video_id"] == "v123"
+    assert len(calls) == 3
+    # Step 1: init
+    assert calls[0]["kwargs"]["json"] == {"upload_phase": "start"}
+    # Step 2: upload file bytes + OAuth header
+    assert calls[1]["url"].startswith("https://rupload.facebook.com")
+    assert calls[1]["kwargs"]["content"] == b"fake-video-bytes"
+    assert calls[1]["kwargs"]["headers"]["Authorization"] == "OAuth tok123"
+    assert calls[1]["kwargs"]["headers"]["file_size"] == "16"
+    # Step 3: publish
+    assert calls[2]["kwargs"]["data"]["upload_phase"] == "finish"
+    assert calls[2]["kwargs"]["data"]["video_state"] == "PUBLISHED"
+    assert calls[2]["kwargs"]["data"]["description"] == "แคปชั่น"
+
+
+def test_post_reel_file_not_found(monkeypatch):
+    """post_reel: ไฟล์ไม่มี → error ทันที ไม่ยิง network"""
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    monkeypatch.setattr(fp.httpx, "post", lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not call")))
+    res = fp.post_reel(file_path="nonexistent.mp4")
+    assert res["ok"] is False
+    assert "ไฟล์ไม่พบ" in res["error"]
+
+
+def test_post_reel_init_error_surfaces(monkeypatch):
+    """post_reel: init error (code 32 rate limit) → คืน error"""
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+
+    class Resp:
+        status_code = 400
+        def json(self):
+            return {"error": {"message": "(#32) Page request limit reached", "code": 32}}
+
+    monkeypatch.setattr(fp.httpx, "post", lambda *a, **k: Resp())
+    res = fp.post_reel(file_url="https://cdn.example.com/clip.mp4")
+    assert res["ok"] is False
+    assert "Page request limit reached" in res["error"]
+    assert "Page rate limit ถึง" in res["error"]  # _reels_error_hint แปลง code 32 → คำแนะนำไทย
+
+
+def test_reels_error_hint_decodes(monkeypatch):
+    """_reels_error_hint: ถอด code/subcode → คำแนะนำไทย; ไม่รู้จัก → ว่าง"""
+    assert "Token หมดอายุ" in fp._reels_error_hint({"error": {"code": 190}})
+    assert "อัตราส่วน" in fp._reels_error_hint({"error": {"error_subcode": 1363040}})
+    assert fp._reels_error_hint({"error": {"code": 99999}}) == ""
+    assert fp._reels_error_hint({}) == ""
+
+
 def test_notify_owner_once_noop_in_dev(monkeypatch):
     """dev/test → ไม่ยิง LINE จริง"""
     monkeypatch.setattr(fp, "_is_prod", lambda: False)

@@ -101,3 +101,12 @@ affiliate_open_api_application.json
 fb_cookies.json
 .promo_caption_state.json
 .promo_poster_state.json
+
+# Reels uploader (uploader.py) — คลิป/state runtime ไม่ commit (เก็บ .gitkeep ไว้)
+pending_videos/*
+!pending_videos/.gitkeep
+posted/*
+!posted/.gitkeep
+last_post_time.txt
+posts_today.txt
+uploader_execution.log

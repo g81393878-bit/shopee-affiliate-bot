@@ -592,3 +592,127 @@ def post_video(description: str = "", file_url: str = "", file_path: str = "",
         return {"ok": True, "video_id": str(vid), "error": None}
     err = (body.get("error") or {}).get("message") or f"HTTP {r.status_code}"
     return {"ok": False, "video_id": None, "error": str(err)[:200]}
+
+
+def _reels_error_hint(body: dict) -> str:
+    """ถอด error code/subcode ของ Reels API → คำแนะนำแก้ภาษาไทย (ช่วย debug ใน log)"""
+    err = (body or {}).get("error") or {}
+    code = err.get("code")
+    subcode = err.get("error_subcode")
+    tips = {
+        190: "Page Access Token หมดอายุ/ถูกถอน — สร้าง token ใหม่",
+        102: "session สิ้นสุด/สิทธิ์หาย — ลอง token ใหม่",
+        10: "สิทธิ์ไม่พอ — ต้องการ pages_show_list/pages_read_engagement/pages_manage_posts",
+        32: "Page rate limit ถึง — ลดความถี่หรือรอ retry",
+        506: "โพสต์ซ้ำติดกัน — ห้ามโพสต์ content เดิมถี่เกิน",
+        1363128: "ความยาว Reels ต้อง 3–90 วินาที",
+        1363040: "อัตราส่วนต้อง 16:9–9:16 (แนะนำ 9:16)",
+        1363127: "ความละเอียดต่ำเกิน — ขั้นต่ำ 540p (แนะนำ 1080p)",
+        1363129: "Frame rate ต้อง 24–60 FPS",
+    }
+    hint = tips.get(code) or (tips.get(subcode) if subcode else None)
+    return f" [hint: {hint}]" if hint else ""
+
+
+def post_reel(description: str = "", file_path: str = "", file_url: str = "",
+              title: str = "") -> dict:
+    """โพสต์ Reels ลงเพจ Facebook ผ่าน 3-step video upload session (Reels Publishing API)
+
+    Step 1: POST /{page-id}/video_reels (upload_phase=start) → video_id + upload_url
+    Step 2: POST upload_url (rupload.facebook.com) พร้อมไฟล์/URL → {"success": true}
+    Step 3: POST /{page-id}/video_reels (upload_phase=finish, video_state=PUBLISHED) → {"success": true}
+
+    file_path (ไฟล์ .mp4 ในเครื่อง) หรือ file_url (โฮสต์สาธารณะ) เลือกอย่างใดอย่างหนึ่ง.
+    หมายเหตุ: Reels API จำกัด 30 โพสต์/24 ชม. (Meta บังคับที่ endpoint นี้) — caller
+    ต้องทำ pacing เอง (ดู uploader.py). description/title กรองอักษรต่างภาษาก่อนส่ง.
+    คืน {ok, video_id, error}
+    """
+    token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or ""
+    if not token:
+        return {"ok": False, "video_id": None, "error": "FACEBOOK_PAGE_ACCESS_TOKEN ไม่ได้ตั้ง"}
+    description = sanitize_post_text(description or "")
+    file_path = (file_path or "").strip()
+    file_url = (file_url or "").strip()
+    if not file_path and not file_url:
+        return {"ok": False, "video_id": None,
+                "error": "ต้องมี file_path หรือ file_url อย่างใดอย่างหนึ่ง"}
+    if file_path and not os.path.exists(file_path):
+        return {"ok": False, "video_id": None, "error": f"ไฟล์ไม่พบ: {file_path}"}
+
+    endpoint = f"{GRAPH_URL}/{PAGE_ID}/video_reels"
+
+    # Step 1: เปิด upload session
+    try:
+        r = httpx.post(endpoint, params={"access_token": token},
+                       json={"upload_phase": "start"}, timeout=30)
+    except Exception as e:
+        logger.warning(f"[facebook_poster] reels init failed: {e}")
+        return {"ok": False, "video_id": None, "error": str(e)[:200]}
+    _log_rate_limit_usage(r)
+    try:
+        body = r.json()
+    except Exception:
+        body = {}
+    if r.status_code != 200 or not body.get("video_id"):
+        err = (body.get("error") or {}).get("message") or f"HTTP {r.status_code}"
+        return {"ok": False, "video_id": None,
+                "error": str(err)[:200] + _reels_error_hint(body)}
+    video_id = str(body["video_id"])
+    version = GRAPH_URL.rstrip("/").rsplit("/", 1)[-1]
+    upload_url = body.get("upload_url") or f"https://rupload.facebook.com/video-upload/{version}/{video_id}"
+
+    # Step 2: อัปโหลดไฟล์ (rupload.facebook.com ใช้ OAuth header ไม่ใช่ ?access_token)
+    try:
+        if file_path:
+            with open(file_path, "rb") as fh:
+                video_bytes = fh.read()
+            r2 = httpx.post(
+                upload_url,
+                headers={
+                    "Authorization": f"OAuth {token}",
+                    "Content-Type": "application/octet-stream",
+                    "offset": "0",
+                    "file_size": str(len(video_bytes)),
+                },
+                content=video_bytes,
+                timeout=180,
+            )
+        else:
+            r2 = httpx.post(
+                upload_url,
+                headers={"Authorization": f"OAuth {token}", "file_url": file_url},
+                timeout=180,
+            )
+    except Exception as e:
+        logger.warning(f"[facebook_poster] reels upload failed: {e}")
+        return {"ok": False, "video_id": video_id, "error": str(e)[:200]}
+    try:
+        body2 = r2.json()
+    except Exception:
+        body2 = {}
+    if r2.status_code != 200 or body2.get("success") is not True:
+        err = (body2.get("error") or {}).get("message") or f"HTTP {r2.status_code}"
+        return {"ok": False, "video_id": video_id,
+                "error": str(err)[:200] + _reels_error_hint(body2)}
+
+    # Step 3: publish (finish session + video_state=PUBLISHED)
+    data = {"video_id": video_id, "upload_phase": "finish", "video_state": "PUBLISHED"}
+    if description:
+        data["description"] = description
+    if (title or "").strip():
+        data["title"] = (title or "").strip()
+    try:
+        r3 = httpx.post(endpoint, params={"access_token": token}, data=data, timeout=60)
+    except Exception as e:
+        logger.warning(f"[facebook_poster] reels publish failed: {e}")
+        return {"ok": False, "video_id": video_id, "error": str(e)[:200]}
+    _log_rate_limit_usage(r3)
+    try:
+        body3 = r3.json()
+    except Exception:
+        body3 = {}
+    if r3.status_code == 200 and body3.get("success") is True:
+        return {"ok": True, "video_id": video_id, "error": None}
+    err = (body3.get("error") or {}).get("message") or f"HTTP {r3.status_code}"
+    return {"ok": False, "video_id": video_id,
+            "error": str(err)[:200] + _reels_error_hint(body3)}
