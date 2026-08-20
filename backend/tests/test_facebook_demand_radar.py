@@ -8,7 +8,7 @@ This test suite satisfies all requirements in ORIGINAL_REQUEST.md (R1 to R5)
 and the multi-tier test infrastructure defined in TEST_INFRA.md:
 
 Tier 1: Feature Coverage (R1 to R5)
-  - F1: Database Models & SQL Migrations (facebook_groups_monitor, facebook_detected_leads,
+  - F1: Database Models & SQL Migrations (facebook_detected_leads,
         facebook_demand_events, lead_actions).
   - F2: AI Intent & Demand Analysis (Intent, Demand Score 0-100, Urgency, Budget,
         Product Keyword, Pain Points, Sentiment, Reasoning).
@@ -19,8 +19,6 @@ Tier 1: Feature Coverage (R1 to R5)
         natural Affiliate link placement).
   - F6: FastAPI Leads Intake Endpoint (POST /api/admin/facebook-radar/leads).
   - F7: FastAPI Admin Action & Data Flywheel Endpoint (POST /api/admin/facebook-radar/actions).
-  - F8: LINE Push Alert Formatting & Dispatch (Flex Bubble, Header badges, Action buttons).
-  - F9: Local FB Group Monitor Tool (CLI args, SeenPostTracker, state persistence, dry-run).
 
 Tier 2: Boundary & Edge Cases
   - Boundary scores (69 vs 70 vs 71, negative/zero/100/150).
@@ -64,7 +62,6 @@ TOOLS_DIR = PROJECT_ROOT / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-import fb_group_monitor_local as monitor
 from app import models, schemas
 from app.db import SessionLocal
 from app.main import app
@@ -78,7 +75,6 @@ from app.services.demand_radar_ai import (
     _nfc,
     _parse_thai_word_number,
 )
-from app.services.product_cards import format_radar_deal_flex_message
 from app.services.product_matcher import (
     calculate_product_match_score,
     generate_suggested_reasons,
@@ -170,30 +166,12 @@ def test_t1_f1_database_models_and_migration(db_session):
     migration_file = PROJECT_ROOT / "supabase" / "migrations" / "20260815194500_social_demand_radar.sql"
     assert migration_file.exists(), f"Missing SQL migration file: {migration_file}"
     sql_text = migration_file.read_text(encoding="utf-8")
-    assert "CREATE TABLE IF NOT EXISTS facebook_groups_monitor" in sql_text
     assert "CREATE TABLE IF NOT EXISTS facebook_detected_leads" in sql_text
     assert "CREATE TABLE IF NOT EXISTS facebook_demand_events" in sql_text
     assert "CREATE TABLE IF NOT EXISTS lead_actions" in sql_text
 
-    # 2. Test Group Monitor Model CRUD & Schema
-    group = models.FacebookGroupMonitor(
-        group_id="grp_tier1_test",
-        group_name="กลุ่มแม่และเด็ก ทดสอบ T1",
-        group_url="https://facebook.com/groups/grp_tier1_test",
-        category_tag="แม่และเด็ก",
-        is_active=True,
-        check_interval_minutes=45,
-    )
-    db_session.add(group)
-    db_session.commit()
-    db_session.refresh(group)
-    assert group.id is not None
-    grp_schema = schemas.FacebookGroupMonitorOut.model_validate(group)
-    assert grp_schema.group_id == "grp_tier1_test"
-
-    # 3. Test Detected Lead Model & Schema
+    # 2. Test Detected Lead Model & Schema
     lead = models.FacebookDetectedLead(
-        group_id=group.id,
         fb_post_id="lead_tier1_001",
         post_url="https://facebook.com/posts/lead_tier1_001",
         author_name="คุณแม่ทดสอบ",
@@ -204,7 +182,6 @@ def test_t1_f1_database_models_and_migration(db_session):
     db_session.commit()
     db_session.refresh(lead)
     assert lead.id is not None
-    assert lead.group.group_name == "กลุ่มแม่และเด็ก ทดสอบ T1"
     lead_schema = schemas.FacebookDetectedLeadOut.model_validate(lead)
     assert lead_schema.fb_post_id == "lead_tier1_001"
 
@@ -345,7 +322,6 @@ def test_t1_f6_fastapi_leads_intake_endpoint(client, db_session):
         "leads": [
             {
                 "fb_post_id": post_id,
-                        "group_name": "กลุ่มแม่และเด็ก",
                 "author_name": "คุณแม่น้องมิน",
                 "post_text": "มีใครแนะนำชุดคลุมท้องใส่สบายๆ บ้างคะ งบไม่เกิน 400 บาท ขอบคุณค่ะ",
                 "post_url": f"https://facebook.com/groups/moms_th/posts/{post_id}",
@@ -368,7 +344,6 @@ def test_t1_f6_fastapi_leads_intake_endpoint(client, db_session):
 
     with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "page_post_t1_001", "error": None}) as mock_post, \
          patch("app.api.facebook_radar.log_post_async") as mock_sheets, \
-         patch("app.api.facebook_radar.dispatch_radar_line_alert") as mock_line_alert, \
          patch("app.api.facebook_radar.analyze_lead_intent_and_demand", return_value=mock_ai):
         resp = client.post("/api/admin/facebook-radar/leads", json=payload)
         assert resp.status_code == 200
@@ -386,7 +361,6 @@ def test_t1_f6_fastapi_leads_intake_endpoint(client, db_session):
         assert sheet_payload["kind"] == "radar"
         assert sheet_payload["post_id"] == "page_post_t1_001"
         assert sheet_payload["link"] == ""
-        mock_line_alert.assert_not_called()
 
 
 def test_t1_f7_fastapi_admin_action_endpoint(client, db_session):
@@ -427,67 +401,6 @@ def test_t1_f7_fastapi_admin_action_endpoint(client, db_session):
     assert data["demand_event_id"] == event.id
     assert data["action_type"] == "reply_posted"
     assert data["feedback_score"] == 5
-
-
-def test_t1_f8_line_push_alert_formatting(db_session):
-    """[R4] Verifies Flex Message builder creates structured bubbles with action URIs."""
-    product = db_session.query(models.Product).filter(models.Product.link_status == "ok").first()
-    flex = format_radar_deal_flex_message(
-        group_name="กลุ่มคนรักหูฟัง",
-        post_text="อยากได้หูฟังบลูทูธตัดเสียงรบกวนดีๆ งบ 500 บาท",
-        post_url="https://facebook.com/groups/tech/posts/999",
-        demand_score=92,
-        urgency="high",
-        matched_product=product,
-        suggested_reasons=["⭐ รีวิวสูง 4.8 ดาว", "🔥 ยอดขายดี"],
-        copy_text="ป้าเข็มแนะนำตัวนี้เลยจ้า https://shope.ee/test",
-    )
-
-    assert flex is not None
-    assert "Demand Radar" in flex.alt_text
-    assert "92" in flex.alt_text
-    contents = flex.contents.as_json_dict() if hasattr(flex.contents, "as_json_dict") else flex.contents
-    assert contents["type"] == "bubble"
-    buttons = contents["footer"]["contents"]
-    assert len(buttons) >= 2
-    assert "facebook.com" in buttons[0]["action"]["uri"]
-
-
-def test_t1_f9_local_fb_monitor_tool(client):
-    """[R5] Verifies local scraper script CLI parsing, SeenPostTracker, and payload submission."""
-    tracker = monitor.SeenPostTracker()
-    assert tracker.count == 0
-
-    # Dry run test
-    res_dry = monitor.run_monitor_iteration(
-        api_url="http://testserver",
-        token=TEST_SECRET_TOKEN,
-        tracker=tracker,
-        sample_mode=True,
-        dry_run=True,
-        limit=2,
-    )
-    assert res_dry["ok"] is True
-    assert res_dry["dry_run"] is True
-    assert res_dry["unseen_count"] == 2
-    assert tracker.count == 2
-
-    # Live test with TestClient
-    tracker.clear()
-    with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "mon_post_1", "error": None}), \
-         patch("app.api.facebook_radar.log_post_async"):
-        res_live = monitor.run_monitor_iteration(
-            api_url="http://testserver",
-            token=TEST_SECRET_TOKEN,
-            tracker=tracker,
-            sample_mode=True,
-            dry_run=False,
-            limit=2,
-            client=client,
-        )
-        assert res_live["ok"] is True
-        assert res_live["dry_run"] is False
-        assert res_live["ingested_count"] == 2
 
 
 # ===========================================================================
@@ -689,7 +602,6 @@ def test_t3_full_e2e_lifecycle_and_data_flywheel(client, db_session):
     # Step 1: Ingest Lead via API
     with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "e2e_fb_post_001", "error": None}) as mock_post, \
          patch("app.api.facebook_radar.log_post_async") as mock_sheets, \
-         patch("app.api.facebook_radar.dispatch_radar_line_alert") as mock_line_alert, \
          patch("app.api.facebook_radar.analyze_lead_intent_and_demand", return_value=mock_ai):
         resp_ingest = client.post("/api/admin/facebook-radar/leads", json=lead_payload)
         assert resp_ingest.status_code == 200
@@ -699,7 +611,6 @@ def test_t3_full_e2e_lifecycle_and_data_flywheel(client, db_session):
         assert ingest_data["results"][0]["status"] == "deal_matched_and_posted"
         assert mock_post.called
         assert mock_sheets.called
-        mock_line_alert.assert_not_called()
 
     # Step 2: Verify Database Event State
     lead = db_session.query(models.FacebookDetectedLead).filter_by(fb_post_id=post_id).first()
@@ -1037,7 +948,6 @@ def test_t4_real_world_thai_workloads(client, db_session):
 
     with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "rw_fb_123", "error": None}) as mock_post, \
          patch("app.api.facebook_radar.log_post_async") as mock_sheets, \
-         patch("app.api.facebook_radar.dispatch_radar_line_alert") as mock_line_alert, \
          patch("app.api.facebook_radar.analyze_lead_intent_and_demand", side_effect=mock_analyze):
         resp = client.post("/api/admin/facebook-radar/leads", json={"leads": batch_posts})
         assert resp.status_code == 200
@@ -1047,7 +957,6 @@ def test_t4_real_world_thai_workloads(client, db_session):
         assert data["processed"] == 10
         assert data["high_demand_count"] == 6
         assert data["alerts_sent"] == 0
-        mock_line_alert.assert_not_called()
 
         # Check high demand results (first 5 succeed within max_posts=5, 6th ignored due to rate limit)
         high_demand_pids = ["rw_001_maternity", "rw_002_earbuds", "rw_003_cushion", "rw_004_catfood", "rw_009_fan", "rw_010_airpurifier"]
@@ -1392,44 +1301,3 @@ def test_cooldown_and_daily_limit_count_pending_events(db_session):
     assert radar_api.check_daily_post_limit_allowed(db_session, max_posts=1) is False
 
 
-def test_radar_group_lead_queued_for_polling(client, db_session):
-    """[Pivot Flow A] lead ที่มี group_id → เข้าคิวรอ polling จากบอท local (pending_polling)
-    ไม่โพสต์เพจ (post_feed ไม่ถูกเรียก) ไม่บันทึก Sheets และไม่จับคู่สินค้า (matched_product_id=None)."""
-    post_id = f"group_queue_{int(time.time() * 1000)}"
-    mock_ai = {
-        "intent": "recommendation_request",
-        "demand_score": 90,
-        "urgency": "medium",
-        "budget": 500.0,
-        "budget_text": "500 บาท",
-        "product_keyword": "หูฟัง",
-        "detected_category": "หูฟัง",
-        "pain_points": ["หูฟังพัง"],
-        "sentiment": "positive",
-        "reasoning": "ต้องการหูฟังใหม่",
-    }
-    payload = {
-        "fb_post_id": post_id,
-        "group_id": "grp_poll_test",
-        "group_name": "กลุ่มทดสอบ",
-        "author_name": "ผู้ใช้ทดสอบ",
-        "post_text": "หูฟังพัง อยากได้หูฟังใหม่ งบ 500",
-        "post_url": f"https://facebook.com/groups/test/posts/{post_id}",
-    }
-    with patch.object(radar_api, "analyze_lead_intent_and_demand", return_value=mock_ai), \
-         patch.object(radar_api, "post_feed") as mock_post, \
-         patch.object(radar_api, "log_post_async") as mock_sheets:
-        resp = client.post("/api/admin/facebook-radar/leads", json=payload)
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["results"][0]["status"] == "queued_for_group_polling"
-        assert data["results"][0]["matched_product_id"] is None
-        mock_post.assert_not_called()
-        mock_sheets.assert_not_called()
-
-    lead = db_session.query(models.FacebookDetectedLead).filter_by(fb_post_id=post_id).first()
-    assert lead is not None
-    event = db_session.query(models.FacebookDemandEvent).filter_by(lead_id=lead.id).first()
-    assert event is not None
-    assert event.notification_status == "pending_polling"
-    assert event.matched_product_id is None

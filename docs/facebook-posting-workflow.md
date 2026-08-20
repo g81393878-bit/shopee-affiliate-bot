@@ -29,14 +29,14 @@
 
 ## บอท 1: Radar (Social Demand Radar) — โพสต์ตาม Demand
 
-**ใครสั่ง:** local monitor (`tools/fb_group_monitor_local.py`) ส่ง lead → `POST /api/admin/facebook-radar/leads`
-**ตัดสินใจ:** API วิเคราะห์ demand → จับคู่สินค้า → โพสต์
+**ใครสั่ง:** lead เข้า `POST /api/admin/facebook-radar/leads` (จากสคริปต์/แหล่งใดก็ตาม)
+**ตัดสินใจ:** API วิเคราะห์ demand → โพสต์ promo ขึ้นเพจ (ไม่จับคู่สินค้าแล้ว)
 
 **ขั้นตอน (ตามลำดับ):**
 1. กรอง lead ทดสอบ (`fb_sample_/fb_mock_/demo_`) + สแปมลิงก์ (Lazada/s.shopee.co.th/shope.ee)
 2. dedup ด้วย `fb_post_id` (ซ้ำ → `already_processed`)
 3. วิเคราะห์ AI: demand_score, urgency, budget, keyword, intent
-4. demand ≥ `radar_min_score` (default 70) → จับคู่สินค้า (`link_status='ok'` + ลิงก์ valid)
+4. demand ≥ `radar_min_score` (default 70) → สร้าง copy promo (ไม่จับคู่สินค้า — `matched_product_id=None`)
 5. **Guard:** category cooldown 24 ชม. (`RADAR_CATEGORY_COOLDOWN_HOURS`) + daily limit
    (`RADAR_MAX_DAILY_POSTS` default 5) — นับ `posted/sent/pending` + CampaignLog `fbpost/fbpost_pending`
    (กันซ้ำกับ cron)
@@ -80,37 +80,7 @@
 | ขายสินค้า | `🛍️ โพสต์ขายสินค้า` | `_build_fb_caption()` (cron.py) |
 | แนะนำบอท (fbintro) | `👵 โพสต์แนะนำบอท | 🏷️ <badge>` | `intro_posts()` (facebook_intro.py) |
 
-### คิวแชร์ลงกลุ่ม (Group Share Queue)
-
-โพสต์เพจสำเร็จทุกชนิด (สินค้า/แนะนำ/ข่าว/ร้าน/พื้นสี) → เข้าคิวอัตโนมัติในตาราง `group_share_tasks`
-(status `pending`) — บอท local แชร์ลงกลุ่มทีหลัง:
-
-1. **โพสต์เพจสำเร็จ** → `_enqueue_group_share(db, kind, post_id)` เก็บ `post_url = https://www.facebook.com/{post_id}`
-2. **บอท local (IP บ้าน) รัน:** `python bot/run_campaign.py share --method share --from-queue --groups-file groups.txt --token <CRON_TOKEN>`
-   - poll `GET /api/admin/group-shares/pending` (claim กัน poll ซ้ำ; งานค้าง >30 นาที self-heal กลับคิว)
-   - แชร์ทีละโพสต์ลงกลุ่ม (Selenium `share_group.py` เดิม + ledger/blacklist/เว้นระยะ) — **ไม่ข้าม**
-     กลุ่มที่แชร์โพสต์อื่นไปแล้ว (ทุกโพสต์ต้องถึงทุกกลุ่ม)
-   - รายงาน `POST /api/admin/group-shares/{id}/status` → `shared` / `failed` (+ note)
-3. **ดูคิว:** `GET /api/admin/group-shares?status=pending` (admin cookie) หรือหน้าแอดมิน
-
-> ⚠️ บอทแชร์ต้องรันบนเครื่องบ้าน/IP จริง (คุกกี้ + Selenium) — ห้ามยิงจาก Render (IP คลาวด์เสี่ยงโดนจำกัด)
-
----
-
-## บอท 3: Local Monitor — สแกนกลุ่มส่ง lead
-
-**ใครสั่ง:** เจ้าของรัน `tools/fb_group_monitor_local.py` (ต้อง `--once` เสมอ — ไม่งั้น loop ค้าง)
-**หน้าที่:** สแกนกลุ่ม → ส่ง lead ให้ radar API (ไม่โพสต์เอง)
-
-**ขั้นตอน:**
-1. ดึงกลุ่ม active จาก API → สแกนโพสต์ (sample หรือ real scraper)
-2. dedup ด้วย `fb_post_id` (ในหน่วยความจำ + `--state-file`)
-   - **ห้ามใช้ `hash()`** สร้าง id (Python salt ต่อ process → dedup ข้าม run พัง → โพสต์ซ้ำ) — ใช้ sha1
-3. ส่ง `POST /api/admin/facebook-radar/leads` (token ผ่าน `X-Admin-Token`/`?token=`)
-
----
-
-## บอท 4: Fake-Post Watcher + Clean-Fake-Posts — กวาดลบโพสต์ลิงก์ปลอมอัตโนมัติ
+## บอท 3: Fake-Post Watcher + Clean-Fake-Posts — กวาดลบโพสต์ลิงก์ปลอมอัตโนมัติ
 
 **ใครสั่ง:** 2 ชั้น — (1) **watcher ในตัว** (`main.py` `facebook_fake_post_watcher` ตรวจทุก
 `FB_FAKE_POST_CHECK_SECONDS` วิ default 300) ลบทันทีที่เจอ; (2) cron-job.org ทุก 6 ชม.
@@ -134,9 +104,8 @@
 
 | บอท | Trigger | Preflight | Guard เฉพาะ | ไม่พร้อม | โพสต์ล้ม |
 |---|---|---|---|---|---|
-| Radar | monitor ส่ง lead | ✅ | demand/cooldown/limit/valid | event `failed` + แจ้ง | แจ้งถ้า error รุนแรง |
+| Radar | lead เข้า | ✅ | demand/cooldown/limit | event `failed` + แจ้ง | แจ้งถ้า error รุนแรง |
 | Cron rotation | scheduler ในตัว | ✅ | lock/dedup/cooldown/valid | note + แจ้ง | ลบจอง + ลองตัวถัดไป + แจ้งถ้ารุนแรง |
-| Local monitor | เจ้าของรัน | — | dedup | ไม่ส่ง lead | log อย่างเดียว |
 | Fake-post watcher | scheduler ในตัว (ทุก 5 นาที) | — | เช็คลิงก์ก่อนลบ | ไม่ลบ | log อย่างเดียว |
 | Clean-fake-posts | cron-job.org (6 ชม.) | — | เช็คลิงก์ก่อนลบ | ไม่ลบ | log อย่างเดียว |
 
@@ -145,4 +114,4 @@
 - `backend/app/api/cron.py` — rotation + `_AUTO_POST_LOCK` + `fbpost_pending` reservation
 - `backend/app/api/facebook_radar.py` — radar ingest + cooldown (นับ `fbpost_pending` ด้วย)
 - `backend/app/main.py` — auto-post loop + `_auto_post_due`
-- `tools/fb_group_monitor_local.py`, `tools/clean_fake_page_posts.py`
+- `tools/clean_fake_page_posts.py`

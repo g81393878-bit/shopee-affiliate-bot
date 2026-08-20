@@ -8,73 +8,8 @@ Verifies:
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-import pytest
-from sqlalchemy.exc import IntegrityError
 
 from app import models, schemas
-
-
-def test_facebook_group_monitor_crud(db):
-    """Test FacebookGroupMonitor ORM creation and querying."""
-    group = models.FacebookGroupMonitor(
-        group_id="fb_group_12345",
-        group_name="กลุ่มแม่และเด็ก ซื้อขายของใช้",
-        group_url="https://facebook.com/groups/12345",
-        category_tag="แม่และเด็ก",
-        is_active=True,
-        check_interval_minutes=30,
-    )
-    db.add(group)
-    db.commit()
-    db.refresh(group)
-
-    assert group.id is not None
-    assert group.group_id == "fb_group_12345"
-    assert group.group_name == "กลุ่มแม่และเด็ก ซื้อขายของใช้"
-    assert group.is_active is True
-    assert group.check_interval_minutes == 30
-    assert group.created_at is not None
-
-    # Test Pydantic Schema conversion
-    schema_out = schemas.FacebookGroupMonitorOut.model_validate(group)
-    assert schema_out.id == group.id
-    assert schema_out.group_id == "fb_group_12345"
-
-
-def test_facebook_detected_lead_and_relationships(db):
-    """Test FacebookDetectedLead and its relationships with group and cascade delete."""
-    group = models.FacebookGroupMonitor(
-        group_id="group_pets_999",
-        group_name="ทาสแมว ชุมชนคนรักแมว",
-        group_url="https://facebook.com/groups/pets999",
-        category_tag="สัตว์เลี้ยง",
-    )
-    db.add(group)
-    db.commit()
-
-    lead = models.FacebookDetectedLead(
-        group_id=group.id,
-        fb_post_id="post_999_001",
-        post_url="https://facebook.com/groups/pets999/posts/001",
-        author_name="สมหญิง รักแมว",
-        post_text="ตามหาอาหารเปียกแมวโรคไต ยี่ห้อไหนดีบ้างคะ น้องทานยากมาก",
-        status="pending",
-        raw_data={"likes": 12, "comments_count": 5},
-    )
-    db.add(lead)
-    db.commit()
-    db.refresh(lead)
-
-    assert lead.id is not None
-    assert lead.group.group_name == "ทาสแมว ชุมชนคนรักแมว"
-    assert len(group.leads) == 1
-    assert group.leads[0].fb_post_id == "post_999_001"
-
-    # Test schema conversion
-    lead_out = schemas.FacebookDetectedLeadOut.model_validate(lead)
-    assert lead_out.id == lead.id
-    assert lead_out.fb_post_id == "post_999_001"
-    assert lead_out.status == "pending"
 
 
 def test_facebook_demand_event_and_product_matching(db):
@@ -238,8 +173,6 @@ def test_pydantic_schemas_payloads():
                 post_url="https://facebook.com/post/01",
                 author_name="User A",
                 post_text="ต้องการซื้อเก้าอี้เพื่อสุขภาพ",
-                group_id="group_100",
-                group_name="โต๊ะคอม Ergonomic",
             )
         ]
     )
@@ -273,11 +206,9 @@ def test_sql_migration_file_exists_and_valid():
     assert migration_path.exists(), f"Migration file not found at {migration_path}"
 
     sql_content = migration_path.read_text(encoding="utf-8")
-    assert "facebook_groups_monitor" in sql_content
     assert "facebook_detected_leads" in sql_content
     assert "facebook_demand_events" in sql_content
     assert "lead_actions" in sql_content
-    assert "idx_fb_groups_group_id" in sql_content
     assert "idx_fb_leads_post_id" in sql_content
     assert "idx_fb_demand_lead_id" in sql_content
     assert "idx_lead_actions_demand_id" in sql_content

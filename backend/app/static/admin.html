@@ -95,7 +95,6 @@ a.del { color:var(--red); cursor:pointer; text-decoration:underline; margin-left
       <button id="tabProducts" onclick="showTab('products')">📦 สินค้า</button>
       <button id="tabRadar" onclick="showTab('radar')">📡 Radar Feed</button>
       <button id="tabCooldown" onclick="showTab('cooldown')">⏰ Cooldown</button>
-      <button id="tabGroups" onclick="showTab('groups')">👥 กลุ่ม Facebook</button>
       <button id="tabSlips" onclick="showTab('slips')">💰 สลิป</button>
     </nav>
     <button id="logout">ออกจากระบบ</button>
@@ -213,34 +212,6 @@ a.del { color:var(--red); cursor:pointer; text-decoration:underline; margin-left
       <div style="font-size:12px;color:var(--gray);text-align:center;margin-top:8px" id="cooldownUpdated"></div>
     </div>
 
-    <!-- Groups Monitor -->
-    <div id="viewGroups" class="hidden">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-        <h2 style="margin:0;font-size:16px">👥 กลุ่ม Facebook ที่กำลังดึงข้อมูล</h2>
-        <div>
-          <button onclick="openAddGroup()" style="padding:7px 16px;border:none;border-radius:8px;background:var(--red);color:#fff;cursor:pointer;margin-right:8px">➕ เพิ่มกลุ่มใหม่</button>
-          <button onclick="loadGroups()" style="padding:7px 16px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer">🔄 รีเฟรช</button>
-        </div>
-      </div>
-      <section class="panel">
-        <table>
-          <thead>
-            <tr>
-              <th>ชื่อกลุ่ม</th>
-              <th>รหัสกลุ่ม (ID)</th>
-              <th>ลิงก์กลุ่ม (URL)</th>
-              <th>สถานะ</th>
-              <th>สแกนล่าสุด</th>
-              <th>จำนวนโพสต์ที่พบ</th>
-            </tr>
-          </thead>
-          <tbody id="groupsBody">
-            <tr><td colspan="6" style="text-align:center;color:var(--gray);padding:20px">กำลังโหลด...</td></tr>
-          </tbody>
-        </table>
-      </section>
-    </div>
-
     <!-- สลิปโอนเงิน (ขายบอท) -->
     <div id="viewSlips">
       <div class="filters" style="margin-bottom:16px">
@@ -319,23 +290,6 @@ a.del { color:var(--red); cursor:pointer; text-decoration:underline; margin-left
   </div>
 </div>
 
-<!-- modal เพิ่มกลุ่ม -->
-<div class="modal-bg hidden" id="addGroupBg">
-  <div class="modal">
-    <h3>➕ เพิ่มกลุ่ม Facebook ใหม่</h3>
-    <label>Group ID (รหัสกลุ่ม) *</label>
-    <input type="text" id="gId" placeholder="เช่น 984343641981437">
-    <label>ชื่อกลุ่ม *</label>
-    <input type="text" id="gName" placeholder="เช่น ตลาดซื้อขายหูฟัง">
-    <label>ลิงก์กลุ่ม (URL) *</label>
-    <input type="text" id="gUrl" placeholder="เช่น https://www.facebook.com/groups/xxxxx">
-    <div class="actions">
-      <button id="saveGroupBtn" onclick="saveNewGroup()" style="background:var(--red); color:#fff; border:none; border-radius:8px; padding:10px; cursor:pointer;">💾 บันทึก</button>
-      <button id="cancelGroupBtn" onclick="closeAddGroup()" style="background:#eee; color:#333; border:none; border-radius:8px; padding:10px; cursor:pointer;">ยกเลิก</button>
-    </div>
-  </div>
-</div>
-
 <script>
 const $ = id => document.getElementById(id);
 let state = { page: 1, perPage: 25, editingId: null, debounce: null };
@@ -374,14 +328,13 @@ $('logout').onclick = () => { fetch('/admin/logout', { method: 'POST' }).then(()
 
 // ---- tabs ----
 function showTab(t) {
-  ['stats','products','radar','cooldown','groups','slips'].forEach(n => {
+  ['stats','products','radar','cooldown','slips'].forEach(n => {
     $('view' + n.charAt(0).toUpperCase() + n.slice(1)).classList.toggle('hidden', t !== n);
     $('tab'  + n.charAt(0).toUpperCase() + n.slice(1)).classList.toggle('active', t === n);
   });
   if (t === 'stats')    { loadStats(); loadShopeeStatus(); loadQuota(); }
   if (t === 'radar')    { loadRadarFeed(); }
   if (t === 'cooldown') { loadCooldown(); }
-  if (t === 'groups')   { loadGroups(); }
   if (t === 'slips')    { loadSlips(1); }
 }
 
@@ -675,46 +628,6 @@ async function loadCooldown() {
       : '<div style="color:var(--gray);font-size:13px;padding:8px">ยังไม่มีประวัติการโพสต์</div>';
     $('cooldownUpdated').textContent = `อัปเดตล่าสุด: ${new Date().toLocaleString('th-TH')} · Cooldown ${ch} ชม./หมวด`;
   } catch (e) { $('lockedGrid').innerHTML = `<div style="color:var(--red)">${esc(e.message)}</div>`; }
-}
-
-// ---- Groups Monitor ----
-async function loadGroups() {
-  try {
-    const data = await api('/api/admin/facebook-radar/groups');
-    $('groupsBody').innerHTML = data.map(g => {
-      const scanTime = g.last_scanned_at ? new Date(g.last_scanned_at).toLocaleString('th-TH') : 'ยังไม่เคยสแกน';
-      const statusBadge = g.is_active ? '<span class="badge ok">เปิดใช้งาน</span>' : '<span class="badge dead">ปิดใช้งาน</span>';
-      return `<tr>
-        <td><b>${esc(g.group_name)}</b></td>
-        <td><code>${g.group_id}</code></td>
-        <td><a href="${esc(g.group_url)}" target="_blank" style="color:var(--red);text-decoration:none">${esc(g.group_url)}</a></td>
-        <td>${statusBadge}</td>
-        <td>${scanTime}</td>
-        <td>${g.post_count_detected} โพสต์</td>
-      </tr>`;
-    }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--gray);padding:30px">ยังไม่มีกลุ่มในระบบ</td></tr>';
-  } catch (e) {
-    $('groupsBody').innerHTML = `<tr><td colspan="6" style="color:var(--red)">${esc(e.message)}</td></tr>`;
-  }
-}
-function openAddGroup() { $('addGroupBg').classList.remove('hidden'); }
-function closeAddGroup() { $('addGroupBg').classList.add('hidden'); }
-async function saveNewGroup() {
-  const gId = $('gId').value.trim();
-  const gName = $('gName').value.trim();
-  const gUrl = $('gUrl').value.trim();
-  if(!gId || !gName || !gUrl) return alert('กรุณากรอกข้อมูลให้ครบถ้วน');
-  try {
-    await api('/api/admin/facebook-radar/groups', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ group_id: gId, group_name: gName, group_url: gUrl })
-    });
-    closeAddGroup();
-    $('gId').value = ''; $('gName').value = ''; $('gUrl').value = '';
-    loadGroups();
-    alert('✅ เพิ่มกลุ่มสำเร็จ');
-  } catch(e) { alert(e.message); }
 }
 
 async function submitInsights() {

@@ -25,7 +25,6 @@ from fastapi.testclient import TestClient
 from app.db import SessionLocal
 from app.main import app
 from app import models
-from app.services.product_cards import format_radar_deal_flex_message
 from app.api.facebook_radar import _safe_daily_post_limit, _looks_like_test_lead, _looks_like_spam_link
 
 TEST_ADMIN_TOKEN = os.getenv("CRON_TOKEN") or os.getenv("ADMIN_DASHBOARD_PASSWORD") or "test_radar_admin_secret"
@@ -222,8 +221,7 @@ def test_high_demand_lead_ingestion_creates_event_and_alert(client, db_session):
     }
 
     with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "test_fb_page_post_123", "error": None}) as mock_post, \
-         patch("app.api.facebook_radar.log_post_async") as mock_sheets, \
-         patch("app.api.facebook_radar.dispatch_radar_line_alert") as mock_line_alert:
+         patch("app.api.facebook_radar.log_post_async") as mock_sheets:
         resp = client.post("/api/admin/facebook-radar/leads", json=payload)
         assert resp.status_code == 200
         data = resp.json()
@@ -242,7 +240,6 @@ def test_high_demand_lead_ingestion_creates_event_and_alert(client, db_session):
 
         mock_post.assert_called_once()
         mock_sheets.assert_called_once()
-        mock_line_alert.assert_not_called()
 
 
     # ตรวจสอบข้อมูลในฐานข้อมูล
@@ -300,8 +297,7 @@ def test_low_demand_lead_ingestion_stores_lead_without_event_or_alert(client, db
     }
 
     with patch("app.api.facebook_radar.post_feed") as mock_post, \
-         patch("app.api.facebook_radar.log_post_async") as mock_sheets, \
-         patch("app.api.facebook_radar.dispatch_radar_line_alert") as mock_line_alert:
+         patch("app.api.facebook_radar.log_post_async") as mock_sheets:
         resp = client.post("/api/admin/facebook-radar/leads", json=payload)
         assert resp.status_code == 200
         data = resp.json()
@@ -320,7 +316,6 @@ def test_low_demand_lead_ingestion_stores_lead_without_event_or_alert(client, db
 
         mock_post.assert_not_called()
         mock_sheets.assert_not_called()
-        mock_line_alert.assert_not_called()
 
     # ตรวจสอบในฐานข้อมูล
     lead = (
@@ -617,49 +612,6 @@ def test_list_radar_leads_endpoint(client, db_session):
 
 # ---------------------------------------------------------------------------
 # 8. Test Flex Message Builder Details
-# ---------------------------------------------------------------------------
-
-def test_radar_deal_flex_message_structure(db_session):
-    """ทดสอบโครงสร้าง Flex Message แจ้งเตือนดีลเรดาร์:
-    - Alt text มีชื่อสินค้าและคะแนน
-    - มีปุ่มลิงก์เปิด Facebook Post
-    - มีปุ่มตรวจสอบสินค้าบน Shopee
-    """
-    product = (
-        db_session.query(models.Product)
-        .filter(models.Product.link_status == "ok")
-        .first()
-    )
-
-    flex = format_radar_deal_flex_message(
-        group_name="กลุ่มทดสอบแม่และเด็ก",
-        post_text="ตามหาชุดคลุมท้องใส่สบายๆ ผ้าระบายอากาศดีๆ งบ 400",
-        post_url="https://facebook.com/groups/test/posts/1001",
-        demand_score=88,
-        urgency="high",
-        matched_product=product,
-        suggested_reasons=["ยอดขายอันดับ 1", "รีวิว 4.9 ดาว"],
-        copy_text="สวัสดีจ้าคุณแม่ ป้าเข็มแนะนำรุ่นนี้เลยจ้า https://shope.ee/test",
-    )
-
-    assert flex is not None
-    assert "Demand Radar" in flex.alt_text
-    assert "88" in flex.alt_text
-
-    contents_dict = flex.contents.as_json_dict() if hasattr(flex.contents, "as_json_dict") else flex.contents
-    assert contents_dict["type"] == "bubble"
-    assert contents_dict["header"]["backgroundColor"] == "#E74C3C"
-
-    # ตรวจสอบปุ่มใน Footer
-    footer = contents_dict["footer"]
-    buttons = footer["contents"]
-    assert len(buttons) == 2
-    assert buttons[0]["action"]["type"] == "uri"
-    assert "facebook.com" in buttons[0]["action"]["uri"]
-    assert buttons[1]["action"]["type"] == "uri"
-    assert buttons[1]["action"]["label"] == "🛒 ตรวจสอบสินค้าบน Shopee"
-
-
 # ---------------------------------------------------------------------------
 # 9. Test Category Cooldown & Daily Rate Limit Rejections
 # ---------------------------------------------------------------------------

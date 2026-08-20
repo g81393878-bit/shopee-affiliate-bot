@@ -1096,41 +1096,6 @@ def test_post_next_product_picks_below_top20_when_top_categories_in_cooldown(mon
     assert res["posted"][0]["name"] == "ของใช้ ดี"  # ข้าม 20 ตัว cooldown เลือกตัวที่พร้อม
 
 
-def test_post_next_product_enqueues_group_share(monkeypatch, db):
-    """โพสต์สินค้าสำเร็จ → เข้าคิวแชร์ลงกลุ่ม (GroupShareTask kind=product + post_url)"""
-    from app import models
-    monkeypatch.setenv("FB_POST_PRODUCTS", "1")
-    _reset_products(db)
-    _add_test_product(db)
-    monkeypatch.setattr(cron, "generate_script_for_product",
-                        lambda *a, **k: {"caption": "ป้า", "hashtags": []})
-    monkeypatch.setattr(cron, "fetch_product_image", lambda url: "")
-    monkeypatch.setattr(cron, "post_feed",
-                        lambda msg, link="", **k: {"ok": True, "post_id": "123_456",
-                                                    "error": None})
-    res = cron._post_next_product(db)
-    assert res["posted"][0]["posted"] is True
-    task = db.query(models.GroupShareTask).order_by(models.GroupShareTask.id.desc()).first()
-    assert task is not None
-    assert task.kind == "product"
-    assert task.status == "pending"
-    assert task.post_url == "https://www.facebook.com/123_456"
-
-
-def test_post_next_intro_enqueues_group_share(monkeypatch, db):
-    """โพสต์แนะนำบอทสำเร็จ → เข้าคิวแชร์ (kind=intro)"""
-    from app import models
-    monkeypatch.setattr(cron, "post_feed",
-                        lambda msg, image_url="", **k: {"ok": True, "post_id": "intro_1",
-                                                         "error": None})
-    res = cron._post_next_intro(db)
-    assert res is not None and res["posted"][0]["posted"] is True
-    task = db.query(models.GroupShareTask).order_by(models.GroupShareTask.id.desc()).first()
-    assert task is not None
-    assert task.kind == "intro"
-    assert task.post_url == "https://www.facebook.com/intro_1"
-
-
 def test_post_next_product_skips_radar_posted_product(monkeypatch, db):
     """สินค้าที่ radar เพิ่งโพสต์ (demand event posted) → cron ไม่โพสต์ซ้ำ"""
     from app import models

@@ -14,12 +14,10 @@ var SPREADSHEET_ID = '1UmWfFTkC7PjPV9h32mf639fhaJWraK8Vg_JK5C-Yqmg';
 
 var CHAT_SHEET = 'คำถามลูกค้า';
 var POSTS_SHEET = 'FB Posts';
-var GROUPS_SHEET = 'กลุ่มผู้สมัคร';
 var MAX_AGE_DAYS = 90;
 
 var CHAT_HEADER = ['เวลา', 'ผู้ใช้', 'ข้อความ', 'ประเภท', 'หมวด', 'ตอบแบบ', 'คำตอบ'];
 var POSTS_HEADER = ['Time', 'Type', 'Title', 'Message', 'Link', 'Post ID', 'Post URL'];
-var GROUPS_HEADER = ['เวลา', 'ชื่อกลุ่ม', 'ลิงก์', 'สิ่งที่ต้องการ', 'โพสต์อยากซื้อ', 'โพสต์ขาย', 'สแกนได้', 'ตัวอย่างโพสต์'];
 
 function getSheet_(name, header) {
   var ss = SPREADSHEET_ID
@@ -45,22 +43,6 @@ function doGet() {
 function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
-
-    // ---- Group candidate row (kind=group_candidate) -> กลุ่มผู้สมัคร tab ----
-    if (data.kind === 'group_candidate') {
-      var gsh = getSheet_(GROUPS_SHEET, GROUPS_HEADER);
-      gsh.appendRow([
-        data.created_at || new Date().toISOString(),
-        data.group_name || '',
-        data.group_url || '',
-        data.want || '',
-        data.buyer_signals || 0,
-        data.seller_signals || 0,
-        data.scannable ? 'ใช่' : 'ไม่',
-        (data.sample_post || '').replace(/\r?\n/g, ' ')
-      ]);
-      return json_({ ok: true, sheet: GROUPS_SHEET, rows: Math.max(0, gsh.getLastRow() - 1) });
-    }
 
     // ---- Facebook post row (has 'kind' field) -> FB Posts tab ----
     if (data.kind) {

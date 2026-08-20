@@ -2,13 +2,13 @@
 """
 บอทโพสต์ลงเพจป้าเข็ม (Graph API) — แยกส่วน: โพสต์อย่างเดียว ไม่แชร์ ไม่บันทึกชีท
 สร้างแคปชั่นโปรโมท + แนบภาพโปสเตอร์จากโฟลเดอร์ assets (หมุนเวียนทีละภาพ)
-คืน URL โพสต์ทาง stdout + เขียนลง --out-file (ให้บอทแชร์ share_group.py เอาไปใช้ต่อ)
+คืน URL โพสต์ทาง stdout + เขียนลง --out-file
 
 ใช้งาน:
   python bot/post_page.py                                   # โพสต์โปรโมท default + รูปจาก assets
   python bot/post_page.py --poster "D:\\path\\poster.png"    # ระบุไฟล์ภาพเฉพาะ
   python bot/post_page.py --caption "ข้อความ" --image-url "https://.../poster.jpg"
-  python bot/post_page.py --out-file post_url.txt           # เก็บ URL ไว้ต่อกับบอทแชร์
+  python bot/post_page.py --out-file post_url.txt           # เก็บ URL ไว้ใช้งานต่อ
   python bot/post_page.py --dry-run                         # จำลอง ไม่โพสต์จริง
 """
 import argparse

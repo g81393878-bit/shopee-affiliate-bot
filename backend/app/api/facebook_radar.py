@@ -35,11 +35,7 @@ from app.services.demand_radar_ai import (
 from app.services.facebook_poster import (
     log_post_async, post_feed, preflight_ready, notify_owner_once, classify_post_error,
 )
-from app.services.line_quota import push_guard
-from app.services.product_cards import format_radar_deal_flex_message
-from app.services.product_matcher import match_best_product_for_demand, is_valid_shopee_affiliate_url
 from app.services.hermes_brain import load_skills_safe
-from app.services.bot_profile import line_cta_footer
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +46,8 @@ COOKIE_NAME = "pkh_admin"
 # ห้ามให้ daily post limit เกินค่านี้ — กัน misconfig/Hermes ทำให้เพจล้นโพสต์
 MAX_DAILY_POSTS_CAP = 25
 
-# fb_post_id ที่ขึ้นต้นด้วยคำพวกนี้ = lead ทดสอบ/หลอก (fb_group_monitor_local --sample
-# หรือสคริปต์เทสต์) — ห้ามหลุดเข้า production เพราะจะสร้างแถว demand event 'posted' หลอก
+# fb_post_id ที่ขึ้นต้นด้วยคำพวกนี้ = lead ทดสอบ/หลอก (สคริปต์เทสต์/sample) —
+# ห้ามหลุดเข้า production เพราะจะสร้างแถว demand event 'posted' หลอก
 # แล้วไปอุดตัน daily-limit counter (เจอจริง 15/08: fb_mock_bulk_* 100 แถวใน 7 วิ)
 # หมายเหตุ: ไม่รวม "test_" เพราะ pytest ใช้ post_id แบบ test_* กับ SQLite test DB เอง
 TEST_LEAD_PREFIXES = ("fb_sample_", "fb_mock_", "demo_")
@@ -276,20 +272,6 @@ def check_daily_post_limit_allowed(
 # Helper Functions
 # ---------------------------------------------------------------------------
 
-def dispatch_radar_line_alert(
-    db: Session,
-    lead: models.FacebookDetectedLead,
-    demand_event: models.FacebookDemandEvent,
-    matched_product: Optional[models.Product] = None,
-    group_name: Optional[str] = None,
-) -> bool:
-    """[DEPRECATED / DEACTIVATED] Social Demand Radar V1 uses 100% Facebook Page auto-posting.
-    LINE admin alerts are deactivated to prevent alert fatigue.
-    """
-    logger.debug("LINE radar alerts are deactivated in favor of Facebook Page auto-posting.")
-    return False
-
-
 def _normalize_lead_item(raw: Any) -> Dict[str, Any]:
     """แปลง input หลากหลายรูปแบบให้อยู่ในโครงสร้างมาตรฐาน"""
     if isinstance(raw, schemas.LeadIngestItem):
@@ -304,8 +286,6 @@ def _normalize_lead_item(raw: Any) -> Dict[str, Any]:
     author_name = data.get("author_name") or None
     post_text = data.get("post_text") or ""
     post_time = data.get("post_time") or data.get("posted_at") or None
-    group_id = data.get("group_id")
-    group_name = data.get("group_name")
     raw_data = data.get("raw_data") or data.get("raw_payload")
 
     if isinstance(post_time, str):
@@ -320,8 +300,6 @@ def _normalize_lead_item(raw: Any) -> Dict[str, Any]:
         "author_name": author_name,
         "post_text": str(post_text).strip(),
         "post_time": post_time,
-        "group_id": group_id,
-        "group_name": group_name,
         "raw_data": raw_data,
     }
 
@@ -436,40 +414,13 @@ def ingest_facebook_leads(
             processed_count += 1
             continue
 
-        # 2. จัดการข้อมูลกลุ่ม FacebookGroupMonitor (ถ้ามีระบุ)
-        group_db_id = None
-        group_identifier = item["group_id"]
-        group_name = item["group_name"]
-        if group_identifier:
-            grp_str = str(group_identifier)
-            group_obj = (
-                db.query(models.FacebookGroupMonitor)
-                .filter(models.FacebookGroupMonitor.group_id == grp_str)
-                .first()
-            )
-            if not group_obj:
-                group_obj = models.FacebookGroupMonitor(
-                    group_id=grp_str,
-                    group_name=group_name or f"Group {grp_str}",
-                    group_url=f"https://facebook.com/groups/{grp_str}",
-                    last_scanned_at=datetime.now(timezone.utc),
-                    post_count_detected=1,
-                )
-                db.add(group_obj)
-                db.flush()
-            else:
-                group_obj.post_count_detected = (group_obj.post_count_detected or 0) + 1
-                group_obj.last_scanned_at = datetime.now(timezone.utc)
-            group_db_id = group_obj.id
-
-        # 3. บันทึกโพสต์ดิบ FacebookDetectedLead
+        # 2. บันทึกโพสต์ดิบ FacebookDetectedLead
         lead = models.FacebookDetectedLead(
             fb_post_id=fb_post_id,
             post_url=item["post_url"],
             author_name=item["author_name"],
             post_text=item["post_text"],
             post_time=item["post_time"] or datetime.now(timezone.utc),
-            group_id=group_db_id,
             raw_data=item["raw_data"],
             status="pending",
         )
@@ -514,9 +465,7 @@ def ingest_facebook_leads(
                 f"💼 เริ่มต้น 490.- แอดไลน์คุยรายละเอียดแพ็กเกจกับป้าเลยจ้า 👉 {line_oa_url}"
             )
 
-            # 5.3 แยก 2 เส้นทางโพสต์ชัดเจน — ห้ามขัดกัน:
-            #   Flow A (กลุ่ม): group_id ตั้ง → pending_polling รอ polling จากบอท local (งาน AI อื่น)
-            #   Flow B (เพจป้าเข็ม): ไม่ใช่กลุ่ม → cooldown + daily limit + preflight แล้ว post_feed (งานผม)
+            # 5.3 ทุก lead ลงเพจป้าเข็มผ่าน post_feed (ยกเลิก flow แชร์ลงกลุ่มแล้ว)
             if not copy_text:
                 # ไม่มีข้อความที่จะโพสต์ → บันทึก failed (เคสเดียวกับ "ไม่พบสินค้า" เดิม)
                 demand_event = models.FacebookDemandEvent(
@@ -535,26 +484,6 @@ def ingest_facebook_leads(
                 db.flush()
 
                 status_str = "deal_matched_post_failed"
-                alert_sent = False
-            elif lead.group_id is not None:
-                # ── Flow A: กลุ่ม → เข้าคิวรอ Polling จากบอท local ──
-                # (ไม่ใช้ cooldown/โควต้า/preflight ของเพจ — บอท local ควบคุมจังหวะแชร์เอง)
-                demand_event = models.FacebookDemandEvent(
-                    lead_id=lead.id,
-                    intent=intent,
-                    demand_score=demand_score,
-                    urgency=urgency,
-                    budget=budget_text,
-                    product_keyword=product_keyword,
-                    matched_product_id=None,
-                    suggested_reason=[],
-                    ai_comment_draft=copy_text,
-                    notification_status="pending_polling",
-                )
-                db.add(demand_event)
-                db.flush()
-                db.commit()
-                status_str = "queued_for_group_polling"
                 alert_sent = False
             else:
                 # ── Flow B: เพจป้าเข็ม → cooldown + daily limit + preflight แล้ว post_feed (Graph API) ──
@@ -823,53 +752,6 @@ def list_radar_leads(
     }
 
 
-@router.get("/groups", response_model=List[schemas.FacebookGroupMonitorOut])
-def list_active_groups(
-    db: Session = Depends(get_db),
-    authorized: bool = Depends(require_admin_auth),
-):
-    """ดึงรายการกลุ่ม Facebook ทั้งหมดที่มีสถานะ Active"""
-    groups = (
-        db.query(models.FacebookGroupMonitor)
-        .filter(models.FacebookGroupMonitor.is_active == True)
-        .all()
-    )
-    return groups
-
-
-@router.post("/groups", response_model=schemas.FacebookGroupMonitorOut)
-def add_new_group(
-    payload: schemas.FacebookGroupMonitorCreate,
-    db: Session = Depends(get_db),
-    authorized: bool = Depends(require_admin_auth),
-):
-    """เพิ่มกลุ่ม Facebook เป้าหมายใหม่เข้าระบบเพื่อเฝ้าส่อง"""
-    # Check duplicate
-    existing = (
-        db.query(models.FacebookGroupMonitor)
-        .filter(models.FacebookGroupMonitor.group_id == payload.group_id)
-        .first()
-    )
-    if existing:
-        existing.is_active = True
-        existing.group_name = payload.group_name
-        existing.group_url = payload.group_url
-        db.commit()
-        db.refresh(existing)
-        return existing
-
-    new_group = models.FacebookGroupMonitor(
-        group_id=payload.group_id,
-        group_name=payload.group_name,
-        group_url=payload.group_url,
-        is_active=True,
-    )
-    db.add(new_group)
-    db.commit()
-    db.refresh(new_group)
-    return new_group
-
-
 from pydantic import BaseModel
 
 class InsightsPayload(BaseModel):
@@ -921,132 +803,6 @@ def analyze_fb_page_insights(
         "status": "success",
         "parsed_metrics": analysis_res
     }
-
-
-# ---------------------------------------------------------------------------
-# Group Sharing Polling Queue API Endpoints
-# ---------------------------------------------------------------------------
-
-# งานแชร์ลงกลุ่ม: bot local poll ทีละ batch → claim ก่อนคืน (กัน poll ซ้ำ / คอมเมนต์ซ้ำ)
-GROUP_POLL_BATCH_SIZE = 20               # จำกัดงานต่อรอบ poll กัน FB จับ bot รัว ๆ
-GROUP_POLL_CLAIM_TIMEOUT_MINUTES = 30    # claim ค้างเกินนี้ = bot ตายกลางทาง → ปล่อยคืนคิว (self-heal)
-
-
-@router.get("/tasks/pending", response_model=List[Dict[str, Any]])
-def get_pending_share_tasks(
-    db: Session = Depends(get_db),
-    authorized: bool = Depends(require_admin_auth),
-):
-    """บอทแชร์ฝั่ง Local จะทำการ Polling มาดึงงานแชร์โพสต์ที่รออยู่
-
-    Claim กัน poll ซ้ำ: ก่อนคืนงานจะ mark เป็น "claimed" (commit ก่อน) —
-    poll ตัวถัดไป / บอทตัวที่สองจะไม่เห็นงานชุดเดิม (เหมือน cron จอง fbpost_pending)
-    งานที่ claim ค้างเกิน GROUP_POLL_CLAIM_TIMEOUT_MINUTES (bot ตาย / report สถานะไม่สำเร็จ)
-    จะถูกปล่อยกลับเป็น pending_polling ให้ poll ใหม่ (self-heal)
-    """
-    now = datetime.now(timezone.utc)
-
-    # self-heal: ปล่อยงานที่ bot claim ค้างไว้นานเกิน (bot ตายกลางทาง)
-    stale_cutoff = now - timedelta(minutes=GROUP_POLL_CLAIM_TIMEOUT_MINUTES)
-    stale_events = (
-        db.query(models.FacebookDemandEvent)
-        .filter(
-            models.FacebookDemandEvent.notification_status == "claimed",
-            models.FacebookDemandEvent.notification_sent_at < stale_cutoff,
-        )
-        .all()
-    )
-    for ev in stale_events:
-        ev.notification_status = "pending_polling"
-    if stale_events:
-        db.commit()
-
-    # claim งานชุดใหม่ (batch จำกัด) ก่อนคืนให้ bot
-    events = (
-        db.query(models.FacebookDemandEvent)
-        .filter(models.FacebookDemandEvent.notification_status == "pending_polling")
-        .order_by(models.FacebookDemandEvent.id)
-        .limit(GROUP_POLL_BATCH_SIZE)
-        .all()
-    )
-    for ev in events:
-        ev.notification_status = "claimed"
-        ev.notification_sent_at = now
-    if events:
-        db.commit()
-
-    return [
-        {
-            "task_id": event.id,
-            "post_url": event.lead.post_url if event.lead else "",
-            "caption": event.ai_comment_draft,
-        }
-        for event in events
-    ]
-
-
-@router.post("/tasks/{task_id}/status")
-def update_share_task_status(
-    task_id: int,
-    update: schemas.TaskStatusUpdate,
-    db: Session = Depends(get_db),
-    authorized: bool = Depends(require_admin_auth),
-):
-    """รับผลการแชร์โพสต์จากบอทแชร์ฝั่ง Local เพื่อบันทึกประวัติและอัปเดตสถานะคิว"""
-    event = (
-        db.query(models.FacebookDemandEvent)
-        .filter(models.FacebookDemandEvent.id == task_id)
-        .first()
-    )
-    if not event:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    # Idempotency: รับ report ซ้ำ/มาช้าไม่ได้ — task ที่จบแล้ว (shared/failed) หรือ
-    # เป็นของ flow เพจ (posted/sent/pending/ignored) ต้องไม่ถูกแก้สถานะอีก
-    # (กัน report ที่ retry มาช้า flip shared → failed / ทับประวัติ)
-    if event.notification_status not in ("claimed", "pending_polling"):
-        return {
-            "status": "ignored",
-            "message": f"Task {task_id} already finalized ({event.notification_status})",
-        }
-
-    if update.status == "completed":
-        # ใช้ "shared" (ไม่ใช่ "posted") — กันแชร์ลงกลุ่มไปนับใน RADAR_MAX_DAILY_POSTS
-        # (check_daily_post_limit_allowed นับแค่ posted/sent/pending = โควต้าโพสต์เพจเท่านั้น)
-        event.notification_status = "shared"
-        event.notification_sent_at = datetime.now(timezone.utc)
-        
-        # บันทึกประวัติโพสต์ลง Google Sheets
-        matched_product = event.matched_product
-        post_url = event.lead.post_url if event.lead else ""
-        log_post_async({
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "kind": "radar_group",
-            "title": (matched_product.name or "")[:45] if matched_product else "Group Share",
-            "message": (event.ai_comment_draft or "")[:1000],
-            "link": matched_product.affiliate_url or "" if matched_product else "",
-            "post_id": f"task_{task_id}",
-            "post_url": post_url,
-        })
-        
-        # แจ้งเตือนแอดมินทาง LINE Bot (ใช้คีย์เฉพาะ ID เพื่อข้าม throttle ป้องกันการขัดกัน)
-        notify_owner_once(
-            f"radar_task_completed_{task_id}",
-            f"📢 บอทแชร์อัตโนมัติ: โพสต์แนะนำระบบป้าเข็มสำเร็จแล้วจ้า!\n📍 ลิงก์โพสต์: {post_url}"
-        )
-    else:
-        event.notification_status = "failed"
-        post_url = event.lead.post_url if event.lead else ""
-        err_msg = update.error_message or "ไม่ทราบสาเหตุแน่ชัด"
-        
-        # แจ้งเตือนแอดมินทาง LINE Bot (เพื่อแจ้งข้อขัดข้อง เช่น คุกกี้หมดอายุ หรือ หาช่องพิมพ์ไม่เจอ)
-        notify_owner_once(
-            f"radar_task_failed_{task_id}",
-            f"⚠️ บอทแชร์อัตโนมัติล้มเหลว!\n❌ สาเหตุ: {err_msg}\n📍 ลิงก์โพสต์: {post_url}"
-        )
-
-    db.commit()
-    return {"status": "success", "message": f"Task {task_id} updated to {event.notification_status}"}
 
 
 

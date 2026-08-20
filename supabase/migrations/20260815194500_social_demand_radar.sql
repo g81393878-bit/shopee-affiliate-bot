@@ -1,31 +1,10 @@
 -- Migration: 20260815194500_social_demand_radar.sql
 -- Description: Create tables for Social Demand Radar V1 (บอทป้าเข็ม)
--- Tables: facebook_groups_monitor, facebook_detected_leads, facebook_demand_events, lead_actions
+-- Tables: facebook_detected_leads, facebook_demand_events, lead_actions
 
--- 1. Facebook Groups Monitor Table
-CREATE TABLE IF NOT EXISTS facebook_groups_monitor (
-    id                      BIGSERIAL PRIMARY KEY,
-    group_id                VARCHAR(100) NOT NULL UNIQUE,
-    group_name              VARCHAR(255) NOT NULL,
-    group_url               TEXT NOT NULL,
-    category_tag            VARCHAR(100),
-    is_active               BOOLEAN NOT NULL DEFAULT TRUE,
-    check_interval_minutes  INTEGER NOT NULL DEFAULT 60,
-    last_scanned_at         TIMESTAMPTZ,
-    post_count_detected     INTEGER NOT NULL DEFAULT 0,
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at              TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_fb_groups_group_id ON facebook_groups_monitor(group_id);
-CREATE INDEX IF NOT EXISTS idx_fb_groups_is_active ON facebook_groups_monitor(is_active);
-CREATE INDEX IF NOT EXISTS idx_fb_groups_last_scanned ON facebook_groups_monitor(last_scanned_at);
-
-
--- 2. Facebook Detected Leads Table
+-- 1. Facebook Detected Leads Table
 CREATE TABLE IF NOT EXISTS facebook_detected_leads (
     id              BIGSERIAL PRIMARY KEY,
-    group_id        BIGINT REFERENCES facebook_groups_monitor(id) ON DELETE SET NULL,
     fb_post_id      VARCHAR(100) NOT NULL UNIQUE,
     post_url        TEXT NOT NULL,
     author_name     VARCHAR(255),
@@ -37,7 +16,6 @@ CREATE TABLE IF NOT EXISTS facebook_detected_leads (
 );
 
 CREATE INDEX IF NOT EXISTS idx_fb_leads_post_id ON facebook_detected_leads(fb_post_id);
-CREATE INDEX IF NOT EXISTS idx_fb_leads_group_id ON facebook_detected_leads(group_id);
 CREATE INDEX IF NOT EXISTS idx_fb_leads_status ON facebook_detected_leads(status);
 CREATE INDEX IF NOT EXISTS idx_fb_leads_detected_at ON facebook_detected_leads(detected_at);
 

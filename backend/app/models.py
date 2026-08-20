@@ -229,25 +229,6 @@ class CampaignLog(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 
 
-class GroupShareTask(Base):
-    """คิวแชร์โพสต์เพจลงกลุ่ม — โพสต์เพจสำเร็จ (สินค้า/แนะนำบอท/ข่าว/ร้าน) → เข้าคิวรอ
-    บอท local poll `GET /api/admin/group-shares/pending` → แชร์ลงกลุ่ม → รายงานสถานะ
-    (แยกจาก radar tasks — งานนี้คือ "แชร์โพสต์เพจที่เพิ่งโพสต์" ไม่ใช่แชร์ lead)
-    """
-    __tablename__ = "group_share_tasks"
-
-    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
-    post_url = Column(Text, nullable=False)
-    kind = Column(String(20), default="product", nullable=False)  # product | intro | bg | content
-    post_id = Column(String(50), nullable=True)
-    status = Column(String(20), default="pending", nullable=False, index=True)
-    # pending → claimed (บอท local claim กัน poll ซ้ำ) → shared / failed / skipped
-    note = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, nullable=False, index=True)
-    claimed_at = Column(DateTime(timezone=True), nullable=True)
-    shared_at = Column(DateTime(timezone=True), nullable=True)
-
-
 class PerformanceLog(Base):
     __tablename__ = "performance_logs"
 
@@ -267,32 +248,11 @@ class PerformanceLog(Base):
 # Social Demand Radar V1 Models
 # ===========================================================================
 
-class FacebookGroupMonitor(Base):
-    """กลุ่ม Facebook เป้าหมายที่ระบบเฝ้าส่องความต้องการซื้อสินค้า"""
-    __tablename__ = "facebook_groups_monitor"
-
-    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
-    group_id = Column(String(100), unique=True, index=True, nullable=False)
-    group_name = Column(String(255), nullable=False)
-    group_url = Column(Text, nullable=False)
-    category_tag = Column(String(100), nullable=True)
-    is_active = Column(Boolean, default=True, nullable=False, index=True)
-    check_interval_minutes = Column(Integer, default=60, nullable=False)
-    last_scanned_at = Column(DateTime(timezone=True), nullable=True)
-    post_count_detected = Column(Integer, default=0, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=True)
-
-    # Relationships
-    leads = relationship("FacebookDetectedLead", back_populates="group")
-
-
 class FacebookDetectedLead(Base):
-    """โพสต์ดิบที่ตรวจพบจากกลุ่ม Facebook ก่อน/หลังการวิเคราะห์ Demand"""
+    """โพสต์ดิบที่ตรวจพบก่อน/หลังการวิเคราะห์ Demand"""
     __tablename__ = "facebook_detected_leads"
 
     id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
-    group_id = Column(BigInteger().with_variant(Integer, "sqlite"), ForeignKey("facebook_groups_monitor.id", ondelete="SET NULL"), nullable=True, index=True)
     fb_post_id = Column(String(100), unique=True, index=True, nullable=False)
     post_url = Column(Text, nullable=False)
     author_name = Column(String(255), nullable=True)
@@ -303,7 +263,6 @@ class FacebookDetectedLead(Base):
     detected_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, nullable=False, index=True)
 
     # Relationships
-    group = relationship("FacebookGroupMonitor", back_populates="leads")
     demand_events = relationship("FacebookDemandEvent", back_populates="lead", cascade="all, delete-orphan")
     actions = relationship("LeadAction", back_populates="lead", cascade="all, delete-orphan")
 

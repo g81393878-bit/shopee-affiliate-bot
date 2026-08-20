@@ -154,36 +154,6 @@ class AIAnalysisResult(BaseModel):
 # Social Demand Radar V1 Schemas
 # ===========================================================================
 
-# --- Facebook Group Monitor Schemas ---
-class FacebookGroupMonitorBase(BaseModel):
-    group_id: str = Field(..., max_length=100)
-    group_name: str = Field(..., max_length=255)
-    group_url: str
-    category_tag: Optional[str] = Field(None, max_length=100)
-    is_active: bool = True
-    check_interval_minutes: int = 60
-
-class FacebookGroupMonitorCreate(FacebookGroupMonitorBase):
-    pass
-
-class FacebookGroupMonitorUpdate(BaseModel):
-    group_name: Optional[str] = None
-    group_url: Optional[str] = None
-    category_tag: Optional[str] = None
-    is_active: Optional[bool] = None
-    check_interval_minutes: Optional[int] = None
-
-class FacebookGroupMonitorOut(FacebookGroupMonitorBase):
-    id: int
-    last_scanned_at: Optional[datetime] = None
-    post_count_detected: int = 0
-    created_at: datetime
-    updated_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
-
-
 # --- Facebook Detected Lead Schemas ---
 class FacebookDetectedLeadBase(BaseModel):
     fb_post_id: str = Field(..., max_length=100)
@@ -191,7 +161,6 @@ class FacebookDetectedLeadBase(BaseModel):
     author_name: Optional[str] = Field(None, max_length=255)
     post_text: str
     post_time: Optional[datetime] = None
-    group_id: Optional[int] = None
     raw_data: Optional[Dict[str, Any]] = None
 
 class FacebookDetectedLeadCreate(FacebookDetectedLeadBase):
@@ -280,8 +249,6 @@ class LeadIngestItem(BaseModel):
     author_name: Optional[str] = None
     post_text: str
     post_time: Optional[datetime] = None
-    group_id: Optional[Union[str, int]] = None
-    group_name: Optional[str] = None
     raw_data: Optional[Dict[str, Any]] = None
 
 class LeadIngestPayload(BaseModel):
@@ -311,11 +278,6 @@ class RadarStatsResponse(BaseModel):
     total_orders: int
     total_commission_earned: Decimal
     top_demanded_keywords: List[Dict[str, Any]]
-
-
-class TaskStatusUpdate(BaseModel):
-    status: str  # "completed" หรือ "failed"
-    error_message: Optional[str] = None
 
 
 

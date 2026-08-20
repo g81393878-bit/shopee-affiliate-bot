@@ -20,27 +20,15 @@ description: >-
 
 | บอท | Trigger | ไฟล์ |
 |---|---|---|
-| **Radar** | local monitor ส่ง lead → `/api/admin/facebook-radar/leads` → demand ≥70 → แยก group/page (ดูด้านล่าง) | `backend/app/api/facebook_radar.py` |
+| **Radar** | lead เข้า `/api/admin/facebook-radar/leads` → demand ≥70 → post_feed เพจ | `backend/app/api/facebook_radar.py` |
 | **Cron rotation** | scheduler ในตัว (`main.py` ตรวจทุก 60 วิ ครบ `FB_AUTO_POST_INTERVAL` นาทีไหม) → หมุน 4 คลัง | `backend/app/api/cron.py` + `backend/app/main.py` |
 
 ทุกตัวที่โพสต์**เพจ**ยิงผ่าน `post_feed()` ใน `backend/app/services/facebook_poster.py` (จุดเดียว) — ตรวจ/แก้ที่จุดเดียวนี้ก่อนเสมอ
 
-## แยก 2 flow: กลุ่ม vs เพจ (status ต่างกัน — อย่าให้ขัดกัน)
+## ทุก lead ลงเพจป้าเข็ม (ยกเลิก flow แชร์ลงกลุ่มแล้ว)
 
-`ingest_facebook_leads` แยกตาม `lead.group_id` (ตั้ง = โพสต์จากกลุ่ม, null = โพสต์เพจ):
-
-| | **Flow A — กลุ่ม (group polling)** | **Flow B — เพจป้าเข็ม (Graph API)** |
-|---|---|---|
-| เงื่อนไข | `lead.group_id is not None` | `lead.group_id is None` |
-| สถานะเริ่ม | `pending_polling` (เข้าคิว) | `pending` (commit ก่อน post_feed) |
-| ใครโพสต์ | บอท local poll `GET /tasks/pending` → แชร์ลงกลุ่ม (งาน AI ตัวอื่น) | ตัวเรา `post_feed()` ตรง ๆ |
-| สถานะจบ | `shared` (สำเร็จ) / `failed` (ล้ม) ผ่าน `POST /tasks/{id}/status` | `posted` (สำเร็จ) / `failed` (ล้ม) |
-| ใช้ guard ไหน | ไม่ใช้ cooldown/โควต้า/preflight ของเพจ (บอท local ควบคุมจังหวะ) | cooldown + daily limit + `preflight_ready()` |
-| แจ้งเจ้าของ | `notify_owner_once(f"radar_task_{completed|failed}_{task_id}")` | `fb_preflight_radar` / `fb_post_hard_error` |
-
-**กติกาสำคัญ:** `shared` (กลุ่ม) **ไม่นับ** ใน `RADAR_MAX_DAILY_POSTS` และ category cooldown —
-ทั้งคู่นับแค่ `posted/sent/pending` (โควต้า/cooldown ของ**เพจ**เท่านั้น) → กลุ่มแชร์เยอะไม่ไปบล็อกโพสต์เพจ
-และเพจโพสต์เยอะไม่ไปบล็อกการแชร์กลุ่ม
+`ingest_facebook_leads` ไม่แยก group/page อีกต่อไป — ทุก lead ที่ demand ≥70 ผ่าน
+cooldown + daily limit + `preflight_ready()` แล้ว `post_feed()` ลงเพจ (Flow B เดิมเท่านั้น)
 
 **Pivot:** radar ไม่จับคู่สินค้าในคลังแล้ว (โพสต์ promo ติดตั้งบอท — `matched_product_id=None`) →
 `check_category_cooldown_allowed` นับได้ทั้ง `Product.category` (event เก่า) และ `product_keyword`
@@ -82,9 +70,7 @@ description: >-
 - **`hash()` ห้ามใช้ทำ id กันซ้ำ** — Python salt ต่อ process (PYTHONHASHSEED) → id เปลี่ยนทุก run
   → dedup ข้าม run พัง → โพสต์ซ้ำ. ใช้ `hashlib.sha1(...)`
 - **โพสต์แนบรูป** (image_url) → ลิงก์ affiliate อยู่ในแคปชั่น (ไม่ใช่ link param) → `post_feed` guard
-  ตรวจ link ไม่ถึง → ต้องกรอง `is_valid_shopee_affiliate_url` ที่ฝั่ง caller ด้วย (radar มี, cron มีแล้ว)
-- **`notification_status='failed'` มักแปลว่า "จับคู่สินค้าไม่ได้"** ไม่ใช่บั๊ก — เทสต์โพสต์จริงต้องเลือก
-  คีย์เวิร์ดที่มีของในคลัง (เช่น "หูฟัง" มี 123 ตัว vs "ชุดคลุมท้อง" = 0)
+  ตรวจ link ไม่ถึง → ต้องกรอง `is_valid_shopee_affiliate_url` ที่ฝั่ง caller ด้วย (cron มีแล้ว)
 - **ไม่เอา `/cron/facebook-post` ลง cron-job.org** — บอทโพสต์เองในตัว (FB_AUTO_POST_INTERVAL)
   เอาเข้า cron-job.org ซ้ำ = โพสต์ซ้ำ
 
@@ -100,7 +86,7 @@ description: >-
 ## ไฟล์
 `backend/app/services/facebook_poster.py` (post_feed + preflight/verify/notify/classify),
 `backend/app/api/cron.py`, `backend/app/api/facebook_radar.py`, `backend/app/main.py`,
-`tools/fb_group_monitor_local.py`, `tools/clean_fake_page_posts.py`, `docs/facebook-posting-workflow.md`
+`tools/clean_fake_page_posts.py`, `docs/facebook-posting-workflow.md`
 
 ## เทสต์
 `backend/tests/test_facebook_poster.py` (cron rotation + preflight/alert + cross-flow cooldown),

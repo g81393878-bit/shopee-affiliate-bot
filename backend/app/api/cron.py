@@ -375,7 +375,6 @@ def _post_next_intro(db) -> Optional[dict]:
         if res["ok"]:
             db.add(models.CampaignLog(category=str(i), recipients=1, status="fbintro"))
             db.commit()
-            _enqueue_group_share(db, "intro", res["post_id"])
             log_post_async(_post_sheet_row("intro", p["title"], p["caption"], "", res["post_id"]))
             return {"posted": [{"kind": "intro", "index": i, "title": p["title"],
                                 "posted": True, "post_id": res["post_id"]}]}
@@ -406,7 +405,6 @@ def _post_next_short_bg(db) -> Optional[dict]:
         if res["ok"]:
             db.add(models.CampaignLog(category=str(i), recipients=1, status="fbbg"))
             db.commit()
-            _enqueue_group_share(db, "bg", res["post_id"])
             log_post_async(_post_sheet_row("bg", p["title"], p["caption"], "", res["post_id"]))
             return {"posted": [{"kind": "bg", "index": i, "title": p["title"],
                                 "posted": True, "post_id": res["post_id"],
@@ -433,23 +431,6 @@ def _post_next_brand(db) -> Optional[dict]:
     if res is not None:
         return res
     return _post_next_short_bg(db)
-
-
-def _enqueue_group_share(db, kind: str, post_id) -> None:
-    """โพสต์เพจสำเร็จ → เข้าคิวรอแชร์ลงกลุ่ม (บอท local poll `/api/admin/group-shares/pending`)
-
-    kind: product | intro | bg | content — บอท local อาจกรองชนิดที่อยากแชร์
-    (แยกจาก radar tasks: งานนี้คือ "แชร์โพสต์เพจที่เพิ่งโพสต์" ไม่ใช่แชร์ lead)
-    """
-    if not post_id:
-        return
-    db.add(models.GroupShareTask(
-        post_url=f"https://www.facebook.com/{post_id}",
-        kind=kind,
-        post_id=str(post_id),
-        status="pending",
-    ))
-    db.commit()
 
 
 def _post_next_product(db, limit: int = 1) -> Optional[dict]:
@@ -550,7 +531,6 @@ def _post_next_product(db, limit: int = 1) -> Optional[dict]:
         if res["ok"]:
             pending.status = "fbpost"
             db.commit()
-            _enqueue_group_share(db, "product", res["post_id"])
             log_post_async(_post_sheet_row("product", p.name[:45],
                                            caption, p.affiliate_url or "",
                                            res["post_id"]))
@@ -588,7 +568,6 @@ def _post_next_local(db) -> Optional[dict]:
         if res["ok"]:
             db.add(models.CampaignLog(category=key, recipients=1, status="fblocal"))
             db.commit()
-            _enqueue_group_share(db, "content", res["post_id"])
             log_post_async(_post_sheet_row("local", (it["title"] or "")[:45],
                                            caption, it["link"], res["post_id"]))
             return {"posted": [{"kind": "local", "title": (it["title"] or "")[:45],
@@ -621,7 +600,6 @@ def _post_next_curated(db) -> Optional[dict]:
         if res["ok"]:
             db.add(models.CampaignLog(category=key, recipients=1, status="fbrss"))
             db.commit()
-            _enqueue_group_share(db, "content", res["post_id"])
             log_post_async(_post_sheet_row("rss", (it["title"] or "")[:45],
                                            caption, it["link"], res["post_id"]))
             return {"posted": [{"kind": "rss", "title": (it["title"] or "")[:45],
