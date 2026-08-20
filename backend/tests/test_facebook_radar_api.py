@@ -80,7 +80,6 @@ def test_ingest_skips_spam_link_leads(client, db_session):
     post_id = f"spam_link_{int(time.time() * 1000)}"
     payload = {
         "fb_post_id": post_id,
-        "group_id": "grp_market",
         "group_name": "มาร์เก็ตสินค้า",
         "author_name": "ร้านค้ารายอื่น",
         "post_text": "#สั่งซื้อได้ที่ https://s.shopee.co.th/9zwy4FdVLv โปรดีมาก",
@@ -106,7 +105,6 @@ def test_ingest_skips_test_leads_in_production(client, db_session, monkeypatch):
     monkeypatch.setattr(facebook_radar, "_is_production", lambda: True)
     payload = {
         "fb_post_id": "fb_mock_bulk_deadbeef",
-        "group_id": "grp_test",
         "group_name": "Test Group",
         "author_name": "User_99",
         "post_text": "สนใจ หูฟังบลูทูธ งบ 400",
@@ -287,7 +285,6 @@ def test_low_demand_lead_ingestion_stores_lead_without_event_or_alert(client, db
     post_id = f"test_fb_low_{int(time.time() * 1000)}"
     payload = {
         "fb_post_id": post_id,
-        "group_id": "grp_moms_th",
         "group_name": "กลุ่มแม่และเด็ก ของใช้แม่ลูก",
         "author_name": "แอดมินกลุ่ม",
         "post_text": "ประกาศเตือนภัยมิจฉาชีพหลอกโอนเงินค่าสินค้า อย่าโอนเด็ดขาด บัญชีคนโกง blacklist ระวังโดนหลอก",
@@ -402,7 +399,6 @@ def test_admin_action_recording_flywheel(client, db_session):
     post_id = f"test_fb_action_{int(time.time() * 1000)}"
     payload = {
         "fb_post_id": post_id,
-        "group_id": "grp_tech_th",
         "group_name": "กลุ่มไอที",
         "author_name": "ผู้ใช้ไอที",
         "post_text": "มีใครแนะนำหูฟังบลูทูธไร้สายบ้างครับ ขอแบบราคาไม่เกิน 300 บาท",

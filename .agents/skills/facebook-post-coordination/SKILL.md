@@ -25,7 +25,7 @@ description: >-
 
 ทุกตัวที่โพสต์**เพจ**ยิงผ่าน `post_feed()` ใน `backend/app/services/facebook_poster.py` (จุดเดียว) — ตรวจ/แก้ที่จุดเดียวนี้ก่อนเสมอ
 
-## ทุก lead ลงเพจป้าเข็ม (ยกเลิก flow แชร์ลงกลุ่มแล้ว)
+## ทุก lead ลงเพจป้าเข็ม
 
 `ingest_facebook_leads` ไม่แยก group/page อีกต่อไป — ทุก lead ที่ demand ≥70 ผ่าน
 cooldown + daily limit + `preflight_ready()` แล้ว `post_feed()` ลงเพจ (Flow B เดิมเท่านั้น)

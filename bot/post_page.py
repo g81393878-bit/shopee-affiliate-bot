@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-บอทโพสต์ลงเพจป้าเข็ม (Graph API) — แยกส่วน: โพสต์อย่างเดียว ไม่แชร์ ไม่บันทึกชีท
+บอทโพสต์ลงเพจป้าเข็ม (Graph API) — โพสต์อย่างเดียว (ไม่บันทึกชีท)
 สร้างแคปชั่นโปรโมท + แนบภาพโปสเตอร์จากโฟลเดอร์ assets (หมุนเวียนทีละภาพ)
-คืน URL โพสต์ทาง stdout + เขียนลง --out-file
+คืน URL โพสต์ทาง stdout
 
 ใช้งาน:
   python bot/post_page.py                                   # โพสต์โปรโมท default + รูปจาก assets
   python bot/post_page.py --poster "D:\\path\\poster.png"    # ระบุไฟล์ภาพเฉพาะ
   python bot/post_page.py --caption "ข้อความ" --image-url "https://.../poster.jpg"
-  python bot/post_page.py --out-file post_url.txt           # เก็บ URL ไว้ใช้งานต่อ
   python bot/post_page.py --dry-run                         # จำลอง ไม่โพสต์จริง
 """
 import argparse
@@ -106,7 +105,6 @@ def main() -> int:
                         help="พาธโฟลเดอร์/ไฟล์ภาพโปสเตอร์ (default โฟลเดอร์ assets)")
     parser.add_argument("--image-url", type=str, default=None,
                         help="URL รูปแนบ (ใช้เมื่อไม่มี --poster)")
-    parser.add_argument("--out-file", type=str, default=None, help="เขียน URL โพสต์ลงไฟล์ (ให้บอทแชร์ใช้ต่อ)")
     parser.add_argument("--dry-run", action="store_true", help="จำลอง: ไม่โพสต์จริง")
     args = parser.parse_args()
 
@@ -134,9 +132,6 @@ def main() -> int:
 
     if post_url:
         print(f"POST_URL={post_url}")
-        if args.out_file:
-            Path(args.out_file).write_text(post_url + "\n", encoding="utf-8")
-            print(f"[OUT] เขียน URL ลง {args.out_file}")
     return 0
 
 

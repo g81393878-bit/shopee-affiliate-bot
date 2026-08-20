@@ -465,7 +465,7 @@ def ingest_facebook_leads(
                 f"💼 เริ่มต้น 490.- แอดไลน์คุยรายละเอียดแพ็กเกจกับป้าเลยจ้า 👉 {line_oa_url}"
             )
 
-            # 5.3 ทุก lead ลงเพจป้าเข็มผ่าน post_feed (ยกเลิก flow แชร์ลงกลุ่มแล้ว)
+            # 5.3 ทุก lead ลงเพจป้าเข็มผ่าน post_feed
             if not copy_text:
                 # ไม่มีข้อความที่จะโพสต์ → บันทึก failed (เคสเดียวกับ "ไม่พบสินค้า" เดิม)
                 demand_event = models.FacebookDemandEvent(
