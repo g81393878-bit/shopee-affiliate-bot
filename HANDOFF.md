@@ -46,7 +46,7 @@
 
 - **Render Auto-Deploy (native):** flag เป็ข `yes` (ผ่าน API) แต่ push จริงไม่ trigger (repo ไม่มี webhook เลย `[]` — สงสัย GitHub integration หลุดตอน rollback) → จึงเปลี่ยนเป็น **GitHub Action + Deploy Hook** (route stable กว่า); ถ้าอยากลองกลับไปใช้ native อีก ให้ reconnect GitHub ใน Dashboard
 - **secret `RENDER_DEPLOY_HOOK_URL` ตั้งแล้ว + auto-deploy ทำงานจริง** — GH Action `auto-deploy to render` รัน success ทุก push ล่าสุด (รวม `3f9ddad`) · trigger deploy hook จาก API เองก็ได้ (curl POST ไป Deploy Hook URL)
-- **Deploy ปัจจุบัน (production):** push `107f509` → GH Action `auto-deploy to render` success → Render deploy Live (verify: `/api/admin/group-shares/pending` = 404, `/health` = 200, radar route = 401)
+- **Deploy ปัจจุบัน (production):** push `7c27c2a` (FB rate-limit logging + classifier fix + Reels uploader + normalize + docs) → GH Action `Test` + `auto-deploy to render` success → `/health` = 200 — Reels uploader (`uploader.py`) รันฝั่งเครื่อง local ไม่ใช่บน Render; บน Render มีผลเฉพาะ rate-limit logging/classifier fix ของ `post_feed`
 - **`FB_CONTENT_POST_INTERVAL=1440` ตั้งบน Render แล้ว (โพสต์คอนเทนต์ 1 ครั้ง/วัน)** — โพสต์แนะนำบอท/ข่าว/ร้านสลับกัน วันละ 1 ตัว · `FB_AUTO_POST_INTERVAL=60` = โพสต์สินค้า 1 ตัว/ชม.
 - **เวลาในตาราง `bot_purchases`:** `created_at` (รับเรื่อง) · `paid_at` (โอน) · `confirmed_at` (เริ่มทำ) — แสดงเป็นเวลาไทย UTC+7
 - **drop ซากตารางบน prod แล้ว (20/08):** ลบ `facebook_detected_leads.group_id` + `group_share_tasks` (48 แถว) + `facebook_groups_monitor` (14 แถว) ผ่าน pooler URL (port 5432) — verify แล้วไม่มีเหลือ · `facebook_detected_leads` ยังอยู่ครบ 1,117 แถว
