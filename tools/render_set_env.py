@@ -21,8 +21,9 @@
        python tools/render_set_env.py deploy                  # trigger deploy
 
 รายละเอียด:
-  - อ่าน API key จาก env RENDER_API_KEY ก่อน (dashboard key แบบ no-expiry)
-    แล้ว fallback ไป ~/.render/cli.yaml (CLI token — หมดอายุเป็นระยะ)
+  - อ่าน API key ตามลำดับ: env RENDER_API_KEY → ~/.bashrc (export ตัวเดียวกัน) →
+    ~/.render/cli.yaml (CLI token — หมดอายุเป็นระยะ) — อ่านจาก ~/.bashrc กันกรณี
+    shell ไม่ได้ inherit env var (non-login/non-interactive หรือ app เปิดค้างไว้ก่อน)
   - ค่าจาก render_env.local.json ชนะค่า default ใน VARS (ใช้กับค่าสาธารณะ เช่น APP_ID)
   - PUT /v1/services/{id}/env-vars/{key} ทีละตัว (upsert — ไม่แตะตัวอื่น ปลอดภัย)
   - DELETE /v1/services/{id}/env-vars/{key} (unset) ลบตัวเดียว — ต้อง deploy ถึงจะมีผล
@@ -79,12 +80,35 @@ def load_local_values() -> dict:
     return {k: str(v) for k, v in data.items() if str(v).strip()}
 
 
+def _key_from_bashrc() -> str:
+    """อ่าน RENDER_API_KEY จาก ~/.bashrc (บรรทัด export RENDER_API_KEY="...").
+
+    กันกรณี shell ไม่ได้ inherit env var (non-login/non-interactive หรือ parent
+    process เปิดค้างไว้ก่อนตั้งค่า) — key หลักแบบ no-expiry อยู่ตรงนี้เสมอ.
+    """
+    p = os.path.expanduser("~/.bashrc")
+    try:
+        with open(p, encoding="utf-8") as f:
+            for line in f:
+                m = re.search(
+                    r'export\s+RENDER_API_KEY\s*=\s*["\']([^"\']+)["\']', line
+                )
+                if m:
+                    return m.group(1).strip()
+    except OSError:
+        pass
+    return ""
+
+
 def get_api_key() -> str:
-    # RENDER_API_KEY (dashboard key แบบ no-expiry) ชนะ CLI token ใน cli.yaml
-    # เพราะ CLI token หมดอายุเป็นระยะ (~6 วัน) — ตั้ง env นี้ไว้กัน workflow พังเงียบ ๆ
+    # ลำดับ: env RENDER_API_KEY → ~/.bashrc → ~/.render/cli.yaml
+    # (key หลักแบบ no-expiry มาก่อน CLI token ที่หมดอายุเป็นระยะ ~6 วัน)
     env = os.environ.get("RENDER_API_KEY", "").strip()
     if env:
         return env
+    bashrc = _key_from_bashrc()
+    if bashrc:
+        return bashrc
     p = os.path.expanduser("~/.render/cli.yaml")
     try:
         with open(p, encoding="utf-8") as f:
