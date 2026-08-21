@@ -18,6 +18,9 @@ import hmac
 import json
 import logging
 import os
+import subprocess
+import sys
+import threading
 import time
 from pathlib import Path
 
@@ -651,6 +654,10 @@ def admin_radar_feed(
 # ---------------------------------------------------------------------------
 
 _REELS_LOG_TAIL_LINES = 25
+# สถานะโพสต์มือ (post-now) — กันกดซ้ำ + แสดงผลในหน้าแอดมิน
+_reels_post_running = False
+_reels_manual_result = None
+_reels_post_lock = threading.Lock()
 
 
 def _repo_root() -> Path:
@@ -775,6 +782,10 @@ def _read_reels_status(root: Path | None = None) -> dict:
             "next_post_in_min": next_post_in_min,
             "pacing_ready": bool(pacing_ready),
         },
+        "manual_post": {
+            "running": _reels_post_running,
+            "last": _reels_manual_result,
+        },
         "log_tail": log_tail,
         "log_file_exists": log_file.exists(),
     }
@@ -784,6 +795,62 @@ def _read_reels_status(root: Path | None = None) -> dict:
 def admin_reels_status(_: None = Depends(require_admin)):
     """สถานะ Reels uploader — คิวรอโพสต์/โพสต์ล่าสุด/pacing/โควต้าวันนี้/log ล่าสุด"""
     return _read_reels_status()
+
+
+@router.post("/api/admin/reels/post-now")
+def admin_reels_post_now(_: None = Depends(require_admin)):
+    """โพสต์คลิปถัดไปทันที (ข้าม pacing ผ่าน uploader.py --force) — ยังนับโควต้า/วัน
+
+    รัน uploader เป็น process แยก (เหมือน Task Scheduler) แล้วตอบกลับทันที —
+    ผลโพสต์ดูได้จาก reels-status (log + manual_post.last)
+    """
+    global _reels_post_running, _reels_manual_result
+    root = _repo_root()
+    pending_dir = root / "pending_videos"
+    if not pending_dir.is_dir() or not any(pending_dir.glob("*.mp4")):
+        return {"ok": False, "started": False, "message": "ไม่มีคลิปรอโพสต์ในคิว"}
+    if _reels_post_running:
+        raise HTTPException(status_code=409, detail="กำลังโพสต์อยู่แล้ว — รอสักครู่แล้วลองใหม่")
+
+    # เลือก python: venv (ตรงกับ Task Scheduler) → fallback sys.executable (เช่นบน Render)
+    python_exe = root / "backend" / ".venv" / "Scripts" / "python.exe"
+    if not python_exe.exists():
+        python_exe = Path(sys.executable)
+
+    started_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    _reels_manual_result = {"started_at": started_at, "finished_at": None,
+                            "exit_code": None, "output_tail": []}
+    _reels_post_running = True
+
+    def _run():
+        global _reels_post_running, _reels_manual_result
+        try:
+            proc = subprocess.run(
+                [str(python_exe), str(root / "uploader.py"), "--force"],
+                cwd=str(root), capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=1800)
+            out = (proc.stdout or "") + (proc.stderr or "")
+            lines = [l for l in out.splitlines() if l.strip()]
+            _reels_manual_result = {
+                "started_at": started_at,
+                "finished_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "exit_code": proc.returncode,
+                "output_tail": lines[-15:],
+            }
+        except Exception as e:
+            logger.error(f"Reels post-now subprocess failed: {e}")
+            _reels_manual_result = {
+                "started_at": started_at,
+                "finished_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "exit_code": None,
+                "output_tail": [f"[ERROR] {e}"],
+            }
+        finally:
+            _reels_post_running = False
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"ok": True, "started": True,
+            "message": "กำลังโพสต์คลิปถัดไปทันที (ข้าม pacing) — รอสักครู่แล้วกดรีเฟรชดูผล"}
 
 
 @router.get("/api/admin/radar/cooldown")

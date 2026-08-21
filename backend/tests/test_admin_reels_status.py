@@ -5,6 +5,7 @@
 - /api/admin/reels-status ต้องมี admin cookie ถึงเรียกได้ (401 ไม่มี)
 """
 import datetime
+import subprocess
 import time
 
 import pytest
@@ -113,6 +114,64 @@ def test_reels_status_endpoint_ok(client):
     r = client.get("/api/admin/reels-status")
     assert r.status_code == 200
     data = r.json()
-    for key in ("queue", "posted", "state", "log_tail"):
+    for key in ("queue", "posted", "state", "log_tail", "manual_post"):
         assert key in data
     assert "spacing_hours" in data["state"]
+    assert "running" in data["manual_post"]
+
+
+def test_reels_post_now_requires_login():
+    c = TestClient(app)
+    assert c.post("/api/admin/reels/post-now").status_code == 401
+
+
+def test_reels_post_now_no_pending(monkeypatch, tmp_path, client):
+    """คิวว่าง → started=False ไม่ spawn uploader (ปลอดภัย ไม่โพสต์จริง)"""
+    from app.api import admin_dashboard
+    monkeypatch.setattr(admin_dashboard, "_repo_root", lambda: tmp_path)
+    r = client.post("/api/admin/reels/post-now")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False
+    assert body["started"] is False
+
+
+def test_reels_post_now_409_when_already_running(monkeypatch, tmp_path, client):
+    """กำลังโพสต์อยู่ → 409 (กันกดซ้ำ)"""
+    from app.api import admin_dashboard
+    (tmp_path / "pending_videos").mkdir()
+    (tmp_path / "pending_videos" / "v.mp4").write_bytes(b"x")
+    monkeypatch.setattr(admin_dashboard, "_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(admin_dashboard, "_reels_post_running", True)
+    r = client.post("/api/admin/reels/post-now")
+    assert r.status_code == 409
+
+
+def test_reels_post_now_starts_thread(monkeypatch, tmp_path, client):
+    """มีคลิป + ไม่กำลังโพสต์ → started=True และ spawn thread รัน uploader --force
+    (mock subprocess.run กันโพสต์ Facebook จริง)"""
+    from app.api import admin_dashboard
+    (tmp_path / "pending_videos").mkdir()
+    (tmp_path / "pending_videos" / "v.mp4").write_bytes(b"x")
+    (tmp_path / "uploader.py").write_text("print('fake uploader')", encoding="utf-8")
+    monkeypatch.setattr(admin_dashboard, "_repo_root", lambda: tmp_path)
+    calls = {}
+
+    def _fake_run(cmd, **kw):
+        calls["cmd"] = cmd
+        return subprocess.CompletedProcess(cmd, 0, stdout="[OK] posted", stderr="")
+
+    monkeypatch.setattr(admin_dashboard.subprocess, "run", _fake_run)
+    r = client.post("/api/admin/reels/post-now")
+    assert r.status_code == 200
+    assert r.json()["started"] is True
+    # รอ thread จบ (สั้นมาก เพราะ mock)
+    import time as _t
+    for _ in range(50):
+        if not admin_dashboard._reels_post_running:
+            break
+        _t.sleep(0.05)
+    assert admin_dashboard._reels_post_running is False
+    assert "--force" in calls["cmd"]
+    assert any(x.endswith("uploader.py") for x in calls["cmd"])
+    assert admin_dashboard._reels_manual_result["exit_code"] == 0

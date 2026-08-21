@@ -223,7 +223,10 @@ a.del { color:var(--red); cursor:pointer; text-decoration:underline; margin-left
         <div><div class="big" id="reelsNextPost" style="font-size:18px">…</div><div class="lbl">โพสต์ถัดไป</div></div>
         <div class="sep"></div>
         <div><div class="big" id="reelsSpacing" style="font-size:18px">…</div><div class="lbl">Spacing</div></div>
-        <div style="margin-left:auto"><button onclick="loadReels()" style="padding:7px 16px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer">🔄 รีเฟรช</button></div>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button id="reelsPostNow" onclick="postReelsNow()" style="padding:7px 16px;border:1px solid var(--red);border-radius:8px;background:var(--red);color:#fff;cursor:pointer">▶️ โพสต์คลิปถัดไปทันที</button>
+          <button onclick="loadReels()" style="padding:7px 16px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer">🔄 รีเฟรช</button>
+        </div>
       </div>
       <section class="panel">
         <h3>📥 คิวรอโพสต์ (FIFO)</h3>
@@ -377,11 +380,29 @@ function _fmtAge(min) {
   if (h < 24) return h + ' ชม. ' + Math.round(min % 60) + ' นาที';
   return Math.round(h / 24) + ' วัน';
 }
+async function postReelsNow() {
+  if (!confirm('โพสต์คลิปถัดไปทันที (ข้าม pacing) จริงไหม?\n\n- ยังนับโควต้า 30 คลิป/วัน\n- รัน background — กดรีเฟรชดูผล')) return;
+  const btn = $('reelsPostNow');
+  btn.disabled = true;
+  btn.textContent = '⏳ กำลังโพสต์…';
+  try {
+    const r = await api('/api/admin/reels/post-now', { method: 'POST' });
+    alert(r.message);
+  } catch (e) { alert(e.message); }
+  btn.disabled = false;
+  btn.textContent = '▶️ โพสต์คลิปถัดไปทันที';
+  loadReels();
+}
 async function loadReels() {
   try {
     const d = await api('/api/admin/reels-status');
     const st = d.state;
+    const mp = d.manual_post || {};
     $('reelsQueueCount').textContent = d.queue.length;
+    // ปุ่มโพสต์ทันที: ปิดเมื่อคิวว่าง หรือกำลังโพสต์อยู่
+    const pn = $('reelsPostNow');
+    if (mp.running) { pn.disabled = true; pn.textContent = '⏳ กำลังโพสต์…'; }
+    else { pn.disabled = d.queue.length === 0; pn.textContent = '▶️ โพสต์คลิปถัดไปทันที'; }
     $('reelsPostedToday').textContent = `${st.posts_today} / ${st.max_per_day}`;
     $('reelsSpacing').textContent = `${st.spacing_hours} ชม.`;
     if (d.queue.length === 0) {
@@ -411,6 +432,19 @@ async function loadReels() {
     $('reelsLogState').textContent = d.log_file_exists ? '' : '(ยังไม่มีไฟล์ log)';
     const last = st.last_posted_at ? `โพสต์ล่าสุด: ${new Date(st.last_posted_at).toLocaleString('th-TH')}` : 'ยังไม่เคยโพสต์';
     $('reelsLogState').textContent += (d.log_file_exists ? ' · ' : '') + last;
+    // ผลโพสต์มือครั้งล่าสุด (post-now)
+    const mr = mp.last;
+    if (mr && mr.finished_at) {
+      const ok = mr.exit_code === 0;
+      const line = mr.output_tail && mr.output_tail.length
+        ? mr.output_tail[mr.output_tail.length - 1] : '';
+      $('reelsLogState').textContent += ` · โพสต์มือ: ${ok ? '✅ สำเร็จ' : '❌ ล้ม'} (exit ${mr.exit_code})`;
+      if (line && !line.includes('ยังไม่ถึงเวลา')) {
+        $('reelsLog').textContent = line + '\n\n--- รายละเอียด ---\n' + $('reelsLog').textContent;
+      }
+    } else if (mp.running) {
+      $('reelsLogState').textContent += ' · ⏳ กำลังโพสต์มือ…';
+    }
   } catch (e) {
     $('reelsQueueRows').innerHTML = `<tr><td colspan="5" style="color:var(--red)">${esc(e.message)}</td></tr>`;
   }
