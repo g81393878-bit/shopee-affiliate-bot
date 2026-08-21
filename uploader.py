@@ -59,6 +59,7 @@ PRODUCTS_JSON = ROOT / "products.json"
 LAST_POST_FILE = ROOT / "last_post_time.txt"
 DAILY_COUNT_FILE = ROOT / "posts_today.txt"
 INTRO_STATE_FILE = ROOT / ".uploader_intro_state.json"
+NOTIFY_STATE_FILE = ROOT / ".reels_notify_state.json"  # throttle การแจ้งเตือน (persist ข้าม process)
 LOG_FILE = ROOT / "uploader_execution.log"
 
 DEFAULT_SPACING_HOURS = 3.0
@@ -180,6 +181,105 @@ def bump_daily_count() -> None:
     except Exception:
         count = 1
     DAILY_COUNT_FILE.write_text(f"{today} {count}", encoding="utf-8")
+
+
+def _load_notify_state() -> dict:
+    """สถานะแจ้งเตือน (persist เป็นไฟล์ — uploader รัน process ใหม่ทุกครั้ง)"""
+    try:
+        return json.loads(NOTIFY_STATE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_notify_state(state: dict) -> None:
+    try:
+        NOTIFY_STATE_FILE.write_text(json.dumps(state), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _log_tail(n: int = 1) -> list:
+    """อ่าน log ท้ายสุด n บรรทัด (ใช้ประกอบข้อความแจ้งเตือน)"""
+    try:
+        return LOG_FILE.read_text(encoding="utf-8", errors="replace").splitlines()[-n:]
+    except Exception:
+        return []
+
+
+def _notify_owner(text: str) -> bool:
+    """push LINE แจ้งเจ้าของร้าน (best-effort — ล้มไม่พังโค้ด; เคารพ LINE push quota)
+
+    ต่างจาก facebook_poster.notify_owner_once (prod-only) — ตัวนี้ใช้ได้บนเครื่อง local
+    ที่รัน uploader อยู่ (ไม่มีเกต _is_prod) เพราะ Reels uploader ทำงานฝั่งเครื่อง
+    """
+    try:
+        from linebot import LineBotApi
+        from linebot.models import TextSendMessage
+        from app.services.line_quota import push_guard
+        from app.db import SessionLocal
+        token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN") or ""
+        if not token or "mock" in token.lower():
+            log("[NOTIFY] ข้ามแจ้งเจ้าของ (ไม่มี LINE token)")
+            return False
+        admin_uid = (os.getenv("ADMIN_LINE_USER_ID")
+                     or "Uc88eb3896b0e4bcc5fbaa9b78ac1294e").strip()
+        db = SessionLocal()
+        try:
+            if not push_guard(db):
+                log("[NOTIFY] ข้ามแจ้งเจ้าของ (LINE push quota หมด)")
+                return False
+        finally:
+            db.close()
+        LineBotApi(token).push_message(admin_uid, TextSendMessage(text=text[:1500]))
+        log(f"[NOTIFY] แจ้งเจ้าของแล้ว: {text.splitlines()[0][:60]}")
+        return True
+    except Exception as e:
+        log(f"[NOTIFY] push ล้ม: {e}")
+        return False
+
+
+def notify_reels_issues(post_result: int, dry_run: bool = False) -> None:
+    """แจ้งเจ้าของผ่าน LINE เมื่อ Reels มีปัญหา (กันโพสต์หยุดเงียบ ๆ):
+
+    1) คิวว่าง (pending_videos/ ไม่มีคลิป) — แจ้ง 1 ครั้ง/วัน (state file กันสแปม)
+    2) โพสต์ล้ม ≥ 2 ครั้งติด — แจ้ง 1 ครั้งต่อรอบที่ล้มต่อเนื่อง (สำเร็จ = รีเซ็ตนับ)
+    """
+    if dry_run:
+        return
+    state = _load_notify_state()
+    now_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    # 1) คิวว่าง — แจ้ง 1 ครั้ง/วัน
+    if not list_pending():
+        if state.get("last_empty_notified_date") != now_date:
+            state["last_empty_notified_date"] = now_date
+            _save_notify_state(state)
+            _notify_owner(
+                "⚠️ คิว Reels ว่างแล้ว!\n\n"
+                "ไม่มีคลิปรอโพสต์ใน pending_videos/ — ใส่คลิปใหม่ให้หน่อย\n"
+                "(จะไม่แจ้งซ้ำจนกว่าจะถึงพรุ่งนี้)"
+            )
+        return
+
+    # 2) โพสต์ล้มต่อเนื่อง
+    if post_result != 0:
+        streak = int(state.get("fail_streak", 0)) + 1
+        state["fail_streak"] = streak
+        if streak >= 2 and int(state.get("last_fail_notified_streak", 0)) < 2:
+            state["last_fail_notified_streak"] = streak
+            tail = _log_tail(1)
+            detail = f"\n{tail[0][:200]}" if tail else ""
+            _notify_owner(
+                f"❌ Reels โพสต์ล้ม {streak} ครั้งติด!\n\n"
+                f"โพสต์ไม่สำเร็จต่อเนื่อง — ตรวจ uploader_execution.log / token / ลิงก์{detail}"
+            )
+        _save_notify_state(state)
+    else:
+        # สำเร็จ (หรือข้าม) — รีเซ็ตนับความล้ม
+        if state.get("fail_streak"):
+            state["fail_streak"] = 0
+            state["last_fail_notified_streak"] = 0
+            _save_notify_state(state)
 
 
 def _read_intro_idx() -> int:
@@ -338,7 +438,9 @@ def main() -> int:
     ap.add_argument("--no-normalize", action="store_true",
                     help="ไม่แปลงคลิป (ใช้ไฟล์เดิม — คลิปต้องตรง spec Reels อยู่แล้ว)")
     args = ap.parse_args()
-    return post_next(dry_run=args.dry_run, force=args.force, normalize=not args.no_normalize)
+    result = post_next(dry_run=args.dry_run, force=args.force, normalize=not args.no_normalize)
+    notify_reels_issues(result, dry_run=args.dry_run)
+    return result
 
 
 if __name__ == "__main__":
