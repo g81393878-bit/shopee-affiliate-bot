@@ -7,8 +7,8 @@
      ตัวอย่าง: {"FACEBOOK_APP_SECRET": "...", "FACEBOOK_PAGE_ACCESS_TOKEN": "...", ...}
      ช่องที่เว้นว่าง "" จะถูกข้าม ไม่ set
   2. รัน:
-       python tools/render_set_env.py             # set env ทีละตัว แล้ว trigger deploy
-       python tools/render_set_env.py --no-deploy # set env อย่างเดียว ยังไม่ deploy
+       python tools/render_set_env.py batch            # set env ทีละตัว แล้ว trigger deploy
+       python tools/render_set_env.py batch --no-deploy # set env อย่างเดียว ยังไม่ deploy
 
 วิธีใช้ (คำสั่งเดี่ยว):
        python tools/render_set_env.py list                    # แสดง env vars ทั้งหมด (mask ค่า)
@@ -339,6 +339,22 @@ def cmd_deploy() -> None:
     sys.exit(1)
 
 
+def _print_usage() -> None:
+    print("usage: python tools/render_set_env.py <คำสั่ง> [ตัวเลือก]")
+    print()
+    print("คำสั่ง:")
+    print("  get KEY               ดูค่า env ตัวเดียว (แสดงเต็ม)")
+    print("  list                  รายการ env ทั้งหมด (mask)")
+    print("  diff                  เทียบ remote กับ local (VARS + render_env.local.json)")
+    print("  set KEY VALUE [--deploy]    ตั้งค่า 1 ตัว (ต้อง --deploy ถึงจะ deploy)")
+    print("  unset KEY [--deploy]        ลบ 1 ตัว (ต้อง --deploy ถึงจะ deploy)")
+    print("  deploy                trigger deploy")
+    print("  batch [--no-deploy]   ตั้งค่าทั้งชุดจาก render_env.local.json + deploy")
+    print()
+    print("⚠️  ต้องระบุคำสั่งเสมอ — รันโดยไม่มีคำสั่งจะไม่ทำอะไร"
+          " (กัน set+deploy เผลอ เหมือน --help ไปโดน batch)")
+
+
 def main() -> None:
     args = sys.argv[1:]
 
@@ -371,29 +387,34 @@ def main() -> None:
         cmd_deploy()
         return
 
-    # --- batch mode (เดิม) ---
-    no_deploy = "--no-deploy" in args
-    todo = {k: v for k, v in VARS.items() if str(v).strip()}
-    todo.update(load_local_values())  # ค่าจริงจากไฟล์ local ชนะ default
-    if not todo:
-        print(f"❌ ยังไม่มีการกรอกค่า — เติม {LOCAL_FILE} แล้วรันใหม่")
-        sys.exit(1)
+    # --- batch mode: ต้องสั่ง `batch` ชัดเจน (กันรันเผลอ set+deploy เหมือน --help) ---
+    if args and args[0] == "batch":
+        no_deploy = "--no-deploy" in args
+        todo = {k: v for k, v in VARS.items() if str(v).strip()}
+        todo.update(load_local_values())  # ค่าจริงจากไฟล์ local ชนะ default
+        if not todo:
+            print(f"❌ ยังไม่มีการกรอกค่า — เติม {LOCAL_FILE} แล้วรันใหม่")
+            sys.exit(1)
 
-    print(f"service: {SERVICE_ID} · กำลัง set {len(todo)} ตัว\n")
-    for key, value in todo.items():
-        status, resp = request("PUT", f"/services/{SERVICE_ID}/env-vars/{key}",
-                               {"value": value})
-        ok = status in (200, 201)
-        mark = "✅" if ok else "❌"
-        print(f"{mark} {key}: HTTP {status} (value={mask(value)})")
-        if not ok:
-            print(f"   → {resp}")
+        print(f"service: {SERVICE_ID} · กำลัง set {len(todo)} ตัว\n")
+        for key, value in todo.items():
+            status, resp = request("PUT", f"/services/{SERVICE_ID}/env-vars/{key}",
+                                   {"value": value})
+            ok = status in (200, 201)
+            mark = "✅" if ok else "❌"
+            print(f"{mark} {key}: HTTP {status} (value={mask(value)})")
+            if not ok:
+                print(f"   → {resp}")
 
-    if no_deploy:
-        print("\n(ข้าม deploy — ใช้ flag --no-deploy)")
+        if no_deploy:
+            print("\n(ข้าม deploy — ใช้ flag --no-deploy)")
+            return
+        cmd_deploy()
         return
 
-    cmd_deploy()
+    # --- ไม่มีคำสั่ง / ไม่รู้จัก (รวม --help) → โชว์วิธีใช้ ห้ามทำอะไร ---
+    _print_usage()
+    sys.exit(2)
 
 
 if __name__ == "__main__":
