@@ -96,6 +96,7 @@ a.del { color:var(--red); cursor:pointer; text-decoration:underline; margin-left
       <button id="tabRadar" onclick="showTab('radar')">📡 Radar Feed</button>
       <button id="tabCooldown" onclick="showTab('cooldown')">⏰ Cooldown</button>
       <button id="tabSlips" onclick="showTab('slips')">💰 สลิป</button>
+      <button id="tabReels" onclick="showTab('reels')">🎬 Reels</button>
     </nav>
     <button id="logout">ออกจากระบบ</button>
   </header>
@@ -210,6 +211,34 @@ a.del { color:var(--red); cursor:pointer; text-decoration:underline; margin-left
         <div class="cooldown-grid" id="availGrid"><div style="color:var(--gray);font-size:13px">กำลังโหลด…</div></div>
       </section>
       <div style="font-size:12px;color:var(--gray);text-align:center;margin-top:8px" id="cooldownUpdated"></div>
+    </div>
+
+    <!-- Reels Uploader -->
+    <div id="viewReels" class="hidden">
+      <div class="stat-banner" id="reelsBanner">
+        <div><div class="big" id="reelsQueueCount">…</div><div class="lbl">รอโพสต์ (คลิป)</div></div>
+        <div class="sep"></div>
+        <div><div class="big" id="reelsPostedToday">…</div><div class="lbl">โพสต์วันนี้ / วัน</div></div>
+        <div class="sep"></div>
+        <div><div class="big" id="reelsNextPost" style="font-size:18px">…</div><div class="lbl">โพสต์ถัดไป</div></div>
+        <div class="sep"></div>
+        <div><div class="big" id="reelsSpacing" style="font-size:18px">…</div><div class="lbl">Spacing</div></div>
+        <div style="margin-left:auto"><button onclick="loadReels()" style="padding:7px 16px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer">🔄 รีเฟรช</button></div>
+      </div>
+      <section class="panel">
+        <h3>📥 คิวรอโพสต์ (FIFO)</h3>
+        <table><thead><tr><th>#</th><th>คลิป</th><th>ขนาด</th><th>รอมา</th><th>แคปชั่น</th></tr></thead>
+        <tbody id="reelsQueueRows"></tbody></table>
+      </section>
+      <section class="panel">
+        <h3>✅ โพสต์ล่าสุด (10)</h3>
+        <table><thead><tr><th>คลิป</th><th>ขนาด</th><th>โพสต์เมื่อ</th></tr></thead>
+        <tbody id="reelsPostedRows"></tbody></table>
+      </section>
+      <section class="panel">
+        <h3>📜 Log ล่าสุด <span id="reelsLogState" style="font-size:12px;color:var(--gray)"></span></h3>
+        <pre id="reelsLog" style="background:var(--light);padding:10px;border-radius:8px;font-size:12px;max-height:320px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin:0"></pre>
+      </section>
     </div>
 
     <!-- สลิปโอนเงิน (ขายบอท) -->
@@ -328,7 +357,7 @@ $('logout').onclick = () => { fetch('/admin/logout', { method: 'POST' }).then(()
 
 // ---- tabs ----
 function showTab(t) {
-  ['stats','products','radar','cooldown','slips'].forEach(n => {
+  ['stats','products','radar','cooldown','slips','reels'].forEach(n => {
     $('view' + n.charAt(0).toUpperCase() + n.slice(1)).classList.toggle('hidden', t !== n);
     $('tab'  + n.charAt(0).toUpperCase() + n.slice(1)).classList.toggle('active', t === n);
   });
@@ -336,6 +365,55 @@ function showTab(t) {
   if (t === 'radar')    { loadRadarFeed(); }
   if (t === 'cooldown') { loadCooldown(); }
   if (t === 'slips')    { loadSlips(1); }
+  if (t === 'reels')    { loadReels(); }
+}
+
+// ---- Reels Uploader ----
+function _fmtSize(mb) { return mb ? mb.toFixed(1) + ' MB' : '-'; }
+function _fmtAge(min) {
+  if (min == null) return '-';
+  if (min < 60) return Math.round(min) + ' นาที';
+  const h = Math.floor(min / 60);
+  if (h < 24) return h + ' ชม. ' + Math.round(min % 60) + ' นาที';
+  return Math.round(h / 24) + ' วัน';
+}
+async function loadReels() {
+  try {
+    const d = await api('/api/admin/reels-status');
+    const st = d.state;
+    $('reelsQueueCount').textContent = d.queue.length;
+    $('reelsPostedToday').textContent = `${st.posts_today} / ${st.max_per_day}`;
+    $('reelsSpacing').textContent = `${st.spacing_hours} ชม.`;
+    if (d.queue.length === 0) {
+      $('reelsNextPost').textContent = '—';
+    } else if (st.pacing_ready) {
+      $('reelsNextPost').textContent = 'พร้อมโพสต์';
+      $('reelsNextPost').style.color = 'var(--green)';
+    } else {
+      $('reelsNextPost').textContent = `ใน ${st.next_post_in_min} นาที`;
+      $('reelsNextPost').style.color = '';
+    }
+    $('reelsQueueRows').innerHTML = d.queue.map((v, i) => `
+      <tr>
+        <td>${i+1}</td>
+        <td>${esc(v.name)}</td>
+        <td>${_fmtSize(v.size_mb)}</td>
+        <td>${_fmtAge(v.age_min)}</td>
+        <td>${v.is_product ? '<span class="badge ok">สินค้า</span>' : '<span class="badge none">แนะนำป้าเข็ม</span>'}</td>
+      </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--gray);padding:20px">ไม่มีคลิปรอโพสต์ 🎉</td></tr>';
+    $('reelsPostedRows').innerHTML = d.posted.map(v => `
+      <tr>
+        <td>${esc(v.name)}</td>
+        <td>${_fmtSize(v.size_mb)}</td>
+        <td>${v.posted_at ? new Date(v.posted_at).toLocaleString('th-TH') : '-'}</td>
+      </tr>`).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--gray);padding:20px">ยังไม่เคยโพสต์</td></tr>';
+    $('reelsLog').textContent = d.log_tail.join('\n') || '(ยังไม่มี log — รอ Task Scheduler รัน uploader.py รอบถัดไป)';
+    $('reelsLogState').textContent = d.log_file_exists ? '' : '(ยังไม่มีไฟล์ log)';
+    const last = st.last_posted_at ? `โพสต์ล่าสุด: ${new Date(st.last_posted_at).toLocaleString('th-TH')}` : 'ยังไม่เคยโพสต์';
+    $('reelsLogState').textContent += (d.log_file_exists ? ' · ' : '') + last;
+  } catch (e) {
+    $('reelsQueueRows').innerHTML = `<tr><td colspan="5" style="color:var(--red)">${esc(e.message)}</td></tr>`;
+  }
 }
 
 // ---- สลิป (ขายบอท) ----

@@ -15,9 +15,11 @@
 import datetime
 import hashlib
 import hmac
+import json
 import logging
 import os
 import time
+from pathlib import Path
 
 from fastapi import APIRouter, Cookie, Depends, Form, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -642,6 +644,146 @@ def admin_radar_feed(
         }
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# Reels Uploader — สถานะคิววิดีโอ (runs บนเครื่อง local ผ่าน Task Scheduler)
+# ---------------------------------------------------------------------------
+
+_REELS_LOG_TAIL_LINES = 25
+
+
+def _repo_root() -> Path:
+    """root ของ repo = ../.. จาก backend/app/api (ไฟล์นี้อยู่ backend/app/api/)."""
+    return Path(__file__).resolve().parents[3]
+
+
+def _mb(path: Path) -> float:
+    try:
+        return round(path.stat().st_size / (1024 * 1024), 1)
+    except OSError:
+        return 0.0
+
+
+def _read_reels_status(root: Path | None = None) -> dict:
+    """อ่านสถานะ Reels uploader จากไฟล์/โฟลเดอร์จริง (ไม่พึ่ง process)
+
+    อ่านจาก: pending_videos/ · posted/ · last_post_time.txt · posts_today.txt ·
+    uploader_execution.log · products.json · env POSTING_SPACING_HOURS/MAX_REELS_PER_DAY
+    คืน dict พร้อมแสดงผลในหน้าแอดมิน — ทุกฟิลด์ไม่มีตัวเลขมโน
+    """
+    root = root or _repo_root()
+    pending_dir = root / "pending_videos"
+    posted_dir = root / "posted"
+    last_file = root / "last_post_time.txt"
+    daily_file = root / "posts_today.txt"
+    log_file = root / "uploader_execution.log"
+
+    spacing = 3.0
+    max_per_day = 30
+    try:
+        spacing = float(os.getenv("POSTING_SPACING_HOURS") or spacing)
+        max_per_day = int(float(os.getenv("MAX_REELS_PER_DAY") or max_per_day))
+    except (TypeError, ValueError):
+        pass
+
+    # คลิปสินค้า (มีแคปชั่น AI + ลิงก์ Shopee) vs คลิปแนะนำป้าเข็ม
+    products = {}
+    try:
+        products = json.loads((root / "products.json").read_text(encoding="utf-8"))
+    except Exception:
+        products = {}
+
+    now = time.time()
+    queue = []
+    if pending_dir.is_dir():
+        for v in sorted(p for p in pending_dir.glob("*.mp4") if p.is_file()):
+            try:
+                age_min = round((now - v.stat().st_mtime) / 60, 1)
+            except OSError:
+                age_min = 0.0
+            queue.append({
+                "name": v.name,
+                "size_mb": _mb(v),
+                "age_min": age_min,
+                "is_product": v.name in products,
+            })
+
+    posted = []
+    if posted_dir.is_dir():
+        for v in sorted((p for p in posted_dir.glob("*.mp4") if p.is_file()),
+                        key=lambda p: p.stat().st_mtime, reverse=True)[:10]:
+            try:
+                posted_at = datetime.datetime.fromtimestamp(v.stat().st_mtime,
+                                                           tz=datetime.timezone.utc)
+            except OSError:
+                posted_at = None
+            posted.append({
+                "name": v.name,
+                "size_mb": _mb(v),
+                "posted_at": posted_at.isoformat() if posted_at else None,
+            })
+
+    # last_post_time.txt = epoch วินาที
+    last_ts = None
+    try:
+        last_ts = float(last_file.read_text(encoding="utf-8").strip())
+    except Exception:
+        pass
+    last_posted_at = (datetime.datetime.fromtimestamp(last_ts, tz=datetime.timezone.utc)
+                      .isoformat() if last_ts else None)
+    next_post_at = None
+    next_post_in_min = None
+    if last_ts:
+        next_ts = last_ts + spacing * 3600
+        next_post_at = (datetime.datetime.fromtimestamp(next_ts, tz=datetime.timezone.utc)
+                        .isoformat())
+        next_post_in_min = max(0.0, round((next_ts - now) / 60, 1))
+    pacing_ready = True
+    if last_ts:
+        pacing_ready = next_ts <= now
+
+    # posts_today.txt = "YYYY-MM-DD count"
+    posts_today = 0
+    posts_today_date = None
+    try:
+        date, count = daily_file.read_text(encoding="utf-8").strip().split()
+        if date == datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d"):
+            posts_today = int(count)
+            posts_today_date = date
+    except Exception:
+        pass
+
+    # log ท้ายสุด ~25 บรรทัด
+    log_tail = []
+    try:
+        lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()
+        log_tail = lines[-_REELS_LOG_TAIL_LINES:]
+    except Exception:
+        pass
+
+    return {
+        "queue": queue,
+        "posted": posted,
+        "state": {
+            "spacing_hours": spacing,
+            "max_per_day": max_per_day,
+            "posts_today": posts_today,
+            "posts_today_date": posts_today_date,
+            "last_posted_at": last_posted_at,
+            "next_post_at": next_post_at,
+            "next_post_in_min": next_post_in_min,
+            "pacing_ready": bool(pacing_ready),
+        },
+        "log_tail": log_tail,
+        "log_file_exists": log_file.exists(),
+    }
+
+
+@router.get("/api/admin/reels-status")
+def admin_reels_status(_: None = Depends(require_admin)):
+    """สถานะ Reels uploader — คิวรอโพสต์/โพสต์ล่าสุด/pacing/โควต้าวันนี้/log ล่าสุด"""
+    return _read_reels_status()
 
 
 @router.get("/api/admin/radar/cooldown")
