@@ -54,7 +54,8 @@ def extract_slip_info(image_bytes: bytes, content_type: str = "image/jpeg") -> d
                                 {"type": "image_url", "image_url": {"url": data_url}},
                             ]},
                         ],
-                    )
+                    ),
+                    circuit_key=client.api_key,
                 )
                 data = _parse_json(response.choices[0].message.content)
                 if isinstance(data, dict):

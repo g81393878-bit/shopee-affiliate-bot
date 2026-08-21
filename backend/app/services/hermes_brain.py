@@ -216,7 +216,8 @@ def _call_llm(prompt: dict) -> dict | None:
                     response_format={"type": "json_object"},
                     temperature=0.2,
                     timeout=60,
-                )
+                ),
+                circuit_key=client.api_key,
             )
             parsed = json.loads(response.choices[0].message.content)
             if not isinstance(parsed, dict):

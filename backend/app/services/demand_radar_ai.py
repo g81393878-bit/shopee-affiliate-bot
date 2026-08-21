@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from app.config import settings
 from app.services.category import CATEGORY_KEYWORDS, guess_category, normalize_query
-from app.services.llm_clients import call_with_backoff
+from app.services.llm_clients import call_with_backoff, parse_llm_json
 from app.services.persona import persona_system_prompt
 
 logger = logging.getLogger(__name__)
@@ -398,10 +398,11 @@ def analyze_lead_intent_and_demand(post_text: str, author_name: Optional[str] = 
                             ],
                             response_format={"type": "json_object"},
                             temperature=0.2,
-                        )
+                        ),
+                        circuit_key=client.api_key,
                     )
                     content = response.choices[0].message.content
-                    data = _clean_llm_data(json.loads(content))
+                    data = _clean_llm_data(parse_llm_json(content))
                     if isinstance(data, dict) and "demand_score" in data:
                         data["demand_score"] = int(data.get("demand_score", 0))
                         return data
@@ -425,14 +426,15 @@ def analyze_lead_intent_and_demand(post_text: str, author_name: Optional[str] = 
                                 {"role": "user", "content": prompt},
                             ],
                             temperature=0.2,
-                        )
+                        ),
+                        circuit_key=client.api_key,
                     )
                     content = response.choices[0].message.content.strip()
                     if content.startswith("```json"):
                         content = content[7:]
                     if content.endswith("```"):
                         content = content[:-3]
-                    data = _clean_llm_data(json.loads(content.strip()))
+                    data = _clean_llm_data(parse_llm_json(content))
                     if isinstance(data, dict) and "demand_score" in data:
                         data["demand_score"] = int(data.get("demand_score", 0))
                         return data
@@ -456,7 +458,7 @@ def analyze_lead_intent_and_demand(post_text: str, author_name: Optional[str] = 
                     generation_config={"response_mime_type": "application/json"},
                 )
             )
-            data = _clean_llm_data(json.loads(response.text))
+            data = _clean_llm_data(parse_llm_json(response.text))
             if isinstance(data, dict) and "demand_score" in data:
                 data["demand_score"] = int(data.get("demand_score", 0))
                 return data
@@ -479,7 +481,7 @@ def analyze_lead_intent_and_demand(post_text: str, author_name: Optional[str] = 
                     temperature=0.2,
                 )
             )
-            data = _clean_llm_data(json.loads(response.choices[0].message.content))
+            data = _clean_llm_data(parse_llm_json(response.choices[0].message.content))
             if isinstance(data, dict) and "demand_score" in data:
                 data["demand_score"] = int(data.get("demand_score", 0))
                 return data
@@ -597,7 +599,8 @@ def generate_auntie_khem_deal_comment(
                                 {"role": "user", "content": prompt},
                             ],
                             temperature=0.7,
-                        )
+                        ),
+                        circuit_key=client.api_key,
                     )
                     comment = response.choices[0].message.content.strip()
                     if affiliate_url not in comment:
@@ -623,7 +626,8 @@ def generate_auntie_khem_deal_comment(
                                 {"role": "user", "content": prompt},
                             ],
                             temperature=0.7,
-                        )
+                        ),
+                        circuit_key=client.api_key,
                     )
                     comment = response.choices[0].message.content.strip()
                     if affiliate_url not in comment:
@@ -697,9 +701,10 @@ def analyze_facebook_insights(insights_text: str) -> Dict[str, Any]:
                             ],
                             response_format={"type": "json_object"},
                             temperature=0.2,
-                        )
+                        ),
+                        circuit_key=client.api_key,
                     )
-                    return json.loads(response.choices[0].message.content)
+                    return parse_llm_json(response.choices[0].message.content)
                 except Exception as ex:
                     logger.warning(f"Groq insights analysis failed for one key: {ex}")
         except Exception as e:
@@ -720,7 +725,7 @@ def analyze_facebook_insights(insights_text: str) -> Dict[str, Any]:
                     generation_config={"response_mime_type": "application/json"},
                 )
             )
-            return json.loads(response.text)
+            return parse_llm_json(response.text)
         except Exception as e:
             logger.warning(f"Gemini insights analysis failed: {e}")
 

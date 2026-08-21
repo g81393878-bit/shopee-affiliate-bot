@@ -132,7 +132,8 @@ def _groq_caption(item: dict) -> str:
                          "content": persona_system_prompt("เขียนโพสต์ Facebook ภาษาไทยสั้น ๆ")},
                         {"role": "user", "content": prompt},
                     ],
-                )
+                ),
+                circuit_key=client.api_key,
             )
             return (resp.choices[0].message.content or "").strip()
         except Exception as e:

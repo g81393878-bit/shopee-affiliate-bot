@@ -2,7 +2,7 @@ import json
 import logging
 import math
 from app.config import settings
-from app.services.llm_clients import call_with_backoff
+from app.services.llm_clients import call_with_backoff, parse_llm_json
 from app.schemas import AIAnalysisResult, ScriptGeneratorResponse
 from app.services.persona import persona_system_prompt
 
@@ -157,7 +157,7 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
                     generation_config={"response_mime_type": "application/json"}
                 )
             )
-            data = json.loads(response.text)
+            data = parse_llm_json(response.text)
             return _normalize_analysis(data, score)
         except Exception as e:
             logger.error(f"Gemini API analysis failed: {e}. Falling back to mock data.")
@@ -191,7 +191,7 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
                     response_format={"type": "json_object"}
                 )
             )
-            data = json.loads(response.choices[0].message.content)
+            data = parse_llm_json(response.choices[0].message.content)
             return _normalize_analysis(data, score)
         except Exception as e:
             logger.error(f"OpenAI API analysis failed: {e}. Falling back to mock data.")
@@ -223,9 +223,10 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
                             {"role": "user", "content": prompt}
                         ],
                         response_format={"type": "json_object"}
-                    )
+                    ),
+                    circuit_key=client.api_key,
                 )
-                data = json.loads(response.choices[0].message.content)
+                data = parse_llm_json(response.choices[0].message.content)
                 return _normalize_analysis(data, score)
             except Exception as e:
                 last_err = e
@@ -260,9 +261,10 @@ def analyze_product_with_ai(name: str, category: str, price: float, rating: floa
                             {"role": "system", "content": persona_system_prompt("You are a Shopee affiliate marketing analyst. Respond only with JSON conforming to the requested schema. Use Thai language for content fields.", tone=tone)},
                             {"role": "user", "content": prompt}
                         ]
-                    )
+                    ),
+                    circuit_key=client.api_key,
                 )
-                data = json.loads(response.choices[0].message.content)
+                data = parse_llm_json(response.choices[0].message.content)
                 return _normalize_analysis(data, score)
             except Exception as e:
                 last_err = e

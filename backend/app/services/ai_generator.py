@@ -1,13 +1,30 @@
 import json
 import logging
 from app.config import settings
-from app.services.llm_clients import call_with_backoff
+from app.services.llm_clients import call_with_backoff, parse_llm_json, groq_json_schema_format
 from app.schemas import ScriptGeneratorResponse
 from app.services.persona import persona_system_prompt
 
 logger = logging.getLogger(__name__)
 
 SCRIPT_KEYS = {"hook", "problem", "solution", "cta", "caption", "hashtags", "title", "thumbnail_prompt"}
+
+# JSON Schema สำหรับ Groq json_schema (strict) — ต้องมี required ครบ + additionalProperties: false
+SCRIPT_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "hook": {"type": "string"},
+        "problem": {"type": "string"},
+        "solution": {"type": "string"},
+        "cta": {"type": "string"},
+        "caption": {"type": "string"},
+        "hashtags": {"type": "array", "items": {"type": "string"}},
+        "title": {"type": "string"},
+        "thumbnail_prompt": {"type": "string"},
+    },
+    "required": ["hook", "problem", "solution", "cta", "caption", "hashtags", "title", "thumbnail_prompt"],
+    "additionalProperties": False,
+}
 
 
 def format_hashtags_text(tags) -> str:
@@ -30,10 +47,17 @@ def format_hashtags_text(tags) -> str:
 
 
 def _require_script_keys(data: dict) -> dict:
-    """Validate the model returned the full script schema; raise so callers fall back."""
-    if not isinstance(data, dict) or not SCRIPT_KEYS.issubset(data):
-        raise ValueError(f"script JSON missing keys: {sorted(SCRIPT_KEYS - set(data)) if isinstance(data, dict) else 'not an object'}")
-    return data
+    """Validate the model returned the full script schema; raise so callers fall back.
+
+    ใช้ Pydantic (ScriptGeneratorResponse) ตรวจ — กัน key ขาด + type ผิด (เช่น hashtags
+    มาเป็น string แทน list) แล้วคืน dict ที่ normalize แล้ว (type coercion ฟรี)
+    """
+    if not isinstance(data, dict):
+        raise ValueError("script JSON ไม่ใช่ object")
+    try:
+        return ScriptGeneratorResponse.model_validate(data).model_dump()
+    except Exception as e:  # pydantic.ValidationError
+        raise ValueError(f"script JSON invalid: {e}") from e
 
 
 def build_template_script(product_name: str, category: str = "", price: float = 0.0,
@@ -105,7 +129,7 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
                     generation_config={"response_mime_type": "application/json"}
                 )
             )
-            return _require_script_keys(json.loads(response.text))
+            return _require_script_keys(parse_llm_json(response.text))
         except Exception as e:
             logger.error(f"Gemini script generation failed: {e}. Falling back to default script.")
             
@@ -129,7 +153,7 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
                     response_format={"type": "json_object"}
                 )
             )
-            return _require_script_keys(json.loads(response.choices[0].message.content))
+            return _require_script_keys(parse_llm_json(response.choices[0].message.content))
         except Exception as e:
             logger.error(f"OpenAI script generation failed: {e}. Falling back to default script.")
 
@@ -151,10 +175,13 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
                             {"role": "system", "content": persona_system_prompt("Respond only in JSON format with Thai texts.", tone=tone, market_tone=market_tone)},
                             {"role": "user", "content": prompt}
                         ],
-                        response_format={"type": "json_object"}
-                    )
+                        # json_schema (strict) บนโมเดลที่รองรับ — การันตี schema ตรง;
+                        # โมเดลอื่นตกกลับ json_object (groq_json_schema_format จัดการเอง)
+                        response_format=groq_json_schema_format(SCRIPT_JSON_SCHEMA, settings.GROQ_MODEL)
+                    ),
+                    circuit_key=client.api_key,
                 )
-                return _require_script_keys(json.loads(response.choices[0].message.content))
+                return _require_script_keys(parse_llm_json(response.choices[0].message.content))
             except Exception as e:
                 last_err = e
                 logger.warning(f"Groq key {client.api_key[:8]}... failed: {e} — ลอง key ถัดไป")
@@ -180,9 +207,10 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
                             {"role": "system", "content": persona_system_prompt("Respond only in JSON format with Thai texts.", tone=tone, market_tone=market_tone)},
                             {"role": "user", "content": prompt}
                         ]
-                    )
+                    ),
+                    circuit_key=client.api_key,
                 )
-                return _require_script_keys(json.loads(response.choices[0].message.content))
+                return _require_script_keys(parse_llm_json(response.choices[0].message.content))
             except Exception as e:
                 last_err = e
                 logger.warning(f"Anthropic key {client.api_key[:8]}... failed: {e} — ลอง key ถัดไป")

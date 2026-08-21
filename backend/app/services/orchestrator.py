@@ -90,7 +90,8 @@ def _claude_generate(prompt: str, system: str = BOSS_SYSTEM) -> str:
                         {"role": "user", "content": prompt},
                     ],
                     timeout=CLAUDE_TIMEOUT,
-                )
+                ),
+                circuit_key=client.api_key,
             )
             out = (resp.choices[0].message.content or "").strip()
             if out:
@@ -128,7 +129,8 @@ def _groq_generate(prompt: str) -> str:
                     ],
                     temperature=0.3,
                     timeout=WORKER_TIMEOUT,
-                )
+                ),
+                circuit_key=client.api_key,
             )
             out = (resp.choices[0].message.content or "").strip()
             if out:

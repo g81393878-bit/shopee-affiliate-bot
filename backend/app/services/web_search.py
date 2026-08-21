@@ -281,7 +281,8 @@ def _summarize_with_groq(query: str, results: list) -> str:
                             {"role": "user", "content": prompt},
                         ],
                         temperature=0.3,
-                    )
+                    ),
+                    circuit_key=client.api_key,
                 )
                 ans = (resp.choices[0].message.content or "").strip()
                 if ans:
