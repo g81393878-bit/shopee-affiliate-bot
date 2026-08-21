@@ -145,6 +145,28 @@ def list_pending() -> list:
     return sorted(p for p in PENDING_DIR.glob("*.mp4") if p.is_file())
 
 
+def recycle_clips() -> bool:
+    """Auto-recycle: pending ว่าง → คัดลอกคลิปจาก posted/ กลับมาโพสต์ใหม่.
+
+    คัดลอก (ไม่ลบ) — posted/ ยังเก็บคลิปต้นฉบับไว้
+    คืน True = recycling เกิดขึ้น (มีคลิปกลับมา)
+    """
+    posted_clips = sorted(p for p in POSTED_DIR.glob("*.mp4") if p.is_file())
+    if not posted_clips:
+        return False
+    PENDING_DIR.mkdir(parents=True, exist_ok=True)
+    for src in posted_clips:
+        dst = PENDING_DIR / src.name
+        if not dst.exists():
+            import shutil
+            shutil.copy2(str(src), str(dst))
+    recycled = list_pending()
+    if recycled:
+        log(f"♻️ Recycle: คัดลอกคลิปจาก posted/ กลับ {len(recycled)} ตัว → pending_videos/")
+        return True
+    return False
+
+
 def pacing_ok(spacing_hours: float) -> bool:
     """True = ครบระยะห่าง (หรือไม่มีเวลาล่าสุด / spacing ปิด)"""
     if spacing_hours <= 0:
@@ -367,8 +389,12 @@ def build_caption(product: dict) -> str:
 def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
     pending = list_pending()
     if not pending:
-        log("ไม่มีคลิปใน pending_videos/ — จบ")
-        return 0
+        # Auto-recycle: คัดลอกคลิปจาก posted/ กลับมาโพสต์ใหม่
+        if recycle_clips():
+            pending = list_pending()
+        else:
+            log("ไม่มีคลิปใน pending_videos/ — จบ")
+            return 0
 
     spacing = _env_float("POSTING_SPACING_HOURS", DEFAULT_SPACING_HOURS)
     max_per_day = int(_env_float("MAX_REELS_PER_DAY", DEFAULT_MAX_PER_DAY))
