@@ -16,9 +16,13 @@ echo WshShell.Run "run_uploader.bat", 0, False
 echo Set WshShell = Nothing
 ) > "%VBS_FILE%"
 
+:: Run the script immediately so it starts in the background right now
+wscript "%VBS_FILE%"
+
 echo.
 echo ====================================================
 echo  ✅ ตั้งค่าระบบแอบรันอัตโนมัติเมื่อเปิดคอมเรียบร้อยแล้ว!
+echo  🚀 และเริ่มเปิดการทำงานในพื้นหลังทันทีโดยไม่ต้องรีสตาร์ท
 echo ====================================================
 echo.
 echo ต่อจากนี้ เมื่อคุณพี่เปิดคอมพิวเตอร์ขึ้นมาใช้งาน 
