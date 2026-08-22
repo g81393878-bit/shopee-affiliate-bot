@@ -321,7 +321,7 @@ def cmd_deploy() -> None:
     for attempt in range(1, max_attempts + 1):
         print(f"กำลัง trigger deploy… (ครั้งที่ {attempt}/{max_attempts})")
         status, resp = request("POST", f"/services/{SERVICE_ID}/deploys", {})
-        if status in (200, 201):
+        if status in (200, 201, 202):
             print(f"✅ trigger deploy สำเร็จ (id={resp.get('id') if isinstance(resp, dict) else resp})")
             print("   รอสถานะ 'live' ที่ https://dashboard.render.com/web/"
                   f"{SERVICE_ID}/deploys (~3 นาที)")
