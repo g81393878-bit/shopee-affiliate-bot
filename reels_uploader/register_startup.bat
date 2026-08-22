@@ -9,12 +9,10 @@ set "STARTUP_FOLDER=%appdata%\Microsoft\Windows\Start Menu\Programs\Startup"
 set "VBS_FILE=%STARTUP_FOLDER%\run_reels_hidden.vbs"
 
 echo Creating startup script at: %VBS_FILE%
-(
-echo Set WshShell = CreateObject^("WScript.Shell"^)
-echo WshShell.CurrentDirectory = "%TARGET_DIR%"
-echo WshShell.Run "run_uploader.bat", 0, False
-echo Set WshShell = Nothing
-) > "%VBS_FILE%"
+echo Set WshShell = CreateObject("WScript.Shell") > "%VBS_FILE%"
+echo WshShell.CurrentDirectory = "%TARGET_DIR%" >> "%VBS_FILE%"
+echo WshShell.Run "run_uploader.bat", 0, False >> "%VBS_FILE%"
+echo Set WshShell = Nothing >> "%VBS_FILE%"
 
 :: Run the script immediately so it starts in the background right now
 wscript "%VBS_FILE%"
