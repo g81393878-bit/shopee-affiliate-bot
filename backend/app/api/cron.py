@@ -474,33 +474,97 @@ def _post_next_product(db, limit: int = 1) -> Optional[dict]:
             if p and p.category:
                 recent_cats.add(p.category)
 
-    query = (db.query(models.Product)
-               .filter(models.Product.link_status == "ok",
-                       models.Product.sales_count >= min_sales))
-    if posted_ids:
-        query = query.filter(~models.Product.id.in_(posted_ids))
-    if recent_radar_ids:
-        query = query.filter(~models.Product.id.in_(recent_radar_ids))
-    # กรองหมวดที่เพิ่งโพสต์ (cooldown) ใน SQL ก่อน limit — เดิมกรองหลังดึงแค่ 20 ตัว
-    # → ถ้า 20 ตัวแรก (คอมสูง) ติด cooldown หมด จะไม่เห็นสินค้าหมวดอื่นที่พร้อม
-    # (เจอจริง 18/08: โพสต์ 14 หมวด/24 ชม. หมวดคอมสูงติด cooldown หมด → เงียบทั้งที่มีของ)
-    if recent_cats:
-        query = query.filter(models.Product.category.is_(None)
-                             | ~models.Product.category.in_(recent_cats))
+    # หาสินค้าผ่าน Loop 2 รอบ เพื่อรองรับการปรับลดเกณฑ์ min_sales อัตโนมัติกรณีสินค้าขายดีหมดคลัง
+    current_min_sales = min_sales
     prods = []
-    for p in (query.order_by(models.Product.commission.desc(),
-                             models.Product.ai_score.desc())
-                   .limit(max(limit * 20, 20)).all()):
-        # Guard กันลิงก์ปลอม/ของ mock (เช่น s.shopee.co.th/earbuds_ok) หลุดขึ้นโพสต์:
-        # ตัวที่โพสต์แนบรูปจะแปะ affiliate_url ไว้ในแคปชั่น (ไม่ใช่ link param) →
-        # post_feed guard ตรวจ link param ไม่ถึง → กรองที่นี่อีกชั้น (defense-in-depth)
-        if not is_valid_shopee_affiliate_url(p.affiliate_url):
-            logger.warning(f"[product] ข้ามสินค้า {p.id} affiliate_url ไม่ valid: "
-                           f"{str(p.affiliate_url)[:60]!r}")
+    
+    for attempt in range(2):
+        query = (db.query(models.Product)
+                   .filter(models.Product.link_status == "ok",
+                           models.Product.sales_count >= current_min_sales))
+        
+        # รอบการหาที่ 1: สินค้าที่ไม่เคยโพสต์เลย
+        q_unposted = query
+        if posted_ids:
+            q_unposted = q_unposted.filter(~models.Product.id.in_(posted_ids))
+        if recent_radar_ids:
+            q_unposted = q_unposted.filter(~models.Product.id.in_(recent_radar_ids))
+        if recent_cats:
+            q_unposted = q_unposted.filter(models.Product.category.is_(None)
+                                           | ~models.Product.category.in_(recent_cats))
+            
+        for p in (q_unposted.order_by(models.Product.commission.desc(),
+                                      models.Product.ai_score.desc())
+                            .limit(max(limit * 20, 20)).all()):
+            if not is_valid_shopee_affiliate_url(p.affiliate_url):
+                logger.warning(f"[product] ข้ามสินค้า {p.id} affiliate_url ไม่ valid: {str(p.affiliate_url)[:60]!r}")
+                continue
+            prods.append(p)
+            if len(prods) >= max(limit * 5, 5):
+                break
+                
+        # รอบการหาที่ 2: วนซ้ำ (Recycle) สินค้าที่เคยโพสต์แล้ว (ยกเว้นเพิ่งโพสต์ 14 วันที่ผ่านมา)
+        if not prods:
+            logger.info(f"[product] ไม่พบสินค้าใหม่ (ยอดขาย >= {current_min_sales}) — เริ่มระบบวนซ้ำ (Recycle 14 วัน)")
+            recycle_cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=14)
+            recently_posted_ids = {int(c.category) for c in db.query(models.CampaignLog)
+                                   .filter(models.CampaignLog.status == "fbpost",
+                                           models.CampaignLog.created_at >= recycle_cutoff).all()
+                                   if str(c.category).isdigit()}
+            
+            q_recycle = query
+            if recently_posted_ids:
+                q_recycle = q_recycle.filter(~models.Product.id.in_(recently_posted_ids))
+            if recent_radar_ids:
+                q_recycle = q_recycle.filter(~models.Product.id.in_(recent_radar_ids))
+            if recent_cats:
+                q_recycle = q_recycle.filter(models.Product.category.is_(None)
+                                             | ~models.Product.category.in_(recent_cats))
+                                             
+            for p in (q_recycle.order_by(models.Product.commission.desc(),
+                                         models.Product.ai_score.desc())
+                               .limit(max(limit * 20, 20)).all()):
+                if not is_valid_shopee_affiliate_url(p.affiliate_url):
+                    continue
+                prods.append(p)
+                if len(prods) >= max(limit * 5, 5):
+                    break
+
+        # รอบการหาที่ 3: วนซ้ำแบบสั้น (Recycle 1 วัน) กันคลังเล็กมากติดเดดล็อก
+        if not prods:
+            logger.info(f"[product] ไม่พบสินค้าว่างในช่วง 14 วัน — เริ่มระบบวนซ้ำระยะสั้น (Recycle 1 วัน)")
+            recycle_cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1)
+            recently_posted_ids = {int(c.category) for c in db.query(models.CampaignLog)
+                                   .filter(models.CampaignLog.status == "fbpost",
+                                           models.CampaignLog.created_at >= recycle_cutoff).all()
+                                   if str(c.category).isdigit()}
+            
+            q_recycle = query
+            if recently_posted_ids:
+                q_recycle = q_recycle.filter(~models.Product.id.in_(recently_posted_ids))
+            if recent_radar_ids:
+                q_recycle = q_recycle.filter(~models.Product.id.in_(recent_radar_ids))
+            if recent_cats:
+                q_recycle = q_recycle.filter(models.Product.category.is_(None)
+                                             | ~models.Product.category.in_(recent_cats))
+                                             
+            for p in (q_recycle.order_by(models.Product.commission.desc(),
+                                         models.Product.ai_score.desc())
+                               .limit(max(limit * 20, 20)).all()):
+                if not is_valid_shopee_affiliate_url(p.affiliate_url):
+                    continue
+                prods.append(p)
+                if len(prods) >= max(limit * 5, 5):
+                    break
+                    
+        # หากยังไม่ได้สินค้าและเกณฑ์ min_sales ปัจจุบัน > 0 ให้ลองลดเกณฑ์เหลือ 0 แล้วหาใหม่
+        if not prods and current_min_sales > 0:
+            logger.info(f"[product] ไม่พบสินค้าแม้จะ Recycle แล้ว — ปรับลดเกณฑ์ยอดขายขั้นต่ำจาก {current_min_sales} เหลือ 0 เพื่อหาต่อ")
+            current_min_sales = 0
             continue
-        prods.append(p)
-        if len(prods) >= max(limit * 5, 5):  # ลองหลายตัว เผื่อตัวแรกโพสต์ล้ม (กัน rotation ติดตาย)
-            break
+        
+        break
+
     if not prods:
         return None
     results = []
