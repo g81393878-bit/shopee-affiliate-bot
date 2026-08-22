@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-UPLOADER = ROOT / "uploader.py"
+UPLOADER = ROOT / "reels_uploader" / "uploader.py"
 
 
 def _load_uploader():
