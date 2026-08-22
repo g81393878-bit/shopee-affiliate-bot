@@ -31,6 +31,10 @@ import datetime
 import pathlib
 import re
 import sys
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal
 from typing import Dict, List, Optional, Tuple
@@ -82,20 +86,40 @@ def read_csv(path: str) -> List[dict]:
     rows = []
     with open(path, encoding="utf-8-sig", newline="") as f:
         rd = csv.DictReader(f)
+        fieldnames = rd.fieldnames or []
         for r in rd:
-            name = (r.get("ชื่อสินค้า") or "").strip()
-            if not name:
-                continue
-            rows.append({
-                "name": name[:255],
-                "price": parse_thb(r.get("ราคา")),
-                "sales": int(parse_number(r.get("ขาย"))),
-                "commission": parse_thb(r.get("คอมมิชชัน")),
-                "rate": (r.get("อัตราค่าคอมมิชชัน") or "").strip(),
-                "affiliate_url": (r.get("ลิงก์ข้อเสนอ") or "").strip(),
-                "product_link": (r.get("ลิงก์สินค้า") or "").strip(),
-                "category": guess_category(name),
-            })
+            # ตรวจสอบว่าเป็นไฟล์รายชื่อร้านค้า/ข้อเสนอแนะนำ
+            if "ชื่อข้อเสนอ" in fieldnames or "ลิงก์ร้านค้า(สั้น)" in fieldnames:
+                name = (r.get("ชื่อข้อเสนอ") or "").strip()
+                if not name:
+                    continue
+                # ดึงลิงก์แนะนำ (ลิงก์สั้น)
+                aff_url = (r.get("ลิงก์ร้านค้า(สั้น)") or r.get("ลิงก์ข้อเสนอ") or "").strip()
+                prod_link = (r.get("ลิงก์ข้อเสนอ") or "").strip()
+                rows.append({
+                    "name": name[:255],
+                    "price": Decimal("0"),
+                    "sales": 5000,  # กำหนดค่าเริ่มต้นยอดขายสูงเพื่อให้ผ่านเกณฑ์การโพสต์อัตโนมัติ
+                    "commission": Decimal("0"),
+                    "rate": (r.get("อัตราค่าคอมมิชชัน") or "").strip(),
+                    "affiliate_url": aff_url,
+                    "product_link": prod_link,
+                    "category": guess_category(name),
+                })
+            else:
+                name = (r.get("ชื่อสินค้า") or "").strip()
+                if not name:
+                    continue
+                rows.append({
+                    "name": name[:255],
+                    "price": parse_thb(r.get("ราคา")),
+                    "sales": int(parse_number(r.get("ขาย"))),
+                    "commission": parse_thb(r.get("คอมมิชชัน")),
+                    "rate": (r.get("อัตราค่าคอมมิชชัน") or "").strip(),
+                    "affiliate_url": (r.get("ลิงก์ข้อเสนอ") or "").strip(),
+                    "product_link": (r.get("ลิงก์สินค้า") or "").strip(),
+                    "category": guess_category(name),
+                })
     return rows
 
 

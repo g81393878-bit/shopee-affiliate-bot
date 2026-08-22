@@ -22,7 +22,7 @@ DEAD_MARKERS = ("item_not_found", "item not found", "ไม่พบสินค
                 "product is no longer", "product_not_found", "ไม่มีสินค้านี้")
 BLOCK_MARKERS = ("เข้าสู่หน้าที่ต้องการไม่สำเร็จ", "traffic verification", "captcha",
                  "แคปต์ชา", "page unavailable", "verify you are human")
-ITEM_URL_RE = re.compile(r"/product/|/opaanlp/|-[a-z0-9-]+-i\.\d+\.\d+", re.IGNORECASE)
+ITEM_URL_RE = re.compile(r"/product/|/opaanlp/|/shop/|-[a-z0-9-]+-i\.\d+\.\d+", re.IGNORECASE)
 
 # ลิงก์ affiliate Shopee จริงต้องเป็นลิงก์สั้น s.shopee.co.th เท่านั้น
 # (https://shope.ee/... = ลิงก์ปลอม/ของ mock — กดแล้ว 404 ห้ามเข้าระบบ/โพสต์)
