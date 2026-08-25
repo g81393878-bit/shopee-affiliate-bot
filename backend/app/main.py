@@ -16,7 +16,7 @@ import httpx
 from sqlalchemy import text
 
 from app.db import engine, Base, is_sqlite
-from app.api import users, products, performance, line_bot, cron, admin_dashboard, facebook_bot, facebook_radar
+from app.api import users, products, performance, line_bot, cron, admin_dashboard, facebook_bot, facebook_radar, creative_brief
 from app.api.cron import run_facebook_auto_post, run_facebook_product_post, run_facebook_content_post
 from app.config import settings
 
@@ -316,6 +316,7 @@ app.include_router(facebook_bot.router, prefix="/api")
 app.include_router(facebook_radar.router, prefix="/api")
 app.include_router(cron.router, prefix="/api")
 app.include_router(admin_dashboard.router)  # แดชบอร์ดแอดมิน (/admin + /api/admin/*)
+app.include_router(creative_brief.router, prefix="/api")
 
 # ไฟล์ static (รูปมาสคอตป้าเข็มสำหรับโพสต์ Facebook เป็นต้น) — เสิร์ฟที่ /static/*
 _STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")

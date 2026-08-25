@@ -97,6 +97,7 @@ a.del { color:var(--red); cursor:pointer; text-decoration:underline; margin-left
       <button id="tabCooldown" onclick="showTab('cooldown')">⏰ Cooldown</button>
       <button id="tabSlips" onclick="showTab('slips')">💰 สลิป</button>
       <button id="tabReels" onclick="showTab('reels')">🎬 Reels</button>
+      <button id="tabBriefs" onclick="showTab('briefs')">📝 Briefs</button>
     </nav>
     <button id="logout">ออกจากระบบ</button>
   </header>
@@ -244,6 +245,26 @@ a.del { color:var(--red); cursor:pointer; text-decoration:underline; margin-left
       </section>
     </div>
 
+    <!-- Creative Briefs -->
+    <div id="viewBriefs" class="hidden">
+      <div class="stat-banner" id="briefsBanner">
+        <div><div class="big" id="briefsTotal">…</div><div class="lbl">สินค้ามี Brief</div></div>
+        <div class="sep"></div>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button id="briefsGenBtn" onclick="generateBriefFromSelect()" style="padding:7px 16px;border:1px solid var(--red);border-radius:8px;background:var(--red);color:#fff;cursor:pointer">🤖 สร้าง Brief ใหม่</button>
+          <button onclick="loadBriefs()" style="padding:7px 16px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer">🔄 รีเฟรช</button>
+        </div>
+      </div>
+      <section class="panel" style="margin-bottom:14px">
+        <h3>🔍 ดู Brief ของสินค้า</h3>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+          <input id="briefsProductId" type="number" min="1" placeholder="Product ID" style="width:140px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+          <button onclick="loadBriefsByProduct()" style="padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;font-size:14px">🔎 ค้น</button>
+        </div>
+      </section>
+      <div id="briefsResult"></div>
+    </div>
+
     <!-- สลิปโอนเงิน (ขายบอท) -->
     <div id="viewSlips">
       <div class="filters" style="margin-bottom:16px">
@@ -360,7 +381,7 @@ $('logout').onclick = () => { fetch('/admin/logout', { method: 'POST' }).then(()
 
 // ---- tabs ----
 function showTab(t) {
-  ['stats','products','radar','cooldown','slips','reels'].forEach(n => {
+  ['stats','products','radar','cooldown','slips','reels','briefs'].forEach(n => {
     $('view' + n.charAt(0).toUpperCase() + n.slice(1)).classList.toggle('hidden', t !== n);
     $('tab'  + n.charAt(0).toUpperCase() + n.slice(1)).classList.toggle('active', t === n);
   });
@@ -369,6 +390,7 @@ function showTab(t) {
   if (t === 'cooldown') { loadCooldown(); }
   if (t === 'slips')    { loadSlips(1); }
   if (t === 'reels')    { loadReels(); }
+  if (t === 'briefs')   { loadBriefs(); }
 }
 
 // ---- Reels Uploader ----
@@ -740,6 +762,74 @@ async function loadCooldown() {
       : '<div style="color:var(--gray);font-size:13px;padding:8px">ยังไม่มีประวัติการโพสต์</div>';
     $('cooldownUpdated').textContent = `อัปเดตล่าสุด: ${new Date().toLocaleString('th-TH')} · Cooldown ${ch} ชม./หมวด`;
   } catch (e) { $('lockedGrid').innerHTML = `<div style="color:var(--red)">${esc(e.message)}</div>`; }
+}
+
+// ---- Creative Briefs ----
+let briefsState = { cache: {} };
+
+async function loadBriefs() {
+  $('briefsResult').innerHTML = '<div style="color:var(--gray);font-size:13px">พิมพ์ Product ID แล้วกด 🔎 เพื่อดู Brief</div>';
+  try {
+    const s = await api('/api/admin/stats');
+    $('briefsTotal').textContent = s.totals?.sellable || 0;
+  } catch (e) { $('briefsTotal').textContent = '?'; }
+}
+
+async function loadBriefsByProduct() {
+  const id = parseInt($('briefsProductId').value);
+  if (!id || id < 1) return alert('กรุณาใส่ Product ID');
+  const box = $('briefsResult');
+  box.innerHTML = '<div style="color:var(--gray)">กำลังโหลด…</div>';
+  try {
+    const d = await api(`/api/creative-briefs/product/${id}`);
+    briefsState.cache[id] = d;
+    box.innerHTML = `<div style="margin-bottom:12px;font-size:14px"><b>📝 Brief ของสินค้า #${d.product_id}</b> — ${esc(d.product_name)} · สร้างเมื่อ ${new Date(d.generated_at).toLocaleString('th-TH')}</div>` +
+      d.perspectives.map(p => _renderBriefCard(p, d.product_id)).join('');
+  } catch (e) {
+    if (e.message.includes('404') || e.message.includes('ไม่พบ')) {
+      box.innerHTML = `<div style="padding:20px;text-align:center;color:var(--gray)">ยังไม่มี Brief สำหรับสินค้า #${id}<br><span style="font-size:13px">กดปุ่ม 🤖 สร้าง Brief ใหม่ หรือใส่ ID ถูกต้อง</span></div>`;
+    } else {
+      box.innerHTML = `<div style="color:var(--red)">${esc(e.message)}</div>`;
+    }
+  }
+}
+
+function _renderBriefCard(p, productId) {
+  const pLabel = {problem_solution:'🔧 แก้ปัญหา', review:'⭐ รีวิว', education:'📚 ให้ความรู้'}[p.perspective] || p.perspective;
+  const confColor = p.ai_confidence >= 70 ? 'var(--green)' : p.ai_confidence >= 50 ? '#B7950B' : 'var(--red)';
+  return `<section class="panel" style="border-left:4px solid ${confColor};margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <h3 style="margin:0">${pLabel}</h3>
+      <span style="font-size:12px;color:var(--gray)">🎯 ${p.ai_confidence}% confidence · ${p.video_duration || '15-30s'} · ${p.format_type || 'vertical_video'}</span>
+    </div>
+    <div style="margin-bottom:8px">
+      <div style="font-weight:bold;font-size:15px;color:var(--red)">Hook: ${esc(p.hook)}</div>
+    </div>
+    <div style="margin-bottom:8px;white-space:pre-wrap;font-size:13px;line-height:1.5;background:var(--light);padding:10px;border-radius:8px">${esc(p.script_body)}</div>
+    <div style="margin-bottom:8px"><b>CTA:</b> ${esc(p.cta)}</div>
+    <div class="caption-box" onclick="this.classList.toggle('open')" style="margin-bottom:8px"><b>แคปชัน:</b> ${esc(p.caption)}</div>
+    <div style="margin-bottom:4px;font-size:12px"><b>🎯 กลุ่มเป้าหมาย:</b> ${esc(p.target_behavior)}</div>
+    <div style="margin-bottom:4px;font-size:12px"><b>🖼️ Thumbnail:</b> ${esc(p.thumbnail_prompt)}</div>
+    <div style="font-size:12px;color:var(--gray)">${(p.hashtags||[]).map(t => '#' + esc(t)).join(' ')}</div>
+  </section>`;
+}
+
+async function generateBriefFromSelect() {
+  const id = parseInt($('briefsProductId').value);
+  if (!id || id < 1) return alert('ใส่ Product ID ก่อนกดสร้าง Brief');
+  if (!confirm(`สร้าง Creative Brief 3 มุมมองสำหรับสินค้า #${id}?\n\n(จะลบ Brief เก่าถ้ามี)`)) return;
+  const btn = $('briefsGenBtn');
+  btn.disabled = true; btn.textContent = '⏳ กำลังสร้าง…';
+  try {
+    const r = await api('/api/creative-briefs/generate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({product_id: id})
+    });
+    alert(`✅ สร้าง Brief สำเร็จ! ${r.perspectives.length} มุมมอง`);
+    loadBriefsByProduct();
+  } catch (e) { alert('❌ ' + e.message); }
+  btn.disabled = false; btn.textContent = '🤖 สร้าง Brief ใหม่';
 }
 
 async function submitInsights() {

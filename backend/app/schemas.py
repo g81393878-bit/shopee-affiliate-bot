@@ -270,6 +270,64 @@ class LeadIngestionResponse(BaseModel):
     alerts_sent: int
     results: List[IngestedLeadResult]
 
+
+# ===========================================================================
+# Creative Brief Schemas (3 มุมมองสำหรับ Meta Ads)
+# ===========================================================================
+
+class CreativeBriefPerspective(BaseModel):
+    """มุมมองเดียวของ Creative Brief"""
+    perspective: str = Field(..., description="problem_solution | review | education")
+    hook: str
+    script_body: str
+    cta: str
+    caption: str
+    hashtags: List[str] = []
+    format_type: Optional[str] = None
+    video_duration: Optional[str] = None
+    target_behavior: Optional[str] = None
+    thumbnail_prompt: Optional[str] = None
+    ai_confidence: int = 0
+
+
+class CreativeBriefOut(BaseModel):
+    """Response สำหรับ Creative Brief ทั้ง 3 มุมมอง"""
+    product_id: int
+    product_name: str
+    perspectives: List[CreativeBriefPerspective]
+    generated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class CreativeBriefSingleOut(BaseModel):
+    """Creative Brief มุมมองเดียว (สำหรับดู/แก้ไข)"""
+    id: int
+    product_id: int
+    perspective: str
+    hook: str
+    script_body: str
+    cta: str
+    caption: str
+    hashtags: List[str] = []
+    format_type: Optional[str] = None
+    video_duration: Optional[str] = None
+    target_behavior: Optional[str] = None
+    thumbnail_prompt: Optional[str] = None
+    ai_confidence: int = 0
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class CreativeBriefGenerateRequest(BaseModel):
+    """Request สำหรับสร้าง Creative Brief ใหม่"""
+    product_id: int
+    tone: str = "neutral"  # youth | elder | neutral
+    market_tone: str = ""  # ท่าทีตลาดจาก Hermes
+
 class RadarStatsResponse(BaseModel):
     total_leads_scanned: int
     high_demand_leads: int

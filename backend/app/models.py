@@ -129,6 +129,7 @@ class Product(Base):
     # Relationships
     analysis = relationship("ProductAnalysis", back_populates="product", uselist=False, cascade="all, delete-orphan")
     contents = relationship("Content", back_populates="product", cascade="all, delete-orphan")
+    creative_briefs = relationship("CreativeBrief", back_populates="product", cascade="all, delete-orphan")
 
 
 # ===========================================================================
@@ -323,4 +324,38 @@ class SystemPreference(Base):
     key = Column(String(100), primary_key=True, index=True)
     value = Column(JSON, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+
+# ===========================================================================
+# Creative Brief — 3 มุมมองสำหรับ Meta Ads (Creative is Targeting)
+# ===========================================================================
+
+class CreativeBrief(Base):
+    """ชิ้นงานโฆษณา 3 มุมมองสำหรับสินค้าแต่ละตัว
+
+    แต่ละ brief มีมุมมองเดียว (perspective): problem_solution | review | education
+    — สร้างโดย LLM จากข้อมูลสินค้า + เก็บไว้ให้เลือกไปยิงแอด
+    """
+    __tablename__ = "creative_briefs"
+
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
+    perspective = Column(String(30), nullable=False, index=True)  # problem_solution | review | education
+    # === เนื้อหาหลัก ===
+    hook = Column(Text, nullable=False)           # 3 วินาทีแรก
+    script_body = Column(Text, nullable=False)    # เนื้อหาวิดีโอ
+    cta = Column(Text, nullable=False)            # Call to Action
+    caption = Column(Text, nullable=False)        # แคปชันสำหรับโพสต์
+    hashtags = Column(JSON, nullable=True)        # ["tag1", "tag2", ...]
+    # === แนวทางการผลิต ===
+    format_type = Column(String(50), nullable=True)   # vertical_video | carousel | static_image
+    video_duration = Column(String(20), nullable=True) # 15s | 30s | 60s
+    target_behavior = Column(Text, nullable=True)      # พฤติกรรมกลุ่มเป้าหมายที่เหมาะ
+    thumbnail_prompt = Column(Text, nullable=True)     # คำสั่งสร้างรูป cover
+    # === การให้คะแนน ===
+    ai_confidence = Column(Integer, default=0)    # ความมั่นใจของ AI 0-100
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+
+    # Relationships
+    product = relationship("Product", back_populates="creative_briefs")
 
