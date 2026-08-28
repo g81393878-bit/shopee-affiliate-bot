@@ -26,13 +26,16 @@
 
 **บอท LINE:** `line-bot-core` (routing/ค้นหา/ราคา/วัย/คู่มือ/wismo/PDPA) · `line-product-cards` (การ์ด Flex) · `line-user-memory` (จำไว้/prefs/tone) · `line-campaigns-quota` (แจ้งราคาลง/re-engage/daily-report/quota)
 
-**AI:** `llm-providers` (multi-key failover) · `ai-content-generation` (สคริปต์/วิเคราะห์/template + สัญญา hashtags) · `demand-radar` (radar V1 + guards) · `facebook-page-automation` (post_feed/Messenger/RSS/local caption) · `web-search` (Tavily+Firecrawl circuit breaker)
+**AI & Video:** `llm-providers` (multi-key failover) · `ai-content-generation` (สคริปต์/วิเคราะห์/template + สัญญา hashtags) · `demand-radar` (radar V1 + guards) · `facebook-page-automation` (post_feed/Messenger/RSS/local caption) · `web-search` (Tavily+Firecrawl circuit breaker)
+
+**Commercial & Video Reels:** `reels_uploader/auto_product_reels.py` (ผลิตคลิป 9:16 Full HD + เสียงพากย์ไทย TTS `edge-tts` อัตโนมัติ) · `reels_uploader/uploader.py` (3-step Meta Reels API upload + Safe Pacing + title truncate ≤80 chars) · `tools/system_runner.py` (Unified multi-threaded watchdog orchestrator) · `start_system.bat` (1-Click Windows Turnkey Launcher) · `USER_MANUAL.md` (คู่มือส่งมอบลูกค้า)
 
 **API/Admin:** `products-and-links` (สินค้า API + link policy) · `admin-dashboard` (/admin + cookie) · `cron-jobs` (ทุก cron + CRON_TOKEN)
 
 **Dev tools:** `product-pipeline` (import-csv/analyze) · `mcp-servers` (pkh_mcp + shopee MCP) · `hermes-ai` (สมองกลเรียนรู้ตลาด) · `content-backfill` (เติมคอนเทนต์ template) · `generate-ai-content` (เติมคอนเทนต์ Groq) · `promo-caption-rotation` (แคปชันอัตโนมัติ+หมุนภาพโปสเตอร์)
 
 **Deploy/Shopee:** `render-supabase-deploy` (ขึ้น production) · `shopee-affiliate` (ลิงก์ผ่านโทรศัพท์) · `facebook-app-config` (ตั้งค่า Meta App)
+
 
 ## Deployment (Render + Supabase)
 
