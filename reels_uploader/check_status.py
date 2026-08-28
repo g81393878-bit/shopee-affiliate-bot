@@ -18,11 +18,11 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
         pass
 
 print("====================================================")
-print("          ตรวจสอบสถานะระบบ Reels Uploader")
+print("       📊 ตรวจสอบสถานะและตัวนับเวลาระบบ Facebook Reels")
 print("====================================================")
 
 # 1. ยอดการโพสต์วันนี้
-max_limit = 10
+max_limit = 50
 today_count = 0
 if DAILY_COUNT_FILE.exists():
     try:
@@ -32,32 +32,45 @@ if DAILY_COUNT_FILE.exists():
             today_count = int(count_str)
     except Exception:
         pass
-print(f"📊 โควต้าการโพสต์วันนี้: โพสต์แล้ว {today_count} / {max_limit} คลิป")
+print(f"📈 โควต้าการโพสต์วันนี้: โพสต์แล้ว {today_count} / {max_limit} คลิป")
 
-# 2. เวลาโพสต์ล่าสุด
+# 2. เวลาโพสต์ล่าสุด & ตัวนับถอยหลัง
+spacing_sec = 600  # 10 นาที
 if LAST_POST_FILE.exists():
     try:
         last_ts = float(LAST_POST_FILE.read_text(encoding="utf-8").strip())
-        last_time = datetime.fromtimestamp(last_ts).strftime("%Y-%m-%d %H:%M:%S")
-        print(f"🕒 โพสต์คลิปล่าสุดเมื่อ: {last_time}")
+        last_time = datetime.fromtimestamp(last_ts).strftime("%H:%M:%S")
+        elapsed = time.time() - last_ts
+        remaining = max(0, spacing_sec - elapsed)
+        
+        print(f"🕒 โพสต์คลิปล่าสุดเมื่อ: {last_time} (ผ่านไปแล้ว {int(elapsed // 60)} นาที {int(elapsed % 60)} วิ)")
+        if remaining > 0:
+            rem_m = int(remaining // 60)
+            rem_s = int(remaining % 60)
+            next_eta = datetime.fromtimestamp(time.time() + remaining).strftime("%H:%M:%S")
+            print(f"⏳ ตัวนับถอยหลังคลิปถัดไป: อีก {rem_m} นาที {rem_s} วินาที (ประมาณเวลา {next_eta} น.)")
+        else:
+            print("🚀 สถานะ: ครบเวลาแล้ว กำลังเริ่มโพสต์คลิปถัดไปอัตโนมัติ!")
     except Exception:
         print("🕒 โพสต์คลิปล่าสุดเมื่อ: (ไม่พบข้อมูล)")
 else:
     print("🕒 โพสต์คลิปล่าสุดเมื่อ: (ยังไม่มีประวัติการโพสต์)")
 
-# 3. ลำดับคิวรอโพสต์ (Pending)
+# 3. ลำดับคิวรอโพสต์ (Pending Buffer)
 pending_clips = sorted(p for p in PENDING_DIR.glob("*.mp4") if p.is_file())
-print(f"\n📥 คิวรอโพสต์ใน pending_videos/ (ทั้งหมด {len(pending_clips)} คลิป):")
+print(f"\n📦 คลิปที่ผลิตรอไว้ในคลัง (พร้อมโพสต์ทันที {len(pending_clips)} คลิป):")
 if pending_clips:
     for idx, clip in enumerate(pending_clips, 1):
-        status = " (คลิปถัดไปที่จะโพสต์ 🚀)" if idx == 1 else ""
-        print(f"  {idx}. {clip.name}{status}")
+        status = " 🚀 [คิวต่อไปที่จะโพสต์]" if idx == 1 else " ⏳ [คิวสำรอง]"
+        print(f"  {idx}. {clip.name[:55]}...{status}")
 else:
-    print("  ❌ ไม่มีคลิปค้างในคิวรอโพสต์ (ระบบจะรีไซเคิลคลิปเก่ามาโพสต์อัตโนมัติหากไม่มีคลิปใหม่)")
+    print("  ⚠️ กำลังผลิตคลิปใหม่เข้าคลัง...")
 
 # 4. ประวัติโพสต์เสร็จแล้ว (Posted)
 posted_clips = sorted(p for p in POSTED_DIR.glob("*.mp4") if p.is_file())
-print(f"\n📤 ประวัติคลิปที่โพสต์ไปแล้วใน posted/ (ทั้งหมด {len(posted_clips)} คลิป):")
+print(f"\n📤 คลิปที่โพสต์สำเร็จแล้วสะสมในระบบ: {len(posted_clips)} คลิป")
+print("====================================================")
+
 if posted_clips:
     # โชว์ล่าสุด 5 คลิป
     show_clips = posted_clips[-5:]
