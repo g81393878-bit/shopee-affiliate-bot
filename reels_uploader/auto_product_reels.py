@@ -70,8 +70,15 @@ FONT_DIR = Path("C:/Windows/Fonts")
 FONT_BOLD = FONT_DIR / "leelawdb.ttf" if (FONT_DIR / "leelawdb.ttf").exists() else FONT_DIR / "tahomabd.ttf"
 FONT_REG = FONT_DIR / "leelawad.ttf" if (FONT_DIR / "leelawad.ttf").exists() else FONT_DIR / "tahoma.ttf"
 
-# เสียงพากย์ป้าเข็ม (Microsoft Edge TTS เสียงภาษาไทยผู้หญิง เป็นธรรมชาติมาก)
-VOICE_NAME = "th-TH-PremwadeeNeural"
+def _hex_to_rgb(hex_str: str, default: tuple = (238, 77, 45)) -> tuple:
+    """แปลงสี Hex เป็น RGB Tuple"""
+    hex_clean = (hex_str or "").strip().lstrip("#")
+    if len(hex_clean) == 6:
+        try:
+            return tuple(int(hex_clean[i:i+2], 16) for i in (0, 2, 4))
+        except Exception:
+            pass
+    return default
 
 
 def get_font(font_path: Path, size: int):
@@ -107,7 +114,8 @@ def download_image(url: str) -> Optional[Image.Image]:
 
 
 def build_voice_script(product_name: str, price: float, category: str) -> str:
-    """สร้างสคริปต์คำพูดภาษาไทยสำหรับเสียงพากย์ป้าเข็ม"""
+    """สร้างสคริปต์คำพูดภาษาไทยสำหรับเสียงพากย์ TTS ตามแบรนด์"""
+    bot_name = os.getenv("BOT_NAME", "ป้าเข็ม")
     # ตัดชื่อสินค้าให้สั้นกระชับสำหรับพูด
     short_name = product_name
     for sep in ["-", "|", "/", ","]:
@@ -119,7 +127,7 @@ def build_voice_script(product_name: str, price: float, category: str) -> str:
     price_text = f"ราคาพิเศษเพียง {price_int:,} บาท" if price_int > 0 else "ราคาพิเศษสุดคุ้ม"
 
     script = (
-        f"สวัสดีจ้า ป้าเข็มมีของดีมาแนะนำ {short_name} "
+        f"สวัสดีจ้า {bot_name} มีของดีมาแนะนำ {short_name} "
         f"{price_text} ของแท้ คุณภาพดี รีวิวแน่น "
         f"สนใจกดสั่งซื้อที่ลิงก์ในแคปชั่นได้เลยนะลูก"
     )
@@ -127,7 +135,8 @@ def build_voice_script(product_name: str, price: float, category: str) -> str:
 
 
 async def _tts_save(text: str, output_path: str):
-    communicate = edge_tts.Communicate(text, VOICE_NAME, rate="+5%")
+    voice = os.getenv("TTS_VOICE", "th-TH-PremwadeeNeural")
+    communicate = edge_tts.Communicate(text, voice, rate="+5%")
     await communicate.save(output_path)
 
 
@@ -142,8 +151,12 @@ def generate_tts_audio(text: str, output_path: Path) -> bool:
 
 
 def create_product_poster(product_name: str, price: float, rating: float, sales_count: int, img: Image.Image) -> Image.Image:
-    """สร้างภาพโปสเตอร์แนวตั้ง 1080x1920 (9:16 Full HD) พร้อมตกแต่งสวยงาม"""
+    """สร้างภาพโปสเตอร์แนวตั้ง 1080x1920 (9:16 Full HD) พร้อมตกแต่งสวยงามตามสีแบรนด์"""
     W, H = 1080, 1920
+    bot_name = os.getenv("BOT_NAME", "ป้าเข็ม ขายของ")
+    slogan = os.getenv("BRAND_SLOGAN", "แท้ 100% • รีวิวแน่น • คุ้มค่าเงินทุกบาท")
+    brand_color = _hex_to_rgb(os.getenv("BRAND_COLOR", "#EE4D2D"))
+
     canvas = Image.new("RGBA", (W, H), (18, 20, 24, 255))
 
     # 1. ทำพื้นหลังแบบเบลอ (Blurred Background)
@@ -162,14 +175,14 @@ def create_product_poster(product_name: str, price: float, rating: float, sales_
 
     draw = ImageDraw.Draw(canvas)
 
-    # 2. แถบ Header ด้านบน (ป้าเข็ม ขายของ)
+    # 2. แถบ Header ด้านบน
     header_box = Image.new("RGBA", (W, 200), (0, 0, 0, 160))
     canvas.paste(header_box, (0, 0), header_box)
     
     f_header = get_font(FONT_BOLD, 48)
     f_sub = get_font(FONT_REG, 30)
-    draw.text((W // 2, 70), "🛍️ ป้าเข็ม คัดของดี ของเด็ด Shopee", font=f_header, fill=(255, 215, 0), anchor="mm")
-    draw.text((W // 2, 135), "แท้ 100% • รีวิวแน่น • คุ้มค่าเงินทุกบาท", font=f_sub, fill=(240, 240, 240), anchor="mm")
+    draw.text((W // 2, 70), f"🛍️ {bot_name} คัดของดี ของเด็ด", font=f_header, fill=(255, 215, 0), anchor="mm")
+    draw.text((W // 2, 135), slogan, font=f_sub, fill=(240, 240, 240), anchor="mm")
 
     # 3. กรอบรูปสินค้าตรงกลาง (พร้อมเงาและขอบทอง)
     target_img_size = 780
@@ -190,12 +203,12 @@ def create_product_poster(product_name: str, price: float, rating: float, sales_
     info_top = 1120
     info_box = Image.new("RGBA", (W - 120, 520), (255, 255, 255, 250))
     draw_info = ImageDraw.Draw(info_box)
-    draw_info.rounded_rectangle([0, 0, W - 120, 520], radius=32, fill=(255, 255, 255), outline=(238, 77, 45), width=4)
+    draw_info.rounded_rectangle([0, 0, W - 120, 520], radius=32, fill=(255, 255, 255), outline=brand_color, width=4)
 
-    # ป้ายราคาเด่นๆ (สีส้ม Shopee #EE4D2D)
+    # ป้ายราคาเด่นๆ (ตามสีแบรนด์)
     f_price_badge = get_font(FONT_BOLD, 64)
     price_str = f"฿{price:,.0f}" if price else "ราคาพิเศษ"
-    draw_info.text((50, 70), price_str, font=f_price_badge, fill=(238, 77, 45), anchor="lm")
+    draw_info.text((50, 70), price_str, font=f_price_badge, fill=brand_color, anchor="lm")
     
     # ป้ายยอดขาย / ดาว
     f_stat = get_font(FONT_BOLD, 32)
@@ -225,7 +238,7 @@ def create_product_poster(product_name: str, price: float, rating: float, sales_
 
     # 5. ปุ่ม CTA ด้านล่างของการ์ด
     cta_rect = [40, 390, W - 160, 480]
-    draw_info.rounded_rectangle(cta_rect, radius=20, fill=(238, 77, 45))
+    draw_info.rounded_rectangle(cta_rect, radius=20, fill=brand_color)
     f_cta = get_font(FONT_BOLD, 36)
     draw_info.text(((W - 120) // 2, 435), "👉 ดูรายละเอียด / สั่งซื้อ ที่ลิงก์ในแคปชั่น", font=f_cta, fill=(255, 255, 255), anchor="mm")
 
@@ -233,9 +246,10 @@ def create_product_poster(product_name: str, price: float, rating: float, sales_
 
     # 6. ท้ายคลิป (Footer)
     f_foot = get_font(FONT_REG, 28)
-    draw.text((W // 2, 1780), "สงสัยของแท้ไหม? ทักปรึกษาป้าเข็มได้ที่ LINE: @137gsref", font=f_foot, fill=(200, 200, 200), anchor="mm")
+    draw.text((W // 2, 1780), f"สนใจสอบถามข้อมูลสินค้า ทักแชท {bot_name} ได้ตลอด 24 ชม.", font=f_foot, fill=(200, 200, 200), anchor="mm")
 
     return canvas.convert("RGB")
+
 
 
 def _ffmpeg_exe() -> str:

@@ -57,4 +57,15 @@ class Settings:
     SUPABASE_PUBLISHABLE_KEY: str = os.getenv("SUPABASE_PUBLISHABLE_KEY", "")
     SUPABASE_SECRET_KEY: str = os.getenv("SUPABASE_SECRET_KEY", "")
 
+    # =========================================================================
+    # White-Label & Commercial Branding (ปรับแต่งแบรนด์สำหรับขายต่อ)
+    # =========================================================================
+    BOT_NAME: str = os.getenv("BOT_NAME", "ป้าเข็ม ขายของ")
+    BRAND_SLOGAN: str = os.getenv("BRAND_SLOGAN", "คัดของดี ของเด็ด Shopee แท้ 100% • รีวิวแน่น")
+    TTS_VOICE: str = os.getenv("TTS_VOICE", "th-TH-PremwadeeNeural")  # th-TH-PremwadeeNeural (หญิง) / th-TH-NiwatNeural (ชาย)
+    BRAND_COLOR: str = os.getenv("BRAND_COLOR", "#EE4D2D")  # โทนสีแบรนด์ (Default: สีส้ม Shopee)
+    ADMIN_LINE_USER_ID: str = os.getenv("ADMIN_LINE_USER_ID", "")
+    ADMIN_DASHBOARD_PASSWORD: str = os.getenv("ADMIN_DASHBOARD_PASSWORD", "")
+
 settings = Settings()
+
