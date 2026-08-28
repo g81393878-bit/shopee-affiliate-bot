@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""reels_uploader/auto_product_reels.py — สร้างคลิปวิดีโอ Reels 9:16 จากภาพสินค้าในคลังอัตโนมัติ
+"""reels_uploader/auto_product_reels.py — สร้างคลิปวิดีโอ Reels 9:16 จากภาพสินค้าพร้อมเสียงพากย์ภาษาไทย (TTS) อัตโนมัติ
 
 1. ดึงข้อมูลสินค้า (รูปภาพ, ชื่อ, ราคา, ลิงก์ affiliate) จากฐานข้อมูล (Supabase)
-2. สร้างภาพโปสเตอร์ 1080x1920 (9:16) ด้วย Pillow (ดีไซน์สวยงาม มีพื้นหลังเบลอ, ป้ายราคา, ดาวรีวิว)
-3. แปลงภาพนิ่งเป็นคลิปวิดีโอ 6 วินาทีด้วย ffmpeg (ใส่เอฟเฟกต์ซูมช้าๆ zoompan)
-4. บันทึกไฟล์ลง pending_videos/ พร้อมอัปเดต products.json อัตโนมัติ
+2. สร้างเสียงพากย์ภาษาไทย (Thai TTS) ด้วย edge-tts เสียงป้าเข็ม (th-TH-PremwadeeNeural)
+3. สร้างภาพโปสเตอร์ 1080x1920 (9:16) ด้วย Pillow (ดีไซน์สวยงาม มีพื้นหลังเบลอ, ป้ายราคา, ดาวรีวิว)
+4. รวมภาพและเสียงเป็นคลิปวิดีโอ Reels ด้วย ffmpeg (ใส่เอฟเฟกต์ซูมช้าๆ zoompan)
+5. บันทึกไฟล์ลง pending_videos/ พร้อมอัปเดต products.json อัตโนมัติ
 """
+import asyncio
 import io
 import json
 import logging
@@ -27,7 +29,7 @@ if hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
-
+import edge_tts
 import requests
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
@@ -58,7 +60,6 @@ from app.db import SessionLocal
 from app import models
 from app.services.product_image import fetch_product_image
 
-
 logger = logging.getLogger(__name__)
 
 PENDING_DIR = ROOT_DIR / "pending_videos"
@@ -68,6 +69,10 @@ PRODUCTS_JSON = ROOT_DIR / "products.json"
 FONT_DIR = Path("C:/Windows/Fonts")
 FONT_BOLD = FONT_DIR / "leelawdb.ttf" if (FONT_DIR / "leelawdb.ttf").exists() else FONT_DIR / "tahomabd.ttf"
 FONT_REG = FONT_DIR / "leelawad.ttf" if (FONT_DIR / "leelawad.ttf").exists() else FONT_DIR / "tahoma.ttf"
+
+# เสียงพากย์ป้าเข็ม (Microsoft Edge TTS เสียงภาษาไทยผู้หญิง เป็นธรรมชาติมาก)
+VOICE_NAME = "th-TH-PremwadeeNeural"
+
 
 def get_font(font_path: Path, size: int):
     try:
@@ -101,6 +106,41 @@ def download_image(url: str) -> Optional[Image.Image]:
     return None
 
 
+def build_voice_script(product_name: str, price: float, category: str) -> str:
+    """สร้างสคริปต์คำพูดภาษาไทยสำหรับเสียงพากย์ป้าเข็ม"""
+    # ตัดชื่อสินค้าให้สั้นกระชับสำหรับพูด
+    short_name = product_name
+    for sep in ["-", "|", "/", ","]:
+        if sep in short_name:
+            short_name = short_name.split(sep)[0]
+    short_name = short_name.strip()[:40]
+
+    price_int = int(price) if price else 0
+    price_text = f"ราคาพิเศษเพียง {price_int:,} บาท" if price_int > 0 else "ราคาพิเศษสุดคุ้ม"
+
+    script = (
+        f"สวัสดีจ้า ป้าเข็มมีของดีมาแนะนำ {short_name} "
+        f"{price_text} ของแท้ คุณภาพดี รีวิวแน่น "
+        f"สนใจกดสั่งซื้อที่ลิงก์ในแคปชั่นได้เลยนะลูก"
+    )
+    return script
+
+
+async def _tts_save(text: str, output_path: str):
+    communicate = edge_tts.Communicate(text, VOICE_NAME, rate="+5%")
+    await communicate.save(output_path)
+
+
+def generate_tts_audio(text: str, output_path: Path) -> bool:
+    """สร้างไฟล์เสียง MP3 ภาษาไทยด้วย Edge TTS"""
+    try:
+        asyncio.run(_tts_save(text, str(output_path)))
+        return output_path.exists() and output_path.stat().st_size > 1000
+    except Exception as e:
+        logger.warning(f"สร้างเสียงพากย์ TTS ล้ม: {e}")
+        return False
+
+
 def create_product_poster(product_name: str, price: float, rating: float, sales_count: int, img: Image.Image) -> Image.Image:
     """สร้างภาพโปสเตอร์แนวตั้ง 1080x1920 (9:16 Full HD) พร้อมตกแต่งสวยงาม"""
     W, H = 1080, 1920
@@ -131,7 +171,7 @@ def create_product_poster(product_name: str, price: float, rating: float, sales_
     draw.text((W // 2, 70), "🛍️ ป้าเข็ม คัดของดี ของเด็ด Shopee", font=f_header, fill=(255, 215, 0), anchor="mm")
     draw.text((W // 2, 135), "แท้ 100% • รีวิวแน่น • คุ้มค่าเงินทุกบาท", font=f_sub, fill=(240, 240, 240), anchor="mm")
 
-    # 3. กรอบรูปสินค้าตรงกลาง (พร้อมเงาและขอบขาว)
+    # 3. กรอบรูปสินค้าตรงกลาง (พร้อมเงาและขอบทอง)
     target_img_size = 780
     img_ratio = min(target_img_size / img.width, target_img_size / img.height)
     prod_w = int(img.width * img_ratio)
@@ -141,7 +181,6 @@ def create_product_poster(product_name: str, price: float, rating: float, sales_
     box_x = (W - prod_w) // 2
     box_y = 260 + (target_img_size - prod_h) // 2
 
-    # วาดกรอบการ์ดสีขาวรองหลัง
     card_padding = 24
     card_box = [box_x - card_padding, box_y - card_padding, box_x + prod_w + card_padding, box_y + prod_h + card_padding]
     draw.rounded_rectangle(card_box, radius=32, fill=(255, 255, 255, 245), outline=(255, 215, 0, 200), width=4)
@@ -177,7 +216,7 @@ def create_product_poster(product_name: str, price: float, rating: float, sales_
         curr += word
     if curr:
         title_lines.append(curr)
-    title_lines = title_lines[:3]  # สูงสุด 3 บรรทัด
+    title_lines = title_lines[:3]
 
     title_y = 175
     for l in title_lines:
@@ -208,8 +247,8 @@ def _ffmpeg_exe() -> str:
         return shutil.which("ffmpeg") or "ffmpeg"
 
 
-def poster_to_video(poster_path: Path, output_video_path: Path, duration: int = 6) -> bool:
-    """แปลงภาพนิ่ง poster เป็นวิดีโอ 9:16 พร้อมเอฟเฟกต์ซูมช้าๆ (Ken Burns effect)"""
+def poster_to_video(poster_path: Path, output_video_path: Path, audio_path: Optional[Path] = None, duration: int = 7) -> bool:
+    """แปลงภาพนิ่ง poster และเสียงพากย์ TTS เป็นวิดีโอ 9:16 พร้อมเอฟเฟกต์ซูมช้าๆ"""
     ffmpeg_exe = _ffmpeg_exe()
     
     # filter ซูมเข้าอย่างนุ่มนวล (1.0 -> 1.06) ที่ 30fps
@@ -218,16 +257,35 @@ def poster_to_video(poster_path: Path, output_video_path: Path, duration: int = 
     cmd = [
         ffmpeg_exe, "-y",
         "-loop", "1",
-        "-i", str(poster_path),
-        "-vf", filter_complex,
-        "-t", str(duration),
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "22",
-        "-pix_fmt", "yuv420p",
-        "-movflags", "+faststart",
-        str(output_video_path)
+        "-i", str(poster_path)
     ]
+
+    if audio_path and audio_path.exists():
+        cmd.extend([
+            "-i", str(audio_path),
+            "-vf", filter_complex,
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "22",
+            "-c:a", "aac",
+            "-b:a", "128k",
+            "-shortest",
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            str(output_video_path)
+        ])
+    else:
+        cmd.extend([
+            "-vf", filter_complex,
+            "-t", str(duration),
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "22",
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            str(output_video_path)
+        ])
+
     try:
         subprocess.run(cmd, check=True, capture_output=True, timeout=60)
         return output_video_path.exists() and output_video_path.stat().st_size > 1000
@@ -236,16 +294,14 @@ def poster_to_video(poster_path: Path, output_video_path: Path, duration: int = 
         return False
 
 
-
 def generate_product_reels(limit: int = 3) -> List[dict]:
-    """ดึงสินค้าจากฐานข้อมูลมาสร้างเป็นคลิปวิดีโอ Reels อัตโนมัติ"""
+    """ดึงสินค้าจากฐานข้อมูลมาสร้างเป็นคลิปวิดีโอ Reels พร้อมเสียงพากย์ TTS อัตโนมัติ"""
     PENDING_DIR.mkdir(parents=True, exist_ok=True)
     POSTED_DIR.mkdir(parents=True, exist_ok=True)
 
     db = SessionLocal()
     generated = []
     try:
-        # อ่าน products.json เดิม
         products_meta = {}
         if PRODUCTS_JSON.exists():
             try:
@@ -253,7 +309,6 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
             except Exception:
                 products_meta = {}
 
-        # ดึงสินค้าที่สถานะ link_status = 'ok' และมียอดขายดี
         prods = (db.query(models.Product)
                    .filter(models.Product.link_status == "ok",
                            models.Product.sales_count >= 100)
@@ -269,13 +324,12 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
             target_path = PENDING_DIR / filename
             posted_path = POSTED_DIR / filename
 
-            # ถ้าเคยสร้างหรือโพสต์ไปแล้ว ให้ข้าม
             if target_path.exists() or posted_path.exists():
                 continue
 
-            print(f"🎨 กำลังสร้างคลิป Reels ให้สินค้า: {p.name[:40]}...")
+            print(f"\n🎨 กำลังสร้างคลิป Reels พร้อมเสียงพากย์ไทย: {p.name[:40]}...")
             
-            # ดึงรูปภาพสินค้า
+            # 1. ดึงรูปภาพสินค้า
             img_url = p.image_url
             if not img_url:
                 img_url = fetch_product_image(p.affiliate_url or "")
@@ -290,7 +344,16 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
             if not pil_img:
                 continue
 
-            # สร้างภาพโปสเตอร์
+            # 2. สร้างเสียงพากย์ภาษาไทย (TTS)
+            voice_script = build_voice_script(p.name, float(p.price or 0), p.category or "")
+            print(f"🎙️ เสียงพากย์: \"{voice_script}\"")
+            
+            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_audio:
+                tmp_audio_path = Path(tmp_audio.name)
+            
+            tts_ok = generate_tts_audio(voice_script, tmp_audio_path)
+
+            # 3. สร้างภาพโปสเตอร์ 9:16
             poster = create_product_poster(
                 product_name=p.name,
                 price=float(p.price or 0),
@@ -304,9 +367,9 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
                 tmp_poster_path = Path(tmp_poster.name)
 
             try:
-                # แปลงเป็นวิดีโอ 6 วินาที
-                if poster_to_video(tmp_poster_path, target_path, duration=6):
-                    # บันทึกข้อมูลลง products.json
+                # 4. รวมภาพและเสียงเป็นวิดีโอ Reels
+                audio_file = tmp_audio_path if tts_ok else None
+                if poster_to_video(tmp_poster_path, target_path, audio_path=audio_file, duration=7):
                     products_meta[filename] = {
                         "product_name": p.name,
                         "price": str(int(p.price or 0)),
@@ -314,11 +377,11 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
                         "affiliate_link": p.affiliate_url or ""
                     }
                     generated.append({"id": p.id, "name": p.name, "file": filename})
-                    print(f"✅ สร้างคลิปวิดีโอสำเร็จ -> {filename}")
+                    print(f"✅ สร้างคลิปวิดีโอพร้อมเสียงสำเร็จ -> {filename}")
             finally:
                 tmp_poster_path.unlink(missing_ok=True)
+                tmp_audio_path.unlink(missing_ok=True)
 
-        # บันทึก products.json
         if generated:
             PRODUCTS_JSON.write_text(json.dumps(products_meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -329,9 +392,9 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
 
 
 if __name__ == "__main__":
-    count = 3
+    count = 2
     if len(sys.argv) > 1 and sys.argv[1].isdigit():
         count = int(sys.argv[1])
-    print(f"🚀 เริ่มต้นสร้างคลิปสินค้าอัตโนมัติ {count} คลิป...")
+    print(f"🚀 เริ่มต้นสร้างคลิปสินค้าพร้อมเสียงพากย์ไทยอัตโนมัติ {count} คลิป...")
     res = generate_product_reels(count)
-    print(f"🎉 สร้างสำเร็จทั้งหมด {len(res)} คลิป พร้อมสำหรับอัปโหลดลง Reels!")
+    print(f"\n🎉 สร้างสำเร็จทั้งหมด {len(res)} คลิป พร้อมสำหรับอัปโหลดลง Reels!")
