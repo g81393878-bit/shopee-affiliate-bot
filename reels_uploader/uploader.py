@@ -485,14 +485,14 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
 
 
     spacing = _env_float("POSTING_SPACING_HOURS", DEFAULT_SPACING_HOURS)
-    max_per_day = int(_env_float("MAX_REELS_PER_DAY", DEFAULT_MAX_PER_DAY))
+    if not force:
+        if not pacing_ok(spacing):
+            log(f"ยังไม่ถึงเวลา (spacing {spacing} ชม.) — ข้าม ไม่โพสต์")
+            return 0
+        if not daily_ok(max_per_day):
+            log(f"ครบลิมิต {max_per_day} โพสต์/วัน แล้ว — ข้าม ไม่โพสต์")
+            return 0
 
-    if not force and not pacing_ok(spacing):
-        log(f"ยังไม่ถึงเวลา (spacing {spacing} ชม.) — ข้าม ไม่โพสต์")
-        return 0
-    if not daily_ok(max_per_day):
-        log(f"ครบลิมิต {max_per_day} โพสต์/วัน แล้ว — ข้าม ไม่โพสต์")
-        return 0
 
     item = pending[0]
     product = load_products().get(item.name, {})

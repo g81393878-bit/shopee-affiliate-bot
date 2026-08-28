@@ -171,24 +171,10 @@ async def _tts_save(text: str, output_path: str, voice: str = "th-TH-PremwadeeNe
 
 
 def generate_tts_audio(text: str, output_path: Path) -> bool:
-    """สร้างไฟล์เสียงพากย์ผู้หญิง (ป้าเข็ม) ภาษาไทย 100% ด้วย Edge TTS / gTTS"""
+    """สร้างไฟล์เสียงพากย์ผู้หญิง (ป้าเข็ม) ภาษาไทย ให้เสียงเป็นโทนเดียวกัน 100% ทุกคลิป ไม่เปลี่ยนเสียงไปมา"""
     clean_text = clean_for_tts(text)
     
-    # 1. ลองใช้เสียงผู้หญิง Premwadee Neural (Microsoft)
-    try:
-        raw_edge = output_path.with_suffix(".edge.mp3")
-        asyncio.run(_tts_save(clean_text, str(raw_edge), voice="th-TH-PremwadeeNeural"))
-        if raw_edge.exists() and raw_edge.stat().st_size > 500:
-            ffmpeg_exe = _ffmpeg_exe()
-            cmd = [ffmpeg_exe, "-y", "-i", str(raw_edge), "-filter:a", "atempo=1.22,volume=1.2", str(output_path)]
-            subprocess.run(cmd, check=True, capture_output=True)
-            raw_edge.unlink(missing_ok=True)
-            if output_path.exists() and output_path.stat().st_size > 500:
-                return True
-    except Exception as e:
-        logger.warning(f"Premwadee Neural TTS ไม่พร้อมใช้งาน: {e}")
-
-    # 2. Fallback สำรองด้วย Google Thai Female Voice (gTTS) ปรับสปีด 1.30x กระฉับกระเฉงสไตล์ Reels
+    # 1. ใช้ Google Thai Female Voice เป็นโมเดลเสียงหลักประจำตัวป้าเข็ม (คงเส้นคงวา 100% ทุกคลิป)
     try:
         from gtts import gTTS
         raw_tmp = output_path.with_suffix(".raw.mp3")
@@ -196,18 +182,26 @@ def generate_tts_audio(text: str, output_path: Path) -> bool:
         tts.save(str(raw_tmp))
         
         ffmpeg_exe = _ffmpeg_exe()
-        cmd = [ffmpeg_exe, "-y", "-i", str(raw_tmp), "-filter:a", "atempo=1.30,volume=1.3", str(output_path)]
+        # ปรับความเร็ว 1.28x และความดัง 1.3x ให้กระฉับกระเฉง สดใส เสียงเดียวกันเป๊ะทุกคลิป
+        cmd = [ffmpeg_exe, "-y", "-i", str(raw_tmp), "-filter:a", "atempo=1.28,volume=1.3", str(output_path)]
         subprocess.run(cmd, check=True, capture_output=True)
         raw_tmp.unlink(missing_ok=True)
         
         if output_path.exists() and output_path.stat().st_size > 500:
-            logger.info("สร้างเสียงพากย์ผู้หญิงด้วย Google TTS (1.3x) สำเร็จ")
             return True
     except Exception as e:
-        logger.error(f"สร้างเสียงพากย์ Google TTS ล้ม: {e}")
+        logger.warning(f"สร้างเสียงพากย์หลักล้ม: {e}")
 
+    # 2. สำรองกรณีฉุกเฉินด้วย Edge TTS
+    try:
+        asyncio.run(_tts_save(clean_text, str(output_path), voice="th-TH-PremwadeeNeural"))
+        if output_path.exists() and output_path.stat().st_size > 500:
+            return True
+    except Exception:
+        pass
 
     return False
+
 
 
 
