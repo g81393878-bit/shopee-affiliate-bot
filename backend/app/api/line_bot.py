@@ -2075,15 +2075,17 @@ def log_chat(db, line_user_id: str, text: str, intent: str, reply, category: Opt
     })
 
 
-ADMIN_STATS_CMDS = ("แอดมิน สถิติ", "สถิติลูกค้า", "รายงานลูกค้า", "แอดมินรายงาน")
+ADMIN_STATS_CMDS = ("แอดมิน สถิติ", "สถิติลูกค้า", "รายงานลูกค้า", "แอดมินรายงาน", "รายงาน", "สถิติ", "สรุปยอด", "สรุปรายงาน", "ดูสถิติ", "ดูรายงาน", "report")
 
 
 def admin_customer_stats(db) -> str:
-    """สรุปความสนใจลูกค้าจาก chat_logs — ต่อยอดการตลาด/เลือกสินค้า/ตอบปัญหา"""
+    """สรุปภาพรวมระบบและสถิติลูกค้า — สรุปส่งให้แอดมินทาง LINE ทันที"""
     total = db.query(models.ChatLog).count()
     searchers = (db.query(models.ChatLog.line_user_id)
                    .filter(models.ChatLog.intent == "search").distinct().count())
     wismo = db.query(models.ChatLog).filter(models.ChatLog.intent == "wismo").count()
+    prod_total = db.query(models.Product).count()
+    prod_ok = db.query(models.Product).filter(models.Product.link_status == "ok").count()
 
     cat_rows = (db.query(models.ChatLog.category, func.count(models.ChatLog.id))
                   .filter(models.ChatLog.category.isnot(None))
@@ -2094,16 +2096,22 @@ def admin_customer_stats(db) -> str:
                  .group_by(models.ChatLog.message_text)
                  .order_by(func.count(models.ChatLog.id).desc()).limit(8).all())
 
-    lines = ['📊 สถิติลูกค้า (90 วัน)', f'• ข้อความรวม: {total} ครั้ง', f'• ลูกค้าที่ค้นสินค้า: {searchers} คน',
-             f'• ทวงถาม/ติดตามพัสดุ: {wismo} ครั้ง']
+    lines = [
+        '📊 สรุปรายงานภาพรวมระบบ (ป้าเข็ม)',
+        f'• สินค้าในคลังทั้งหมด: {prod_total:,} รายการ (ลิงก์พร้อมขาย {prod_ok:,} รายการ)',
+        f'• ข้อความแชทลูกค้า: {total:,} ครั้ง',
+        f'• ลูกค้าที่ค้นหาสินค้า: {searchers:,} คน',
+        f'• ติดตามพัสดุ: {wismo:,} ครั้ง'
+    ]
     if cat_rows:
-        lines.append('\n🔥 หมวดที่ลูกค้าสนใจ')
+        lines.append('\n🔥 หมวดที่ลูกค้าสนใจค้นหาบ่อย')
         lines += [f'• {c}: {n} ครั้ง' for c, n in cat_rows]
     if kw_rows:
         lines.append('\n🔍 คำค้นยอดนิยม')
         lines += [f'• {k[:40]}: {n} ครั้ง' for k, n in kw_rows]
-    lines.append('\n💡 นำไปใช้: เอาไปหาสินค้าหมวดที่ฮิต + เขียนคอนเทนต์ตามคำค้น')
+    lines.append('\n🌐 ดูแดชบอร์ดละเอียด: https://shopee-affiliate-bot-9e9n.onrender.com/admin')
     return '\n'.join(lines)
+
 
 
 def handle_top_sellers(db: Session, user: models.User, is_owner: bool = False) -> str:
