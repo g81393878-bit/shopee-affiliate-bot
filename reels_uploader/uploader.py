@@ -79,12 +79,7 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 IMAGE_VIDEO_DURATION = 5  # วินาที
 LAST_POST_FILE = ROOT / "last_post_time.txt"
 DAILY_COUNT_FILE = ROOT / "posts_today.txt"
-INTRO_STATE_FILE = ROOT / ".uploader_intro_state.json"
-NOTIFY_STATE_FILE = ROOT / ".reels_notify_state.json"  # throttle การแจ้งเตือน (persist ข้าม process)
 LOG_FILE = ROOT / "uploader_execution.log"
-
-DEFAULT_SPACING_HOURS = 3.0
-DEFAULT_MAX_PER_DAY = 30  # Reels API จำกัด 30 โพสต์/24 ชม.
 
 
 def log(msg: str) -> None:
@@ -103,6 +98,12 @@ def _env_float(key: str, default: float) -> float:
         return float(os.getenv(key) or default)
     except (TypeError, ValueError):
         return default
+
+
+DEFAULT_SPACING_HOURS = _env_float("POSTING_SPACING_HOURS", 0.1667)  # 10 นาที (0.1667 ชม.)
+DEFAULT_MAX_PER_DAY = 30  # Reels API จำกัด 30 โพสต์/24 ชม.
+
+
 
 
 def _ffmpeg_exe() -> str:

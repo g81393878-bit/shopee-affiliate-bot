@@ -62,14 +62,13 @@ def is_active_hours() -> bool:
 
 
 def run_reels_uploader_loop():
-    """เธรดหลักสำหรับผลิตคลิปและโพสต์ลง Facebook Reels"""
-    logger.info("🎬 เริ่มต้นระบบ Facebook Reels Auto-Producer & Uploader (ทุกๆ 1.5 - 2 ชั่วโมง)")
+    """เธรดหลักสำหรับผลิตคลิปและโพสต์ลง Facebook Reels (โหมดเร่งด่วน: ทุกๆ 10 นาที)"""
+    logger.info("🎬 เริ่มต้นระบบ Facebook Reels Auto-Producer & Uploader (รอบโพสต์ทุกๆ 10 นาที)")
     import uploader
     
     while True:
         try:
             if is_active_hours():
-                logger.info("🚀 ตรวจสอบคิวและโพสต์คลิป Facebook Reels...")
                 # รันโพสต์คลิปถัดไป (ถ้าไม่มีคลิป ระบบจะดึงรูปสินค้ามาผลิตคลิป+เสียงพากย์ TTS ให้อัตโนมัติ)
                 uploader.post_next(dry_run=False, force=False, normalize=True)
             else:
@@ -77,8 +76,9 @@ def run_reels_uploader_loop():
         except Exception as e:
             logger.error(f"❌ ระบบโพสต์ Reels เกิดข้อผิดพลาด: {e}")
         
-        # ตรวจสอบคิวทุกๆ 20 นาที (ระบบ uploader มีตัว pacing คุมรอบ 1.5 - 2 ชม.)
-        time.sleep(1200)
+        # ตรวจสอบคิวทุกๆ 60 วินาที (1 นาที)
+        time.sleep(60)
+
 
 
 def print_banner():
