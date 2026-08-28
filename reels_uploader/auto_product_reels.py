@@ -150,12 +150,10 @@ def build_voice_script(product_name: str, price: float, category: str) -> str:
     if not short_title:
         short_title = category if category else "สินค้าคุณภาพดี"
 
-    price_int = int(price) if price else 0
-    price_text = f"ราคาเริ่มต้นเพียง {price_int:,} บาท" if price_int > 0 else "ราคาพิเศษ"
-
-    # บทพูดสั้นกระชับ พูดประมาณ 4 วินาที จบครบถ้วน
-    script = f"สวัสดีจ้า {bot_name} แนะนำ {short_title} {price_text} สั่งซื้อที่ลิงก์ในแคปชั่นได้เลยนะลูก"
+    # บทพูดกระตุ้นความอยากรู้ ไม่พูดตัวเลขราคา เพื่อให้ลูกค้ากดเช็คราคาโปรโมชั่นในลิงก์
+    script = f"สวัสดีจ้า {bot_name} แนะนำ {short_title} ของแท้ คุณภาพดี มีโปรลดพิเศษ เช็คราคาและสั่งซื้อที่ลิงก์ในแคปชั่นได้เลยนะลูก"
     return script
+
 
 
 
@@ -289,8 +287,7 @@ def create_product_posters_multiphase(product_name: str, price: float, rating: f
     card_padding = 20
     card_box = [box_x - card_padding, box_y - card_padding, box_x + prod_w + card_padding, box_y + prod_h + card_padding]
 
-    # กำหนดข้อความ 3 จังหวะ (ระบุ 'เริ่มต้น' เพื่อความโปร่งใสตรงกับตัวเลือก Shopee)
-    price_str = f"เริ่มต้น ฿{price:,.0f}" if price else "ราคาพิเศษ"
+    # กำหนดข้อความ 3 จังหวะ (ไม่บอกตัวเลขราคา เพื่อกระตุ้นให้ลูกค้ากดเช็คโปรโมชั่นในลิงก์ Shopee)
     phases = [
         # Phase 1: Hook สะดุดตา
         {
@@ -299,16 +296,16 @@ def create_product_posters_multiphase(product_name: str, price: float, rating: f
             "top_text": "ของดีบอกต่อ • Shopee แท้ 100%!",
             "top_text_col": (0, 0, 0),
             "cta_bg": brand_color,
-            "cta_text": "กดดูรายละเอียด / สั่งซื้อ ที่ลิงก์ในแคปชั่น"
+            "cta_text": "กดดูโปรโมชั่น / สั่งซื้อ ที่ลิงก์ในแคปชั่น"
         },
-        # Phase 2: จุดเด่น & ราคาเริ่มต้น
+        # Phase 2: จุดเด่น & โปรโมชั่น
         {
             "top_bg": brand_color,
             "top_border": (255, 215, 0),
-            "top_text": f"ราคาเริ่มต้นเพียง {price_str} บาท (คะแนน {rating:.1f})",
+            "top_text": f"ของแท้ คุณภาพดี มีโปรลดพิเศษ (คะแนน {rating:.1f})",
             "top_text_col": (255, 255, 255),
             "cta_bg": brand_color,
-            "cta_text": "กดดูรายละเอียด / สั่งซื้อ ที่ลิงก์ในแคปชั่น"
+            "cta_text": "กดดูราคาโปรโมชั่น / สั่งซื้อ ที่ลิงก์ในแคปชั่น"
         },
         # Phase 3: ชวนกดซื้อทันที
         {
@@ -342,13 +339,14 @@ def create_product_posters_multiphase(product_name: str, price: float, rating: f
         draw_info = ImageDraw.Draw(info_box)
         draw_info.rounded_rectangle([0, 0, W - 120, 520], radius=32, fill=(255, 255, 255), outline=brand_color, width=4)
 
-        f_price_badge = get_font(FONT_BOLD, 64)
-        draw_info.text((50, 70), price_str, font=f_price_badge, fill=brand_color, anchor="lm")
+        f_badge = get_font(FONT_BOLD, 48)
+        draw_info.text((50, 70), "มีโปรลดพิเศษ", font=f_badge, fill=brand_color, anchor="lm")
         
         f_stat = get_font(FONT_BOLD, 32)
         stat_str = f"คะแนน {rating:.1f}  |  ขายแล้ว {sales_count:,} ชิ้น"
         draw_info.text((W - 170, 70), stat_str, font=f_stat, fill=(60, 60, 60), anchor="rm")
         draw_info.line([(40, 125), (W - 160, 125)], fill=(220, 220, 220), width=2)
+
 
         f_title = get_font(FONT_BOLD, 38)
         title_lines = wrap_thai_lines(clean_pname, max_chars_per_line=24, max_lines=3)
