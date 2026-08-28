@@ -151,11 +151,12 @@ def build_voice_script(product_name: str, price: float, category: str) -> str:
         short_title = category if category else "สินค้าคุณภาพดี"
 
     price_int = int(price) if price else 0
-    price_text = f"เพียง {price_int:,} บาท" if price_int > 0 else "ราคาพิเศษ"
+    price_text = f"ราคาเริ่มต้นเพียง {price_int:,} บาท" if price_int > 0 else "ราคาพิเศษ"
 
     # บทพูดสั้นกระชับ พูดประมาณ 4 วินาที จบครบถ้วน
     script = f"สวัสดีจ้า {bot_name} แนะนำ {short_title} {price_text} สั่งซื้อที่ลิงก์ในแคปชั่นได้เลยนะลูก"
     return script
+
 
 
 def clean_for_tts(text: str) -> str:
@@ -288,8 +289,8 @@ def create_product_posters_multiphase(product_name: str, price: float, rating: f
     card_padding = 20
     card_box = [box_x - card_padding, box_y - card_padding, box_x + prod_w + card_padding, box_y + prod_h + card_padding]
 
-    # กำหนดข้อความ 3 จังหวะ (ไม่ใช้อีโมจิที่เรนเดอร์เป็นตัวสี่เหลี่ยม)
-    price_str = f"฿{price:,.0f}" if price else "ราคาพิเศษ"
+    # กำหนดข้อความ 3 จังหวะ (ระบุ 'เริ่มต้น' เพื่อความโปร่งใสตรงกับตัวเลือก Shopee)
+    price_str = f"เริ่มต้น ฿{price:,.0f}" if price else "ราคาพิเศษ"
     phases = [
         # Phase 1: Hook สะดุดตา
         {
@@ -300,11 +301,11 @@ def create_product_posters_multiphase(product_name: str, price: float, rating: f
             "cta_bg": brand_color,
             "cta_text": "กดดูรายละเอียด / สั่งซื้อ ที่ลิงก์ในแคปชั่น"
         },
-        # Phase 2: จุดเด่น & ราคา
+        # Phase 2: จุดเด่น & ราคาเริ่มต้น
         {
             "top_bg": brand_color,
             "top_border": (255, 215, 0),
-            "top_text": f"ราคาพิเศษเพียง {price_str} บาท (คะแนน {rating:.1f})",
+            "top_text": f"ราคาเริ่มต้นเพียง {price_str} บาท (คะแนน {rating:.1f})",
             "top_text_col": (255, 255, 255),
             "cta_bg": brand_color,
             "cta_text": "กดดูรายละเอียด / สั่งซื้อ ที่ลิงก์ในแคปชั่น"
@@ -319,6 +320,7 @@ def create_product_posters_multiphase(product_name: str, price: float, rating: f
             "cta_text": "สั่งซื้อของแท้ กดลิงก์ในแคปชั่นเลยลูก!"
         }
     ]
+
 
     posters = []
     for ph in phases:

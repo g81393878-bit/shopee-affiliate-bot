@@ -412,10 +412,10 @@ def build_caption(product: dict) -> str:
     link = (product or {}).get("affiliate_link") or ""
     category = (product or {}).get("category") or ""
 
-    template = f"✨ {name}" + (f" — {price} บาท" if price else "") + "\n"
+    template = f"✨ {name}" + (f" — ราคาเริ่มต้นเพียง ฿{price}" if price else "") + "\n"
     if link:
-        template += f"🛒 {link}\n"
-    template += "\n#ของดีบอกต่อ #ป้าป้ายยา"
+        template += f"🛒 สั่งซื้อของแท้: {link}\n"
+    template += "\n#ของดีบอกต่อ #ป้าเข็มป้ายยา #Shopee"
 
     # ลอง AI (Groq) — พัง/ไม่มี key → template
     try:
@@ -425,11 +425,12 @@ def build_caption(product: dict) -> str:
             return template
         prompt = (
             "เขียนแคปชั่น Facebook Reels ภาษาไทยสั้น ๆ กระชับ มี emoji ป้ายยาสินค้า:\n"
-            f"- สินค้า: {name}\n- หมวด: {category}\n- ราคา: {price} บาท\n"
+            f"- สินค้า: {name}\n- หมวด: {category}\n- ราคาเริ่มต้น: ฿{price} บาท\n"
             f"- ลิงก์: {link or '(ไม่มี)'}\n\n"
-            "ตอบเฉพาะข้อความแคปชั่น ไม่มีคำอธิบาย ไม่มีเครื่องหมายคำพูดครอบ\n"
+            "ตอบเฉพาะข้อความแคปชั่น ระบุว่าเป็นราคาเริ่มต้น ให้กดเช็คโปรล่าสุดที่ลิงก์ ไม่มีคำอธิบาย ไม่มีเครื่องหมายคำพูดครอบ\n"
             "ห้ามแปะลิงก์ปลอม — ใช้ลิงก์ที่ให้เท่านั้น"
         )
+
 
         def _gen():
             last_exc = None
