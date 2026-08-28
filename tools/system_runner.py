@@ -56,9 +56,12 @@ logger = logging.getLogger("SystemRunner")
 ICT = timezone(timedelta(hours=7))
 
 def is_active_hours() -> bool:
-    """เวลาทำการ 07:00 - 23:00 น. (เวลาไทย)"""
-    now = datetime.now(ICT)
-    return 7 <= now.hour < 23
+    """โพสต์ตลอด 24 ชั่วโมง (หรือกำหนดช่วงเวลาผ่าน env)"""
+    if os.getenv("ACTIVE_HOURS_ONLY", "false").lower() in ("true", "1"):
+        now = datetime.now(ICT)
+        return 7 <= now.hour < 24
+    return True
+
 
 
 def run_prebuffer_producer_loop():
