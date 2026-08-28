@@ -30,6 +30,24 @@
 
 **Commercial & Video Reels:** `reels_uploader/auto_product_reels.py` (ผลิตคลิป 9:16 Full HD + เสียงพากย์ไทย TTS `edge-tts` อัตโนมัติ) · `reels_uploader/uploader.py` (3-step Meta Reels API upload + Safe Pacing + title truncate ≤80 chars) · `tools/system_runner.py` (Unified multi-threaded watchdog orchestrator) · `start_system.bat` (1-Click Windows Turnkey Launcher) · `USER_MANUAL.md` (คู่มือส่งมอบลูกค้า)
 
+## Commercial & Video Reels Rules (กฎเหล็กการผลิตคลิป Reels และเสียงพากย์)
+
+เอเจนต์ทุกตัวต้องปฏิบัติตามกฎเหล็ก 5 ข้อนี้อย่างเคร่งครัด:
+
+1. **ห้ามพูดเรื่องราคา และห้ามแสดงตัวเลขราคาบนคลิปเด็ดขาด (Strict No-Price Policy)**:
+   - สคริปต์เสียงพากย์ (`build_voice_script`) และแคปชั่น ต้องไม่มีตัวเลขราคา และไม่เอ่ยคำว่า "ราคา" หรือ "เช็คราคา"
+   - ภาพโปสเตอร์ 3 จังหวะ (`create_product_posters_multiphase`) ต้องไม่มีตัวเลขราคา ป้ายมุมซ้ายต้องใช้ `ของแท้ 100%` และปุ่ม CTA เป็น `กดดูรายละเอียด / สั่งซื้อ ที่ลิงก์ในแคปชั่น` เท่านั้น
+   - เหตุผล: ทำให้คลิปเป็น **Evergreen** ไม่มีวันหมดอายุเมื่อโปรโมชั่น Shopee เปลี่ยนแปลง และกระตุ้นความอยากรู้ (Curiosity-Driven) ให้คนดูคลิกลิงก์ Shopee Affiliate
+2. **ระบบตัดคำไทยด้วยพจนานุกรม (PyThaiNLP Tokenization)**:
+   - การตัดข้อความชื่อสินค้าบนวิดีโอต้องผ่าน `wrap_thai_lines` ที่ใช้ `pythainlp.word_tokenize(engine='newmm')` เสมอ ห้ามตัดคำขาด หรือทำให้เกิดสระลอยเด็ดขาด
+3. **เสียงพากย์ป้าเข็มมาตรฐานเดียวกัน 100% (Voice Consistency)**:
+   - ล็อคเสียงพากย์หลักเป็น Google Thai Female Voice (`atempo=1.28,volume=1.3`) เพื่อให้เสียงพากย์มีเอกลักษณ์เดียวกัน สปีดและความดังเท่ากันทุกคลิป ห้ามสลับโมเดลเสียงไปมา
+4. **โรงงานผลิตคลิปล่วงหน้า (Pre-buffer Continuous Producer)**:
+   - คลังรอโพสต์ `pending_videos/` ต้องมีเธรด `run_prebuffer_producer_loop` ตรวจสอบและผลิตคลิปสำรองไว้ 3-5 คลิปเสมอ เมื่อคลิปถูกโพสต์ออกไป ต้องผลิตเติมทันที ห้ามปล่อยให้คิวว่างเด็ดขาด
+5. **การแจ้งเตือนเจ้าของร้านผ่าน LINE อัตโนมัติ (Instant LINE Notification)**:
+   - ทุกครั้งที่โพสต์คลิป Reels สำเร็จ ระบบต้องส่งแจ้งเตือนพร้อมลิงก์คลิป Facebook และลิงก์ Shopee เข้า LINE แอดมิน (`ADMIN_LINE_USER_ID`) ทันที
+
+
 **API/Admin:** `products-and-links` (สินค้า API + link policy) · `admin-dashboard` (/admin + cookie) · `cron-jobs` (ทุก cron + CRON_TOKEN)
 
 **Dev tools:** `product-pipeline` (import-csv/analyze) · `mcp-servers` (pkh_mcp + shopee MCP) · `hermes-ai` (สมองกลเรียนรู้ตลาด) · `content-backfill` (เติมคอนเทนต์ template) · `generate-ai-content` (เติมคอนเทนต์ Groq) · `promo-caption-rotation` (แคปชันอัตโนมัติ+หมุนภาพโปสเตอร์)
