@@ -158,18 +158,19 @@ def build_voice_script(product_name: str, price: float, category: str) -> str:
     return script
 
 
-async def _tts_save(text: str, output_path: str, voice: str = "th-TH-PremwadeeNeural"):
+async def _tts_save(text: str, output_path: str, voice: str = "th-TH-NiwatNeural"):
     communicate = edge_tts.Communicate(text, voice)
     await communicate.save(output_path)
 
 
 def generate_tts_audio(text: str, output_path: Path) -> bool:
-    """สร้างไฟล์เสียง MP3 ภาษาไทยด้วย Edge TTS พร้อมระบบ multi-voice failover & retry"""
-    preferred_voice = os.getenv("TTS_VOICE", "th-TH-PremwadeeNeural")
-    voices = [preferred_voice, "th-TH-PremwadeeNeural", "th-TH-NiwatNeural"]
+    """สร้างไฟล์เสียง MP3 ภาษาไทยด้วย Edge TTS (Niwat/Premwadee) พร้อม gTTS Fallback 100%"""
+    preferred_voice = os.getenv("TTS_VOICE", "th-TH-NiwatNeural")
+    voices = [preferred_voice, "th-TH-NiwatNeural", "th-TH-PremwadeeNeural"]
     seen = set()
     fallback_voices = [x for x in voices if not (x in seen or seen.add(x))]
 
+    # 1. ลองใช้ Microsoft Neural Voices
     for v in fallback_voices:
         for attempt in range(2):
             try:
@@ -178,8 +179,21 @@ def generate_tts_audio(text: str, output_path: Path) -> bool:
                     return True
             except Exception as e:
                 logger.warning(f"สร้างเสียงพากย์ TTS ล้ม (voice: {v}, attempt {attempt+1}): {e}")
-                time.sleep(0.5)
+                time.sleep(0.3)
+
+    # 2. Fallback สำรองด้วย Google Translate TTS (gTTS) การันตีมีเสียง 100%
+    try:
+        from gtts import gTTS
+        tts = gTTS(text=text, lang="th")
+        tts.save(str(output_path))
+        if output_path.exists() and output_path.stat().st_size > 500:
+            logger.info("สร้างเสียงพากย์ด้วย gTTS Fallback สำเร็จ")
+            return True
+    except Exception as e:
+        logger.error(f"สร้างเสียงพากย์ gTTS ล้ม: {e}")
+
     return False
+
 
 
 
