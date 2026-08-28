@@ -131,51 +131,72 @@ def download_image(url: str) -> Optional[Image.Image]:
 
 
 def build_voice_script(product_name: str, price: float, category: str) -> str:
-    """สร้างบทพูดภาษาไทยธรรมชาติ 100% — ไร้คำซ้ำซ้อน ไร้รหัสโมเดลขยะ"""
+    """สร้างบทพูดสั้นกระชับ จบสมบูรณ์ใน 4-5 วินาที ไม่ตัดประโยค"""
     bot_name = os.getenv("BOT_NAME", "ป้าเข็ม")
     
     # 1. กรองข้อความขยะ
     clean_name = clean_display_text(product_name)
-    # ลบรหัสสินค้าภาษาอังกฤษ/ตัวเลขย่อ (เช่น 2L, KC215SQ, A892, YTL)
     clean_name = re.sub(r'\b[A-Za-z0-9_-]{1,8}\b', '', clean_name)
     clean_name = re.sub(r'\s+', ' ', clean_name).strip()
 
-    # 2. ลบคำที่ซ้ำกัน (เช่น กระติกน้ำ กระติกน้ำ)
+    # 2. ลบคำที่ซ้ำกัน
     words = clean_name.split()
     clean_words = []
     for w in words:
         if not clean_words or (w not in clean_words[-1] and clean_words[-1] not in w):
             clean_words.append(w)
 
-    short_title = " ".join(clean_words[:5]).strip()
+    short_title = " ".join(clean_words[:4]).strip()
     if not short_title:
         short_title = category if category else "สินค้าคุณภาพดี"
 
     price_int = int(price) if price else 0
-    price_text = f"{price_int:,} บาท" if price_int > 0 else "ราคาพิเศษสุดคุ้ม"
+    price_text = f"เพียง {price_int:,} บาท" if price_int > 0 else "ราคาพิเศษ"
 
-    script = (
-        f"สวัสดีจ้า {bot_name} มีของดีมาแนะนำ {short_title} "
-        f"ราคาพิเศษเพียง {price_text} ของแท้ คุณภาพดี รีวิวแน่น "
-        f"สนใจกดสั่งซื้อที่ลิงก์ในแคปชั่นได้เลยนะลูก"
-    )
+    # บทพูดสั้นกระชับ พูดประมาณ 4 วินาที จบครบถ้วน
+    script = f"สวัสดีจ้า {bot_name} แนะนำ {short_title} {price_text} สั่งซื้อที่ลิงก์ในแคปชั่นได้เลยนะลูก"
     return script
 
 
-async def _tts_save(text: str, output_path: str):
-    voice = os.getenv("TTS_VOICE", "th-TH-PremwadeeNeural")
-    communicate = edge_tts.Communicate(text, voice, rate="+5%")
+async def _tts_save(text: str, output_path: str, voice: str = "th-TH-PremwadeeNeural"):
+    communicate = edge_tts.Communicate(text, voice)
     await communicate.save(output_path)
 
 
 def generate_tts_audio(text: str, output_path: Path) -> bool:
-    """สร้างไฟล์เสียง MP3 ภาษาไทยด้วย Edge TTS"""
+    """สร้างไฟล์เสียง MP3 ภาษาไทยด้วย Edge TTS พร้อมระบบ multi-voice failover & retry"""
+    preferred_voice = os.getenv("TTS_VOICE", "th-TH-PremwadeeNeural")
+    voices = [preferred_voice, "th-TH-PremwadeeNeural", "th-TH-NiwatNeural"]
+    seen = set()
+    fallback_voices = [x for x in voices if not (x in seen or seen.add(x))]
+
+    for v in fallback_voices:
+        for attempt in range(2):
+            try:
+                asyncio.run(_tts_save(text, str(output_path), voice=v))
+                if output_path.exists() and output_path.stat().st_size > 500:
+                    return True
+            except Exception as e:
+                logger.warning(f"สร้างเสียงพากย์ TTS ล้ม (voice: {v}, attempt {attempt+1}): {e}")
+                time.sleep(0.5)
+    return False
+
+
+
+def get_audio_duration(audio_path: Path) -> float:
+    """วัดความยาวไฟล์เสียงจริงด้วย ffmpeg เพื่อเรนเดอร์วิดีโอให้ยาวพอดี ไม่ตัดเสียง"""
     try:
-        asyncio.run(_tts_save(text, str(output_path)))
-        return output_path.exists() and output_path.stat().st_size > 1000
-    except Exception as e:
-        logger.warning(f"สร้างเสียงพากย์ TTS ล้ม: {e}")
-        return False
+        ffmpeg_exe = _ffmpeg_exe()
+        cmd = [ffmpeg_exe, "-i", str(audio_path)]
+        res = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+        m = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", res.stderr)
+        if m:
+            h, mn, s = m.groups()
+            return int(h) * 3600 + int(mn) * 60 + float(s)
+    except Exception:
+        pass
+    return 5.0
+
 
 
 def create_product_posters_multiphase(product_name: str, price: float, rating: float, sales_count: int, img: Image.Image) -> List[Image.Image]:
@@ -449,9 +470,14 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
                     tmp_poster_paths.append(Path(tmp_p.name))
 
             try:
-                # 4. รวมภาพ 3 จังหวะและเสียงพากย์เป็นวิดีโอ Reels
+                # 4. รวมภาพ 3 จังหวะและเสียงพากย์เป็นวิดีโอ Reels (ความยาวตรงกับเสียงจริง + เผื่อเวลาหายใจ 1.2 วิ)
+
                 audio_file = tmp_audio_path if tts_ok else None
-                if multiphase_posters_to_video(tmp_poster_paths, target_path, audio_path=audio_file, duration=7.5):
+                audio_len = get_audio_duration(tmp_audio_path) if tts_ok else 5.0
+                target_duration = max(5.5, audio_len + 1.2)
+                if multiphase_posters_to_video(tmp_poster_paths, target_path, audio_path=audio_file, duration=target_duration):
+
+
                     products_meta[filename] = {
                         "product_name": clean_name,
                         "price": str(int(p.price or 0)),
