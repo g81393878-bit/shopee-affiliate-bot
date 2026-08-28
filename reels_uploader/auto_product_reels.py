@@ -470,10 +470,28 @@ def multiphase_posters_to_video(poster_paths: List[Path], output_video_path: Pat
 
 
 
+def get_used_product_ids() -> set:
+    """ดึงรหัสสินค้า (Product ID) ทั้งหมดที่เคยสร้างหรือโพสต์ไปแล้ว เพื่อไม่ให้ทำซ้ำเด็ดขาด 100%"""
+    used_ids = set()
+    for d in [POSTED_DIR, PENDING_DIR]:
+        if d.exists():
+            for f in d.glob("*"):
+                m = re.search(r'prod_(\d+)_', f.name)
+                if m:
+                    try:
+                        used_ids.add(int(m.group(1)))
+                    except Exception:
+                        pass
+    return used_ids
+
+
 def generate_product_reels(limit: int = 3) -> List[dict]:
-    """ดึงสินค้าจากฐานข้อมูลมาสร้างเป็นคลิปวิดีโอ Reels พร้อมเสียงพากย์ TTS ภาษาไทยธรรมชาติ"""
+    """ดึงสินค้าใหม่ 100% จากฐานข้อมูล 2,000+ รายการ หมุนเวียน 20 หมวดหมู่ ไม่ซ้ำสินค้าเดิม"""
     PENDING_DIR.mkdir(parents=True, exist_ok=True)
     POSTED_DIR.mkdir(parents=True, exist_ok=True)
+
+    used_ids = get_used_product_ids()
+    print(f"📦 ตรวจพบสินค้าที่เคยผลิต/โพสต์แล้วในระบบ: {len(used_ids)} รายการ (จะข้ามไม่ให้ซ้ำเด็ดขาด)")
 
     db = SessionLocal()
     generated = []
@@ -485,23 +503,36 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
             except Exception:
                 products_meta = {}
 
-        prods = (db.query(models.Product)
+        # ดึงสินค้าคุณภาพดีทั้งหมดจากแคตตาล็อก 2,000+ รายการที่ไม่เคยโพสต์มาก่อน
+        query = (db.query(models.Product)
                    .filter(models.Product.link_status == "ok",
-                           models.Product.sales_count >= 100)
-                   .order_by(models.Product.ai_score.desc(),
-                             models.Product.sales_count.desc())
-                   .limit(100).all())
+                           models.Product.sales_count >= 30))
+        
+        if used_ids:
+            query = query.filter(~models.Product.id.in_(used_ids))
 
+        prods = query.order_by(models.Product.ai_score.desc(),
+                               models.Product.sales_count.desc()) \
+                     .limit(3000).all()
 
-        # จัดกลุ่มสินค้าตามหมวดหมู่ แล้วสลับหมวดหมู่แบบ Round-Robin เพื่อความหลากหลาย 100%
+        print(f"✨ มีสินค้าใหม่พร้อมผลิตเป็นคลิป: {len(prods)} รายการ")
+
+        # จัดกลุ่มสินค้าแยกตาม 20 หมวดหมู่ แล้วสับเปลี่ยนแบบ Round-Robin
+        import random
         by_cat = {}
         for p in prods:
             cat = p.category or "ของใช้ทั่วไป"
             by_cat.setdefault(cat, []).append(p)
 
+        # สลับลำดับในแต่ละหมวดเพื่อความสดใหม่
+        for cat in by_cat:
+            random.shuffle(by_cat[cat])
+
         interleaved_prods = []
+        cat_keys = list(by_cat.keys())
+        random.shuffle(cat_keys)
         while any(by_cat.values()):
-            for cat in list(by_cat.keys()):
+            for cat in cat_keys:
                 if by_cat[cat]:
                     interleaved_prods.append(by_cat[cat].pop(0))
 
@@ -509,6 +540,9 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
             if len(generated) >= limit:
                 break
             if not p.affiliate_url or not p.affiliate_url.startswith("https://"):
+                continue
+
+            if p.id in used_ids:
                 continue
 
             filename = f"prod_{p.id}_{sanitize_filename(p.name)}.mp4"
@@ -519,7 +553,8 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
                 continue
 
             clean_name = clean_display_text(p.name)
-            print(f"\n🎨 กำลังสร้างคลิป Reels: {clean_name[:40]}... (หมวด: {p.category})")
+            print(f"\n🎨 กำลังสร้างคลิป Reels สินค้าใหม่: {clean_name[:40]}... (หมวด: {p.category})")
+
             
             # 1. ดึงรูปภาพสินค้า
             img_url = p.image_url
