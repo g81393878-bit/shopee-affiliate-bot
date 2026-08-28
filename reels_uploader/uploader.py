@@ -56,6 +56,10 @@ from app.services.bot_profile import LINE_OA_URL  # noqa: E402
 PENDING_DIR = ROOT / "pending_videos"
 POSTED_DIR = ROOT / "posted"
 PRODUCTS_JSON = ROOT / "products.json"
+
+# รองรับภาพนิ่ง — แปลงเป็นวิดีโอ 5 วินาทีอัตโนมัติ
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+IMAGE_VIDEO_DURATION = 5  # วินาที
 LAST_POST_FILE = ROOT / "last_post_time.txt"
 DAILY_COUNT_FILE = ROOT / "posts_today.txt"
 INTRO_STATE_FILE = ROOT / ".uploader_intro_state.json"
@@ -139,30 +143,77 @@ def load_products() -> dict:
         return {}
 
 
+def is_image(path: Path) -> bool:
+    """เช็คว่าเป็นไฟล์ภาพนิ่ง"""
+    return path.suffix.lower() in IMAGE_EXTENSIONS
+
+
+def convert_image_to_video(src: Path, dst: Path, duration: int = IMAGE_VIDEO_DURATION, ffmpeg: str | None = None) -> bool:
+    """แปลงภาพนิ่งเป็นวิดีโอ 9:16 (1080x1920) ด้วย ffmpeg:
+
+    - ภาพจะถูก scale ให้พอดี 1080x1920 (เติมเบลอแทนแถบดำ)
+    - ความยาว duration วินาที (default 5 วิ)
+    - H.264 + AAC (silent) + faststart
+    """
+    if not src.exists():
+        return False
+    ffmpeg = ffmpeg or _ffmpeg_exe()
+    # สร้างวิดีโอจากภาพนิ่ง: scale + blur background + overlay
+    filter_complex = (
+        f"color=c=black:s=1080x1920:d={duration}[bg];"
+        f"[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg];"
+        "[bg][fg]overlay=(W-w)/2:(H-h)/2[v]"
+    )
+    cmd = [
+        ffmpeg, "-y",
+        "-loop", "1", "-i", str(src),
+        "-filter_complex", filter_complex,
+        "-map", "[v]",
+        "-r", "30", "-t", str(duration),
+        "-c:v", "libx264", "-preset", "medium", "-crf", "23",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        str(dst),
+    ]
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, timeout=300)
+        return dst.exists() and dst.stat().st_size > 0
+    except Exception as e:
+        log(f"[WARN] convert_image_to_video ล้ม ({e}) — ข้ามภาพนี้")
+        return False
+
+
 def list_pending() -> list:
-    """คลิป .mp4 ใน pending_videos/ เรียง FIFO (ตามชื่อไฟล์)"""
+    """คลิป .mp4 + ภาพ (.jpg/.png/.webp) ใน pending_videos/ เรียง FIFO (ตามชื่อไฟล์)"""
     PENDING_DIR.mkdir(parents=True, exist_ok=True)
-    return sorted(p for p in PENDING_DIR.glob("*.mp4") if p.is_file())
+    all_files = [p for p in PENDING_DIR.iterdir() if p.is_file() and not p.name.startswith(".")]
+    # filter เฉพาะ .mp4 หรือภาพ
+    supported = [f for f in all_files if f.suffix.lower() == ".mp4" or is_image(f)]
+    return sorted(supported)
 
 
 def recycle_clips() -> bool:
-    """Auto-recycle: pending ว่าง → คัดลอกคลิปจาก posted/ กลับมาโพสต์ใหม่.
+    """Auto-recycle: pending ว่าง → คัดลอกคลิป/ภาพจาก posted/ กลับมาโพสต์ใหม่.
 
-    คัดลอก (ไม่ลบ) — posted/ ยังเก็บคลิปต้นฉบับไว้
-    คืน True = recycling เกิดขึ้น (มีคลิปกลับมา)
+    คัดลอก (ไม่ลบ) — posted/ ยังเก็บต้นฉบับไว้
+    คืน True = recycling เกิดขึ้น (มีคลิป/ภาพกลับมา)
     """
-    posted_clips = sorted(p for p in POSTED_DIR.glob("*.mp4") if p.is_file())
-    if not posted_clips:
+    # ดึงทั้ง .mp4 และภาพจาก posted/
+    posted_files = sorted(
+        p for p in POSTED_DIR.iterdir()
+        if p.is_file() and not p.name.startswith(".")
+        and (p.suffix.lower() == ".mp4" or is_image(p))
+    )
+    if not posted_files:
         return False
     PENDING_DIR.mkdir(parents=True, exist_ok=True)
-    for src in posted_clips:
+    for src in posted_files:
         dst = PENDING_DIR / src.name
         if not dst.exists():
-            import shutil
             shutil.copy2(str(src), str(dst))
     recycled = list_pending()
     if recycled:
-        log(f"♻️ Recycle: คัดลอกคลิปจาก posted/ กลับ {len(recycled)} ตัว → pending_videos/")
+        log(f"♻️ Recycle: คัดลอกจาก posted/ กลับ {len(recycled)} ตัว → pending_videos/")
         return True
     return False
 
@@ -406,31 +457,49 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
         log(f"ครบลิมิต {max_per_day} โพสต์/วัน แล้ว — ข้าม ไม่โพสต์")
         return 0
 
-    video = pending[0]
-    product = load_products().get(video.name, {})
+    item = pending[0]
+    product = load_products().get(item.name, {})
     caption = build_caption(product)
 
+    # ถ้าเป็นภาพนิ่ง → แปลงเป็นวิดีโอก่อน
+    is_img = is_image(item)
+    img_video_tmp = None
+    if is_img:
+        fd, img_tmp_path = tempfile.mkstemp(suffix=".mp4", prefix="reels_img_")
+        os.close(fd)
+        img_video_tmp = Path(img_tmp_path)
+        log(f"[IMG] แปลงภาพนิ่งเป็นวิดีโอ 5 วินาที: {item.name} ...")
+        if not convert_image_to_video(item, img_video_tmp):
+            log(f"[FAIL] แปลงภาพล้ม: {item.name} — ข้าม")
+            if img_video_tmp:
+                img_video_tmp.unlink(missing_ok=True)
+            return 1
+        item = img_video_tmp  # ใช้วิดีโอที่แปลงแล้วแทน
+
     if dry_run:
-        log(f"[DRY-RUN] จะโพสต์ Reels: {video.name} (PAGE_ID={PAGE_ID})")
+        src_label = f"ภาพ → วิดีโอ" if is_img else "คลิป"
+        log(f"[DRY-RUN] จะโพสต์ Reels ({src_label}): {item.name} (PAGE_ID={PAGE_ID})")
         log(f"[DRY-RUN] normalize: {'ON (แปลง 9:16 อัตโนมัติ)' if normalize else 'OFF (ใช้ไฟล์เดิม)'}")
         log(f"[DRY-RUN] caption:\n{caption}")
+        if img_video_tmp:
+            img_video_tmp.unlink(missing_ok=True)
         return 0
 
     # แปลงคลิปให้ตรง spec Reels ก่อนโพสต์ (9:16/1080p/30fps/≤90s) — ถ้าไม่สั่ง --no-normalize
-    upload_path = str(video)
+    upload_path = str(item)
     tmp = None
     if normalize:
         fd, tmp_path = tempfile.mkstemp(suffix=".mp4", prefix="reels_norm_")
         os.close(fd)
         tmp = Path(tmp_path)
-        log(f"[NORM] แปลงคลิปเป็น 9:16/1080p/30fps: {video.name} ...")
-        if normalize_video(video, tmp):
+        log(f"[NORM] แปลงคลิปเป็น 9:16/1080p/30fps: {item.name} ...")
+        if normalize_video(item, tmp):
             upload_path = str(tmp)
         else:
             tmp = None  # แปลงล้ม → ใช้ไฟล์ต้นฉบับแทน
 
     try:
-        log(f"[POST] กำลังอัปโหลด Reels: {video.name} → เพจ {PAGE_ID} ...")
+        log(f"[POST] กำลังอัปโหลด Reels: {item.name} → เพจ {PAGE_ID} ...")
         res = post_reel(description=caption, file_path=upload_path,
                         title=(product or {}).get("product_name", "") or "")
     finally:
@@ -442,18 +511,32 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
 
     if res["ok"]:
         POSTED_DIR.mkdir(parents=True, exist_ok=True)
-        dst = POSTED_DIR / video.name
+        # ย้ายไฟล์ต้นฉบับ (ภาพหรือคลิป) ไป posted/
+        original = pending[0]  # ใช้ไฟล์ต้นฉบับจาก pending
+        dst = POSTED_DIR / original.name
         if dst.exists():
-            dst = POSTED_DIR / f"{int(time.time())}_{video.name}"
-        shutil.move(str(video), str(dst))
+            dst = POSTED_DIR / f"{int(time.time())}_{original.name}"
+        shutil.move(str(original), str(dst))
         LAST_POST_FILE.write_text(str(time.time()), encoding="utf-8")
         bump_daily_count()
         if not product:
             build_intro_caption(advance=True)  # เลื่อนแคปชั่นแนะนำป้าเข็ม (กันโพสต์ซ้ำติดกัน)
         log(f"[OK] Reels โพสต์สำเร็จ video_id={res['video_id']} → {dst.name}")
+        # ลบ temp file ที่แปลงจากภาพ
+        if img_video_tmp is not None:
+            try:
+                img_video_tmp.unlink(missing_ok=True)
+            except Exception:
+                pass
         return 0
 
     log(f"[FAIL] โพสต์ไม่สำเร็จ: {res['error']}")
+    # ลบ temp file ที่แปลงจากภาพ (โพสต์ล้ม)
+    if img_video_tmp is not None:
+        try:
+            img_video_tmp.unlink(missing_ok=True)
+        except Exception:
+            pass
     return 1
 
 

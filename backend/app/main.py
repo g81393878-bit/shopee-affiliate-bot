@@ -86,10 +86,21 @@ _migrate_schema()
 
 KEEP_ALIVE_URL = (os.getenv("RENDER_EXTERNAL_URL") or "").rstrip("/")
 KEEP_ALIVE_INTERVAL = int(os.getenv("KEEP_ALIVE_INTERVAL", "600"))
+# เวลาตื่น-พัก (เวลาไทย UTC+7) — ค่าเริ่มต้นตื่น 07:00 - 23:00 น. (พัก 23:00 - 07:00 น. ประหยัดโควต้า 750 ชม./เดือน)
+KEEP_ALIVE_START_HOUR = int(os.getenv("KEEP_ALIVE_START_HOUR", "7") or 7)
+KEEP_ALIVE_END_HOUR = int(os.getenv("KEEP_ALIVE_END_HOUR", "23") or 23)
+
+def _is_active_hours() -> bool:
+    """ตรวจว่าตอนนี้อยู่ในช่วงเวลาทำการ (07:00 - 23:00 น. เวลาไทย UTC+7) หรือไม่"""
+    utc_now = datetime.datetime.now(datetime.timezone.utc)
+    bkk_now = utc_now + datetime.timedelta(hours=7)
+    return KEEP_ALIVE_START_HOUR <= bkk_now.hour < KEEP_ALIVE_END_HOUR
+
 # นาทีระหว่างโพสต์ Facebook อัตโนมัติ (0/ไม่ตั้ง = ปิด) — บอทโพสต์เองในตัว ไม่พึ่ง cron-job.org
 FB_AUTO_POST_INTERVAL = int(os.getenv("FB_AUTO_POST_INTERVAL", "0") or 0)
 # นาทีระหว่างโพสต์คอนเทนต์ (แนะนำแม่เข็ม/ข่าว/ร้าน) — แยกกำหนดเวลาจากสินค้า (0 = ปิด)
 FB_CONTENT_POST_INTERVAL = int(os.getenv("FB_CONTENT_POST_INTERVAL", "0") or 0)
+
 
 
 FB_AUTO_POST_CHECK_SECONDS = 60  # ตรวจทุก 1 นาทีว่าถึงเวลาโพสต์หรือยัง (ไม่ sleep ยาว 4 ชม. รวดเดียว)
@@ -188,14 +199,14 @@ async def facebook_auto_post_loop():
 
 
 async def facebook_product_post_loop():
-    """โพสต์สินค้าอัตโนมัติทุก FB_AUTO_POST_INTERVAL นาที (นับจากโพสต์สินค้าล่าสุด) — แยกจากคอนเทนต์."""
+    """โพสต์สินค้าอัตโนมัติทุก FB_AUTO_POST_INTERVAL นาที (นับจากโพสต์สินค้าล่าสุด) — เฉพาะเวลา 07:00 - 23:00 น."""
     if FB_AUTO_POST_INTERVAL <= 0:
         logger.info("FB_AUTO_POST_INTERVAL not set — product auto-post disabled")
         return
-    logger.info(f"product auto-post enabled — ทุก {FB_AUTO_POST_INTERVAL} นาที")
+    logger.info(f"product auto-post enabled — ทุก {FB_AUTO_POST_INTERVAL} นาที (เวลาทำการ 07:00 - 23:00 น.)")
     while True:
         try:
-            if _product_due():
+            if _is_active_hours() and _product_due():
                 result = await asyncio.to_thread(run_facebook_product_post, 1)
                 posted = [r for r in result.get("posted", []) if r.get("posted")]
                 if posted:
@@ -209,14 +220,14 @@ async def facebook_product_post_loop():
 
 
 async def facebook_content_post_loop():
-    """โพสต์คอนเทนต์ (แนะนำแม่เข็ม/ข่าว/ร้าน) ทุก FB_CONTENT_POST_INTERVAL นาที — แยกจากสินค้า."""
+    """โพสต์คอนเทนต์ (แนะนำแม่เข็ม/ข่าว/ร้าน) ทุก FB_CONTENT_POST_INTERVAL นาที — เฉพาะเวลา 07:00 - 23:00 น."""
     if FB_CONTENT_POST_INTERVAL <= 0:
         logger.info("FB_CONTENT_POST_INTERVAL not set — content auto-post disabled")
         return
-    logger.info(f"content auto-post enabled — ทุก {FB_CONTENT_POST_INTERVAL} นาที")
+    logger.info(f"content auto-post enabled — ทุก {FB_CONTENT_POST_INTERVAL} นาที (เวลาทำการ 07:00 - 23:00 น.)")
     while True:
         try:
-            if _content_due():
+            if _is_active_hours() and _content_due():
                 result = await asyncio.to_thread(run_facebook_content_post)
                 posted = [r for r in result.get("posted", []) if r.get("posted")]
                 if posted:
@@ -227,6 +238,7 @@ async def facebook_content_post_loop():
         except Exception as e:
             logger.warning(f"content auto-post failed: {e}")
         await asyncio.sleep(FB_AUTO_POST_CHECK_SECONDS)
+
 
 
 async def facebook_fake_post_watcher():
@@ -261,20 +273,24 @@ async def facebook_fake_post_watcher():
 
 
 async def keep_alive_loop():
-    """กัน Render free tier หลับ: ping ตัวเองทุก 10 นาที
-    ไม่พึ่ง cron-job.org เพียงอย่างเดียว — ถ้า external ping หยุด บอทก็ยังตื่นอยู่
+    """กัน Render free tier หลับ: ping ตัวเองทุก 10 นาที เฉพาะช่วงเวลาทำการ (07:00 - 23:00 น. เวลาไทย)
+    ช่วงเวลาพักผ่อน (23:00 - 07:00 น.) จะหยุด ping เพื่อปล่อยให้ Render หลับอัตโนมัติ ช่วยประหยัดโควต้า 750 ชม./เดือน
     (Render ตั้ง RENDER_EXTERNAL_URL ให้อัตโนมัติ = URL สาธารณะของ service)"""
     if not KEEP_ALIVE_URL:
         logger.warning("RENDER_EXTERNAL_URL not set — keep-alive loop disabled (dev)")
         return
     while True:
         await asyncio.sleep(KEEP_ALIVE_INTERVAL)
+        if not _is_active_hours():
+            logger.info("keep-alive: อยู่นอกเวลาทำการ (23:00 - 07:00 น.) — ข้าม ping เพื่อปล่อยให้ Render พักผ่อน")
+            continue
         try:
             async with httpx.AsyncClient(timeout=15) as client:
                 r = await client.get(f"{KEEP_ALIVE_URL}/health")
                 logger.info(f"keep-alive ping {KEEP_ALIVE_URL}/health -> {r.status_code}")
         except Exception as e:
             logger.warning(f"keep-alive ping failed: {e}")
+
 
 
 @asynccontextmanager

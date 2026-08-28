@@ -115,14 +115,16 @@ def main():
     if not token:
         raise SystemExit("CRON_TOKEN ไม่พบใน backend/.env")
 
-    every_10_min = {"hours": [-1], "minutes": [0, 10, 20, 30, 40, 50]}
+    # Keepalive เฉพาะ 07:00 - 23:00 น. (เวลาไทย) — พัก 23:00 - 07:00 น. เพื่อประหยัดโควต้า 750 ชม./เดือน
+    every_10_min_active = {"hours": list(range(7, 23)), "minutes": [0, 10, 20, 30, 40, 50]}
     every_2_hours = {"hours": list(range(0, 24, 2)), "minutes": [0]}
     every_6_hours = {"hours": [0, 6, 12, 18], "minutes": [30]}  # กวาดลิงก์ปลอมวันละ 4 รอบ
     def daily(h, m=0):
         return {"hours": [h], "minutes": [m]}
 
     wanted = [
-        ("ป้าเข็ม-keepalive", f"{BASE}/health", GET, every_10_min),
+        ("ป้าเข็ม-keepalive", f"{BASE}/health", GET, every_10_min_active),
+
         ("ป้าเข็ม-ตรวจลิงก์", f"{BASE}/api/cron/check-links?token={token}", POST, daily(7)),
         ("ป้าเข็ม-คอนเทนต์", f"{BASE}/api/cron/analyze?token={token}&limit=30", POST, every_2_hours),
         ("ป้าเข็ม-ราคา", f"{BASE}/api/cron/refresh-prices?token={token}", POST, daily(5)),

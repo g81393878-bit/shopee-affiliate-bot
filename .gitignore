@@ -103,6 +103,11 @@ fb_cookies.json
 .promo_poster_state.json
 
 # Reels uploader (uploader.py) — คลิป/state runtime ไม่ commit (เก็บ .gitkeep ไว้)
+*.mp4
+reels_uploader/pending_videos/*
+!reels_uploader/pending_videos/.gitkeep
+reels_uploader/posted/*
+!reels_uploader/posted/.gitkeep
 pending_videos/*
 !pending_videos/.gitkeep
 posted/*
@@ -112,3 +117,4 @@ posts_today.txt
 uploader_execution.log
 .uploader_intro_state.json
 .reels_notify_state.json
+
