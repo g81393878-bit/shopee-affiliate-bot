@@ -43,7 +43,21 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
 
 ROOT = Path(__file__).resolve().parent
 BACKEND = ROOT.parent / "backend"
+TOOLS = ROOT.parent / "tools"
 sys.path.insert(0, str(BACKEND))
+sys.path.insert(0, str(TOOLS))
+
+# โหลด Credential จาก Render หรือ .env
+try:
+    import render_set_env
+    render_set_env.API_KEY = render_set_env.get_api_key()
+    items = render_set_env.fetch_env_vars()
+    for it in items:
+        k, v = render_set_env.decode_env_var(it.get("envVar"))
+        if k:
+            os.environ[k] = v
+except Exception:
+    pass
 
 from dotenv import load_dotenv  # noqa: E402
 load_dotenv(BACKEND / ".env")
@@ -51,6 +65,7 @@ load_dotenv(BACKEND / ".env")
 from app.services.facebook_poster import PAGE_ID, post_reel  # noqa: E402
 from app.services.facebook_intro import intro_posts  # noqa: E402
 from app.services.bot_profile import LINE_OA_URL  # noqa: E402
+
 
 
 PENDING_DIR = ROOT / "pending_videos"
@@ -512,9 +527,8 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
             tmp = None  # แปลงล้ม → ใช้ไฟล์ต้นฉบับแทน
 
     try:
-        log(f"[POST] กำลังอัปโหลด Reels: {item.name} → เพจ {PAGE_ID} ...")
-        res = post_reel(description=caption, file_path=upload_path,
-                        title=(product or {}).get("product_name", "") or "")
+        title_text = str((product or {}).get("product_name", "") or "")[:80]
+        res = post_reel(description=caption, file_path=upload_path, title=title_text)
     finally:
         if tmp is not None:
             try:

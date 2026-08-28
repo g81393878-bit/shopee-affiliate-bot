@@ -700,7 +700,7 @@ def post_reel(description: str = "", file_path: str = "", file_url: str = "",
     if description:
         data["description"] = description
     if (title or "").strip():
-        data["title"] = (title or "").strip()
+        data["title"] = (title or "").strip()[:80]
     try:
         r3 = httpx.post(endpoint, params={"access_token": token}, data=data, timeout=60)
     except Exception as e:
