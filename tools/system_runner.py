@@ -61,24 +61,40 @@ def is_active_hours() -> bool:
     return 7 <= now.hour < 23
 
 
+def run_prebuffer_producer_loop():
+    """เธรดผลิตคลิปสินค้าล่วงหน้าในคลัง (Pre-buffer Producer) — ผลิตคลิปรอไว้เสมอ 3-5 คลิป"""
+    logger.info("🏭 เริ่มต้นระบบ Auto Pre-buffer Producer (ผลิตคลิปรอไว้ในคลังเสมอ 3-5 คลิป)")
+    while True:
+        try:
+            import uploader
+            from auto_product_reels import generate_product_reels
+            pending = uploader.list_pending()
+            if len(pending) < 3:
+                needed = 3 - len(pending)
+                logger.info(f"📦 คิวคลิปพร้อมโพสต์เหลือ {len(pending)} คลิป — กำลังผลิตเพิ่มล่วงหน้า {needed} คลิป...")
+                generate_product_reels(limit=needed)
+        except Exception as e:
+            logger.warning(f"⚠️ Pre-buffer producer warning: {e}")
+        time.sleep(120)  # ตรวจสอบทุก 2 นาที
+
+
 def run_reels_uploader_loop():
-    """เธรดหลักสำหรับผลิตคลิปและโพสต์ลง Facebook Reels (โหมดเร่งด่วน: ทุกๆ 10 นาที)"""
-    logger.info("🎬 เริ่มต้นระบบ Facebook Reels Auto-Producer & Uploader (รอบโพสต์ทุกๆ 10 นาที)")
+    """เธรดหลักสำหรับโพสต์คลิปพร้อมใช้งานลง Facebook Reels ทุกๆ 10 นาที"""
+    logger.info("🎬 เริ่มต้นระบบ Facebook Reels Auto-Uploader (รอบโพสต์ทุกๆ 10 นาที)")
     import uploader
     
     while True:
         try:
             if is_active_hours():
-                # รันโพสต์คลิปถัดไป (ถ้าไม่มีคลิป ระบบจะดึงรูปสินค้ามาผลิตคลิป+เสียงพากย์ TTS ให้อัตโนมัติ)
+                # โพสต์คลิปที่ผลิตรอไว้แล้วทันที
                 uploader.post_next(dry_run=False, force=False, normalize=True)
             else:
                 logger.info("🌙 อยู่นอกเวลาทำการ (23:00 - 07:00 น.) — พักโพสต์ Reels")
         except Exception as e:
             logger.error(f"❌ ระบบโพสต์ Reels เกิดข้อผิดพลาด: {e}")
         
-        # ตรวจสอบคิวทุกๆ 60 วินาที (1 นาที)
+        # ตรวจสอบเวลาโพสต์ทุกๆ 60 วินาที
         time.sleep(60)
-
 
 
 def print_banner():
@@ -103,15 +119,20 @@ def print_banner():
 
 def main():
     print_banner()
+    
+    # 1. รันเธรดผลิตคลิปสินค้าล่วงหน้ารอไว้เสมอ (Pre-buffer)
+    t_producer = threading.Thread(target=run_prebuffer_producer_loop, daemon=True, name="ReelsPrebuffer")
+    t_producer.start()
 
-    t_reels = threading.Thread(target=run_reels_uploader_loop, daemon=True, name="ReelsUploader")
-    t_reels.start()
+    # 2. รันเธรดอัปโหลดตามรอบเวลา 10 นาที
+    t_uploader = threading.Thread(target=run_reels_uploader_loop, daemon=True, name="ReelsUploader")
+    t_uploader.start()
 
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print("\n🛑 กำลังปิดการทำงานของระบบอย่างปลอดภัย...")
+        logger.info("🛑 ปิดการทำงานระบบ System Runner")
         sys.exit(0)
 
 
