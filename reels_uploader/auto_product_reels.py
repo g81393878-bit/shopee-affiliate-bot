@@ -223,34 +223,27 @@ def get_audio_duration(audio_path: Path) -> float:
 
 
 
-def wrap_thai_lines(text: str, max_chars_per_line: int = 24, max_lines: int = 3) -> List[str]:
-    """ตัดบรรทัดชื่อสินค้าตามคำ ไม่ตัดกลางสระหรือวรรณยุกต์"""
-    words = text.split()
+def wrap_thai_lines(text: str, max_chars_per_line: int = 25, max_lines: int = 3) -> List[str]:
+    """ตัดบรรทัดชื่อสินค้าด้วย PyThaiNLP ตามหลักพจนานุกรม ไม่ตัดกลางคำหรือสระลอยเด็ดขาด 100%"""
+    try:
+        from pythainlp import word_tokenize
+        tokens = word_tokenize(text, engine="newmm")
+    except Exception:
+        tokens = text.split()
+
     lines = []
     curr = ""
-    for w in words:
+    for tok in tokens:
         if not curr:
-            curr = w
-        elif len(curr) + len(w) + 1 <= max_chars_per_line:
-            curr = f"{curr} {w}"
+            curr = tok
+        elif len(curr) + len(tok) <= max_chars_per_line:
+            curr += tok
         else:
-            lines.append(curr)
-            curr = w
+            lines.append(curr.strip())
+            curr = tok
     if curr:
-        lines.append(curr)
-    
-    # กรณีข้อความติดกันยาวเป็นพรืด
-    final_lines = []
-    for line in lines:
-        while len(line) > max_chars_per_line:
-            cut_idx = max_chars_per_line
-            while cut_idx > 0 and line[cut_idx-1] in ('\u0E31', '\u0E34', '\u0E35', '\u0E36', '\u0E37', '\u0E38', '\u0E39', '\u0E3A', '\u0E47', '\u0E48', '\u0E49', '\u0E4A', '\u0E4B', '\u0E4C', '\u0E33', '\u0E30'):
-                cut_idx -= 1
-            final_lines.append(line[:cut_idx].strip())
-            line = line[cut_idx:].strip()
-        if line:
-            final_lines.append(line)
-    return final_lines[:max_lines]
+        lines.append(curr.strip())
+    return [l for l in lines if l][:max_lines]
 
 
 def create_product_posters_multiphase(product_name: str, price: float, rating: float, sales_count: int, img: Image.Image) -> List[Image.Image]:
@@ -334,13 +327,14 @@ def create_product_posters_multiphase(product_name: str, price: float, rating: f
         draw_info = ImageDraw.Draw(info_box)
         draw_info.rounded_rectangle([0, 0, W - 120, 520], radius=32, fill=(255, 255, 255), outline=brand_color, width=4)
 
-        f_badge = get_font(FONT_BOLD, 46)
-        draw_info.text((50, 70), "สินค้าคุณภาพแท้ 100%", font=f_badge, fill=brand_color, anchor="lm")
+        f_badge = get_font(FONT_BOLD, 40)
+        draw_info.text((50, 70), "ของแท้ 100%", font=f_badge, fill=brand_color, anchor="lm")
         
-        f_stat = get_font(FONT_BOLD, 32)
+        f_stat = get_font(FONT_BOLD, 30)
         stat_str = f"คะแนน {rating:.1f}  |  ขายแล้ว {sales_count:,} ชิ้น"
         draw_info.text((W - 170, 70), stat_str, font=f_stat, fill=(60, 60, 60), anchor="rm")
         draw_info.line([(40, 125), (W - 160, 125)], fill=(220, 220, 220), width=2)
+
 
 
 
