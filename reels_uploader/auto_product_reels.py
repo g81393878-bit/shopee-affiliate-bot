@@ -199,8 +199,38 @@ def get_audio_duration(audio_path: Path) -> float:
 
 
 
+def wrap_thai_lines(text: str, max_chars_per_line: int = 24, max_lines: int = 3) -> List[str]:
+    """ตัดบรรทัดชื่อสินค้าตามคำ ไม่ตัดกลางสระหรือวรรณยุกต์"""
+    words = text.split()
+    lines = []
+    curr = ""
+    for w in words:
+        if not curr:
+            curr = w
+        elif len(curr) + len(w) + 1 <= max_chars_per_line:
+            curr = f"{curr} {w}"
+        else:
+            lines.append(curr)
+            curr = w
+    if curr:
+        lines.append(curr)
+    
+    # กรณีข้อความติดกันยาวเป็นพรืด
+    final_lines = []
+    for line in lines:
+        while len(line) > max_chars_per_line:
+            cut_idx = max_chars_per_line
+            while cut_idx > 0 and line[cut_idx-1] in ('\u0E31', '\u0E34', '\u0E35', '\u0E36', '\u0E37', '\u0E38', '\u0E39', '\u0E3A', '\u0E47', '\u0E48', '\u0E49', '\u0E4A', '\u0E4B', '\u0E4C', '\u0E33', '\u0E30'):
+                cut_idx -= 1
+            final_lines.append(line[:cut_idx].strip())
+            line = line[cut_idx:].strip()
+        if line:
+            final_lines.append(line)
+    return final_lines[:max_lines]
+
+
 def create_product_posters_multiphase(product_name: str, price: float, rating: float, sales_count: int, img: Image.Image) -> List[Image.Image]:
-    """สร้างภาพโปสเตอร์ 3 จังหวะ (Dynamic 3-Phase Text Overlay) — สำหรับคนดูคลิปแบบปิดเสียง"""
+    """สร้างภาพโปสเตอร์ 3 จังหวะ (Dynamic 3-Phase Text Overlay) — สำหรับคนดูคลิปแบบปิดเสียง ไร้ภาษาต่างดาว 100%"""
     W, H = 1080, 1920
     bot_name = clean_display_text(os.getenv("BOT_NAME", "ป้าเข็ม ขายของ"))
     brand_color = _hex_to_rgb(os.getenv("BRAND_COLOR", "#EE4D2D"))
@@ -228,35 +258,35 @@ def create_product_posters_multiphase(product_name: str, price: float, rating: f
     card_padding = 20
     card_box = [box_x - card_padding, box_y - card_padding, box_x + prod_w + card_padding, box_y + prod_h + card_padding]
 
-    # กำหนดข้อความ 3 จังหวะ
+    # กำหนดข้อความ 3 จังหวะ (ไม่ใช้อีโมจิที่เรนเดอร์เป็นตัวสี่เหลี่ยม)
     price_str = f"฿{price:,.0f}" if price else "ราคาพิเศษ"
     phases = [
         # Phase 1: Hook สะดุดตา
         {
             "top_bg": (255, 215, 0),
             "top_border": (238, 77, 45),
-            "top_text": "🔥 ของดีบอกต่อ • Shopee แท้ 100%!",
+            "top_text": "ของดีบอกต่อ • Shopee แท้ 100%!",
             "top_text_col": (0, 0, 0),
             "cta_bg": brand_color,
-            "cta_text": "👉 ดูรายละเอียด / สั่งซื้อ ที่ลิงก์ในแคปชั่น"
+            "cta_text": "กดดูรายละเอียด / สั่งซื้อ ที่ลิงก์ในแคปชั่น"
         },
         # Phase 2: จุดเด่น & ราคา
         {
             "top_bg": brand_color,
             "top_border": (255, 215, 0),
-            "top_text": f"💰 ราคาพิเศษเพียง {price_str} บาท! (รีวิว ⭐ {rating:.1f})",
+            "top_text": f"ราคาพิเศษเพียง {price_str} บาท (คะแนน {rating:.1f})",
             "top_text_col": (255, 255, 255),
             "cta_bg": brand_color,
-            "cta_text": "👉 ดูรายละเอียด / สั่งซื้อ ที่ลิงก์ในแคปชั่น"
+            "cta_text": "กดดูรายละเอียด / สั่งซื้อ ที่ลิงก์ในแคปชั่น"
         },
         # Phase 3: ชวนกดซื้อทันที
         {
             "top_bg": (16, 185, 129),  # Emerald Green
             "top_border": (255, 255, 255),
-            "top_text": "👉 พิกัดของแท้ กดลิงก์ในแคปชั่นได้เลย!",
+            "top_text": "พิกัดของแท้ กดลิงก์ในแคปชั่นได้เลย!",
             "top_text_col": (255, 255, 255),
             "cta_bg": (16, 185, 129),
-            "cta_text": "🛒 สั่งซื้อของแท้ กดลิงก์ในแคปชั่นเลยลูก!"
+            "cta_text": "สั่งซื้อของแท้ กดลิงก์ในแคปชั่นเลยลูก!"
         }
     ]
 
@@ -284,22 +314,14 @@ def create_product_posters_multiphase(product_name: str, price: float, rating: f
         draw_info.text((50, 70), price_str, font=f_price_badge, fill=brand_color, anchor="lm")
         
         f_stat = get_font(FONT_BOLD, 32)
-        stat_str = f"⭐ {rating:.1f}  |  ขายแล้ว {sales_count:,} ชิ้น"
+        stat_str = f"คะแนน {rating:.1f}  |  ขายแล้ว {sales_count:,} ชิ้น"
         draw_info.text((W - 170, 70), stat_str, font=f_stat, fill=(60, 60, 60), anchor="rm")
         draw_info.line([(40, 125), (W - 160, 125)], fill=(220, 220, 220), width=2)
 
         f_title = get_font(FONT_BOLD, 38)
-        title_lines = []
-        curr = ""
-        for word in clean_pname:
-            if len(curr) >= 28:
-                title_lines.append(curr)
-                curr = ""
-            curr += word
-        if curr:
-            title_lines.append(curr)
+        title_lines = wrap_thai_lines(clean_pname, max_chars_per_line=24, max_lines=3)
         title_y = 175
-        for l in title_lines[:3]:
+        for l in title_lines:
             draw_info.text((50, title_y), l, font=f_title, fill=(20, 20, 20), anchor="lt")
             title_y += 52
 
@@ -318,6 +340,7 @@ def create_product_posters_multiphase(product_name: str, price: float, rating: f
         posters.append(canvas.convert("RGB"))
 
     return posters
+
 
 
 def _ffmpeg_exe() -> str:
@@ -530,18 +553,9 @@ def create_custom_topic_poster(title: str, subtitle: str, points: list, theme_bg
         draw.text((90, card_y + 45), p_title, font=f_p_head, fill=(20, 20, 20), anchor="lt")
         
         # จัดข้อความอธิบาย
-        desc_lines = []
-        curr = ""
-        for word in p_desc:
-            if len(curr) >= 28:
-                desc_lines.append(curr)
-                curr = ""
-            curr += word
-        if curr:
-            desc_lines.append(curr)
-        
+        desc_lines = wrap_thai_lines(p_desc, max_chars_per_line=26, max_lines=2)
         dy = card_y + 120
-        for l in desc_lines[:2]:
+        for l in desc_lines:
             draw.text((90, dy), l, font=f_p_body, fill=(60, 60, 60), anchor="lt")
             dy += 50
 
@@ -552,9 +566,10 @@ def create_custom_topic_poster(title: str, subtitle: str, points: list, theme_bg
     draw.rounded_rectangle(cta_box, radius=32, fill=brand_color, outline=(255, 255, 255), width=4)
     f_cta_main = get_font(FONT_BOLD, 46)
     f_cta_sub = get_font(FONT_REG, 32)
-    draw.text((W // 2, H - 370), "👉 แอดไลน์คุยกับป้าเข็มได้เลย!", font=f_cta_main, fill=(255, 255, 255), anchor="mm")
+    draw.text((W // 2, H - 370), "แอดไลน์คุยกับป้าเข็มได้เลย!", font=f_cta_main, fill=(255, 255, 255), anchor="mm")
     draw.text((W // 2, H - 280), "กดลิงก์ที่หน้าโปรไฟล์ หรือ ในแคปชั่น", font=f_cta_sub, fill=(255, 240, 200), anchor="mm")
     draw.text((W // 2, H - 200), f"LINE: {line_id}", font=f_cta_main, fill=(255, 255, 0), anchor="mm")
+
 
     f_copy = get_font(FONT_REG, 26)
     draw.text((W // 2, H - 70), "ผู้ช่วยช้อปปิ้ง AI ตัวจริง • ปรึกษาฟรี 24 ชม.", font=f_copy, fill=(200, 210, 225), anchor="mm")
