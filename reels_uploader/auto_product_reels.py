@@ -158,41 +158,50 @@ def build_voice_script(product_name: str, price: float, category: str) -> str:
     return script
 
 
-async def _tts_save(text: str, output_path: str, voice: str = "th-TH-NiwatNeural"):
+def clean_for_tts(text: str) -> str:
+    """กรองให้เหลือเฉพาะตัวอักษรและตัวเลข เพื่อให้ TTS อ่านได้อย่างลื่นไหล ไม่ error"""
+    text = re.sub(r'[\+\-\*\/\\&%#@!\?=\(\)\[\]\{\}\<\>_\|~^]', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+
+async def _tts_save(text: str, output_path: str, voice: str = "th-TH-PremwadeeNeural"):
     communicate = edge_tts.Communicate(text, voice)
     await communicate.save(output_path)
 
 
 def generate_tts_audio(text: str, output_path: Path) -> bool:
-    """สร้างไฟล์เสียง MP3 ภาษาไทยด้วย Edge TTS (Niwat/Premwadee) พร้อม gTTS Fallback 100%"""
-    preferred_voice = os.getenv("TTS_VOICE", "th-TH-NiwatNeural")
-    voices = [preferred_voice, "th-TH-NiwatNeural", "th-TH-PremwadeeNeural"]
-    seen = set()
-    fallback_voices = [x for x in voices if not (x in seen or seen.add(x))]
-
-    # 1. ลองใช้ Microsoft Neural Voices
-    for v in fallback_voices:
-        for attempt in range(2):
-            try:
-                asyncio.run(_tts_save(text, str(output_path), voice=v))
-                if output_path.exists() and output_path.stat().st_size > 500:
-                    return True
-            except Exception as e:
-                logger.warning(f"สร้างเสียงพากย์ TTS ล้ม (voice: {v}, attempt {attempt+1}): {e}")
-                time.sleep(0.3)
-
-    # 2. Fallback สำรองด้วย Google Translate TTS (gTTS) การันตีมีเสียง 100%
+    """สร้างไฟล์เสียงพากย์ผู้หญิง (ป้าเข็ม) ภาษาไทย 100% ด้วย Edge TTS / gTTS"""
+    clean_text = clean_for_tts(text)
+    
+    # 1. ลองใช้เสียงผู้หญิง Premwadee Neural (Microsoft)
     try:
-        from gtts import gTTS
-        tts = gTTS(text=text, lang="th")
-        tts.save(str(output_path))
+        asyncio.run(_tts_save(clean_text, str(output_path), voice="th-TH-PremwadeeNeural"))
         if output_path.exists() and output_path.stat().st_size > 500:
-            logger.info("สร้างเสียงพากย์ด้วย gTTS Fallback สำเร็จ")
             return True
     except Exception as e:
-        logger.error(f"สร้างเสียงพากย์ gTTS ล้ม: {e}")
+        logger.warning(f"Premwadee Neural TTS ไม่พร้อมใช้งาน: {e}")
+
+    # 2. Fallback สำรองด้วย Google Thai Female Voice (gTTS) พร้อมปรับสปีดให้สดใสเป็นธรรมชาติ
+    try:
+        from gtts import gTTS
+        raw_tmp = output_path.with_suffix(".raw.mp3")
+        tts = gTTS(text=clean_text, lang="th")
+        tts.save(str(raw_tmp))
+        
+        ffmpeg_exe = _ffmpeg_exe()
+        cmd = [ffmpeg_exe, "-y", "-i", str(raw_tmp), "-filter:a", "atempo=1.12,volume=1.25", str(output_path)]
+        subprocess.run(cmd, check=True, capture_output=True)
+        raw_tmp.unlink(missing_ok=True)
+        
+        if output_path.exists() and output_path.stat().st_size > 500:
+            logger.info("สร้างเสียงพากย์ผู้หญิงด้วย Google TTS สำเร็จ")
+            return True
+    except Exception as e:
+        logger.error(f"สร้างเสียงพากย์ Google TTS ล้ม: {e}")
 
     return False
+
 
 
 
@@ -447,7 +456,8 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
                            models.Product.sales_count >= 100)
                    .order_by(models.Product.ai_score.desc(),
                              models.Product.sales_count.desc())
-                   .limit(limit * 5).all())
+                   .limit(100).all())
+
 
         for p in prods:
             if len(generated) >= limit:
