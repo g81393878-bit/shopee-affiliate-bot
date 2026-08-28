@@ -21,9 +21,10 @@ print("====================================================")
 print("       📊 ตรวจสอบสถานะและตัวนับเวลาระบบ Facebook Reels")
 print("====================================================")
 
-# 1. ยอดการโพสต์วันนี้
-max_limit = 50
+# 1. ยอดการโพสต์วันนี้ (จำกัดตาม Meta Reels API สูงสุด 30 คลิป/24 ชม.)
+max_limit = int(os.getenv("MAX_REELS_PER_DAY", "30"))
 today_count = 0
+
 if DAILY_COUNT_FILE.exists():
     try:
         date_str, count_str = DAILY_COUNT_FILE.read_text(encoding="utf-8").strip().split()
