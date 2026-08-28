@@ -440,11 +440,12 @@ def build_caption(product: dict) -> str:
 def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
     pending = list_pending()
     if not pending:
-        # Auto-recycle: คัดลอกคลิปจาก posted/ กลับมาโพสต์ใหม่
-        if recycle_clips():
+        # ตรวจสอบว่าเปิด Auto-recycle หรือไม่ (ค่าเริ่มต้น ปิด เพื่อรอคลิปใหม่จากผู้ใช้)
+        auto_recycle = os.getenv("AUTO_RECYCLE_CLIPS", "0").lower() in ("1", "true", "yes")
+        if auto_recycle and recycle_clips():
             pending = list_pending()
         else:
-            log("ไม่มีคลิปใน pending_videos/ — จบ")
+            log("ไม่มีคลิปใหม่ใน pending_videos/ — พักรอคลิปใหม่จากผู้ใช้")
             return 0
 
     spacing = _env_float("POSTING_SPACING_HOURS", DEFAULT_SPACING_HOURS)
