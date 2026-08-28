@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""reels_uploader/auto_product_reels.py — สร้างคลิปวิดีโอ Reels 9:16 จากภาพสินค้าพร้อมเสียงพากย์ภาษาไทย (TTS) อัตโนมัติ
+"""reels_uploader/auto_product_reels.py — สร้างคลิปวิดีโอ Reels 9:16 จากภาพสินค้าพร้อมเสียงพากย์ภาษาไทย (TTS) คุณภาพสูง
 
 1. ดึงข้อมูลสินค้า (รูปภาพ, ชื่อ, ราคา, ลิงก์ affiliate) จากฐานข้อมูล (Supabase)
-2. สร้างเสียงพากย์ภาษาไทย (Thai TTS) ด้วย edge-tts เสียงป้าเข็ม (th-TH-PremwadeeNeural)
-3. สร้างภาพโปสเตอร์ 1080x1920 (9:16) ด้วย Pillow (ดีไซน์สวยงาม มีพื้นหลังเบลอ, ป้ายราคา, ดาวรีวิว)
-4. รวมภาพและเสียงเป็นคลิปวิดีโอ Reels ด้วย ffmpeg (ใส่เอฟเฟกต์ซูมช้าๆ zoompan)
-5. บันทึกไฟล์ลง pending_videos/ พร้อมอัปเดต products.json อัตโนมัติ
+2. กรองและตัดคำซ้ำ/รหัสต่างดาว/emoji ขยะออกจากชื่อสินค้า
+3. สร้างเสียงพากย์ภาษาไทย (Thai TTS) ลื่นไหล เป็นธรรมชาติ 100% ไม่พูดซ้ำ
+4. สร้างภาพโปสเตอร์ 1080x1920 (9:16) ด้วย Pillow (ไม่มีตัวอักษรขยะหรือเต้าหู้)
+5. รวมภาพและเสียงเป็นคลิปวิดีโอ Reels ความยาวพอดีกับเสียงพากย์ (~6-8 วิ)
 """
 import asyncio
 import io
@@ -70,6 +70,7 @@ FONT_DIR = Path("C:/Windows/Fonts")
 FONT_BOLD = FONT_DIR / "leelawdb.ttf" if (FONT_DIR / "leelawdb.ttf").exists() else FONT_DIR / "tahomabd.ttf"
 FONT_REG = FONT_DIR / "leelawad.ttf" if (FONT_DIR / "leelawad.ttf").exists() else FONT_DIR / "tahoma.ttf"
 
+
 def _hex_to_rgb(hex_str: str, default: tuple = (238, 77, 45)) -> tuple:
     """แปลงสี Hex เป็น RGB Tuple"""
     hex_clean = (hex_str or "").strip().lstrip("#")
@@ -88,11 +89,27 @@ def get_font(font_path: Path, size: int):
         return ImageFont.load_default()
 
 
+def clean_display_text(text: str) -> str:
+    """กรองข้อความสำหรับแสดงบนภาพโปสเตอร์ — ลบ emoji และอักขระต่างดาวทั้งหมด"""
+    if not text:
+        return ""
+    # 1. ลบ tag / bracket ขยะ เช่น [ซื้อ 4 แถม 2], 【แท้ 100%】, (พร้อมส่ง)
+    t = re.sub(r'\[[^\]]*\]|\([^\)]*\)|【[^】]*】', ' ', text)
+    # 2. เก็บเฉพาะภาษาไทย ภาษาอังกฤษ ตัวเลข และเครื่องหมายวรรคตอนพื้นฐาน
+    t = re.sub(r'[^\u0E00-\u0E7Fa-zA-Z0-9\s.,/%+\-()]', '', t)
+    # 3. จัดการสระอำ
+    t = t.replace('\u0e4d\u0e32', '\u0e33').replace('\u0e4d\u0e33', '\u0e33')
+    # 4. ลบช่องว่างซ้ำซ้อน
+    t = re.sub(r'\s+', ' ', t).strip()
+    return t
+
+
 def sanitize_filename(name: str) -> str:
     """แปลงชื่อให้ปลอดภัยสำหรับเป็นชื่อไฟล์"""
-    clean = re.sub(r'[\\/*?:"<>|]', "", name)
+    clean = clean_display_text(name)
+    clean = re.sub(r'[\\/*?:"<>|]', "", clean)
     clean = clean.replace(" ", "_").strip()
-    return clean[:40]
+    return clean[:35]
 
 
 def download_image(url: str) -> Optional[Image.Image]:
@@ -114,21 +131,32 @@ def download_image(url: str) -> Optional[Image.Image]:
 
 
 def build_voice_script(product_name: str, price: float, category: str) -> str:
-    """สร้างสคริปต์คำพูดภาษาไทยสำหรับเสียงพากย์ TTS ตามแบรนด์"""
+    """สร้างบทพูดภาษาไทยธรรมชาติ 100% — ไร้คำซ้ำซ้อน ไร้รหัสโมเดลขยะ"""
     bot_name = os.getenv("BOT_NAME", "ป้าเข็ม")
-    # ตัดชื่อสินค้าให้สั้นกระชับสำหรับพูด
-    short_name = product_name
-    for sep in ["-", "|", "/", ","]:
-        if sep in short_name:
-            short_name = short_name.split(sep)[0]
-    short_name = short_name.strip()[:40]
+    
+    # 1. กรองข้อความขยะ
+    clean_name = clean_display_text(product_name)
+    # ลบรหัสสินค้าภาษาอังกฤษ/ตัวเลขย่อ (เช่น 2L, KC215SQ, A892, YTL)
+    clean_name = re.sub(r'\b[A-Za-z0-9_-]{1,8}\b', '', clean_name)
+    clean_name = re.sub(r'\s+', ' ', clean_name).strip()
+
+    # 2. ลบคำที่ซ้ำกัน (เช่น กระติกน้ำ กระติกน้ำ)
+    words = clean_name.split()
+    clean_words = []
+    for w in words:
+        if not clean_words or (w not in clean_words[-1] and clean_words[-1] not in w):
+            clean_words.append(w)
+
+    short_title = " ".join(clean_words[:5]).strip()
+    if not short_title:
+        short_title = category if category else "สินค้าคุณภาพดี"
 
     price_int = int(price) if price else 0
-    price_text = f"ราคาพิเศษเพียง {price_int:,} บาท" if price_int > 0 else "ราคาพิเศษสุดคุ้ม"
+    price_text = f"{price_int:,} บาท" if price_int > 0 else "ราคาพิเศษสุดคุ้ม"
 
     script = (
-        f"สวัสดีจ้า {bot_name} มีของดีมาแนะนำ {short_name} "
-        f"{price_text} ของแท้ คุณภาพดี รีวิวแน่น "
+        f"สวัสดีจ้า {bot_name} มีของดีมาแนะนำ {short_title} "
+        f"ราคาพิเศษเพียง {price_text} ของแท้ คุณภาพดี รีวิวแน่น "
         f"สนใจกดสั่งซื้อที่ลิงก์ในแคปชั่นได้เลยนะลูก"
     )
     return script
@@ -151,11 +179,12 @@ def generate_tts_audio(text: str, output_path: Path) -> bool:
 
 
 def create_product_poster(product_name: str, price: float, rating: float, sales_count: int, img: Image.Image) -> Image.Image:
-    """สร้างภาพโปสเตอร์แนวตั้ง 1080x1920 (9:16 Full HD) พร้อมตกแต่งสวยงามตามสีแบรนด์"""
+    """สร้างภาพโปสเตอร์แนวตั้ง 1080x1920 (9:16 Full HD) พร้อมตกแต่งสวยงาม ไร้ภาษาต่างดาว"""
     W, H = 1080, 1920
-    bot_name = os.getenv("BOT_NAME", "ป้าเข็ม ขายของ")
-    slogan = os.getenv("BRAND_SLOGAN", "แท้ 100% • รีวิวแน่น • คุ้มค่าเงินทุกบาท")
+    bot_name = clean_display_text(os.getenv("BOT_NAME", "ป้าเข็ม ขายของ"))
+    slogan = clean_display_text(os.getenv("BRAND_SLOGAN", "แท้ 100% • รีวิวแน่น • คุ้มค่าเงินทุกบาท"))
     brand_color = _hex_to_rgb(os.getenv("BRAND_COLOR", "#EE4D2D"))
+    clean_pname = clean_display_text(product_name)
 
     canvas = Image.new("RGBA", (W, H), (18, 20, 24, 255))
 
@@ -179,7 +208,7 @@ def create_product_poster(product_name: str, price: float, rating: float, sales_
     header_box = Image.new("RGBA", (W, 200), (0, 0, 0, 160))
     canvas.paste(header_box, (0, 0), header_box)
     
-    f_header = get_font(FONT_BOLD, 48)
+    f_header = get_font(FONT_BOLD, 46)
     f_sub = get_font(FONT_REG, 30)
     draw.text((W // 2, 70), f"🛍️ {bot_name} คัดของดี ของเด็ด", font=f_header, fill=(255, 215, 0), anchor="mm")
     draw.text((W // 2, 135), slogan, font=f_sub, fill=(240, 240, 240), anchor="mm")
@@ -219,10 +248,10 @@ def create_product_poster(product_name: str, price: float, rating: float, sales_
     draw_info.line([(40, 125), (W - 160, 125)], fill=(220, 220, 220), width=2)
 
     # ชื่อสินค้า (ตัดคำไม่ให้ล้น)
-    f_title = get_font(FONT_BOLD, 40)
+    f_title = get_font(FONT_BOLD, 38)
     title_lines = []
     curr = ""
-    for word in product_name:
+    for word in clean_pname:
         if len(curr) >= 28:
             title_lines.append(curr)
             curr = ""
@@ -234,7 +263,7 @@ def create_product_poster(product_name: str, price: float, rating: float, sales_
     title_y = 175
     for l in title_lines:
         draw_info.text((50, title_y), l, font=f_title, fill=(20, 20, 20), anchor="lt")
-        title_y += 55
+        title_y += 52
 
     # 5. ปุ่ม CTA ด้านล่างของการ์ด
     cta_rect = [40, 390, W - 160, 480]
@@ -251,7 +280,6 @@ def create_product_poster(product_name: str, price: float, rating: float, sales_
     return canvas.convert("RGB")
 
 
-
 def _ffmpeg_exe() -> str:
     """path ffmpeg — ใช้ binary ที่ติดมากับ imageio_ffmpeg (ใน venv) ก่อน fallback เป็น 'ffmpeg' ใน PATH"""
     try:
@@ -262,7 +290,7 @@ def _ffmpeg_exe() -> str:
 
 
 def poster_to_video(poster_path: Path, output_video_path: Path, audio_path: Optional[Path] = None, duration: int = 7) -> bool:
-    """แปลงภาพนิ่ง poster และเสียงพากย์ TTS เป็นวิดีโอ 9:16 พร้อมเอฟเฟกต์ซูมช้าๆ"""
+    """แปลงภาพนิ่ง poster และเสียงพากย์ TTS เป็นวิดีโอ 9:16 พร้อมเอฟเฟกต์ซูมช้าๆ (พอดีกับความยาวเสียง)"""
     ffmpeg_exe = _ffmpeg_exe()
     
     # filter ซูมเข้าอย่างนุ่มนวล (1.0 -> 1.06) ที่ 30fps
@@ -278,12 +306,12 @@ def poster_to_video(poster_path: Path, output_video_path: Path, audio_path: Opti
         cmd.extend([
             "-i", str(audio_path),
             "-vf", filter_complex,
+            "-t", str(duration),
             "-c:v", "libx264",
             "-preset", "fast",
             "-crf", "22",
             "-c:a", "aac",
-            "-b:a", "128k",
-            "-shortest",
+            "-b:a", "192k",
             "-pix_fmt", "yuv420p",
             "-movflags", "+faststart",
             str(output_video_path)
@@ -309,7 +337,7 @@ def poster_to_video(poster_path: Path, output_video_path: Path, audio_path: Opti
 
 
 def generate_product_reels(limit: int = 3) -> List[dict]:
-    """ดึงสินค้าจากฐานข้อมูลมาสร้างเป็นคลิปวิดีโอ Reels พร้อมเสียงพากย์ TTS อัตโนมัติ"""
+    """ดึงสินค้าจากฐานข้อมูลมาสร้างเป็นคลิปวิดีโอ Reels พร้อมเสียงพากย์ TTS ภาษาไทยธรรมชาติ"""
     PENDING_DIR.mkdir(parents=True, exist_ok=True)
     POSTED_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -341,7 +369,8 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
             if target_path.exists() or posted_path.exists():
                 continue
 
-            print(f"\n🎨 กำลังสร้างคลิป Reels พร้อมเสียงพากย์ไทย: {p.name[:40]}...")
+            clean_name = clean_display_text(p.name)
+            print(f"\n🎨 กำลังสร้างคลิป Reels: {clean_name[:40]}...")
             
             # 1. ดึงรูปภาพสินค้า
             img_url = p.image_url
@@ -358,16 +387,16 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
             if not pil_img:
                 continue
 
-            # 2. สร้างเสียงพากย์ภาษาไทย (TTS)
+            # 2. สร้างเสียงพากย์ภาษาไทย (TTS) ธรรมชาติ ไร้คำซ้ำ ไร้รหัสขยะ
             voice_script = build_voice_script(p.name, float(p.price or 0), p.category or "")
-            print(f"🎙️ เสียงพากย์: \"{voice_script}\"")
+            print(f"🎙️ เสียงพากย์ไทย: \"{voice_script}\"")
             
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_audio:
                 tmp_audio_path = Path(tmp_audio.name)
             
             tts_ok = generate_tts_audio(voice_script, tmp_audio_path)
 
-            # 3. สร้างภาพโปสเตอร์ 9:16
+            # 3. สร้างภาพโปสเตอร์ 9:16 ไร้ภาษาต่างดาว
             poster = create_product_poster(
                 product_name=p.name,
                 price=float(p.price or 0),
@@ -381,17 +410,17 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
                 tmp_poster_path = Path(tmp_poster.name)
 
             try:
-                # 4. รวมภาพและเสียงเป็นวิดีโอ Reels
+                # 4. รวมภาพและเสียงเป็นวิดีโอ Reels ความยาว 7 วินาที
                 audio_file = tmp_audio_path if tts_ok else None
                 if poster_to_video(tmp_poster_path, target_path, audio_path=audio_file, duration=7):
                     products_meta[filename] = {
-                        "product_name": p.name,
+                        "product_name": clean_name,
                         "price": str(int(p.price or 0)),
                         "category": p.category or "สินค้าแนะนำ",
                         "affiliate_link": p.affiliate_url or ""
                     }
-                    generated.append({"id": p.id, "name": p.name, "file": filename})
-                    print(f"✅ สร้างคลิปวิดีโอพร้อมเสียงสำเร็จ -> {filename}")
+                    generated.append({"id": p.id, "name": clean_name, "file": filename})
+                    print(f"✅ สร้างคลิปวิดีโอพร้อมเสียงพากย์สำเร็จ -> {filename}")
             finally:
                 tmp_poster_path.unlink(missing_ok=True)
                 tmp_audio_path.unlink(missing_ok=True)

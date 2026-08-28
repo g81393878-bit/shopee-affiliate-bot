@@ -514,9 +514,11 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
         return 0
 
     # แปลงคลิปให้ตรง spec Reels ก่อนโพสต์ (9:16/1080p/30fps/≤90s) — ถ้าไม่สั่ง --no-normalize
+    # ถ้าเป็นคลิปสินค้าที่สร้างจาก auto_product_reels (prod_*) จะตรง spec 1080x1920 อยู่แล้ว ไม่ต้องแปลงซ้ำ
     upload_path = str(item)
     tmp = None
-    if normalize:
+    should_normalize = normalize and not item.name.startswith("prod_")
+    if should_normalize:
         fd, tmp_path = tempfile.mkstemp(suffix=".mp4", prefix="reels_norm_")
         os.close(fd)
         tmp = Path(tmp_path)
@@ -525,6 +527,7 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
             upload_path = str(tmp)
         else:
             tmp = None  # แปลงล้ม → ใช้ไฟล์ต้นฉบับแทน
+
 
     try:
         title_text = str((product or {}).get("product_name", "") or "")[:80]
