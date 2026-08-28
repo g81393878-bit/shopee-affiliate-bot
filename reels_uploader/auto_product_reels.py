@@ -178,15 +178,12 @@ def generate_tts_audio(text: str, output_path: Path) -> bool:
         return False
 
 
-def create_product_poster(product_name: str, price: float, rating: float, sales_count: int, img: Image.Image) -> Image.Image:
-    """สร้างภาพโปสเตอร์แนวตั้ง 1080x1920 (9:16 Full HD) พร้อมตกแต่งสวยงาม ไร้ภาษาต่างดาว"""
+def create_product_posters_multiphase(product_name: str, price: float, rating: float, sales_count: int, img: Image.Image) -> List[Image.Image]:
+    """สร้างภาพโปสเตอร์ 3 จังหวะ (Dynamic 3-Phase Text Overlay) — สำหรับคนดูคลิปแบบปิดเสียง"""
     W, H = 1080, 1920
     bot_name = clean_display_text(os.getenv("BOT_NAME", "ป้าเข็ม ขายของ"))
-    slogan = clean_display_text(os.getenv("BRAND_SLOGAN", "แท้ 100% • รีวิวแน่น • คุ้มค่าเงินทุกบาท"))
     brand_color = _hex_to_rgb(os.getenv("BRAND_COLOR", "#EE4D2D"))
     clean_pname = clean_display_text(product_name)
-
-    canvas = Image.new("RGBA", (W, H), (18, 20, 24, 255))
 
     # 1. ทำพื้นหลังแบบเบลอ (Blurred Background)
     bg_img = img.copy()
@@ -196,88 +193,110 @@ def create_product_poster(product_name: str, price: float, rating: float, sales_
     top = (bg_resized.height - H) // 2
     bg_cropped = bg_resized.crop((left, top, left + W, top + H))
     bg_blurred = bg_cropped.filter(ImageFilter.GaussianBlur(radius=35))
-    
-    # Overlay เงาดำให้พื้นหลังมืดลง
     dark_overlay = Image.new("RGBA", (W, H), (0, 0, 0, 140))
-    canvas.paste(bg_blurred, (0, 0))
-    canvas = Image.alpha_composite(canvas, dark_overlay)
+    base_bg = Image.alpha_composite(bg_blurred, dark_overlay)
 
-    draw = ImageDraw.Draw(canvas)
-
-    # 2. แถบ Header ด้านบน
-    header_box = Image.new("RGBA", (W, 200), (0, 0, 0, 160))
-    canvas.paste(header_box, (0, 0), header_box)
-    
-    f_header = get_font(FONT_BOLD, 46)
-    f_sub = get_font(FONT_REG, 30)
-    draw.text((W // 2, 70), f"🛍️ {bot_name} คัดของดี ของเด็ด", font=f_header, fill=(255, 215, 0), anchor="mm")
-    draw.text((W // 2, 135), slogan, font=f_sub, fill=(240, 240, 240), anchor="mm")
-
-    # 3. กรอบรูปสินค้าตรงกลาง (พร้อมเงาและขอบทอง)
-    target_img_size = 780
+    # 2. กรอบรูปสินค้าตรงกลาง
+    target_img_size = 760
     img_ratio = min(target_img_size / img.width, target_img_size / img.height)
     prod_w = int(img.width * img_ratio)
     prod_h = int(img.height * img_ratio)
     prod_resized = img.resize((prod_w, prod_h), Image.Resampling.LANCZOS)
-
     box_x = (W - prod_w) // 2
-    box_y = 260 + (target_img_size - prod_h) // 2
-
-    card_padding = 24
+    box_y = 280 + (target_img_size - prod_h) // 2
+    card_padding = 20
     card_box = [box_x - card_padding, box_y - card_padding, box_x + prod_w + card_padding, box_y + prod_h + card_padding]
-    draw.rounded_rectangle(card_box, radius=32, fill=(255, 255, 255, 245), outline=(255, 215, 0, 200), width=4)
-    canvas.paste(prod_resized, (box_x, box_y), prod_resized)
 
-    # 4. กล่องข้อมูลสินค้าด้านล่าง (ชื่อ + ราคา + ดาว)
-    info_top = 1120
-    info_box = Image.new("RGBA", (W - 120, 520), (255, 255, 255, 250))
-    draw_info = ImageDraw.Draw(info_box)
-    draw_info.rounded_rectangle([0, 0, W - 120, 520], radius=32, fill=(255, 255, 255), outline=brand_color, width=4)
-
-    # ป้ายราคาเด่นๆ (ตามสีแบรนด์)
-    f_price_badge = get_font(FONT_BOLD, 64)
+    # กำหนดข้อความ 3 จังหวะ
     price_str = f"฿{price:,.0f}" if price else "ราคาพิเศษ"
-    draw_info.text((50, 70), price_str, font=f_price_badge, fill=brand_color, anchor="lm")
-    
-    # ป้ายยอดขาย / ดาว
-    f_stat = get_font(FONT_BOLD, 32)
-    stat_str = f"⭐ {rating:.1f}  |  ขายแล้ว {sales_count:,} ชิ้น"
-    draw_info.text((W - 170, 70), stat_str, font=f_stat, fill=(60, 60, 60), anchor="rm")
+    phases = [
+        # Phase 1: Hook สะดุดตา
+        {
+            "top_bg": (255, 215, 0),
+            "top_border": (238, 77, 45),
+            "top_text": "🔥 ของดีบอกต่อ • Shopee แท้ 100%!",
+            "top_text_col": (0, 0, 0),
+            "cta_bg": brand_color,
+            "cta_text": "👉 ดูรายละเอียด / สั่งซื้อ ที่ลิงก์ในแคปชั่น"
+        },
+        # Phase 2: จุดเด่น & ราคา
+        {
+            "top_bg": brand_color,
+            "top_border": (255, 215, 0),
+            "top_text": f"💰 ราคาพิเศษเพียง {price_str} บาท! (รีวิว ⭐ {rating:.1f})",
+            "top_text_col": (255, 255, 255),
+            "cta_bg": brand_color,
+            "cta_text": "👉 ดูรายละเอียด / สั่งซื้อ ที่ลิงก์ในแคปชั่น"
+        },
+        # Phase 3: ชวนกดซื้อทันที
+        {
+            "top_bg": (16, 185, 129),  # Emerald Green
+            "top_border": (255, 255, 255),
+            "top_text": "👉 พิกัดของแท้ กดลิงก์ในแคปชั่นได้เลย!",
+            "top_text_col": (255, 255, 255),
+            "cta_bg": (16, 185, 129),
+            "cta_text": "🛒 สั่งซื้อของแท้ กดลิงก์ในแคปชั่นเลยลูก!"
+        }
+    ]
 
-    # เส้นคั่น
-    draw_info.line([(40, 125), (W - 160, 125)], fill=(220, 220, 220), width=2)
+    posters = []
+    for ph in phases:
+        canvas = base_bg.copy()
+        draw = ImageDraw.Draw(canvas)
 
-    # ชื่อสินค้า (ตัดคำไม่ให้ล้น)
-    f_title = get_font(FONT_BOLD, 38)
-    title_lines = []
-    curr = ""
-    for word in clean_pname:
-        if len(curr) >= 28:
+        # แถบ Highlight ด้านบนตัวโตๆ
+        draw.rounded_rectangle([40, 50, W - 40, 220], radius=32, fill=ph["top_bg"], outline=ph["top_border"], width=4)
+        f_top = get_font(FONT_BOLD, 46)
+        draw.text((W // 2, 135), ph["top_text"], font=f_top, fill=ph["top_text_col"], anchor="mm")
+
+        # กรอบรูปสินค้า
+        draw.rounded_rectangle(card_box, radius=32, fill=(255, 255, 255, 245), outline=(255, 215, 0, 200), width=4)
+        canvas.paste(prod_resized, (box_x, box_y), prod_resized)
+
+        # กล่องข้อมูลสินค้า
+        info_top = 1120
+        info_box = Image.new("RGBA", (W - 120, 520), (255, 255, 255, 250))
+        draw_info = ImageDraw.Draw(info_box)
+        draw_info.rounded_rectangle([0, 0, W - 120, 520], radius=32, fill=(255, 255, 255), outline=brand_color, width=4)
+
+        f_price_badge = get_font(FONT_BOLD, 64)
+        draw_info.text((50, 70), price_str, font=f_price_badge, fill=brand_color, anchor="lm")
+        
+        f_stat = get_font(FONT_BOLD, 32)
+        stat_str = f"⭐ {rating:.1f}  |  ขายแล้ว {sales_count:,} ชิ้น"
+        draw_info.text((W - 170, 70), stat_str, font=f_stat, fill=(60, 60, 60), anchor="rm")
+        draw_info.line([(40, 125), (W - 160, 125)], fill=(220, 220, 220), width=2)
+
+        f_title = get_font(FONT_BOLD, 38)
+        title_lines = []
+        curr = ""
+        for word in clean_pname:
+            if len(curr) >= 28:
+                title_lines.append(curr)
+                curr = ""
+            curr += word
+        if curr:
             title_lines.append(curr)
-            curr = ""
-        curr += word
-    if curr:
-        title_lines.append(curr)
-    title_lines = title_lines[:3]
+        title_y = 175
+        for l in title_lines[:3]:
+            draw_info.text((50, title_y), l, font=f_title, fill=(20, 20, 20), anchor="lt")
+            title_y += 52
 
-    title_y = 175
-    for l in title_lines:
-        draw_info.text((50, title_y), l, font=f_title, fill=(20, 20, 20), anchor="lt")
-        title_y += 52
+        # ปุ่ม CTA
+        cta_rect = [40, 390, W - 160, 480]
+        draw_info.rounded_rectangle(cta_rect, radius=20, fill=ph["cta_bg"])
+        f_cta = get_font(FONT_BOLD, 36)
+        draw_info.text(((W - 120) // 2, 435), ph["cta_text"], font=f_cta, fill=(255, 255, 255), anchor="mm")
 
-    # 5. ปุ่ม CTA ด้านล่างของการ์ด
-    cta_rect = [40, 390, W - 160, 480]
-    draw_info.rounded_rectangle(cta_rect, radius=20, fill=brand_color)
-    f_cta = get_font(FONT_BOLD, 36)
-    draw_info.text(((W - 120) // 2, 435), "👉 ดูรายละเอียด / สั่งซื้อ ที่ลิงก์ในแคปชั่น", font=f_cta, fill=(255, 255, 255), anchor="mm")
+        canvas.paste(info_box, (60, info_top), info_box)
 
-    canvas.paste(info_box, (60, info_top), info_box)
+        # Footer
+        f_foot = get_font(FONT_REG, 28)
+        draw.text((W // 2, 1780), f"สนใจสอบถามข้อมูลสินค้า ทักแชท {bot_name} ได้ตลอด 24 ชม.", font=f_foot, fill=(200, 200, 200), anchor="mm")
 
-    # 6. ท้ายคลิป (Footer)
-    f_foot = get_font(FONT_REG, 28)
-    draw.text((W // 2, 1780), f"สนใจสอบถามข้อมูลสินค้า ทักแชท {bot_name} ได้ตลอด 24 ชม.", font=f_foot, fill=(200, 200, 200), anchor="mm")
+        posters.append(canvas.convert("RGB"))
 
-    return canvas.convert("RGB")
+    return posters
 
 
 def _ffmpeg_exe() -> str:
@@ -289,23 +308,35 @@ def _ffmpeg_exe() -> str:
         return shutil.which("ffmpeg") or "ffmpeg"
 
 
-def poster_to_video(poster_path: Path, output_video_path: Path, audio_path: Optional[Path] = None, duration: int = 7) -> bool:
-    """แปลงภาพนิ่ง poster และเสียงพากย์ TTS เป็นวิดีโอ 9:16 พร้อมเอฟเฟกต์ซูมช้าๆ (พอดีกับความยาวเสียง)"""
+def multiphase_posters_to_video(poster_paths: List[Path], output_video_path: Path, audio_path: Optional[Path] = None, duration: float = 7.5) -> bool:
+    """แปลงภาพโปสเตอร์ 3 จังหวะพร้อมเสียงพากย์ TTS เป็นวิดีโอ 9:16 แบบมีไฮไลท์วิ่งสลับตามเวลา"""
     ffmpeg_exe = _ffmpeg_exe()
     
-    # filter ซูมเข้าอย่างนุ่มนวล (1.0 -> 1.06) ที่ 30fps
-    filter_complex = f"zoompan=z='min(zoom+0.0003,1.06)':d={duration*30}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30"
+    p_dur = duration / len(poster_paths)
+    filter_parts = []
+    concat_inputs = ""
+    for i in range(len(poster_paths)):
+        dur_i = p_dur if i < len(poster_paths) - 1 else (duration - p_dur * (len(poster_paths) - 1))
+        frames_i = int(dur_i * 30)
+        filter_parts.append(
+            f"[{i}:v]trim=duration={dur_i:.2f},setpts=PTS-STARTPTS,"
+            f"zoompan=z='min(zoom+0.0003,1.04)':d={frames_i}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30[v{i}]"
+        )
+        concat_inputs += f"[v{i}]"
     
-    cmd = [
-        ffmpeg_exe, "-y",
-        "-loop", "1",
-        "-i", str(poster_path)
-    ]
+    filter_parts.append(f"{concat_inputs}concat=n={len(poster_paths)}:v=1:a=0[v]")
+    filter_complex = ";".join(filter_parts)
+
+    cmd = [ffmpeg_exe, "-y"]
+    for p in poster_paths:
+        cmd.extend(["-loop", "1", "-i", str(p)])
 
     if audio_path and audio_path.exists():
         cmd.extend([
             "-i", str(audio_path),
-            "-vf", filter_complex,
+            "-filter_complex", filter_complex,
+            "-map", "[v]",
+            "-map", f"{len(poster_paths)}:a",
             "-t", str(duration),
             "-c:v", "libx264",
             "-preset", "fast",
@@ -318,7 +349,8 @@ def poster_to_video(poster_path: Path, output_video_path: Path, audio_path: Opti
         ])
     else:
         cmd.extend([
-            "-vf", filter_complex,
+            "-filter_complex", filter_complex,
+            "-map", "[v]",
             "-t", str(duration),
             "-c:v", "libx264",
             "-preset", "fast",
@@ -332,8 +364,9 @@ def poster_to_video(poster_path: Path, output_video_path: Path, audio_path: Opti
         subprocess.run(cmd, check=True, capture_output=True, timeout=60)
         return output_video_path.exists() and output_video_path.stat().st_size > 1000
     except Exception as e:
-        logger.error(f"สร้างวิดีโอจากภาพล้ม: {e}")
+        logger.error(f"สร้างวิดีโอ 3 จังหวะล้ม: {e}")
         return False
+
 
 
 def generate_product_reels(limit: int = 3) -> List[dict]:
@@ -361,6 +394,9 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
         for p in prods:
             if len(generated) >= limit:
                 break
+            if not p.affiliate_url or not p.affiliate_url.startswith("https://"):
+                continue
+
 
             filename = f"prod_{p.id}_{sanitize_filename(p.name)}.mp4"
             target_path = PENDING_DIR / filename
@@ -368,6 +404,7 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
 
             if target_path.exists() or posted_path.exists():
                 continue
+
 
             clean_name = clean_display_text(p.name)
             print(f"\n🎨 กำลังสร้างคลิป Reels: {clean_name[:40]}...")
@@ -396,8 +433,8 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
             
             tts_ok = generate_tts_audio(voice_script, tmp_audio_path)
 
-            # 3. สร้างภาพโปสเตอร์ 9:16 ไร้ภาษาต่างดาว
-            poster = create_product_poster(
+            # 3. สร้างภาพโปสเตอร์ 3 จังหวะ (Dynamic 3-Phase Highlight Text Overlay)
+            posters = create_product_posters_multiphase(
                 product_name=p.name,
                 price=float(p.price or 0),
                 rating=float(p.rating or 4.9),
@@ -405,14 +442,16 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
                 img=pil_img
             )
 
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_poster:
-                poster.save(tmp_poster.name, format="PNG")
-                tmp_poster_path = Path(tmp_poster.name)
+            tmp_poster_paths = []
+            for idx, post_img in enumerate(posters):
+                with tempfile.NamedTemporaryFile(suffix=f"_{idx}.png", delete=False) as tmp_p:
+                    post_img.save(tmp_p.name, format="PNG")
+                    tmp_poster_paths.append(Path(tmp_p.name))
 
             try:
-                # 4. รวมภาพและเสียงเป็นวิดีโอ Reels ความยาว 7 วินาที
+                # 4. รวมภาพ 3 จังหวะและเสียงพากย์เป็นวิดีโอ Reels
                 audio_file = tmp_audio_path if tts_ok else None
-                if poster_to_video(tmp_poster_path, target_path, audio_path=audio_file, duration=7):
+                if multiphase_posters_to_video(tmp_poster_paths, target_path, audio_path=audio_file, duration=7.5):
                     products_meta[filename] = {
                         "product_name": clean_name,
                         "price": str(int(p.price or 0)),
@@ -420,10 +459,12 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
                         "affiliate_link": p.affiliate_url or ""
                     }
                     generated.append({"id": p.id, "name": clean_name, "file": filename})
-                    print(f"✅ สร้างคลิปวิดีโอพร้อมเสียงพากย์สำเร็จ -> {filename}")
+                    print(f"✅ สร้างคลิปวิดีโอ 3 จังหวะพร้อมไฮไลท์ข้อความสำเร็จ -> {filename}")
             finally:
-                tmp_poster_path.unlink(missing_ok=True)
+                for tp in tmp_poster_paths:
+                    tp.unlink(missing_ok=True)
                 tmp_audio_path.unlink(missing_ok=True)
+
 
         if generated:
             PRODUCTS_JSON.write_text(json.dumps(products_meta, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -434,10 +475,218 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
     return generated
 
 
+def create_custom_topic_poster(title: str, subtitle: str, points: list, theme_bg: tuple, line_id: str = "@137gsref") -> Image.Image:
+    """สร้างภาพโปสเตอร์แนวตั้ง 1080x1920 (9:16 Full HD) ตามหัวข้อเฉพาะ"""
+    W, H = 1080, 1920
+    bot_name = clean_display_text(os.getenv("BOT_NAME", "ป้าเข็ม ขายของ"))
+    brand_color = _hex_to_rgb(os.getenv("BRAND_COLOR", "#EE4D2D"))
+
+    canvas = Image.new("RGBA", (W, H), theme_bg)
+    draw = ImageDraw.Draw(canvas)
+
+    # 1. Header Banner
+    header_box = [40, 60, W - 40, 290]
+    draw.rounded_rectangle(header_box, radius=32, fill=brand_color, outline=(255, 255, 255, 200), width=3)
+    f_header = get_font(FONT_BOLD, 48)
+    f_sub = get_font(FONT_REG, 32)
+    draw.text((W // 2, 125), title, font=f_header, fill=(255, 255, 255), anchor="mm")
+    draw.text((W // 2, 210), subtitle, font=f_sub, fill=(255, 245, 220), anchor="mm")
+
+    # 2. Body Points (3 กล่องไฮไลท์ใหญ่ๆ อ่านง่าย)
+    card_y = 350
+    card_h = 280
+    f_p_head = get_font(FONT_BOLD, 42)
+    f_p_body = get_font(FONT_REG, 32)
+
+    for p_title, p_desc in points:
+        box = [50, card_y, W - 50, card_y + card_h]
+        draw.rounded_rectangle(box, radius=28, fill=(255, 255, 255, 250), outline=(255, 215, 0, 240), width=4)
+        draw.text((90, card_y + 45), p_title, font=f_p_head, fill=(20, 20, 20), anchor="lt")
+        
+        # จัดข้อความอธิบาย
+        desc_lines = []
+        curr = ""
+        for word in p_desc:
+            if len(curr) >= 28:
+                desc_lines.append(curr)
+                curr = ""
+            curr += word
+        if curr:
+            desc_lines.append(curr)
+        
+        dy = card_y + 120
+        for l in desc_lines[:2]:
+            draw.text((90, dy), l, font=f_p_body, fill=(60, 60, 60), anchor="lt")
+            dy += 50
+
+        card_y += card_h + 40
+
+    # 3. Footer / CTA Box
+    cta_box = [50, H - 460, W - 50, H - 150]
+    draw.rounded_rectangle(cta_box, radius=32, fill=brand_color, outline=(255, 255, 255), width=4)
+    f_cta_main = get_font(FONT_BOLD, 46)
+    f_cta_sub = get_font(FONT_REG, 32)
+    draw.text((W // 2, H - 370), "👉 แอดไลน์คุยกับป้าเข็มได้เลย!", font=f_cta_main, fill=(255, 255, 255), anchor="mm")
+    draw.text((W // 2, H - 280), "กดลิงก์ที่หน้าโปรไฟล์ หรือ ในแคปชั่น", font=f_cta_sub, fill=(255, 240, 200), anchor="mm")
+    draw.text((W // 2, H - 200), f"LINE: {line_id}", font=f_cta_main, fill=(255, 255, 0), anchor="mm")
+
+    f_copy = get_font(FONT_REG, 26)
+    draw.text((W // 2, H - 70), "ผู้ช่วยช้อปปิ้ง AI ตัวจริง • ปรึกษาฟรี 24 ชม.", font=f_copy, fill=(200, 210, 225), anchor="mm")
+
+    return canvas.convert("RGB")
+
+
+def generate_intro_series() -> List[dict]:
+    """สร้างคลิป Reels ซีรีส์แนะนำตัวและฟีเจอร์เด่น 4 ตอนจบ พร้อมเสียงพากย์ไทย TTS"""
+    PENDING_DIR.mkdir(parents=True, exist_ok=True)
+    POSTED_DIR.mkdir(parents=True, exist_ok=True)
+
+    bot_name = os.getenv("BOT_NAME", "ป้าเข็ม")
+    line_url = os.getenv("LINE_OA_URL", "https://lin.ee/o9Kjp1N")
+    
+    episodes = [
+        {
+            "id": "ep1_who_is_pakhem",
+            "filename": f"intro_ep1_who_is_{sanitize_filename(bot_name)}.mp4",
+            "title": f"🛍️ รู้จักกับ {bot_name}",
+            "subtitle": "ป้าไม่ใช่คนขายของ • ไม่อยากให้เสียเงินฟรี",
+            "theme_bg": (15, 23, 42, 255),  # Deep Navy
+            "points": [
+                ("💖 ถ้าไม่คุ้ม ป้าบอกให้!", "ป้าเป็นป้าที่ชอบดูรีวิวและเทียบราคาเป็นชั่วโมงๆ แทนคุณ"),
+                ("🤝 ไม่ยัดเยียดขายของ", "เลือกเฉพาะของดี คุ้มค่าเงินทุกบาท ช้อปปิ้งอย่างมั่นใจ"),
+                ("📱 ถามป้าก่อนซื้อได้ 24 ชม.", "สงสัยเรื่องสินค้าชิ้นไหน ทักไลน์มาถามป้าได้ตลอดเวลา")
+            ],
+            "speech": (
+                f"สวัสดีจ้า {bot_name} เองนะลูก ป้าไม่ใช่คนขายของนะ "
+                f"แต่ป้าไม่อยากเห็นลูกหลานเสียเงินกับของที่ไม่คุ้ม "
+                f"จะซื้ออะไรใน Shopee ไลน์มาถามป้าก่อนได้เลยนะลูก แอดไลน์คุยกันได้เลยจ้า"
+            ),
+            "caption": f"🛍️ รู้จักกับ {bot_name} ผู้ช่วยช้อปปิ้ง AI ตัวจริง! ไม่อยากเสียเงินกับของไม่คุ้ม ถามป้าก่อนซื้อได้ตลอด 24 ชม. จ้า 👉 {line_url} #ป้าเข็ม #ถ้าไม่คุ้มป้าบอกให้ #ผู้ช่วยช้อปปิ้ง"
+        },
+        {
+            "id": "ep2_budget_search",
+            "filename": "intro_ep2_budget_search.mp4",
+            "title": "🔍 ฟีเจอร์เด็ด: หาสินค้าตามงบ",
+            "subtitle": "พิมพ์บอกงบ ป้าคัดของเด็ดให้ทันที",
+            "theme_bg": (6, 78, 59, 255),  # Emerald Green
+            "points": [
+                ("🎧 'หูฟังไม่เกิน 300 บาท'", "ป้าคัดตัวเสียงดี มีตัดเสียงรบกวน แบตอึด ตรงงบเป๊ะ"),
+                ("🧊 'กระติกน้ำเก็บความเย็น 200-400'", "เก็บความเย็นข้ามวัน ของแท้ รีวิวแน่น ไม่ต้องเลื่อนหา"),
+                ("⚡ 'พาวเวอร์แบงค์งบ 500'", "ชาร์จไว มี มอก. ปลอดภัย ได้มาตรฐาน มั่นใจได้ 100%")
+            ],
+            "speech": (
+                f"อยากได้ของดีแต่งบจำกัดใช่ไหมลูก แค่พิมพ์บอกงบใน LINE "
+                f"เช่น หูฟังไม่เกิน 300 หรือ พัดลมงบ 500 "
+                f"{bot_name} จะไปคัดของดีตรงงบมาให้ทันที ไม่ต้องเสียเวลาหาเอง แอดไลน์มาลองได้เลยนะลูก"
+            ),
+            "caption": f"🔍 หาสินค้า Shopee ตามงบได้ง่ายๆ แค่พิมพ์บอกงบใน LINE เช่น 'หูฟังไม่เกิน 300' ป้าหาของเด็ดให้ทันที! 👉 {line_url} #หาสินค้าตามงบ #ช้อปปี้ถูกและดี #ป้าเข็ม"
+        },
+        {
+            "id": "ep3_authentic_check",
+            "filename": "intro_ep3_authentic_check.mp4",
+            "title": "🛡️ เตือนภัย: คัดเฉพาะของแท้ 100%",
+            "subtitle": "กรองรีวิว 4.8 ดาวขึ้นไป • ไม่โดนหลอก",
+            "theme_bg": (30, 58, 138, 255),  # Royal Blue
+            "points": [
+                ("🚨 อย่าหลงเชื่อโปรลด 90%!", "ระวังสินค้าลดราคาเวอร์ผิดปกติ อาจได้ของปลอมไม่ตรงปก"),
+                ("⭐ เช็ครีวิวและยอดขายจริง", "ป้ากรองเฉพาะร้านทางการและร้านแนะนำที่มีรีวิว 4.8 ดาวขึ้นไป"),
+                ("🔒 ส่งลิงก์ให้ป้าช่วยเช็คได้ฟรี", "ไม่มั่นใจร้านไหน ส่งลิงก์มาให้ป้าช่วยตรวจสอบก่อนกดสั่งซื้อ")
+            ],
+            "speech": (
+                f"เห็นโปรลด 90 เปอร์เซ็นต์ อย่าเพิ่งรีบกดซื้อนะลูก ระวังโดนของปลอม "
+                f"{bot_name} มีระบบช่วยคัดเฉพาะร้านค้าของแท้ รีวิวแน่น ยอดขายจริง "
+                f"ส่งลิงก์มาให้ป้าช่วยดูก่อนได้ตลอด 24 ชั่วโมงจ้า"
+            ),
+            "caption": f"🚨 เตือนภัยช้อปปิ้งออนไลน์! เห็นโปรลดเวอร์อย่าเพิ่งกดซื้อ ให้ {bot_name} ช่วยคัดร้านของแท้ รีวิวแน่นให้ก่อน ช้อปอย่างปลอดภัย 👉 {line_url} #เตือนภัยช้อปปิ้ง #ช้อปปี้ของแท้"
+        },
+        {
+            "id": "ep4_price_drop_alerts",
+            "filename": "intro_ep4_price_drop_alerts.mp4",
+            "title": "🔻 จำความชอบ & แจ้งราคาลด!",
+            "subtitle": "Account Memory & Price-Drop Alert",
+            "theme_bg": (88, 28, 135, 255),  # Deep Purple
+            "points": [
+                ("🧠 พิมพ์ 'จำไว้ ชอบแก้วเก็บความเย็น'", "ป้าจะจดจำความชอบของคุณไว้ แนะนำสินค้าใหม่ได้ตรงใจ"),
+                ("📉 แจ้งเตือนเมื่อราคาลดลง ≥ 5%", "ตรวจจับราคาทุกวัน วันไหนลดราคา ป้าทักเตือนในไลน์ทันที"),
+                ("🎁 ไม่พลาดโค้ดลับและโปรเด็ด", "ได้รับสิทธิพิเศษและโปรโมชันลดราคาก่อนใครใน LINE OA")
+            ],
+            "speech": (
+                f"ชอบสินค้าหมวดไหน แค่พิมพ์บอกป้า เช่น จำไว้ ชอบสกินแคร์ "
+                f"วันไหนสินค้าลดราคา หรือมีโค้ดลับพิเศษ "
+                f"{bot_name} จะรีบสะกิดเตือนในไลน์ทันที ไม่พลาดของถูกแน่นอนจ้า แอดไลน์มาได้เลยนะลูก"
+            ),
+            "caption": f"🔻 ไม่พลาดของถูก! มีระบบจำความชอบและแจ้งเตือนเมื่อสินค้าลดราคา พร้อมแจกโค้ดลับใน LINE OA 👉 {line_url} #แจ้งเตือนราคาลด #โค้ดส่วนลดช้อปปี้ #ป้าเข็ม"
+        }
+    ]
+
+    products_meta = {}
+    if PRODUCTS_JSON.exists():
+        try:
+            products_meta = json.loads(PRODUCTS_JSON.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    results = []
+    print(f"\n🎬 เริ่มต้นสร้างซีรีส์คลิปแนะนำตัวและฟีเจอร์เด่น {len(episodes)} ตอน...")
+
+    for ep in episodes:
+        target_path = PENDING_DIR / ep["filename"]
+        posted_path = POSTED_DIR / ep["filename"]
+
+        if target_path.exists() or posted_path.exists():
+            print(f"⏩ มีไฟล์ {ep['filename']} อยู่แล้ว ข้าม...")
+            continue
+
+        print(f"\n🎨 กำลังสร้าง: {ep['title']} ({ep['filename']})...")
+        print(f"🎙️ เสียงพากย์ไทย: \"{ep['speech']}\"")
+
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_audio:
+            tmp_audio_path = Path(tmp_audio.name)
+
+        tts_ok = generate_tts_audio(ep["speech"], tmp_audio_path)
+        poster = create_custom_topic_poster(
+            title=ep["title"],
+            subtitle=ep["subtitle"],
+            points=ep["points"],
+            theme_bg=ep["theme_bg"]
+        )
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_poster:
+            poster.save(tmp_poster.name, format="PNG")
+            tmp_poster_path = Path(tmp_poster.name)
+
+        try:
+            audio_file = tmp_audio_path if tts_ok else None
+            if poster_to_video(tmp_poster_path, target_path, audio_path=audio_file, duration=9):
+                products_meta[ep["filename"]] = {
+                    "product_name": ep["title"],
+                    "price": "",
+                    "category": "ซีรีส์แนะนำตัวบอท",
+                    "affiliate_link": line_url
+                }
+                results.append(ep)
+                print(f"✅ ผลิตคลิปสำเร็จ -> {ep['filename']}")
+        finally:
+            tmp_poster_path.unlink(missing_ok=True)
+            tmp_audio_path.unlink(missing_ok=True)
+
+    if results:
+        PRODUCTS_JSON.write_text(json.dumps(products_meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return results
+
+
 if __name__ == "__main__":
-    count = 2
-    if len(sys.argv) > 1 and sys.argv[1].isdigit():
-        count = int(sys.argv[1])
-    print(f"🚀 เริ่มต้นสร้างคลิปสินค้าพร้อมเสียงพากย์ไทยอัตโนมัติ {count} คลิป...")
-    res = generate_product_reels(count)
-    print(f"\n🎉 สร้างสำเร็จทั้งหมด {len(res)} คลิป พร้อมสำหรับอัปโหลดลง Reels!")
+    if "--intro-series" in sys.argv:
+        generate_intro_series()
+    elif "--intro" in sys.argv:
+        generate_intro_reel()
+    else:
+        count = 2
+        if len(sys.argv) > 1 and sys.argv[1].isdigit():
+            count = int(sys.argv[1])
+        print(f"🚀 เริ่มต้นสร้างคลิปสินค้าพร้อมเสียงพากย์ไทยอัตโนมัติ {count} คลิป...")
+        res = generate_product_reels(count)
+        print(f"\n🎉 สร้างสำเร็จทั้งหมด {len(res)} คลิป พร้อมสำหรับอัปโหลดลง Reels!")
+
+

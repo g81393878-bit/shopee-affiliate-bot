@@ -444,12 +444,15 @@ def build_caption(product: dict) -> str:
 
         resp = call_with_backoff(_gen)
         text = (resp.choices[0].message.content or "").strip().strip('"“”').strip()
-        if link and link not in text:
-            text = f"{text}\n\n🛒 {link}"
+        # ลบ URL ปลอมที่ AI อาจมโนขึ้นมาเอง
+        text = re.sub(r'https?://\S+', '', text).strip()
+        if link:
+            text = f"{text}\n\n🛒 สั่งซื้อของแท้ได้ที่นี่ 👉 {link}"
         return text[:900]
     except Exception as e:
         log(f"[WARN] AI caption ล้ม ({e}) — ใช้ template")
         return template
+
 
 
 def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
