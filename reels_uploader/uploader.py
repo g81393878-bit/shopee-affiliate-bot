@@ -440,13 +440,25 @@ def build_caption(product: dict) -> str:
 def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
     pending = list_pending()
     if not pending:
-        # ตรวจสอบว่าเปิด Auto-recycle หรือไม่ (ค่าเริ่มต้น ปิด เพื่อรอคลิปใหม่จากผู้ใช้)
+        # ดึงสินค้าจากคลังมาสร้างคลิป Reels ให้อัตโนมัติ (Auto Product Reels จากภาพสินค้า)
+        try:
+            from auto_product_reels import generate_product_reels
+            generated = generate_product_reels(limit=3)
+            if generated:
+                log(f"🎬 สร้างคลิปสินค้าใหม่อัตโนมัติ {len(generated)} คลิป -> pending_videos/")
+                pending = list_pending()
+        except Exception as e:
+            log(f"[WARN] สร้างคลิปสินค้าอัตโนมัติล้ม: {e}")
+
+    if not pending:
+        # ตรวจสอบว่าเปิด Auto-recycle หรือไม่ (ค่าเริ่มต้น ปิด เพื่อรอคลิปใหม่)
         auto_recycle = os.getenv("AUTO_RECYCLE_CLIPS", "0").lower() in ("1", "true", "yes")
         if auto_recycle and recycle_clips():
             pending = list_pending()
         else:
-            log("ไม่มีคลิปใหม่ใน pending_videos/ — พักรอคลิปใหม่จากผู้ใช้")
+            log("ไม่มีคลิปใหม่ใน pending_videos/ — พักรอคลิปใหม่")
             return 0
+
 
     spacing = _env_float("POSTING_SPACING_HOURS", DEFAULT_SPACING_HOURS)
     max_per_day = int(_env_float("MAX_REELS_PER_DAY", DEFAULT_MAX_PER_DAY))
