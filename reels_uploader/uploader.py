@@ -563,6 +563,23 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
         if not product:
             build_intro_caption(advance=True)  # เลื่อนแคปชั่นแนะนำป้าเข็ม (กันโพสต์ซ้ำติดกัน)
         log(f"[OK] Reels โพสต์สำเร็จ video_id={res['video_id']} → {dst.name}")
+        
+        # ส่งแจ้งเตือนตรงเข้า LINE แอดมินทันทีทุกครั้งที่โพสต์สำเร็จ (ไม่ต้องกดเช็คเอง)
+        try:
+            pname = (product or {}).get("product_name") or original.name
+            aff_link = (product or {}).get("affiliate_link") or ""
+            fb_url = f"https://www.facebook.com/reel/{res['video_id']}"
+            notify_msg = (
+                f"🎬 โพสต์คลิป Reels สำเร็จแล้วจ้า!\n\n"
+                f"📦 สินค้า: {pname[:60]}\n"
+                f"🔗 ดูคลิปบน Facebook: {fb_url}\n"
+                f"🛒 ลิงก์ Shopee: {aff_link}\n\n"
+                f"⏱️ รอบถัดไป: อีก 10 นาทีจะโพสต์คลิปต่อไปให้อัตโนมัติ"
+            )
+            _notify_owner(notify_msg)
+        except Exception as e:
+            log(f"[NOTIFY] ส่งแจ้งเตือน LINE ล้ม: {e}")
+
         # ลบ temp file ที่แปลงจากภาพ
         if img_video_tmp is not None:
             try:
@@ -570,6 +587,7 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
             except Exception:
                 pass
         return 0
+
 
     log(f"[FAIL] โพสต์ไม่สำเร็จ: {res['error']}")
     # ลบ temp file ที่แปลงจากภาพ (โพสต์ล้ม)
