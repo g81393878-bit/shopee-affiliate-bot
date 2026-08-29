@@ -608,7 +608,7 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
             yt_token_file = TOOLS / "youtube_token.json"
             if yt_token_file.exists():
                 import youtube_uploader
-                yt_url = youtube_uploader.upload_shorts(upload_path, product)
+                yt_url = youtube_uploader.upload_shorts(Path(upload_path), product)
                 if yt_url:
                     log(f"[OK] YouTube Shorts โพสต์สำเร็จ -> {yt_url}")
         except Exception as e_yt:

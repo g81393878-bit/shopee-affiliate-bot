@@ -16,7 +16,7 @@ import pathlib
 import re
 import sys
 import time
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 
 # บังคับ UTF-8
 if hasattr(sys.stdout, "reconfigure"):
@@ -135,10 +135,11 @@ def build_shorts_description(product_name: str, link: str, prod_id: Optional[int
     return desc
 
 
-def upload_shorts(video_path: pathlib.Path, product_meta: Optional[Dict] = None) -> Optional[str]:
+def upload_shorts(video_path: Union[pathlib.Path, str], product_meta: Optional[Dict] = None) -> Optional[str]:
     """อัปโหลดไฟล์วิดีโอขึ้น YouTube Shorts"""
     from googleapiclient.http import MediaFileUpload
 
+    video_path = pathlib.Path(video_path)
     name = (product_meta or {}).get("product_name") or video_path.stem
     link = (product_meta or {}).get("affiliate_link") or ""
 
