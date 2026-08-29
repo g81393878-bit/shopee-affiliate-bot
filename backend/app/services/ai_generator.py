@@ -113,7 +113,7 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
             
             Your response must be JSON only. Return a JSON object matching this schema:
             {{
-                "hook": "string (short hook, first 3 seconds, in Thai)",
+                "hook": "string (3-second instant pain-point hook in Thai, NO greeting words like 'สวัสดี', start directly with the problem/frustration that stops scrolling)",
                 "problem": "string (pain point of target audience, in Thai)",
                 "solution": "string (how this product solves it, in Thai)",
                 "cta": "string (call to action pointing to affiliate link, in Thai)",
