@@ -631,6 +631,28 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
         shutil.move(str(original), str(dst))
         LAST_POST_FILE.write_text(str(time.time()), encoding="utf-8")
         bump_daily_count()
+
+        # อัปเดต timestamp สินค้าที่เพิ่งโพสต์บน Supabase เพื่อให้ LINE Bot "ของในคลิป" ดึงขึ้นอันดับ 1 ทันที
+        try:
+            m_id = re.match(r'^prod_(\d+)_', original.name)
+            if m_id:
+                p_id = int(m_id.group(1))
+                supa_u = os.getenv("SUPABASE_URL")
+                supa_k = os.getenv("SUPABASE_PUBLISHABLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+                if supa_u and supa_k:
+                    import urllib.request
+                    now_iso = datetime.now(timezone.utc).isoformat()
+                    req_sb = urllib.request.Request(
+                        f"{supa_u}/rest/v1/products?id=eq.{p_id}",
+                        data=json.dumps({"price_checked_at": now_iso}).encode("utf-8"),
+                        headers={"apikey": supa_k, "Authorization": f"Bearer {supa_k}", "Content-Type": "application/json", "Prefer": "return=minimal"},
+                        method="PATCH"
+                    )
+                    with urllib.request.urlopen(req_sb) as resp_sb:
+                        pass
+        except Exception as e_sb:
+            log(f"[WARN] อัปเดต timestamp สินค้าล่าสุดบน Supabase ล้มเหลว: {e_sb}")
+
         if not product:
             build_intro_caption(advance=True)  # เลื่อนแคปชั่นแนะนำป้าเข็ม (กันโพสต์ซ้ำติดกัน)
         vids = []
