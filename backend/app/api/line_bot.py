@@ -240,6 +240,70 @@ DEAL_PHRASES = (
 )
 
 
+LATEST_VIDEO_PHRASES = (
+    "ในคลิป", "ของในคลิป", "จากคลิป", "คลิปล่าสุด", "ในยูทูป", "จากยูทูป",
+    "ดูจากยูทูป", "ดูจากคลิป", "ตัวล่าสุด", "ขอพิกัดในคลิป", "สินค้าในคลิป",
+    "ที่ลงเมื่อกี้", "คลิปวันนี้", "ที่เห็นในคลิป", "สินค้าในคลิปล่าสุด",
+    "ของในคลิปล่าสุด", "พิกัดในคลิป", "คลิปยูทูป", "ที่ลงยูทูป", "ดูคลิปมา"
+)
+
+
+def is_latest_video_query(text: str) -> bool:
+    """ตรวจสอบว่าลูกค้าถามถึงสินค้าในคลิป YouTube Shorts / Reels หรือไม่"""
+    t = _strip_polite_suffix((text or "").rstrip("?？ ").strip()).replace(" ", "").lower()
+    return any(p.replace(" ", "") in t for p in LATEST_VIDEO_PHRASES)
+
+
+def parse_product_code(text: str) -> Optional[int]:
+    """แยกหมายเลขรหัสสินค้า เช่น 'รหัส 1628', 'รหัส1628', 'code 1628', '#1628', 'p1628'"""
+    t = (text or "").strip()
+    m = re.match(r'^(?:รหัส|code|p|#)\s*(\d{1,5})$', t, re.IGNORECASE)
+    if m:
+        try:
+            return int(m.group(1))
+        except ValueError:
+            return None
+    return None
+
+
+def handle_latest_video_products(db: Session, user: models.User, is_owner: bool = False):
+    """ดึงสินค้า 3 รายการล่าสุดที่เพิ่งโพสต์ลง YouTube Shorts/Reels ส่งให้ลูกค้าทันที"""
+    posted_ids = []
+    try:
+        import pathlib
+        posted_dir = pathlib.Path(__file__).resolve().parent.parent.parent.parent / "reels_uploader" / "posted"
+        if posted_dir.exists():
+            vids = sorted(posted_dir.glob("*.mp4"), key=os.path.getmtime, reverse=True)
+            for v in vids[:6]:
+                m = re.match(r'^prod_(\d+)_', v.name)
+                if m:
+                    posted_ids.append(int(m.group(1)))
+    except Exception:
+        pass
+
+    prods = []
+    if posted_ids:
+        prods = db.query(models.Product).filter(models.Product.id.in_(posted_ids), models.Product.link_status == "ok").all()
+        prods.sort(key=lambda p: posted_ids.index(p.id) if p.id in posted_ids else 999)
+
+    if not prods:
+        prods = (db.query(models.Product)
+                   .filter(models.Product.link_status == "ok", models.Product.sales_count >= MIN_SALES)
+                   .order_by(models.Product.ai_score.desc()).limit(3).all())
+
+    return format_product_message(db, user, prods[:3], title="🎬 สินค้าในคลิปล่าสุดที่ป้าเข็มเพิ่งลงจ้า 💖", is_owner=is_owner)
+
+
+def handle_direct_product_code(db: Session, user: models.User, prod_id: int, is_owner: bool = False):
+    """ส่งการ์ดสินค้าตรงตัวตามรหัสที่ระบุทันทีใน 0.1 วินาที"""
+    p = db.query(models.Product).filter(models.Product.id == prod_id).first()
+    if p and p.link_status == "ok":
+        return format_product_message(db, user, [p], title=f"✨ พิกัดสินค้าตรงจากคลิป (รหัส {prod_id}) จ้า 💖", is_owner=is_owner)
+    elif p:
+        return TextSendMessage(text=f"ขออภัยจ้า สินค้ารหัส {prod_id} ({p.name[:30]}) สินค้าหมดหรือปิดการขายชั่วคราว ลองดูสินค้าแนะนำอื่นนะคะ")
+    return None
+
+
 def is_deal_query(text: str) -> bool:
     """แยก 'ขอสินค้าแนะนำ' ออกจาก 'คำค้นสินค้า' — 'หูฟังขายดี' ต้องไปค้น ไม่ใช่เมนูแนะนำ"""
     t = text.rstrip("?？ ").strip()
@@ -420,12 +484,7 @@ def nosearch_new_text(user_text: str, category: str, tone: str = "neutral") -> s
 
 def quick_reply_items() -> QuickReply:
     """ปุ่มลัดแบบสากล (Quick Reply) — ลูกค้าแตะแทนพิมพ์
-    4 ปุ่ม: 🔍 ค้นหาสินค้า · 💬 ฝากคำถาม · 💰 ราคาบอท/แพ็กเกจ · 💰 วิธีจ่ายเงิน
-    (ไม่มี "คุยกับป้าเข็ม" — ซ้ำซ้อน เพราะบอทตอบเองทุกข้อความอยู่แล้ว)
-    ส่วนที่เหลือลูกค้าพิมพ์เองได้ หรือกดจาก Rich Menu แถบติดหน้าจอ — ปุ่มทุกตัว
-    ส่งข้อความที่ dispatch route ตรง intent ไม่หลุด "ค้นไม่เจอ"
-    ปุ่ม "ราคาบอท" = ขายบอทต่อ (ป้าเข็มขายทั้งสินค้าและบอทเอง) → การ์ด 5 ทางเลือก
-    ปุ่ม "วิธีจ่ายเงิน" = โอน PromptPay/บัตร (จบในแชท) → payment_reply_text()"""
+    4 ปุ่ม: 🔍 ค้นหาสินค้า · 💬 ฝากคำถาม · 💰 ราคาบอท/แพ็กเกจ · 💰 วิธีจ่ายเงิน"""
     return QuickReply(items=[
         QuickReplyButton(action=MessageAction(label="🔍 ค้นหาสินค้า", text="ค้นสินค้า")),
         QuickReplyButton(action=MessageAction(label="💬 ฝากคำถาม", text="ฝากคำถาม")),
@@ -1592,7 +1651,7 @@ def package_summary_text() -> str:
 
 
 def package_summary_quick_reply() -> QuickReply:
-    """ปุ่ม 5 แพ็กเกจ — แตะ → 'ยอด <key>' → ตอบรายละเอียดตัวนั้น (เส้นเดียว ไม่ทิ้งการ์ดเต็มทันที)"""
+    """ปุ่ม 5 แพ็กเกจรายตัว — แตะ → 'ยอด <key>' → ตอบรายละเอียดตัวนั้น (ไม่ทิ้งการ์ดเต็มทันที)"""
     return QuickReply(items=[
         QuickReplyButton(action=MessageAction(label="🟡 Lean", text="ยอด lean")),
         QuickReplyButton(action=MessageAction(label="🟢 Starter", text="ยอด starter")),
@@ -3375,6 +3434,21 @@ def message_text(event):
         elif is_owner and normalized_text in ADMIN_STATS_CMDS:
             reply = TextSendMessage(text=admin_customer_stats(db))
             intent = 'admin'
+        elif parse_product_code(normalized_text) is not None:
+            # รหัสสินค้าตรงตัวจากคลิป (เช่น "รหัส 1628", "code 1628") -> ส่งการ์ดสินค้าชิ้นนั้นทันทีใน 0.1 วิ
+            prod_id = parse_product_code(normalized_text)
+            p_reply = handle_direct_product_code(db, user, prod_id, is_owner=is_owner)
+            if p_reply:
+                reply = p_reply
+                intent = 'product_code'
+            else:
+                reply = TextSendMessage(text=f"ขออภัยจ้า ไม่พบสินค้ารหัส {prod_id} ในระบบ หรือสินค้าอาจหมดชั่วคราว ลองพิมพ์ค้นหาชื่อสินค้าแทนได้นะคะ 😊",
+                                        quick_reply=quick_reply_items())
+                intent = 'product_code'
+        elif is_latest_video_query(normalized_text):
+            # สินค้าในคลิปล่าสุด (YouTube Shorts / Reels) -> ส่งการ์ดสินค้าที่เพิ่งโพสต์ให้ทันที
+            reply = handle_latest_video_products(db, user, is_owner=is_owner)
+            intent = 'latest_video'
         elif normalized_text == "อันดับขายดี":
             reply = handle_top_sellers(db, user, is_owner=is_owner)
             intent = 'top'

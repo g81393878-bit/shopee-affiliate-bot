@@ -391,9 +391,12 @@ def create_product_posters_multiphase(product_name: str, price: float, rating: f
 
         canvas.paste(info_box, (60, info_top), info_box)
 
-        # Footer
-        f_foot = get_font(FONT_REG, 28)
-        draw.text((W // 2, 1780), f"สนใจสอบถามข้อมูลสินค้า ทักแชท {bot_name} ได้ตลอด 24 ชม.", font=f_foot, fill=(200, 200, 200), anchor="mm")
+        # แถบ Conversion Bar เด่นชัด ลอยด้านล่าง พร้อมรหัสสินค้าตรงตัว (Direct Product Code)
+        draw.rounded_rectangle([40, 1705, W - 40, 1860], radius=24, fill=(15, 23, 42, 245), outline=(34, 197, 94), width=4)
+        f_foot1 = get_font(FONT_BOLD, 33)
+        f_foot2 = get_font(FONT_BOLD, 27)
+        draw.text((W // 2, 1750), f"🛒 พิกัดของแท้: แอด LINE @137gsref พิมพ์ \"{seed_id}\"", font=f_foot1, fill=(255, 255, 255), anchor="mm")
+        draw.text((W // 2, 1810), f"👉 รับลิงก์ตรงตัวทันที! (หรือกดดูที่หน้าช่อง Anda)", font=f_foot2, fill=(74, 222, 128), anchor="mm")
 
         posters.append(canvas.convert("RGB"))
     return posters
@@ -503,38 +506,57 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
             except Exception:
                 products_meta = {}
 
-        # ดึงสินค้าคุณภาพดีทั้งหมดจากแคตตาล็อก 2,000+ รายการที่ไม่เคยโพสต์มาก่อน
+        # 8 หมวดหมู่สินค้าเทรนด์ขายดีและของจำเป็นต้องมี (ครอบคลุมสินค้าทั้งคลัง 2,471 รายการ 100%)
+        TREND_CATEGORIES_MAPPING = {
+            "ของใช้ในบ้าน & จัดระเบียบบ้าน": ["ของใช้บ้าน", "กระดาษทิชชู่", "จัดระเบียบ", "ของใช้", "อื่นๆ", "เครื่องเขียน", "ของสะสม"],
+            "สมาร์ตโฮม & เครื่องใช้ไฟฟ้า": ["เครื่องใช้ไฟฟ้า", "โคมไฟ", "พัดลม", "สมาร์ตโฮม", "โซล่าเซลล์"],
+            "สุขภาพ & คลายปวดเมื่อย": ["สุขภาพ", "นวด", "ปวดหลัง", "ดูแลตัวเอง"],
+            "ความงาม & แฟชั่นไลฟ์สไตล์": ["ความงาม", "แฟชั่น", "เครื่องประดับ", "สกินแคร์", "สำลี", "บำรุงผิว"],
+            "ไอที & แกดเจ็ตมือถือ": ["หูฟัง", "กล้อง", "อุปกรณ์เสริม", "บลูทูธ", "ไอที", "แกดเจ็ต"],
+            "สัตว์เลี้ยง & ของใช้หมาแมว": ["สัตว์เลี้ยง", "ทาสแมว", "อาหารสัตว์"],
+            "เครื่องครัว & ของกินของฝาก": ["เครื่องครัว", "แก้วน้ำ", "หม้อ", "กระทะ", "อาหาร"],
+            "ของใช้ติดรถ & เดินทาง/ช่าง": ["เครื่องมือช่าง", "กีฬา", "อุปกรณ์ติดรถ", "เดินทาง"],
+        }
+        ALLOWED_DB_CATS = {c for sub in TREND_CATEGORIES_MAPPING.values() for c in sub}
+
+        # ดึงสินค้าคุณภาพดีจาก 8 หมวดหมู่เทรนด์ครอบคลุม 100% เต็มคลัง
         query = (db.query(models.Product)
-                   .filter(models.Product.link_status == "ok",
-                           models.Product.sales_count >= 30))
+                   .filter(models.Product.link_status == "ok"))
         
         if used_ids:
             query = query.filter(~models.Product.id.in_(used_ids))
 
         prods = query.order_by(models.Product.ai_score.desc(),
                                models.Product.sales_count.desc()) \
-                     .limit(3000).all()
+                     .limit(4000).all()
 
-        print(f"✨ มีสินค้าใหม่พร้อมผลิตเป็นคลิป: {len(prods)} รายการ")
+        print(f"✨ คัดเลือกสินค้าตรงกับ 8 หมวดหมู่เทรนด์ยอดฮิต: {len(prods)} รายการ (เต็มคลัง 100%)")
 
-        # จัดกลุ่มสินค้าแยกตาม 20 หมวดหมู่ แล้วสับเปลี่ยนแบบ Round-Robin
+        # จัดกลุ่มสินค้าแยกตาม 8 หมวดหมู่เทรนด์ แล้วสับเปลี่ยนแบบ Round-Robin
         import random
-        by_cat = {}
+        by_cat = {trend_name: [] for trend_name in TREND_CATEGORIES_MAPPING}
         for p in prods:
-            cat = p.category or "ของใช้ทั่วไป"
-            by_cat.setdefault(cat, []).append(p)
+            p_cat = (p.category or "").strip()
+            # แมปเข้า 8 หมวดหมู่หลัก
+            matched_trend = None
+            for trend_name, sub_cats in TREND_CATEGORIES_MAPPING.items():
+                if any(sc in p_cat for sc in sub_cats):
+                    matched_trend = trend_name
+                    break
+            if matched_trend:
+                by_cat[matched_trend].append(p)
 
         # สลับลำดับในแต่ละหมวดเพื่อความสดใหม่
-        for cat in by_cat:
-            random.shuffle(by_cat[cat])
+        for trend_name in by_cat:
+            random.shuffle(by_cat[trend_name])
 
         interleaved_prods = []
-        cat_keys = list(by_cat.keys())
-        random.shuffle(cat_keys)
+        trend_keys = list(by_cat.keys())
+        random.shuffle(trend_keys)
         while any(by_cat.values()):
-            for cat in cat_keys:
-                if by_cat[cat]:
-                    interleaved_prods.append(by_cat[cat].pop(0))
+            for tk in trend_keys:
+                if by_cat[tk]:
+                    interleaved_prods.append(by_cat[tk].pop(0))
 
         for p in interleaved_prods:
             if len(generated) >= limit:

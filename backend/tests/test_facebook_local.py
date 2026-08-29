@@ -1,25 +1,27 @@
 # -*- coding: utf-8 -*-
-"""เทสต์ facebook_local — Firecrawl ค้นร้านอร่อย/ของฝาก/ของกิน หมุน 77 จังหวัด."""
+"""เทสต์ facebook_local — Firecrawl ค้นหาสินค้ากระแส/ของจำเป็นต้องมี หมุน 8 หมวดหมู่."""
 from app.services import facebook_local as fl
 
 
-def test_provinces_cover_77():
-    assert len(fl._PROVINCES) == 77
-    assert len(set(fl._PROVINCES)) == 77  # ไม่ซ้ำ
-    assert "กรุงเทพมหานคร" in fl._PROVINCES and "ภูเก็ต" in fl._PROVINCES
+def test_product_categories_cover_8():
+    assert len(fl._PRODUCT_CATEGORIES) == 8
+    categories = [c["category"] for c in fl._PRODUCT_CATEGORIES]
+    assert len(set(categories)) == 8  # ไม่ซ้ำ
+    assert any("ของใช้ในบ้าน" in c for c in categories)
+    assert any("เครื่องใช้ไฟฟ้า" in c for c in categories)
 
 
-def test_pick_rotates_province_and_topic():
-    p1, label1, _ = fl._pick(0)
-    p2, label2, _ = fl._pick(1)
-    p3, label3, _ = fl._pick(2)
-    # 3 ตัวแรก: จังหวัดไล่ลำดับ + หัวข้อครบทั้ง 3
-    assert (p1, p2, p3) == (fl._PROVINCES[0], fl._PROVINCES[1], fl._PROVINCES[2])
-    assert sorted([label1, label2, label3]) == [
-        "ของกินอร่อย", "ของฝากขึ้นชื่อ", "ร้านอาหารเด็ด",
+def test_pick_rotates_category_and_angle():
+    cat1, tag1, angle1, q1 = fl._pick(0)
+    cat2, tag2, angle2, q2 = fl._pick(1)
+    cat3, tag3, angle3, q3 = fl._pick(2)
+    
+    assert cat1 != cat2
+    assert sorted([angle1, angle2, angle3]) == [
+        "ของมันต้องมี", "ยอดฮิตขายดี", "รีวิวบอกต่อ",
     ]
-    # วนกลับจังหวัดที่ 0 เมื่อเลย 77 ตัว
-    assert fl._pick(77)[0] == fl._PROVINCES[0]
+    # วนกลับหมวดหมู่ที่ 0 เมื่อเลย 8 ตัว
+    assert fl._pick(8)[0] == fl._PRODUCT_CATEGORIES[0]["category"]
 
 
 def test_fetch_local_items_builds_query_and_normalizes(monkeypatch):
@@ -29,23 +31,21 @@ def test_fetch_local_items_builds_query_and_normalizes(monkeypatch):
         captured["query"] = query
         captured["max_results"] = max_results
         return [
-            {"title": "ร้านก๋วยเตี๋ยวเรือ", "url": "https://food.example/1",
-             "content": "เด็ดจริง"},
+            {"title": "กล่องจัดระเบียบ 3D", "url": "https://item.example/1",
+             "content": "ใช้ดีมาก รีวิวแน่น"},
             {"title": "", "url": "", "content": ""},  # title/url ว่าง → ตัดทิ้ง
         ]
 
-    # fetch_local_items import firecrawl_search_results แบบ deferred → monkeypatch ที่ web_search
     from app.services import web_search
     monkeypatch.setattr(web_search, "firecrawl_search_results", fake_search)
 
     items = fl.fetch_local_items(0)
     assert len(items) == 1
-    assert items[0]["guid"] == "https://food.example/1"
-    assert items[0]["link"] == "https://food.example/1"
+    assert items[0]["guid"] == "https://item.example/1"
+    assert items[0]["link"] == "https://item.example/1"
     assert items[0]["source"] == "firecrawl"
-    assert "ของกินอร่อย" in items[0]["topic"] or "ร้านอาหารเด็ด" in items[0]["topic"] \
-        or "ของฝากขึ้นชื่อ" in items[0]["topic"]
-    assert "จังหวัด" in captured["query"]
+    assert "ของใช้ในบ้าน" in items[0]["topic"]
+    assert "รีวิว" in captured["query"] or "ของมันต้องมี" in captured["query"]
 
 
 def test_fetch_local_items_empty_when_firecrawl_fails(monkeypatch):
@@ -56,7 +56,7 @@ def test_fetch_local_items_empty_when_firecrawl_fails(monkeypatch):
 
 
 def test_item_key_sha1_stable_and_short():
-    item = {"guid": "https://food.example/1", "link": "https://food.example/1"}
+    item = {"guid": "https://item.example/1", "link": "https://item.example/1"}
     assert fl.item_key(item) == fl.item_key(item)
     assert len(fl.item_key(item)) == 40
     assert fl.item_key({"guid": "x"}) != fl.item_key({"guid": "y"})
@@ -64,7 +64,7 @@ def test_item_key_sha1_stable_and_short():
 
 def test_link_ok_rejects_facebook_domains():
     """ลิงก์ facebook.com/fb.watch/messenger → Graph API โพสต์ preview ไม่ได้ → ตัด"""
-    assert fl._link_ok("https://www.wongnai.com/listings/x") is True
+    assert fl._link_ok("https://www.pantip.com/topic/12345") is True
     assert fl._link_ok("https://www.facebook.com/groups/123/posts/456") is False
     assert fl._link_ok("https://fb.watch/video123") is False
     assert fl._link_ok("https://m.facebook.com/story.php") is False
@@ -75,29 +75,29 @@ def test_fetch_local_items_skips_facebook_links(monkeypatch):
     """Firecrawl มักคืนโพสต์กลุ่มเฟสเป็นผลแรก → ต้องข้ามไม่ให้คลังติดตาย"""
     from app.services import web_search
     monkeypatch.setattr(web_search, "firecrawl_search_results", lambda *a, **k: [
-        {"title": "กลุ่มเฟสรวมร้าน", "url": "https://www.facebook.com/groups/123/posts/1",
+        {"title": "กลุ่มเฟสรวมสินค้า", "url": "https://www.facebook.com/groups/123/posts/1",
          "content": "x"},
-        {"title": "ร้านอร่อยวงใน", "url": "https://www.wongnai.com/listings/x",
+        {"title": "รีวิวพันทิป", "url": "https://www.pantip.com/topic/12345",
          "content": "y"},
     ])
     items = fl.fetch_local_items(0)
     assert len(items) == 1
-    assert items[0]["link"] == "https://www.wongnai.com/listings/x"
+    assert items[0]["link"] == "https://www.pantip.com/topic/12345"
 
 
 def test_curate_local_caption_fallback_when_groq_down(monkeypatch):
     monkeypatch.setattr(fl, "_groq_caption", lambda item: (_ for _ in ()).throw(RuntimeError("down")))
     cap = fl.curate_local_caption(
-        {"title": "ข้าวซอยเชียงใหม่", "topic": "ของกินอร่อย · จ.เชียงใหม่"},
+        {"title": "กล่องจัดระเบียบ", "topic": "ของใช้ในบ้าน · รีวิวบอกต่อ"},
         line_oa="https://lin.ee/test",
     )
-    assert "ข้าวซอยเชียงใหม่" in cap
+    assert "กล่องจัดระเบียบ" in cap
     assert "https://lin.ee/test" in cap  # ลิงก์ LINE OA ครบ
-    assert "#ป้าเข็ม" in cap and "#เที่ยวไทย" in cap
+    assert "#ป้าเข็มป้ายยา" in cap and "#ของมันต้องมี" in cap
 
 
 def test_curate_local_caption_uses_groq_output(monkeypatch):
-    monkeypatch.setattr(fl, "_groq_caption", lambda item: "ป้าลองแล้ว อร่อยจริง 😋")
-    cap = fl.curate_local_caption({"title": "ของฝาก"}, line_oa="https://lin.ee/test")
-    assert cap.startswith("ป้าลองแล้ว อร่อยจริง 😋")
+    monkeypatch.setattr(fl, "_groq_caption", lambda item: "ป้าแนะนำตัวนี้เลยลูก ดีจริง ✨")
+    cap = fl.curate_local_caption({"title": "ไอเทมเด็ด"}, line_oa="https://lin.ee/test")
+    assert cap.startswith("ป้าแนะนำตัวนี้เลยลูก ดีจริง ✨")
     assert "https://lin.ee/test" in cap

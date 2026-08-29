@@ -23,6 +23,10 @@ ENV/
 # Render env vars (real secret values for tools/render_set_env.py) — NEVER commit
 tools/render_env.local.json
 tools/render2_env_export.txt
+tools/client_secret.json
+tools/youtube_token.json
+telegram-smart-memo-*.json
+*.mp3
 
 # Cron setup doc with real CRON_TOKEN — NEVER commit! (template: cron-setup.example.md)
 docs/cron-setup.md

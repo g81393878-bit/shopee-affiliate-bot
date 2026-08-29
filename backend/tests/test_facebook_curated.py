@@ -18,6 +18,13 @@ ATOM = """<?xml version="1.0" encoding="utf-8"?>
 </feed>"""
 
 
+def test_default_sources_has_7_publishers():
+    sources = fc._DEFAULT_SOURCES
+    assert len(sources) >= 7
+    names = [s["name"] for s in sources]
+    assert "Beartai" in names and "The Standard" in names and "DroidSans" in names
+
+
 def test_parse_rss2():
     items = fc._parse_feed(RSS2, {"name": "Test", "topic": "เทค"})
     assert len(items) == 2

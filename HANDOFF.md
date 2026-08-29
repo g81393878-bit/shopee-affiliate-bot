@@ -14,6 +14,44 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- **ระบบโพสต์ Reels อัตโนมัติ 100% ทุก 30 นาที สำหรับ 3 เพจ (29/08) — [Autonomous Bot Mode]:**
+  ① **บอททำงานเองสมบูรณ์แบบ 100% (No Human/AI Intervention):** บอททำงานผ่าน Windows Task Scheduler `\PaKhem Reels Uploader` ทุก ๆ 30 นาที (`PT30M`) แบบเบื้องหลัง ไม่ต้องเปิดโปรแกรมทิ้งไว้ ไม่ต้องให้คนหรือ AI ช่วยกด
+  ② **ปรับเวลาโพสต์ (Pacing):** ตั้ง `POSTING_SPACING_HOURS=0.5` (ทุก 30 นาที) และ `MAX_REELS_PER_DAY=48` ใน `backend/.env` + `reels_uploader/uploader.py`
+  ③ **กระจาย 3 เพจพร้อมกัน:** ยิงไปยังเพจหลัก 1 (`FACEBOOK_PAGE_ID`), เพจ 2 ชี้เป้าของดี (`FACEBOOK_PAGE_2_ID`), และเพจ 3 ป้าเข็ม ของดีบอกต่อ (`FACEBOOK_PAGE_3_ID`)
+  ④ **ระบบผลิตคลิปอัตโนมัติ (Self-generating Producer):** หากคิวใน `pending_videos/` ว่าง บอทจะเรียก `auto_product_reels.py` ดึงสินค้า Shopee มาสร้างคลิป Reels + เสียงพากย์ TTS ใหม่ 3 คลิปทันทีโดยอัตโนมัติ
+  ⑤ **แจ้งเตือน LINE อัตโนมัติ:** บอทส่งสถานะและลิงก์โพสต์เข้า LINE แอดมินทันทีหลังโพสต์เสร็จแต่ละรอบ
+
+- **ปรับปรุงกลยุทธ์ล่าเทรนด์สินค้าจากเน็ต `facebook_local.py` (29/08):**
+  ① เปลี่ยนจากค้นหาของกิน 77 จังหวัด ➔ ค้นหาสินค้ากระแส / ของจำเป็นต้องมี / ไอเทมรีวิวแน่น ผ่าน Firecrawl Search หมุนเวียน 8 หมวดหมู่ (ของใช้ในบ้าน, สมาร์ตโฮม, สุขภาพ, ความงาม, ไอที, สัตว์เลี้ยง, เครื่องครัว, ของติดรถ) × 3 มุมมอง (รีวิวบอกต่อ, ของมันต้องมี, ยอดฮิตขายดี)
+  ② AI ป้าเข็ม (Groq) เขียนป้ายยาเจาะลึกความคุ้มค่าตามสโลแกน *"ถ้าไม่คุ้ม ป้าบอกให้"* ดึงคนแอด LINE OA / ซื้อ Shopee
+  ③ Unit tests ใน `test_facebook_local.py` อัปเดตครบ 9/9 passed (รวม suite 99 passed)
+
+- **อัปเกรด RSS Feed ข่าว/เทรนด์ 12 สำนักข่าวชั้นนำ + วิเคราะห์เชื่อมโยง 8 หมวดสินค้า `facebook_curated.py` (29/08):**
+  ① ขยาย RSS Feeds ครอบคลุม 12 แหล่งชั้นนำของไทย: Beartai, Techhub, The Standard, DroidSans, Brand Inside, Sanook Hitech, Thairath Lifestyle, Positioning Mag, Marketing Oops, Mango Zero, Siamphone, Kapook
+  ② AI ป้าเข็ม (Groq) สรุปข่าวเป็นภาษาชาวบ้าน + วิเคราะห์เชื่อมโยงสู่ 8 หมวดสินค้าจำเป็นที่ต้องมีติดตัว/ติดบ้านตามบริบทของข่าว
+  ③ Unit tests ใน `test_facebook_curated.py` อัปเดตพร้อมรองรับ multi-source feeds ครบถ้วน
+
+- **อัปเกรดดีไซน์ LINE Rich Menu ระดับพรีเมียม (Ultra-Modern Glassmorphism) (29/08):**
+  ① รีดีไซน์ใหม่หมดจดสไตล์ High-End E-Commerce Tech Dashboard บนพื้นหลัง Dark Cyber Slate
+  ② ใช้ Gradient ไล่เฉดสีระดับพรีเมียม (Coral Orange Flame, Royal Amber Gold, Cyber Emerald Teal)
+  ③ ประกอบด้วย 3 การ์ดลอย 3 มิติ:
+     - การ์ด 1: `🔍 ค้นหาสินค้า` (Badge: 🔥 ค้นหาของแท้ & ดีลลด / CTA: แตะเพื่อค้นหาทันที ›)
+     - การ์ด 2: `💼 บอทรายเดือน` (Badge: ⚡️ เริ่มต้น 490.- / เดือน / CTA: ดูแพ็กเกจ & ราคาบอท ›)
+     - การ์ด 3: `💬 คุยกับป้าเข็ม` (Badge: 🟢 ออนไลน์ตอบไว 24 ชม. / CTA: ทักแชทคุยกับป้าเข็ม ›)
+  ④ ดาวน์โหลดและเรนเดอร์ด้วยฟอนต์ `Prompt-Bold` และ `Prompt-Medium` จาก Google Fonts คมชัดทุกขนาดหน้าจอ
+  ⑤ อัปโหลดและเปิดใช้งานเป็น Default Rich Menu บน LINE OA เรียบร้อยแล้ว (`richmenu-423b8bb8cbbb3c4743bce13aff475555`)
+
+- **ขยายโรงงานผลิตคลิป Reels ครอบคลุมสินค้าทั้งคลัง 2,471 รายการ 100% (29/08):**
+  ① จัดกลุ่มสินค้า 2,471 รายการเข้าสู่ 8 หมวดหมู่เทรนด์หลัก (ของใช้ในบ้าน, สมาร์ตโฮม, สุขภาพ, ความงาม, ไอที, สัตว์เลี้ยง, เครื่องครัว, ของติดรถ)
+  ② ระบบจดจำประวัติสินค้า (`used_ids`) ป้องกันการผลิตซ้ำ 100%
+  ③ สับเปลี่ยนการผลิตแบบ Round-Robin หมุนเวียนครบ 8 หมวดต่อเนื่องตลอด 24 ชม. จนครบทั้ง 2,471 รายการ
+
+- **แนวทางบริหารและสร้างมูลค่าจาก "คลิปเก่า" (Evergreen Monetization & Repurposing) (29/08):**
+  ① คลิปเก่าบน Facebook Reels เป็นสินทรัพย์ระยะยาวที่ไม่มีวันหมดอายุ (Strict No-Price) ดันฟีดต่อเนื่องระลอก 2-3
+  ② เพิ่มยอดขายด้วยการปักหมุดคอมเมนต์โค้ดลด Shopee และแชร์ลง Story / กลุ่มชุมชน
+  ③ ไฟล์ `.mp4` ใน `reels_uploader/posted/` สามารถนำไปรีโพสต์ต่อบน TikTok, YouTube Shorts, IG Reels ได้ทันทีโดยไม่ต้องตัดต่อใหม่
+  ④ คลิปอยู่บนเซิร์ฟเวอร์ Facebook ถาวรแล้ว สามารถลบไฟล์ในคอมที่เกิน 60-90 วันเพื่อประหยัดพื้นที่ดิสก์ได้ปลอดภัย 100%
+
 - **feat(creative-brief): สำเร็จแล้ว 100% (commit `2109e60`)** — ชิ้นงานโฆษณา 3 มุมมองสำหรับ Meta Ads (Creative is Targeting): ① `CreativeBrief` model (`creative_briefs` table — perspective/hook/script_body/cta/caption/hashtags/target_behavior/thumbnail_prompt/ai_confidence) ② API endpoints: POST `/api/creative-briefs/generate` (สร้างจาก LLM + fallback template), GET `/api/creative-briefs/product/{id}` (3 มุม), GET `/api/creative-briefs/{id}` (มุมเดียว), DELETE `/api/creative-briefs/product/{id}` ③ LLM generator multi-provider (Groq/Gemini/OpenAI/Anthropic) + fallback `เสียงป้าเข็ม` ④ Pydantic schemas: `CreativeBriefOut`, `CreativeBriefSingleOut`, `CreativeBriefPerspective`, `CreativeBriefGenerateRequest` ⑤ 📝 Briefs tab ใน admin dashboard (Product ID lookup + perspective cards + confidence scoring + ปุ่มสร้าง Brief) ⑥ Supabase migration `20260825000000_creative_briefs.sql` ⑦ 17 tests — **1162 passed**, working tree สะอาด
 
 - **สรุปงานวันนี้ (21/08) — Reels + แอดมิน (กระชับ):** ① แท็บ 🎬 Reels ในแดชบอร์ด (`/api/admin/reels-status` — คิว/pacing/โควต้า/log) ② ปุ่ม ▶️ โพสต์ทันที (`/api/admin/reels/post-now` — รัน `uploader.py --force`, กันกดซ้ำ 409) ③ แจ้งเตือน LINE เจ้าของ (คิวว่าง 1 ครั้ง/วัน + ล้ม ≥2 ครั้งติด — throttle ผ่าน state file) ④ ตั้ง `POSTING_SPACING_HOURS=2` + `MAX_REELS_PER_DAY=10` (local .env) ⑤ **deploy ขึ้น Render แล้ว** (push 12 commits, GH Action ✓, /health 200, routes 2 ตัว live + แท็บใน /admin) — หมายเหตุ: ปุ่ม post-now บน Render คิวว่าง (คลิปอยู่เครื่อง local) ใช้จริงที่ localhost ⑥ ตั้ง `ADMIN_DASHBOARD_PASSWORD` ตัวเดียวกันทั้ง local + Render — **รหัสเดียวใช้ได้ 2 ที่** (ไม่บันทึกค่าลง repo) ⑦ `tools/open_admin.bat` ทางลัดเปิดแดชบอร์ด 1 คลิก (auto-start server) + guard `render_set_env.py` กันรัน batch เผลอ deploy — รวม pytest **1126 passed**, working tree สะอาด

@@ -79,6 +79,7 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 IMAGE_VIDEO_DURATION = 5  # วินาที
 LAST_POST_FILE = ROOT / "last_post_time.txt"
 DAILY_COUNT_FILE = ROOT / "posts_today.txt"
+NOTIFY_STATE_FILE = ROOT / ".reels_notify_state.json"
 LOG_FILE = ROOT / "uploader_execution.log"
 
 
@@ -100,8 +101,8 @@ def _env_float(key: str, default: float) -> float:
         return default
 
 
-DEFAULT_SPACING_HOURS = _env_float("POSTING_SPACING_HOURS", 0.1667)  # 10 นาที (0.1667 ชม.)
-DEFAULT_MAX_PER_DAY = 30  # Reels API จำกัด 30 โพสต์/24 ชม.
+DEFAULT_SPACING_HOURS = _env_float("POSTING_SPACING_HOURS", 0.5)  # 30 นาที (0.5 ชม.)
+DEFAULT_MAX_PER_DAY = 48  # โควต้าต่อวัน
 
 
 
@@ -412,10 +413,25 @@ def build_caption(product: dict) -> str:
     link = (product or {}).get("affiliate_link") or ""
     category = (product or {}).get("category") or ""
 
-    template = f"✨ {name}\n🏷️ เช็คโปรโมชั่นพิเศษและสั่งซื้อของแท้ได้ที่นี่:\n"
+    _VIRAL_HOOKS = [
+        "🚨 เตือนแล้วนะ! ใครยังไม่มีตัวนี้ติดบ้านคือพลาดมาก 😱",
+        "✨ มีตัวนี้แล้วชีวิตง่ายขึ้น 10 เท่า! เสียดายที่เพิ่งมาเจอ 💕",
+        "🔥 ตัวนี้ทำไมคนแย่งกันซื้อถล่มทลาย? รีวิว 5 ดาวแน่นมาก!",
+        "💡 อย่าเพิ่งเลื่อนผ่าน ถ้าไม่อยากพลาดไอเทมเด็ดตัวนี้!",
+        "😱 ของหลักสิบแต่ประโยชน์หลักพัน คุ้มจนป้าต้องบอกต่อ!",
+        "🛒 ไอเทมลับที่คนทักถามพิกัดในไลน์ป้าเยอะที่สุด!",
+        "🎯 ถ้าไม่คุ้ม ป้าไม่กล้าบอกต่อแน่นอนลูก คัดของแท้มาให้แล้ว ✨",
+    ]
+    import random
+    hook = random.choice(_VIRAL_HOOKS)
+    line_url = os.getenv("LINE_OA_URL", "https://lin.ee/o9Kjp1N")
+    line_id = os.getenv("LINE_OA_ID", "@137gsref")
+
+    template = f"{hook}\n\n✨ {name}\n\n🛒 สั่งซื้อของแท้ / ดูโปรโมชั่น Shopee:\n"
     if link:
-        template += f"🛒 {link}\n"
-    template += "\n#ของดีบอกต่อ #ป้าเข็มป้ายยา #Shopee"
+        template += f"👉 {link}\n"
+    template += f"\n💬 หรือทักแชทถามป้าเข็มได้ที่ LINE: {line_id}\n👉 {line_url}\n"
+    template += "\n#ของดีบอกต่อ #ของมันต้องมี #ป้าเข็มป้ายยา #ถ้าไม่คุ้มป้าบอกให้ #Shopee"
 
     # ลอง AI (Groq) — พัง/ไม่มี key → template
     try:
@@ -424,15 +440,15 @@ def build_caption(product: dict) -> str:
         if not clients:
             return template
         prompt = (
-            "เขียนแคปชั่น Facebook Reels ภาษาไทยสั้น ๆ กระชับ มี emoji ป้ายยาสินค้า:\n"
+            "เขียนแคปชั่น Facebook Reels ป้ายยาสินค้าตามกฎ 'หยุดนิ้วใน 3 วินาที' (3-Second Hook Rule) ในเสียง 'ป้าเข็ม':\n"
             f"- สินค้า: {name}\n- หมวด: {category}\n"
             f"- ลิงก์: {link or '(ไม่มี)'}\n\n"
-            "ตอบเฉพาะข้อความแคปชั่น ป้ายยาให้กดดูโปรโมชั่นและสั่งซื้อของแท้ที่ลิงก์ โดยไม่พูดถึงเรื่องราคา ไม่มีคำอธิบาย ไม่มีเครื่องหมายคำพูดครอบ\n"
-            "ห้ามแปะลิงก์ปลอม — ใช้ลิงก์ที่ให้เท่านั้น"
+            "โครงสร้างแคปชั่น 3 จังหวะ:\n"
+            "1. บรรทัดแรก: ประโยค Hook กระตุกความอยากรู้/แก้ปัญหาทันที หยุดนิ้วคนดูใน 3 วินาที (ใช้อิโมจิเด่น เช่น 🔥 🚨 💡 😱)\n"
+            "2. บรรทัดที่สอง: บอกจุดเด่นที่คุ้มค่าและแก้ปัญหาได้จริง 1-2 ประโยคสั้นกระชับ (ห้ามพูดเรื่องราคา และห้ามมีตัวเลขราคา)\n"
+            "3. บรรทัดสุดท้าย: ป้ายยาชวนกดสั่งซื้อ หรือทักแชทถามป้าเข็ม\n\n"
+            "ตอบเฉพาะข้อความแคปชั่น ไม่มีคำอธิบาย ไม่มีเครื่องหมายคำพูดครอบ ห้ามแปะลิงก์ปลอม"
         )
-
-
-
 
         def _gen():
             last_exc = None
@@ -441,7 +457,7 @@ def build_caption(product: dict) -> str:
                     return c.chat.completions.create(
                         model=os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
                         messages=[{"role": "user", "content": prompt}],
-                        temperature=0.8,
+                        temperature=0.85,
                         max_tokens=300,
                     )
                 except Exception as e:
@@ -453,7 +469,9 @@ def build_caption(product: dict) -> str:
         # ลบ URL ปลอมที่ AI อาจมโนขึ้นมาเอง
         text = re.sub(r'https?://\S+', '', text).strip()
         if link:
-            text = f"{text}\n\n🛒 สั่งซื้อของแท้ได้ที่นี่ 👉 {link}"
+            text = f"{text}\n\n🛒 สั่งซื้อของแท้ / ดูโปรโมชั่น Shopee 👉 {link}"
+        text += f"\n💬 หรือทักแชทถามป้าเข็มได้ที่ LINE: {line_id} 👉 {line_url}"
+        text += "\n\n#ของดีบอกต่อ #ของมันต้องมี #ป้าเข็มป้ายยา #ถ้าไม่คุ้มป้าบอกให้ #Shopee"
         return text[:900]
     except Exception as e:
         log(f"[WARN] AI caption ล้ม ({e}) — ใช้ template")
@@ -542,7 +560,60 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
 
     try:
         title_text = str((product or {}).get("product_name", "") or "")[:80]
+        # โพสต์เพจหลัก 1 (ป้าเข็ม ขายของ)
         res = post_reel(description=caption, file_path=upload_path, title=title_text)
+        
+        # โพสต์เพจ 2 (ป้าเข็ม ชี้เป้าของดี) พร้อมกัน
+        page_2_id = os.getenv("FACEBOOK_PAGE_2_ID")
+        page_2_token = os.getenv("FACEBOOK_PAGE_2_ACCESS_TOKEN")
+        res_p2 = None
+        if page_2_id and page_2_token:
+            try:
+                res_p2 = post_reel(
+                    description=caption,
+                    file_path=upload_path,
+                    title=title_text,
+                    page_id=page_2_id,
+                    access_token=page_2_token,
+                )
+                if res_p2.get("ok"):
+                    log(f"[OK] โพสต์เพจ 2 (ชี้เป้าของดี) สำเร็จ video_id={res_p2['video_id']}")
+                else:
+                    log(f"[WARN] โพสต์เพจ 2 ไม่สำเร็จ: {res_p2.get('error')}")
+            except Exception as ep2:
+                log(f"[WARN] โพสต์เพจ 2 ล้ม: {ep2}")
+
+        # โพสต์เพจ 3 (ป้าเข็ม ของดีบอกต่อ) พร้อมกัน
+        page_3_id = os.getenv("FACEBOOK_PAGE_3_ID")
+        page_3_token = os.getenv("FACEBOOK_PAGE_3_ACCESS_TOKEN")
+        res_p3 = None
+        if page_3_id and page_3_token:
+            try:
+                res_p3 = post_reel(
+                    description=caption,
+                    file_path=upload_path,
+                    title=title_text,
+                    page_id=page_3_id,
+                    access_token=page_3_token,
+                )
+                if res_p3.get("ok"):
+                    log(f"[OK] โพสต์เพจ 3 (ป้าเข็ม ของดีบอกต่อ) สำเร็จ video_id={res_p3['video_id']}")
+                else:
+                    log(f"[WARN] โพสต์เพจ 3 ไม่สำเร็จ: {res_p3.get('error')}")
+            except Exception as ep3:
+                log(f"[WARN] โพสต์เพจ 3 ล้ม: {ep3}")
+        # อัปโหลดขึ้น YouTube Shorts (@regency1229) อัตโนมัติถ้ามี token
+        yt_url = None
+        try:
+            yt_token_file = TOOLS / "youtube_token.json"
+            if yt_token_file.exists():
+                import youtube_uploader
+                yt_url = youtube_uploader.upload_shorts(upload_path, product)
+                if yt_url:
+                    log(f"[OK] YouTube Shorts โพสต์สำเร็จ -> {yt_url}")
+        except Exception as e_yt:
+            log(f"[WARN] อัปโหลด YouTube Shorts ล้มเหลว: {e_yt}")
+
     finally:
         if tmp is not None:
             try:
@@ -550,7 +621,7 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
             except Exception:
                 pass
 
-    if res["ok"]:
+    if res["ok"] or (res_p2 and res_p2.get("ok")) or (res_p3 and res_p3.get("ok")) or yt_url:
         POSTED_DIR.mkdir(parents=True, exist_ok=True)
         # ย้ายไฟล์ต้นฉบับ (ภาพหรือคลิป) ไป posted/
         original = pending[0]  # ใช้ไฟล์ต้นฉบับจาก pending
@@ -562,23 +633,43 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
         bump_daily_count()
         if not product:
             build_intro_caption(advance=True)  # เลื่อนแคปชั่นแนะนำป้าเข็ม (กันโพสต์ซ้ำติดกัน)
-        log(f"[OK] Reels โพสต์สำเร็จ video_id={res['video_id']} → {dst.name}")
+        vids = []
+        if res.get("ok") and res.get("video_id"): vids.append(f"P1:{res['video_id']}")
+        if res_p2 and res_p2.get("ok") and res_p2.get("video_id"): vids.append(f"P2:{res_p2['video_id']}")
+        if res_p3 and res_p3.get("ok") and res_p3.get("video_id"): vids.append(f"P3:{res_p3['video_id']}")
+        if yt_url: vids.append("YT:Shorts")
+        vid_summary = ", ".join(vids)
+        log(f"[OK] วิดีโอโพสต์สำเร็จ ({vid_summary}) → {dst.name}")
         
         # ส่งแจ้งเตือนตรงเข้า LINE แอดมินทันทีทุกครั้งที่โพสต์สำเร็จ (ไม่ต้องกดเช็คเอง)
         try:
             pname = (product or {}).get("product_name") or original.name
             aff_link = (product or {}).get("affiliate_link") or ""
-            fb_url = f"https://www.facebook.com/reel/{res['video_id']}"
+            
+            fb_links = []
+            if res.get("ok") and res.get("video_id"):
+                fb_links.append(f"📍 เพจ 1 (ป้าเข็ม ขายของ):\nhttps://www.facebook.com/reel/{res['video_id']}")
+            if res_p2 and res_p2.get("ok") and res_p2.get("video_id"):
+                fb_links.append(f"📍 เพจ 2 (ป้าเข็ม ชี้เป้าของดี):\nhttps://www.facebook.com/reel/{res_p2['video_id']}")
+            if res_p3 and res_p3.get("ok") and res_p3.get("video_id"):
+                fb_links.append(f"📍 เพจ 3 (ป้าเข็ม ของดีบอกต่อ):\nhttps://www.facebook.com/reel/{res_p3['video_id']}")
+            if yt_url:
+                fb_links.append(f"🔴 YouTube Shorts (ช่อง Anda):\n{yt_url}")
+            
+            fb_url_text = "\n\n".join(fb_links) if fb_links else "โพสต์สำเร็จเรียบร้อย"
+            
             notify_msg = (
-                f"🎬 โพสต์คลิป Reels สำเร็จแล้วจ้า!\n\n"
-                f"📦 สินค้า: {pname[:60]}\n"
-                f"🔗 ดูคลิปบน Facebook: {fb_url}\n"
+                f"🎬 โพสต์คลิปสำเร็จแล้วจ้า (ยิง Facebook 3 เพจ + YouTube Shorts! 🔥)\n\n"
+                f"📦 สินค้า: {pname[:60]}\n\n"
+                f"{fb_url_text}\n\n"
                 f"🛒 ลิงก์ Shopee: {aff_link}\n\n"
-                f"⏱️ รอบถัดไป: อีก 10 นาทีจะโพสต์คลิปต่อไปให้อัตโนมัติ"
+                f"⏱️ รอบถัดไป: อีก 30 นาทีจะโพสต์คลิปต่อไปให้อัตโนมัติ"
             )
             _notify_owner(notify_msg)
         except Exception as e:
             log(f"[NOTIFY] ส่งแจ้งเตือน LINE ล้ม: {e}")
+
+
 
         # ลบ temp file ที่แปลงจากภาพ
         if img_video_tmp is not None:

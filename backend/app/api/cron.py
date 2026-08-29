@@ -586,11 +586,12 @@ def _post_next_product(db, limit: int = 1) -> Optional[dict]:
         db.add(pending)
         db.commit()
         if image:
-            # โพสต์แนบรูปจริง (ไม่พึ่ง Facebook crawl การ์ดลิงก์) — ลิงก์ affiliate ไปอยู่ในแคปชั่น
-            caption = f"{caption}\n\n🛒 {p.affiliate_url or ''}".strip()
+            # โพสต์แนบรูปจริง — มีทั้งลิงก์สินค้า Shopee + ลิงก์ LINE OA ป้าเข็ม
+            caption = f"{caption}\n\n🛒 สั่งซื้อของแท้ / ดูโปรโมชั่น Shopee 👉 {p.affiliate_url or ''}\n\n{line_cta_footer()}".strip()
             res = post_feed(caption, image_url=image)
         else:
-            # หารูปไม่ได้ → fallback การ์ดลิงก์เดิม (Facebook crawl เอาเอง)
+            # หารูปไม่ได้ → fallback การ์ดลิงก์เดิม พร้อมแถม LINE footer
+            caption = f"{caption}\n\n{line_cta_footer()}".strip()
             res = post_feed(caption, link=p.affiliate_url or "")
         if res["ok"]:
             pending.status = "fbpost"

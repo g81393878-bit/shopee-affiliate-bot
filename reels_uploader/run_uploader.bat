@@ -12,7 +12,7 @@ echo.
 echo [%date% %time%] กำลังตรวจสอบคิวและโพสต์ Reels...
 ..\backend\.venv\Scripts\python.exe uploader.py
 echo.
-echo นอนหลับ 15 นาที... (กด Ctrl+C เพื่อหยุดการทำงาน)
+echo นอนหลับ 10 นาที... (กด Ctrl+C เพื่อหยุดการทำงาน)
 echo ----------------------------------------------------
-timeout /t 900 /nobreak
+timeout /t 600 /nobreak
 goto loop

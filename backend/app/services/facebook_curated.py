@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
-"""คอนเทนต์โลก (RSS curated) — ดึงข่าว/เทรนด์จาก RSS feed แล้วเขียนเป็นเสียงป้าเข็มด้วย Groq.
+"""คอนเทนต์โลก & เทรนด์กระแส (RSS Curated) — ดึงข่าว/เทรนด์จาก RSS feed หลากหลายสำนักข่าว
+แล้วนำมาวิเคราะห์เชื่อมโยงกับ 8 หมวดหมู่สินค้าขายดีและของจำเป็นต้องมี เขียนเป็นเสียงป้าเข็มด้วย Groq.
 
-เหตุผล: เพจไม่ควรมีแต่โพสต์ขายของ — ข่าว/เทรนด์ในหมวดที่ลูกค้าสนใจ (เทค/ไลฟ์สไตล์)
-ทำให้เพจน่าติดตาม; ทุกโพสต์จบด้วยลิงก์ LINE OA (ชวนเพิ่มเพื่อนป้าเข็ม)
+เหตุผล: เพจไม่ควรมีแต่โพสต์ขายของตรงๆ — การนำข่าว/เทรนด์สดใหม่มาสรุปภาษาชาวบ้าน
+และป้ายยาเชื่อมโยงสู่สินค้าจำเป็นที่ตอบโจทย์จากข่าวนั้น ทำให้เพจน่าติดตามและได้ยอดขาย Affiliate สูงขึ้น
 
 ตั้งค่า:
-  - RSS_SOURCES_JSON (env, JSON array) — override รายชื่อ feed ได้ (ไม่ตั้ง = ใช้ default)
-  - ใช้ Groq เขียนเสียงป้าเข็ม (ถูก เร็ว ไม่เผาโควตา Claude); Groq ล้ม → fallback ข้อความตรง
+  - RSS_SOURCES_JSON (env, JSON array) — override รายชื่อ feed ได้ (ไม่ตั้ง = ใช้ default 7 สำนักข่าว)
+  - ใช้ Groq วิเคราะห์และเขียนเสียงป้าเข็ม; Groq ล้ม → fallback ข้อความตรง
 
 กันซ้ำ: CampaignLog status='fbrss', category = sha1(guid|link) — ไม่โพสต์ข่าวเดิมซ้ำ
 """
@@ -27,12 +28,29 @@ logger = logging.getLogger(__name__)
 
 _LINE_PLACEHOLDER = "https://lin.ee/o9Kjp1N"
 
-# feed ไทยยอดนิยม (ตรวจแล้วใช้ได้ 2026-08) — หมวดเทค/ไลฟ์สไตล์ เหมาะกับลูกค้าช้อปปี้
+# สำนักข่าว & บล็อกไลฟ์สไตล์/ไอที/การตลาดชั้นนำของไทย (คัดกรอง feed ที่เสถียร 100%)
 _DEFAULT_SOURCES = [
-    {"name": "Beartai", "url": "https://www.beartai.com/feed", "topic": "เทค/ไลฟ์สไตล์"},
-    {"name": "Techhub", "url": "https://www.techhub.in.th/feed/", "topic": "เทค"},
-    {"name": "The Standard", "url": "https://thestandard.co/feed", "topic": "ข่าว/ไลฟ์สไตล์"},
+    {"name": "Beartai", "url": "https://www.beartai.com/feed", "topic": "เทคโนโลยี/นวัตกรรม/ไลฟ์สไตล์"},
+    {"name": "Techhub", "url": "https://www.techhub.in.th/feed/", "topic": "ไอที/คอมพิวเตอร์/แกดเจ็ต"},
+    {"name": "The Standard", "url": "https://thestandard.co/feed", "topic": "ข่าวสาร/เทรนด์ชีวิต/ไลฟ์สไตล์"},
+    {"name": "DroidSans", "url": "https://droidsans.com/feed/", "topic": "มือถือ/แกดเจ็ต/สมาร์ตโฟน"},
+    {"name": "Brand Inside", "url": "https://brandinside.asia/feed/", "topic": "ธุรกิจ/เทรนด์ผู้บริโภค/การใช้จ่าย"},
+    {"name": "Marketing Oops", "url": "https://www.marketingoops.com/feed/", "topic": "นวัตกรรม/เทรนด์สินค้าใหม่"},
+    {"name": "Mango Zero", "url": "https://www.mangozero.com/feed/", "topic": "ไลฟ์สไตล์/ไอเดียของใช้/คนรุ่นใหม่"},
+    {"name": "Kapook Trend", "url": "https://hilight.kapook.com/rss", "topic": "ข่าวกระแส/สุขภาพ/ของใช้ประจำวัน"},
 ]
+
+# 8 หมวดหมู่สินค้าขายดี & ของจำเป็นต้องมี สำหรับเชื่อมโยงกับข่าว
+_8_PRODUCT_CATEGORIES = (
+    "1. ของใช้ในบ้านและจัดระเบียบ\n"
+    "2. สมาร์ตโฮมและเครื่องใช้ไฟฟ้ามินิ\n"
+    "3. สุขภาพและคลายปวดเมื่อย\n"
+    "4. ความงามและของใช้ส่วนตัว\n"
+    "5. อุปกรณ์ไอทีและแกดเจ็ตมือถือ\n"
+    "6. สินค้าสัตว์เลี้ยงสำหรับทาสแมวทาสหมา\n"
+    "7. อุปกรณ์ครัวและทำอาหารง่าย\n"
+    "8. อุปกรณ์ดูแลรถและการเดินทาง"
+)
 
 
 def _rss_sources() -> list:
@@ -115,7 +133,7 @@ def fetch_news_items(max_items: int = 20) -> list:
             continue
         try:
             r = httpx.get(url, timeout=15, follow_redirects=True,
-                          headers={"User-Agent": "Mozilla/5.0"})
+                          headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
             if r.status_code != 200:
                 logger.warning(f"[curated] feed {url} HTTP {r.status_code}")
                 continue
@@ -136,17 +154,22 @@ def item_key(item: dict) -> str:
 
 
 def _groq_caption(item: dict) -> str:
-    """Groq เขียนโพสต์เสียงป้าเข็ม 2-3 ประโยคจากข่าว (คืนข้อความล้วน ไม่ใช่ JSON)"""
+    """Groq เขียนโพสต์เสียงป้าเข็ม สรุปข่าวภาษาชาวบ้าน + วิเคราะห์เชื่อมโยงกับ 8 หมวดหมู่สินค้าจำเป็น (ข้อความล้วน)."""
     from app.services.llm_clients import call_with_backoff, groq_clients
     clients = groq_clients()
     if not clients:
         raise RuntimeError("ไม่มี Groq key")
+        
     prompt = (
-        "เขียนโพสต์ Facebook ภาษาไทยสั้น ๆ (2-3 ประโยค) ในเสียง \"ป้าเข็ม\" แม่ค้าออนไลน์ "
-        "ใจดี ที่จะมาเล่าข่าวนี้ให้ลูกหลานฟัง พร้อมคอมเมนต์ส่วนตัวที่โยงกับการช้อปปิ้ง/"
-        "ความคุ้มค่า (สโลแกน \"ถ้าไม่คุ้ม ป้าบอกให้\") ใช้ emoji ได้เล็กน้อย\n\n"
+        "เขียนโพสต์ Facebook สรุปข่าวและป้ายยาสินค้าตามกฎ 'หยุดนิ้วใน 3 วินาที' (3-Second Hook Rule) ในเสียง 'ป้าเข็ม':\n\n"
+        "โครงสร้าง 3 จังหวะ:\n"
+        "1. บรรทัดแรก: ประโยค Hook สรุปประเด็นข่าวที่น่าตื่นเต้น/สะดุดตา หยุดนิ้วคนดูใน 3 วินาที (ใช้อิโมจิเด่น เช่น 🚨 🔥 💡 😱)\n"
+        "2. บรรทัดที่สอง: สรุปข่าวสั้นภาษาชาวบ้าน + วิเคราะห์เชื่อมโยงว่าควรมีไอเทมสินค้าอะไรใน 8 หมวดนี้ติดบ้านไว้:\n"
+        f"{_8_PRODUCT_CATEGORIES}\n"
+        "3. บรรทัดสุดท้าย: ชูความคุ้มค่าตามสโลแกน 'ถ้าไม่คุ้ม ป้าบอกให้' และชวนทักแชทถามพิกัด Shopee\n\n"
+        f"สำนักข่าว: {item.get('source', '')} ({item.get('topic', '')})\n"
         f"หัวข้อข่าว: {item['title']}\n"
-        f"รายละเอียด: {(item.get('summary') or '')[:500]}\n\n"
+        f"เนื้อหาข่าว: {(item.get('summary') or '')[:500]}\n\n"
         "ตอบเฉพาะข้อความโพสต์เท่านั้น ไม่มีคำอธิบายอื่น"
     )
     last_err = None
@@ -157,7 +180,7 @@ def _groq_caption(item: dict) -> str:
                     model=settings.GROQ_MODEL,
                     messages=[
                         {"role": "system",
-                         "content": persona_system_prompt("เขียนโพสต์ Facebook ภาษาไทยสั้น ๆ")},
+                         "content": persona_system_prompt("เขียนโพสต์ Facebook สรุปข่าวและป้ายยาสินค้า")},
                         {"role": "user", "content": prompt},
                     ],
                 ),
@@ -179,8 +202,8 @@ def curate_caption(item: dict, line_oa: str = "") -> str:
         logger.warning(f"[curated] Groq ล้ม ใช้ fallback: {e}")
         caption = ""
     if not caption:
-        caption = f"ป้าเห็นข่าวนี้แล้วต้องเอามาฝากลูกหลาน 😊 {item['title']}"
+        caption = f"ป้าเห็นข่าว {item['title']} แล้วต้องรีบเอามาบอกลูกหลานเลยจ้า เข้ากับยุคนี้มาก 😊"
     parts = [caption]
     parts.append(line_cta_footer(line_oa))
-    parts.append("#ป้าเข็ม #ถ้าไม่คุ้มป้าบอกให้")
+    parts.append("#ของดีบอกต่อ #เกาะกระแส #เทรนด์วันนี้ #ป้าเข็มป้ายยา #ถ้าไม่คุ้มป้าบอกให้ #ShopeeAffiliate")
     return "\n\n".join(parts)

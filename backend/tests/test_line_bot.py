@@ -1180,7 +1180,7 @@ def test_admin_stats(sim):
     sim.send("U_cust_2", "สั่งแล้ว ของถึงยัง")
     r = sim.send(sim.owner_uid, "แอดมิน สถิติ")
     assert r["intent"] == "admin"
-    assert "ลูกค้าที่ค้นสินค้า" in r["preview"]
+    assert "ลูกค้าที่ค้นหาสินค้า" in r["preview"]
 
 
 # ---------- follow event (แอดเพื่อน) + sticker ----------
@@ -1579,3 +1579,43 @@ def test_nosearch_fallback_prefers_name_similar(sim, db):
         db.query(models.Product).filter(
             models.Product.name.in_(["ถุงเท้ากีฬา 3 คู่", "นาฬิกาอัจฉริยะ KENTO"])).delete()
         db.commit()
+
+
+# ---------- สินค้าในคลิป / รหัสสินค้าตรงตัว (YouTube Shorts & Reels Fast Buy) ----------
+
+def test_latest_video_phrases_detection():
+    for phrase in ("ของในคลิป", "ดูจากยูทูป", "คลิปล่าสุด", "ในคลิป", "ตัวล่าสุด", "ขอพิกัดในคลิป", "คลิปวันนี้"):
+        assert lb.is_latest_video_query(phrase) is True, f"'{phrase}' should be recognized as latest video query"
+    assert lb.is_latest_video_query("หูฟังบลูทูธ") is False
+
+
+def test_direct_product_code_parsing():
+    assert lb.parse_product_code("รหัส 1628") == 1628
+    assert lb.parse_product_code("รหัส1628") == 1628
+    assert lb.parse_product_code("code 1628") == 1628
+    assert lb.parse_product_code("#1628") == 1628
+    assert lb.parse_product_code("p1628") == 1628
+    assert lb.parse_product_code("สวัสดี") is None
+
+
+def test_direct_product_code_dispatch(sim, db):
+    prod = models.Product(
+        id=9876,
+        name="รีโมทอัจฉริยะ Tuya Smart",
+        category="เครื่องใช้ไฟฟ้า",
+        price=199,
+        sales_count=5000,
+        affiliate_url="https://s.shopee.co.th/2VqtxaXpj2",
+        link_status="ok",
+        ai_score=95
+    )
+    db.add(prod)
+    db.commit()
+    try:
+        r = sim.send("U_cust_1", "รหัส 9876")
+        assert r["intent"] == "product_code"
+        assert "9876" in r["preview"] or "Tuya" in r["preview"]
+    finally:
+        db.query(models.Product).filter(models.Product.id == 9876).delete()
+        db.commit()
+

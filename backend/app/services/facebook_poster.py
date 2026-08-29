@@ -615,7 +615,7 @@ def _reels_error_hint(body: dict) -> str:
 
 
 def post_reel(description: str = "", file_path: str = "", file_url: str = "",
-              title: str = "") -> dict:
+              title: str = "", page_id: Optional[str] = None, access_token: Optional[str] = None) -> dict:
     """โพสต์ Reels ลงเพจ Facebook ผ่าน 3-step video upload session (Reels Publishing API)
 
     Step 1: POST /{page-id}/video_reels (upload_phase=start) → video_id + upload_url
@@ -627,7 +627,8 @@ def post_reel(description: str = "", file_path: str = "", file_url: str = "",
     ต้องทำ pacing เอง (ดู uploader.py). description/title กรองอักษรต่างภาษาก่อนส่ง.
     คืน {ok, video_id, error}
     """
-    token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or ""
+    token = access_token or os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or ""
+    target_page_id = page_id or PAGE_ID
     if not token:
         return {"ok": False, "video_id": None, "error": "FACEBOOK_PAGE_ACCESS_TOKEN ไม่ได้ตั้ง"}
     description = sanitize_post_text(description or "")
@@ -639,7 +640,8 @@ def post_reel(description: str = "", file_path: str = "", file_url: str = "",
     if file_path and not os.path.exists(file_path):
         return {"ok": False, "video_id": None, "error": f"ไฟล์ไม่พบ: {file_path}"}
 
-    endpoint = f"{GRAPH_URL}/{PAGE_ID}/video_reels"
+    endpoint = f"{GRAPH_URL}/{target_page_id}/video_reels"
+
 
     # Step 1: เปิด upload session
     try:
