@@ -50,6 +50,15 @@
    - โรงงานผลิตคลิป Reels (`auto_product_reels.py`) ต้องคัดกรองเฉพาะสินค้าใน **8 หมวดหมู่สินค้าเทรนด์ยอดฮิตและของจำเป็น** (ของใช้ในบ้าน, สมาร์ตโฮม, สุขภาพ, ความงาม, ไอที, สัตว์เลี้ยง, เครื่องครัว, อุปกรณ์ติดรถ) ฐานข้อมูลเดียวกับเรดาร์ข่าวเทรนด์ ห้ามนำสินค้าไม่ตรงหมวดเทรนด์มาผลิตเด็ดขาด
 7. **แคปชั่นกฎ 3 วินาที พร้อม 2 ลิงก์ (3-Second Viral Hook + Dual CTA Links)**:
    - ทุกแคปชั่นต้องขึ้นต้นด้วยประโยค Hook หยุดนิ้วใน 3 วินาที และปิดท้ายด้วย **2 ลิงก์เสมอ**: 1. 🛒 ลิงก์สินค้า Shopee Affiliate ตรง และ 2. 💬 ลิงก์ LINE OA ป้าเข็ม (`https://lin.ee/o9Kjp1N`) เพื่อให้คนซื้อทันทีหรือทักปรึกษาได้ 24 ชม.
+8. **ยิง 4 แพลตฟอร์มพร้อมกัน 100% (Simultaneous 4-Channel Multi-Broadcast)**:
+   - การโพสต์วิดีโอต้องยิงพร้อมกันครบ **4 แพลตฟอร์มทุก 30 นาที**: Facebook 3 เพจ (ป้าเข็ม 1, 2, 3) + YouTube Shorts (ช่อง Anda `@regency1229`)
+   - โมดูล `youtube_uploader.py` และ `uploader.py` ต้องรองรับประเภทข้อมูลพาธไฟล์ทั้ง `Path` และ `str` เสมอ และแจ้งเตือนสรุปลิงก์ทั้ง 4 แพลตฟอร์มเข้า LINE เจ้าของร้านทุกรอบ
+9. **สถาปัตยกรรมธุรกิจคู่ขนาน (Dual-Engine Business Model in LINE OA)**:
+   - บอท LINE OA (`@137gsref`) ต้องรองรับ 2 ธุรกิจอย่างกลมกลืน:
+     - 🛍️ **Shopee Affiliate Shopping:** ค้นหาสินค้าจากคลัง 2,471 ชิ้น, รับรหัสสินค้าตรงตัว (`รหัส {id}`), ตอบคำถามจากคลิป (`ของในคลิป`), ส่งการ์ด Flex พร้อมปุ่มซื้อ Shopee
+     - 🤖 **AI Bot SaaS Sales:** แพ็กเกจขายบอท 5 ระดับ (🟡 Lean 490฿ · 🟢 Starter 990฿ · 🔵 Business 1,990฿ · 🟣 White-Label 4,990฿ · 🟠 ซื้อขาด 15,000–25,000฿) + พร้อมเพย์ `0935325959` + ธนาคารกสิกรไทย `0380816931` (จีรวัฒน์ พลอาจ) + ระบบตรวจรับรูปภาพสลิป
+10. **ระบบ Serverless Webhook บน Google Apps Script (Always-On Zero-Cost Webhook)**:
+    - ตัวรับ Webhook หลักของ LINE OA รันผ่าน `tools/shopee_pakhem_bot.gs` บน Google Cloud โดยตรงเพื่อหลีกเลี่ยงข้อจำกัดชั่วโมงของ Render คิวรี่ฐานข้อมูล Supabase REST API และประมวลผล Groq AI Multi-Key 7 Keys ตลอด 24 ชม. ฟรีถาวร
 
 
 **API/Admin:** `products-and-links` (สินค้า API + link policy) · `admin-dashboard` (/admin + cookie) · `cron-jobs` (ทุก cron + CRON_TOKEN)
