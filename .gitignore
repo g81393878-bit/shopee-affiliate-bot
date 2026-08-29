@@ -25,6 +25,7 @@ tools/render_env.local.json
 tools/render2_env_export.txt
 tools/client_secret.json
 tools/youtube_token.json
+tools/*.gs
 telegram-smart-memo-*.json
 *.mp3
 
