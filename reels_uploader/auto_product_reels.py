@@ -626,13 +626,14 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
             print(f"\n🎨 กำลังสร้างคลิป Reels สินค้าใหม่: {clean_name[:40]}... (หมวด: {p.category})")
 
             
-            # 1. ดึงรูปภาพสินค้า
-            img_url = p.image_url
-            if not img_url:
-                img_url = fetch_product_image(p.affiliate_url or "")
-                if img_url:
-                    p.image_url = img_url
+            # 1. ดึงรูปภาพสินค้าสดใหม่จากหน้าเว็บ Shopee จริงเสมอ (ป้องกันรูปเก่าที่ติดป้ายราคาเดิม)
+            img_url = fetch_product_image(p.affiliate_url or "") or p.image_url
+            if img_url and img_url != p.image_url:
+                p.image_url = img_url
+                try:
                     db.commit()
+                except Exception:
+                    pass
 
             if not img_url:
                 continue
