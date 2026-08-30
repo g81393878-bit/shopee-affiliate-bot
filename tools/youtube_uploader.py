@@ -331,7 +331,13 @@ def main():
         tokens = get_token_files()
         print(f"\n📺 รายการช่อง YouTube ที่เชื่อมต่อไว้ในระบบ ({len(tokens)} ช่อง):")
         for t in tokens:
-            print(f"  • [{t['id']}] {t['name']} (ไฟล์: {t['path'].name})")
+            try:
+                service = get_authenticated_service(token_path=t["path"], channel_id=t["id"])
+                info = get_channel_info(service)
+                disp = f"{info['title']} ({info['handle']})" if info.get("handle") else info.get("title", t["name"])
+                print(f"  • [{t['id']}] {disp} (ไฟล์: {t['path'].name})")
+            except Exception as e:
+                print(f"  • [{t['id']}] {t['name']} (ไฟล์: {t['path'].name}) - ข้อผิดพลาด: {e}")
         print("")
         return
 
