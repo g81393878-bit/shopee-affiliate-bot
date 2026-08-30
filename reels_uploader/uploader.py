@@ -82,6 +82,12 @@ PENDING_DIR = ROOT / "pending_videos"
 POSTED_DIR = ROOT / "posted"
 PRODUCTS_JSON = ROOT / "products.json"
 
+
+def product_selection_mode() -> str:
+    """อ่านกลยุทธ์คัดสินค้าเดียวกับ pre-buffer runner"""
+    mode = os.getenv("PRODUCT_SELECTION_MODE", "balanced").strip().lower()
+    return mode if mode in {"discount", "bestseller", "balanced"} else "balanced"
+
 # รองรับภาพนิ่ง — แปลงเป็นวิดีโอ 5 วินาทีอัตโนมัติ
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 IMAGE_VIDEO_DURATION = 5  # วินาที
@@ -536,7 +542,8 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
         # ดึงสินค้าจากคลังมาสร้างคลิป Reels ให้อัตโนมัติ (Auto Product Reels จากภาพสินค้า)
         try:
             from auto_product_reels import generate_product_reels
-            generated = generate_product_reels(limit=3)
+            generated = generate_product_reels(
+                limit=3, selection=product_selection_mode())
             if generated:
                 log(f"🎬 สร้างคลิปสินค้าใหม่อัตโนมัติ {len(generated)} คลิป -> pending_videos/")
                 pending = list_pending()

@@ -60,6 +60,12 @@ logger = logging.getLogger("SystemRunner")
 
 ICT = timezone(timedelta(hours=7))
 
+
+def product_selection_mode() -> str:
+    """เลือกโหมดคัดสินค้าโดยไม่ hard-code กลยุทธ์ในตัว runner"""
+    mode = os.getenv("PRODUCT_SELECTION_MODE", "balanced").strip().lower()
+    return mode if mode in {"discount", "bestseller", "balanced"} else "balanced"
+
 def is_active_hours() -> bool:
     """โพสต์ตลอด 24 ชั่วโมง (หรือกำหนดช่วงเวลาผ่าน env)"""
     if os.getenv("ACTIVE_HOURS_ONLY", "false").lower() in ("true", "1"):
@@ -80,7 +86,8 @@ def run_prebuffer_producer_loop():
             if len(pending) < 3:
                 needed = 3 - len(pending)
                 logger.info(f"📦 คิวคลิปพร้อมโพสต์เหลือ {len(pending)} คลิป — กำลังผลิตเพิ่มล่วงหน้า {needed} คลิป...")
-                generate_product_reels(limit=needed)
+                generate_product_reels(limit=needed,
+                                       selection=product_selection_mode())
         except Exception as e:
             logger.warning(f"⚠️ Pre-buffer producer warning: {e}")
         time.sleep(120)  # ตรวจสอบทุก 2 นาที
