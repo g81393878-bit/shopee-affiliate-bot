@@ -12,16 +12,17 @@
                                   ├───► Facebook เพจ 2: ป้าเข็ม ชี้เป้าของดี (ID: 1323469404180656)
 [โรงงานผลิตคลิป Reels/Shorts] ────┼───► Facebook เพจ 3: ป้าเข็ม ของดีบอกต่อ (ID: 1307380735783361)
    (ทุกๆ 30 นาที / 48 คลิปต่อวัน)      │
-                                  └───► YouTube Shorts (Round-Robin หมุนเวียน 4 ช่อง)
+                                  └───► YouTube Shorts (Round-Robin หมุนเวียน 5 ช่อง)
                                           ├─ ช่อง 1: ป้าเข็ม ขายของ (@regency1229)
                                           ├─ ช่อง 2: ของดีติดบ้าน by ป้าเข็ม (@goodthings-w4e)
                                           ├─ ช่อง 3: ชี้เป้า ไอเทมต้องมี (@pakmud.review)
-                                          └─ ช่อง 4: อันดา ป้ายยาของใช้ดี (@anda.review99)
+                                          ├─ ช่อง 4: อันดา ป้ายยาของใช้ดี (@anda.review99)
+                                          └─ ช่อง 5: หยิบมารีวิว (@yibmareview-th)
 ```
 
 ---
 
-## 🔴 2. รายละเอียดช่อง YouTube Shorts ที่เชื่อมต่ออยู่ (4 ช่อง)
+## 🔴 2. รายละเอียดช่อง YouTube Shorts ที่เชื่อมต่ออยู่ (5 ช่อง)
 
 | ลำดับ | ชื่อช่อง YouTube | Handle | ไฟล์ OAuth Token | โหมดการทำงาน |
 | :---: | :--- | :--- | :--- | :---: |
@@ -29,6 +30,7 @@
 | 2️⃣ | **🏠 ของดีติดบ้าน by ป้าเข็ม** | `@goodthings-w4e` | `tools/youtube_token_2.json` | Round-Robin |
 | 3️⃣ | **🛒 ชี้เป้า ไอเทมต้องมี** | `@pakmud.review` | `tools/youtube_token_3.json` | Round-Robin |
 | 4️⃣ | **🔥 อันดา ป้ายยาของใช้ดี** | `@anda.review99` | `tools/youtube_token_4.json` | Round-Robin |
+| 5️⃣ | **หยิบมารีวิว** | `@yibmareview-th` | `tools/youtube_token_5.json` | Round-Robin |
 
 ### 🔄 กลไกการหมุนเวียนและการป้องกันสะดุด (Round-Robin & Auto-Failover):
 1. **การสลับช่องอัตโนมัติ:** เมื่อโพสต์สำเร็จ ระบบจะบันทึกลำดับช่องลง `tools/last_youtube_channel_index.txt` เพื่อให้รอบถัดไปสลับไปช่องต่อไปทันที
