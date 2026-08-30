@@ -254,25 +254,78 @@ def upload_shorts_to_channel(youtube_service, video_path: pathlib.Path, product_
     return video_url
 
 
-def upload_shorts(video_path: Union[pathlib.Path, str], product_meta: Optional[Dict] = None):
-    """อัปโหลดขึ้น YouTube Shorts ทุกช่องที่มีการเชื่อมต่อไว้พร้อมกัน (Multi-Channel)"""
+LAST_CHANNEL_INDEX_FILE = TOOLS_DIR / "last_youtube_channel_index.txt"
+
+
+def get_next_channel_rotation(tokens: list):
+    """จัดลำดับคิวช่อง YouTube แบบ Round-Robin: สลับช่องวนรอบ และต่อคิวด้วยช่องถัดไปอัตโนมัติ (Auto-Failover)"""
+    if not tokens:
+        return [], 0
+    last_idx = -1
+    if LAST_CHANNEL_INDEX_FILE.exists():
+        try:
+            last_idx = int(LAST_CHANNEL_INDEX_FILE.read_text(encoding="utf-8").strip())
+        except Exception:
+            last_idx = -1
+    
+    next_idx = (last_idx + 1) % len(tokens)
+    ordered = tokens[next_idx:] + tokens[:next_idx]
+    return ordered, next_idx
+
+
+def set_last_successful_channel(token_id: int, tokens: list):
+    """บันทึกลำดับช่องที่โพสต์สำเร็จ เพื่อให้รอบถัดไปสลับไปช่องใหม่"""
+    try:
+        for idx, t in enumerate(tokens):
+            if t["id"] == token_id:
+                LAST_CHANNEL_INDEX_FILE.write_text(str(idx), encoding="utf-8")
+                break
+    except Exception:
+        pass
+
+
+def upload_shorts(video_path: Union[pathlib.Path, str], product_meta: Optional[Dict] = None, broadcast_all: bool = False):
+    """อัปโหลดขึ้น YouTube Shorts:
+    - โหมดหมุนเวียน (Default): สลับช่องวนรอบ (Round-Robin) เพื่อเฉลี่ยโควต้า 24 ชม. + สลับช่องอัตโนมัติหากช่องในคิวโควต้าเต็ม (Auto-Failover)
+    - โหมด Broadcast All: ยิงทุกช่องพร้อมกัน
+    """
     video_path = pathlib.Path(video_path)
     tokens = get_token_files()
     if not tokens:
         log("[WARN] ไม่พบไฟล์ YouTube Token ใดๆ ใน tools/")
         return None
 
+    if broadcast_all:
+        results = []
+        for t in tokens:
+            try:
+                yt_service = get_authenticated_service(token_path=t["path"], channel_id=t["id"])
+                ch_info = get_channel_info(yt_service)
+                ch_display = f"{ch_info['title']} ({ch_info['handle']})" if ch_info.get("handle") else ch_info.get("title", t["name"])
+                url = upload_shorts_to_channel(yt_service, video_path, product_meta, channel_name=ch_display)
+                if url:
+                    results.append({"channel": ch_display, "url": url, "id": t["id"]})
+            except Exception as e:
+                log(f"[WARN] อัปโหลดขึ้น {t['name']} ล้มเหลว: {e}")
+        return results
+
+    # โหมด Round-Robin Rotation + Auto-Failover (เฉลี่ยโควต้าและกันสะดุด)
+    ordered_tokens, target_idx = get_next_channel_rotation(tokens)
     results = []
-    for t in tokens:
+
+    for t in ordered_tokens:
         try:
             yt_service = get_authenticated_service(token_path=t["path"], channel_id=t["id"])
             ch_info = get_channel_info(yt_service)
             ch_display = f"{ch_info['title']} ({ch_info['handle']})" if ch_info.get("handle") else ch_info.get("title", t["name"])
             url = upload_shorts_to_channel(yt_service, video_path, product_meta, channel_name=ch_display)
             if url:
+                set_last_successful_channel(t["id"], tokens)
                 results.append({"channel": ch_display, "url": url, "id": t["id"]})
+                log(f"🎯 [Rotation] โพสต์ YouTube Shorts สำเร็จด้วย {ch_display} (รอบถัดไปจะสลับช่องต่อไป)")
+                break  # โพสต์สำเร็จ 1 ช่องในรอบนี้เรียบร้อย (เฉลี่ยโควต้า)
         except Exception as e:
-            log(f"[WARN] อัปโหลดขึ้น {t['name']} ล้มเหลว: {e}")
+            log(f"[WARN] ช่อง {t['name']} โควต้าเต็ม/ไม่พร้อม ({e}) ➔ สลับไปช่องสำรองถัดไปอัตโนมัติ (Auto-Failover)...")
 
     return results
 
