@@ -941,9 +941,15 @@ def _track_bot_purchase(db, line_user_id: str, text: str) -> None:
 
 def _send_telegram(text: str) -> bool:
     """ส่งแจ้งเตือนเข้า Telegram Commander แอดมิน (ฟรี 100% ไม่จำกัดจำนวน ไม่กินโควต้า LINE)"""
-    token = os.getenv("TELEGRAM_BOT_TOKEN", "8648538339:AAGDjwjHlrYRj-g3XrqZ_nAxfJV0S-d3yfk")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID", "6734965582")
-    if not token or not chat_id:
+    # Guard: ห้ามส่งข้อความจาก Unit Test / Mock Data เข้า Telegram จริงเด็ดขาด
+    if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("TESTING"):
+        return True
+    if "U_cust_" in text or "U_mock" in text or "test_user" in text:
+        return True
+
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+    if not token or not chat_id or "mock" in token.lower():
         return False
     try:
         url = f"https://api.telegram.org/bot{token}/sendMessage"
