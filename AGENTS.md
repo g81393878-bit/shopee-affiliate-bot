@@ -59,8 +59,11 @@
      - 🤖 **AI Bot SaaS Sales:** แพ็กเกจขายบอท 5 ระดับ (🟡 Lean 490฿ · 🟢 Starter 990฿ · 🔵 Business 1,990฿ · 🟣 White-Label 4,990฿ · 🟠 ซื้อขาด 15,000–25,000฿) + พร้อมเพย์ `0935325959` + ธนาคารกสิกรไทย `0380816931` (จีรวัฒน์ พลอาจ) + ระบบตรวจรับรูปภาพสลิป
 10. **ระบบ Serverless Webhook บน Google Apps Script (Always-On Zero-Cost Webhook)**:
     - ตัวรับ Webhook หลักของ LINE OA รันผ่าน `tools/shopee_pakhem_bot.gs` บน Google Cloud โดยตรงเพื่อหลีกเลี่ยงข้อจำกัดชั่วโมงของ Render คิวรี่ฐานข้อมูล Supabase REST API และประมวลผล Groq AI Multi-Key 7 Keys ตลอด 24 ชม. ฟรีถาวร
-11. **การดึงภาพสินค้าสดใหม่จากหน้าเว็บจริง (Live Fresh Image Sourcing)**:
-    - ทุกครั้งที่โรงงานนำสินค้ามาผลิตคลิป Reels/Shorts ใหม่หรือวนรอบ ต้องดึงภาพปกสินค้าล่าสุดสดใหม่จากลิงก์ Shopee จริง (`fetch_product_image`) เสมอ เพื่อป้องกันรูปสินค้าเก่าที่อาจมีป้ายราคาโปรโมชั่นเดิมติดอยู่บนภาพ!
+12. **การจัดการ Multi-Channel YouTube Shorts & Google OAuth 403 Fix**:
+    - สถาปัตยกรรมรองรับหลายช่องคู่ขนาน (`youtube_token.json`, `youtube_token_2.json`, `youtube_token_3.json`, ...) และตรวจจับ Handle ของช่องอัตโนมัติ
+    - **ปัญหาที่พบบ่อย (OAuth 403 `access_denied` / App not verified)**:
+      - **สาเหตุ**: Google Cloud Console อยู่ในสถานะ `Testing` และยังไม่ได้เพิ่มอีเมลเจ้าของช่องลงในรายชื่อผู้ทดสอบ
+      - **วิธีแก้**: ไปที่ Google Cloud Console > `APIs & Services` > `OAuth consent screen` > เลื่อนไปที่ `Test users` > กด `+ ADD USERS` > ใส่อีเมล (เช่น `regency2919@gmail.com`) แล้วกด `SAVE` จะล็อกอินผ่านฉลุย 100%
 
 
 **API/Admin:** `products-and-links` (สินค้า API + link policy) · `admin-dashboard` (/admin + cookie) · `cron-jobs` (ทุก cron + CRON_TOKEN)
