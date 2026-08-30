@@ -266,9 +266,11 @@ def upload_shorts(video_path: Union[pathlib.Path, str], product_meta: Optional[D
     for t in tokens:
         try:
             yt_service = get_authenticated_service(token_path=t["path"], channel_id=t["id"])
-            url = upload_shorts_to_channel(yt_service, video_path, product_meta, channel_name=t["name"])
+            ch_info = get_channel_info(yt_service)
+            ch_display = f"{ch_info['title']} ({ch_info['handle']})" if ch_info.get("handle") else ch_info.get("title", t["name"])
+            url = upload_shorts_to_channel(yt_service, video_path, product_meta, channel_name=ch_display)
             if url:
-                results.append({"channel": t["name"], "url": url, "id": t["id"]})
+                results.append({"channel": ch_display, "url": url, "id": t["id"]})
         except Exception as e:
             log(f"[WARN] อัปโหลดขึ้น {t['name']} ล้มเหลว: {e}")
 
