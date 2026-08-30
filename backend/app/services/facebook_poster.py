@@ -645,8 +645,7 @@ def post_reel(description: str = "", file_path: str = "", file_url: str = "",
 
     # Step 1: เปิด upload session
     try:
-        r = httpx.post(endpoint, params={"access_token": token},
-                       json={"upload_phase": "start"}, timeout=30)
+        r = httpx.post(endpoint, params={"upload_phase": "start", "access_token": token}, timeout=30)
     except Exception as e:
         logger.warning(f"[facebook_poster] reels init failed: {e}")
         return {"ok": False, "video_id": None, "error": str(e)[:200]}
@@ -698,13 +697,17 @@ def post_reel(description: str = "", file_path: str = "", file_url: str = "",
                 "error": str(err)[:200] + _reels_error_hint(body2)}
 
     # Step 3: publish (finish session + video_state=PUBLISHED)
-    data = {"video_id": video_id, "upload_phase": "finish", "video_state": "PUBLISHED"}
+    finish_data = {
+        "upload_phase": "finish",
+        "video_state": "PUBLISHED",
+        "access_token": token,
+    }
     if description:
-        data["description"] = description
+        finish_data["description"] = description
     if (title or "").strip():
-        data["title"] = (title or "").strip()[:80]
+        finish_data["title"] = (title or "").strip()[:80]
     try:
-        r3 = httpx.post(endpoint, params={"access_token": token}, data=data, timeout=60)
+        r3 = httpx.post(endpoint, data=finish_data, timeout=60)
     except Exception as e:
         logger.warning(f"[facebook_poster] reels publish failed: {e}")
         return {"ok": False, "video_id": video_id, "error": str(e)[:200]}
