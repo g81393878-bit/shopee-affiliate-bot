@@ -18,32 +18,37 @@ set /p choice="กรุณาเลือกตัวเลข (1-5) แล้�
 
 cd /d "%~dp0\.."
 
-if "%choice%"=="1" (
-    cls
-    backend\.venv\Scripts\python.exe tools\youtube_uploader.py --list-channels
-    pause
-    goto end
-)
-if "%choice%"=="2" (
-    cls
-    echo กำลังเปิดเบราว์เซอร์เพื่อเชื่อมต่อช่องที่ 2...
-    backend\.venv\Scripts\python.exe tools\youtube_uploader.py --add-channel 2
-    pause
-    goto end
-)
-if "%choice%"=="3" (
-    cls
-    echo กำลังเปิดเบราว์เซอร์เพื่อเชื่อมต่อช่องที่ 3...
-    backend\.venv\Scripts\python.exe tools\youtube_uploader.py --add-channel 3
-    pause
-    goto end
-)
-if "%choice%"=="4" (
-    cls
-    echo กำลังเปิดเบราว์เซอร์เพื่อเชื่อมต่อช่องที่ 4...
-    backend\.venv\Scripts\python.exe tools\youtube_uploader.py --add-channel 4
-    pause
-    goto end
-)
+if "%choice%"=="1" goto list_ch
+if "%choice%"=="2" goto add_2
+if "%choice%"=="3" goto add_3
+if "%choice%"=="4" goto add_4
+goto end
+
+:list_ch
+cls
+python tools\youtube_uploader.py --list-channels
+pause
+goto end
+
+:add_2
+cls
+echo กำลังเปิดเบราว์เซอร์เพื่อเชื่อมต่อช่องที่ 2...
+python tools\youtube_uploader.py --add-channel 2
+pause
+goto end
+
+:add_3
+cls
+echo กำลังเปิดเบราว์เซอร์เพื่อเชื่อมต่อช่องที่ 3...
+python tools\youtube_uploader.py --add-channel 3
+pause
+goto end
+
+:add_4
+cls
+echo กำลังเปิดเบราว์เซอร์เพื่อเชื่อมต่อช่องที่ 4...
+python tools\youtube_uploader.py --add-channel 4
+pause
+goto end
 
 :end

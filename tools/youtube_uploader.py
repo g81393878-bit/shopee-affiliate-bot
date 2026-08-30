@@ -89,18 +89,30 @@ def get_authenticated_service(token_path: Optional[pathlib.Path] = None, channel
                 creds = None
 
         if not creds:
-            if not CLIENT_SECRET_FILE.exists():
+            secret_file = TOOLS_DIR / f"client_secret_{channel_id}.json"
+            if not secret_file.exists():
+                secret_file = CLIENT_SECRET_FILE
+            if not secret_file.exists():
                 raise FileNotFoundError(
-                    f"ไม่พบไฟล์ {CLIENT_SECRET_FILE}\n"
-                    f"กรุณาดาวน์โหลด client_secret.json จาก Google Cloud Console แล้วนำมาวางที่: {CLIENT_SECRET_FILE}"
+                    f"ไม่พบไฟล์ OAuth Client Secret ({secret_file.name} หรือ {CLIENT_SECRET_FILE.name})\n"
+                    f"กรุณาวางไฟล์ที่: {TOOLS_DIR}"
                 )
-            flow = InstalledAppFlow.from_client_secrets_file(str(CLIENT_SECRET_FILE), SCOPES)
+            flow = InstalledAppFlow.from_client_secrets_file(str(secret_file), SCOPES)
+            auth_url, _ = flow.authorization_url(prompt='consent', access_type='offline')
             print("\n=======================================================")
-            print(f"🔑 กำลังเปิดเบราว์เซอร์เพื่อขอสิทธิ์อัปโหลด YouTube Shorts ช่องที่ {channel_id}")
-            print("กรุณาเลือกบัญชี Google และช่อง YouTube ที่ต้องการเชื่อมต่อ")
+            print(f"🔑 กรุณาคลิกลิงก์ด้านล่างนี้เพื่อขอสิทธิ์อัปโหลด YouTube Shorts ช่องที่ {channel_id}:")
+            print(auth_url)
             print("=======================================================\n")
-            creds = flow.run_local_server(port=0)
+            
+            # เปิดเบราว์เซอร์อัตโนมัติด้วยคำสั่ง OS
+            try:
+                import webbrowser
+                webbrowser.open(auth_url)
+            except Exception:
+                pass
 
+            creds = flow.run_local_server(port=8080, prompt='consent', authorization_prompt_message="")
+        
         target_token_file.write_text(creds.to_json(), encoding="utf-8")
         log(f"[OK] บันทึก YouTube OAuth Token ช่องที่ {channel_id} สำเร็จ: {target_token_file.name}")
 
@@ -127,13 +139,31 @@ def build_shorts_title(product_name: str) -> str:
     return title
 
 
-def build_shorts_description(product_name: str, link: str, prod_id: Optional[int] = None) -> str:
+def get_channel_info(youtube_service) -> dict:
+    """ดึงชื่อช่องและแฮนเดิล (@handle) จริงจาก YouTube API"""
+    try:
+        res = youtube_service.channels().list(part="snippet", mine=True).execute()
+        items = res.get("items", [])
+        if items:
+            snip = items[0].get("snippet", {})
+            title = snip.get("title", "YouTube Channel")
+            handle = snip.get("customUrl", "")
+            if not handle and title:
+                handle = f"@{title.replace(' ', '')}"
+            return {"title": title, "handle": handle}
+    except Exception:
+        pass
+    return {"title": "YouTube Shorts", "handle": ""}
+
+
+def build_shorts_description(product_name: str, link: str, prod_id: Optional[int] = None, channel_handle: str = "") -> str:
     """สร้าง Description สำหรับ YouTube Shorts พร้อมลิงก์ Shopee และ LINE OA Deep Link"""
     line_url = os.getenv("LINE_OA_URL", "https://lin.ee/o9Kjp1N")
     line_id = os.getenv("LINE_OA_ID", "@137gsref")
     
     code_prompt = f" แล้วพิมพ์ \"{prod_id}\"" if prod_id else ""
     deep_link = f"https://line.me/R/oaMessage/{line_id}/?รหัส{prod_id}" if prod_id else line_url
+    channel_ref = f" {channel_handle}" if channel_handle else ""
 
     desc = (
         f"✨ {product_name}\n\n"
@@ -141,7 +171,7 @@ def build_shorts_description(product_name: str, link: str, prod_id: Optional[int
         f"💬 ทักแชท LINE ป้าเข็ม รับพิกัดตรงทันที:\n"
         f"👉 แอด LINE ไอดี: {line_id}{code_prompt}\n"
         f"👉 ลิงก์เปิดแชทรับพิกัด: {deep_link}\n\n"
-        f"📍 หรือกดที่ชื่อช่องเพื่อดูลิงก์พิกัดหน้าโปรไฟล์ได้เลยจ้า!\n"
+        f"📍 หรือกดที่ชื่อช่อง{channel_ref} เพื่อดูลิงก์พิกัดหน้าโปรไฟล์ได้เลยจ้า!\n"
         f"----------------------------------------\n"
         f"#Shorts #ของดีบอกต่อ #ของมันต้องมี #ป้าเข็มป้ายยา #ถ้าไม่คุ้มป้าบอกให้ #ShopeeAffiliate #Shopee"
     )
@@ -152,6 +182,9 @@ def upload_shorts_to_channel(youtube_service, video_path: pathlib.Path, product_
     """อัปโหลดไฟล์วิดีโอขึ้น YouTube Shorts ของ 1 ช่อง"""
     from googleapiclient.http import MediaFileUpload
 
+    ch_info = get_channel_info(youtube_service)
+    display_name = f"{ch_info['title']} ({ch_info['handle']})" if ch_info['handle'] else ch_info['title']
+
     name = (product_meta or {}).get("product_name") or video_path.stem
     link = (product_meta or {}).get("affiliate_link") or ""
 
@@ -161,7 +194,7 @@ def upload_shorts_to_channel(youtube_service, video_path: pathlib.Path, product_
         prod_id = int(m.group(1))
 
     title = build_shorts_title(name)
-    description = build_shorts_description(name, link, prod_id=prod_id)
+    description = build_shorts_description(name, link, prod_id=prod_id, channel_handle=ch_info.get("handle", ""))
 
     body = {
         "snippet": {
