@@ -3,6 +3,7 @@ import json
 import re
 import logging
 import inspect
+import urllib.request
 from typing import List, Optional, Tuple
 from fastapi import APIRouter, HTTPException, Header, Request, Response
 from sqlalchemy import func
@@ -255,12 +256,24 @@ def is_latest_video_query(text: str) -> bool:
 
 
 def parse_product_code(text: str) -> Optional[int]:
-    """แยกหมายเลขรหัสสินค้า เช่น 'รหัส 1628', 'รหัส1628', 'code 1628', '#1628', 'p1628'"""
-    t = (text or "").strip()
-    m = re.match(r'^(?:รหัส|code|p|#)\s*(\d{1,5})$', t, re.IGNORECASE)
+    """แยกหมายเลขรหัสสินค้าตรงจากคลิป เช่น '25', '447', 'รหัส 1628', 'รหัสสินค้า 1628', 'code 1628', '#1628', 'p1628', 'เลข 25', '25 ครับ'"""
+    t = _strip_polite_suffix((text or "").strip()).strip()
+    if not t:
+        return None
+    # 1. รหัสที่มีคำนำหน้า: รหัส, รหัสสินค้า, code, id, item, no, no., p, #, เลข, เบอร์, ชิ้นที่, อันที่, ตัวที่
+    m = re.match(r'^(?:รหัสสินค้า|รหัส|code|id|item|no\.?|p|#|เลข|เบอร์|ชิ้นที่|อันที่|ตัวที่)\s*(\d{1,5})$', t, re.IGNORECASE)
     if m:
         try:
             return int(m.group(1))
+        except ValueError:
+            return None
+    # 2. ตัวเลขล้วน 1-5 หลัก (เช่น ลูกค้าพิมพ์ '25', '447', '1628' ตรงจากป้ายในคลิป YouTube Shorts / Reels)
+    m_pure = re.match(r'^(\d{1,5})$', t)
+    if m_pure:
+        try:
+            val = int(m_pure.group(1))
+            if 1 <= val <= 99999:
+                return val
         except ValueError:
             return None
     return None
@@ -310,8 +323,11 @@ def is_deal_query(text: str) -> bool:
     return t in DEAL_PHRASES or "วันนี้ขายอะไรดี" in t
 
 
-GREETING_WORDS = ("hello", "hi", "hey", "หวัดดี", "ทักทาย", "ดีจ้า", "สวัสดี",
-                  "สวัสดีครับ", "สวัสดีค่ะ", "ฮัลโหล", "ไหว้")
+GREETING_WORDS = (
+    "hello", "hi", "hey", "หวัดดี", "ทักทาย", "ดีจ้า", "สวัสดี",
+    "สวัสดีครับ", "สวัสดีค่ะ", "ฮัลโหล", "ไหว้", "ครับ", "ค่ะ", "คับ", "คะ", "จ้า", "จ้ะ", "ครับผม",
+    "ดีครับ", "ดีค่ะ", "คับผม", "ครับป้า", "ค่ะป้า", "คุณป้า", "ป้าเข็ม", "แม่เข็ม"
+)
 
 
 POLITE_SUFFIXES = ("ครับผม", "ครับ", "ค่ะ", "คะ", "จ๊ะ", "จ้า", "นะคะ", "นะ")
@@ -328,15 +344,23 @@ def _strip_polite_suffix(text: str) -> str:
 
 
 def is_greeting(text: str) -> bool:
-    """แยกคำทักทายล้วนๆ ออกจากคำค้น — 'สวัสดี อยากได้หูฟัง' ต้องไปค้น ไม่ใช่ทักทาย"""
+    """แยกคำทักทายล้วนๆ หรือคำตอบรับสุภาพ ออกจากคำค้น — 'สวัสดี อยากได้หูฟัง' ต้องไปค้น ไม่ใช่ทักทาย"""
     t = text.rstrip("?？!. ").strip().lower()
     if t in GREETING_WORDS:
         return True
     # "สวัสดีค่ะ ป้าเข็ม" / "สวัสดีนะคะ" → ยังเป็นทักทาย (ตัดชื่อบอท + คำสุภาพแล้วเทียบ)
-    t2 = _strip_polite_suffix(t).replace("ป้าเข็ม", "").replace("แม่เข็ม", "").replace(" ", "")
+    t2 = _strip_polite_suffix(t).replace("ป้าเข็ม", "").replace("แม่เข็ม", "").replace("คุณป้า", "").replace(" ", "")
     if t2 in GREETING_WORDS:
         return True
-    return t.startswith("สวัสดี") and len(t) <= 12
+    return (t.startswith("สวัสดี") or t.startswith("หวัดดี") or t.startswith("ดีจ้า")) and len(t) <= 15
+
+
+def polite_reply_for(text: str, user_name: str, tone: str = "neutral") -> str:
+    """ตอบรับคำทักทาย/คำสุภาพอย่างเป็นธรรมชาติ ไม่ทื่อ"""
+    t = (text or "").strip().lower()
+    if t in ("ครับ", "ค่ะ", "คับ", "คะ", "จ้า", "จ้ะ", "ครับผม", "คับผม", "ครับป้า", "ค่ะป้า"):
+        return f"จ้าคุณ {user_name} มีสินค้าชิ้นไหนอยากให้ป้าเข็มช่วยหา หรือต้องการปรึกษาเรื่องไหน พิมพ์บอกได้เลยน้า ยินดีดูแลจ้า 😊"
+    return greeting_text_for(user_name, tone)
 
 
 # --- ปรับโทนภาษาให้เหมาะทุกวัย (วัยรุ่น/ผู้สูงอายุ) จากสไตล์การพิมพ์ ---
@@ -529,20 +553,8 @@ def greeting_text(user_name: str) -> str:
 
 
 def _ensure_menu(reply):
-    """ควิกรีไพลเมนูหลักติดข้อความสุดท้ายของทุกคำตอบเสมอ.
-
-    LINE ลบ quick reply ทันทีที่บอท/ใครก็ตามส่งข้อความใหม่ในห้อง — ถ้าแนบกับ
-    ข้อความแรกของชุดตอบ (บั๊กเดิมใน browse_category_message) ปุ่มจะหายก่อน
-    ลูกค้าเห็น ข้อความสุดท้ายที่มี quick_reply เฉพาะอยู่แล้ว (เช่น เมนูหมวด)
-    เก็บไว้ไม่ทับ"""
-    msgs = reply if isinstance(reply, list) else [reply]
-    last = msgs[-1]
-    if getattr(last, "quick_reply", None) is None:
-        try:
-            last.quick_reply = quick_reply_items()
-        except Exception:
-            pass
-    return msgs
+    """ส่งข้อความโดยตรง ไม่บังคับแนบควิกรีไพล เพื่อให้หน้าแชทสะอาด 100% ตามคำสั่ง"""
+    return reply if isinstance(reply, list) else [reply]
 
 
 def _web_answer_messages(query, answer=None):
@@ -927,22 +939,71 @@ def _track_bot_purchase(db, line_user_id: str, text: str) -> None:
     db.commit()
 
 
+def _send_telegram(text: str) -> bool:
+    """ส่งแจ้งเตือนเข้า Telegram Commander แอดมิน (ฟรี 100% ไม่จำกัดจำนวน ไม่กินโควต้า LINE)"""
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "8648538339:AAGDjwjHlrYRj-g3XrqZ_nAxfJV0S-d3yfk")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID", "6734965582")
+    if not token or not chat_id:
+        return False
+    try:
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        payload = json.dumps({"chat_id": chat_id, "text": text[:4000], "disable_web_page_preview": True}).encode("utf-8")
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=5) as res:
+            return res.status == 200
+    except Exception as e:
+        logger.warning(f"Telegram notify failed: {e}")
+        return False
+
+
+def _notify_owner_payment_intent(user, text: str = "") -> None:
+    """แจ้งเตือนเจ้าของร้านผ่าน Telegram ทันทีเมื่อลูกค้ากดปุ่มชำระเงิน / ขอเลขบัญชี / สนใจแพ็กเกจ"""
+    try:
+        uid = user.line_user_id
+        name = user.name or "ลูกค้า LINE"
+        key = package_payment_key(text) if text else None
+        pkg = _purchase_package_name(key) if key else (text or "สอบถามวิธีชำระเงิน/เลขบัญชี")
+        
+        msg = (
+            f"💳 [ลูกค้ากดปุ่มชำระเงิน / ดูเลขบัญชี]\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"• 👤 ชื่อลูกค้า: {name}\n"
+            f"• 🆔 User ID: {uid}\n"
+            f"• 📦 สนใจรายการ: {pkg}\n"
+            f"• ⏰ เวลา: {_fmt_bkk(datetime.datetime.utcnow())} น.\n"
+            f"• 💬 ตอบกลับลูกค้าได้ทันที: `/reply {uid} <ข้อความ>`\n"
+            f"━━━━━━━━━━━━━━━━━━"
+        )
+        _send_telegram(msg)
+    except Exception as e:
+        logger.warning(f"Payment intent notify failed: {e}")
+
+
 def _notify_owner_purchase(user, package_key: str, status: str) -> None:
     """แจ้งเจ้าของร้านเรื่องสถานะซื้อ (จ่ายแล้ว/ยกเลิก) — เจ้าของยืนยันด้วย /ยืนยัน <userId>"""
-    if "mock" in LINE_ACCESS_TOKEN.lower():
-        return
     try:
         uid = user.line_user_id
         name = user.name or uid
         pkg = _purchase_package_name(package_key)
         if status == "paid_pending":
-            text = (f"💰 ลูกค้า {name} ({uid}) แจ้งว่าโอนเงินแล้ว (แพ็กเกจ {pkg})!\n"
-                    f"เช็คยอดแล้วยืนยัน: /ยืนยัน {uid}")
+            text = (f"💰 [แจ้งเตือนการสั่งซื้อแพ็กเกจ]\n"
+                    f"━━━━━━━━━━━━━━━━━━\n"
+                    f"• 👤 ลูกค้า: {name} ({uid})\n"
+                    f"• 📦 แพ็กเกจ: {pkg}\n"
+                    f"• 📌 สถานะ: แจ้งว่าโอนเงินเรียบร้อยแล้ว\n"
+                    f"• ✅ คำสั่งยืนยัน: /ยืนยัน {uid}\n"
+                    f"━━━━━━━━━━━━━━━━━━")
         elif status == "cancelled":
             text = f"❌ ลูกค้า {name} ({uid}) ยกเลิกคำสั่งซื้อบอท (แพ็กเกจ {pkg}) แล้ว"
         else:
             text = f"📦 ลูกค้า {name} ({uid}) สถานะซื้อ: {status} (แพ็กเกจ {pkg})"
-        line_bot_api.push_message(ADMIN_LINE_USER_ID, TextSendMessage(text=text))
+            
+        # ส่งเข้า Telegram ทันที (ฟรี 100%)
+        _send_telegram(text)
+        
+        # ส่งเข้า LINE OA ด้วยหาก token ไม่ใช่ mock
+        if "mock" not in LINE_ACCESS_TOKEN.lower():
+            line_bot_api.push_message(ADMIN_LINE_USER_ID, TextSendMessage(text=text))
     except Exception as e:
         logger.warning(f"owner purchase notify failed: {e}")
 
@@ -1080,14 +1141,31 @@ def _notify_owner_slip(user, purchase, size_bytes: int, content_type: str,
                     ],
                 },
             }
-            line_bot_api.push_message(ADMIN_LINE_USER_ID, [
-                FlexSendMessage(alt_text=alt_text, contents=contents),
-                TextSendMessage(text=f"เช็คยอดแล้วยืนยัน: /ยืนยัน {uid}"),
-            ])
-        else:
-            # ไม่มีลิงก์สลิป (กันไว้) — ข้อความเดิม
-            alt_text += f"\nเช็คยอดแล้วยืนยัน: /ยืนยัน {uid}"
-            line_bot_api.push_message(ADMIN_LINE_USER_ID, TextSendMessage(text=alt_text))
+
+        # ส่งเข้า Telegram Commander ทันที (ฟรี 100% พร้อมลิงก์สลิป)
+        tg_text = (
+            f"🔔 [แจ้งเตือนสลิปโอนเงินใหม่ 🔥]\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"• 👤 ลูกค้า: {name}\n"
+            f"• 🆔 User ID: {uid}\n"
+            f"• 📦 แพ็กเกจ: {pkg}\n"
+            f"• 💵 ยอดจากสลิป: {amount_text}\n"
+            f"• 🔍 ลิงก์ดูรูปสลิป: {purchase.slip_url or 'ไม่มี'}\n"
+            f"• ✅ คำสั่งยืนยันระบบ: /ยืนยัน {uid}\n"
+            f"━━━━━━━━━━━━━━━━━━"
+        )
+        _send_telegram(tg_text)
+
+        if "mock" not in LINE_ACCESS_TOKEN.lower():
+            if purchase.slip_url:
+                line_bot_api.push_message(ADMIN_LINE_USER_ID, [
+                    FlexSendMessage(alt_text=alt_text, contents=contents),
+                    TextSendMessage(text=f"เช็คยอดแล้วยืนยัน: /ยืนยัน {uid}"),
+                ])
+            else:
+                # ไม่มีลิงก์สลิป (กันไว้) — ข้อความเดิม
+                alt_text += f"\nเช็คยอดแล้วยืนยัน: /ยืนยัน {uid}"
+                line_bot_api.push_message(ADMIN_LINE_USER_ID, TextSendMessage(text=alt_text))
     except Exception as e:
         logger.warning(f"owner slip notify failed: {e}")
 
@@ -1812,30 +1890,8 @@ def spec_size_numbers(spec: str) -> list:
 
 
 def compare_invite_message(hits: list) -> Optional[TextSendMessage]:
-    """ค้นเจอ 2-3 ตัวคล้ายกัน (หมวดเดียวกัน) → ชวนเทียบ (แบบ Amazon Rufus)
-    ปุ่มลัด 'เทียบ #1 กับ #2' — การ์ดสินค้าโชว์เลข 1/2/3 อยู่แล้ว ลูกค้าแตะจบไม่ต้องพิมพ์เอง
-    คนละหมวด = ไม่ใช่ของใกล้กัน → ไม่ชวน (กันคำค้นกว้างๆ อย่าง 'ขวด' เด้งปุ่มรก)"""
-    if len(hits) < 2:
-        return None
-    if (hits[0].category or "") != (hits[1].category or ""):
-        return None
-    buttons = []
-    for i in range(1, len(hits)):
-        if len(buttons) >= 2:
-            break
-        a, b = hits[0], hits[i]
-        name_a = (a.name or "").strip()
-        name_b = (b.name or "").strip()
-        if not name_a or not name_b:
-            continue
-        buttons.append(QuickReplyButton(
-            action=MessageAction(label=f"⚖️ เทียบ #1 กับ #{i + 1}",
-                                 text=f"เทียบ {name_a[:25]} กับ {name_b[:25]}")))
-    if not buttons:
-        return None
-    return TextSendMessage(
-        text="👀 มี 2 ตัวใกล้กัน จะเทียบให้ดูไหม? แตะปุ่มด้านล่างจ๊ะ 👇",
-        quick_reply=QuickReply(items=buttons))
+    """ปิดการทำงาน Quick Reply เปรียบเทียบสินค้าตามคำสั่ง เพื่อความสะอาดของหน้าแชท"""
+    return None
 
 
 def handle_compare(db, raw_text: str, user, is_owner: bool = False):
@@ -3021,17 +3077,21 @@ def is_leave_request(text: str) -> bool:
 
 
 def _notify_owner_question(user, question: str) -> None:
-    """แจ้งเจ้าของร้านว่ามีลูกค้าฝากคำถามไว้ → เจ้าของตอบทีหลังด้วย /ตอบ <userId> <ข้อความ>"""
-    if "mock" in LINE_ACCESS_TOKEN.lower():
-        return
+    """แจ้งเจ้าของร้านว่ามีลูกค้าฝากคำถามไว้ผ่าน Telegram (ฟรี 100%)"""
     try:
         uid = user.line_user_id
         name = user.name or uid
-        line_bot_api.push_message(ADMIN_LINE_USER_ID, TextSendMessage(text=(
-            f"💬 ลูกค้า {name} ({uid}) ฝากคำถามไว้:\n"
-            f"“{question}”\n\n"
-            f"ตอบกลับ: /ตอบ {uid} <ข้อความ>"
-        )))
+        text = (
+            f"💬 [ลูกค้าฝากคำถามใน LINE OA]\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"• 👤 ลูกค้า: {name} ({uid})\n"
+            f"• ❓ คำถาม: “{question}”\n\n"
+            f"• ✍️ ตอบกลับผ่าน LINE: /ตอบ {uid} <ข้อความ>\n"
+            f"━━━━━━━━━━━━━━━━━━"
+        )
+        _send_telegram(text)
+        if "mock" not in LINE_ACCESS_TOKEN.lower():
+            line_bot_api.push_message(ADMIN_LINE_USER_ID, TextSendMessage(text=text))
     except Exception as e:
         logger.warning(f"owner notify failed: {e}")
 
@@ -3199,6 +3259,7 @@ def _send_reply(reply_token: str, reply, label: str = ""):
 @handler.add(MessageEvent, message=TextMessage)
 def message_text(event):
     user_text = event.message.text.strip()
+    logger.info(f"📩 [LINE INCOMING] from {event.source.user_id}: '{user_text}'")
     # Accept both "วันนี้ขายอะไรดี" and "วันนี้ขายอะไรดี?" — the Thai keyboard doesn't add
     # the ?, and a bare trailing "?" from autocorrect shouldn't break the match either.
     normalized_text = user_text.rstrip("?？ ").strip()
@@ -3368,9 +3429,8 @@ def message_text(event):
             reply = handle_owner_slip(normalized_text)
             intent = 'admin'
         elif is_greeting(normalized_text):
-            # แนวสากล: ทักทาย + ปุ่มทางเลือก — ไม่ยิงสินค้าจนกว่าลูกค้าจะบอกความต้องการ
-            reply = TextSendMessage(text=_append_market_emphasis(greeting_text_for(user.name, tone), emphasis),
-                                    quick_reply=quick_reply_items())
+            # แนวสากล: ทักทาย/ตอบรับคำสุภาพ
+            reply = TextSendMessage(text=_append_market_emphasis(polite_reply_for(normalized_text, user.name, tone), emphasis))
             intent = 'greeting'
         elif normalized_text in WHY_US_PHRASES:
             # ทำไมต้องซื้อกับป้าเข็ม — คุณค่าที่ประชาชนได้ (ราคาเท่ากัน/ของจริง/ดูแล)
@@ -3416,12 +3476,15 @@ def message_text(event):
             intent = 'manual'
         elif is_package_request(normalized_text):
             # ถามแพ็กเกจ/ราคาบอท → สรุปย่อ + ปุ่มเลือกทีละแพ็กเกจ (ไม่ทิ้งการ์ดเต็มทันที)
+            _notify_owner_payment_intent(user, "ดูราคาแพ็กเกจบอท")
             reply = TextSendMessage(text=package_summary_text(),
                                     quick_reply=package_summary_quick_reply())
             intent = 'manual'
         elif is_bot_manual_request(normalized_text):
             # คำถามคู่มือ (ค้น/เทียบ/จำ/พัสดุ/ติดตั้ง...) = ตอบจากคู่มือเท่านั้น ไม่ AI เดา
             _track_bot_purchase(db, line_user_id, normalized_text)
+            if is_bot_payment_request(normalized_text) or package_payment_key(normalized_text):
+                _notify_owner_payment_intent(user, normalized_text)
             reply = _manual_reply_messages(normalized_text, is_owner)
             intent = 'manual'
             # ถามติดตั้ง/โค้ด → แนบปุ่มเปิด GitHub + คู่มือ (แตะได้ ไม่ต้องก๊อปลิงก์)
@@ -3628,20 +3691,22 @@ def follow_event(event):
         privacy = TextSendMessage(text=PRIVACY_NOTICE)
         if "mock" in LINE_ACCESS_TOKEN.lower():
             logger.info(f"Mock follow welcome -> {user.name}")
-        elif not push_guard(db):
-            logger.warning(f"ข้าม welcome push (quota หมด) -> {user.name}")
+            line_bot_api.push_message(line_user_id, [privacy, PRIVACY_BUTTON, welcome])
+        elif push_guard(db):
             # welcome (มี quick reply) ต้องเป็นข้อความสุดท้ายของชุด — ไม่งั้น
             # LINE ลบปุ่มทันทีที่ push ข้อความถัดไป (privacy/ปุ่ม PDPA) ตามมา
             line_bot_api.push_message(line_user_id, [privacy, PRIVACY_BUTTON, welcome])
-            admin_uid = os.getenv("ADMIN_LINE_USER_ID", "Uc88eb3896b0e4bcc5fbaa9b78ac1294e")
-            if admin_uid and admin_uid != line_user_id:
-                try:
-                    line_bot_api.push_message(
-                        admin_uid,
-                        TextSendMessage(text=f"👋 [ลูกค้าใหม่เพิ่มเพื่อน] คุณ \"{user.name}\" เพิ่มเพื่อนร้านป้าเข็มเข้ามาใหม่จ้า!")
-                    )
-                except Exception:
-                    pass
+            
+        # แจ้งเตือนแอดมินเข้า Telegram ทันที (ฟรี 100%)
+        admin_msg = (
+            f"👋 [ลูกค้าใหม่เพิ่มเพื่อน LINE OA]\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"• 👤 ชื่อลูกค้า: {user.name or 'ลูกค้าใหม่'}\n"
+            f"• 🆔 User ID: {line_user_id}\n"
+            f"• ⏰ เวลา: {_fmt_bkk(datetime.datetime.utcnow())} น.\n"
+            f"━━━━━━━━━━━━━━━━━━"
+        )
+        _send_telegram(admin_msg)
     except Exception as e:
         logger.error(f"Follow welcome error: {e}")
     finally:

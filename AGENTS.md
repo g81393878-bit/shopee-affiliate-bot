@@ -56,7 +56,7 @@
 9. **สถาปัตยกรรมธุรกิจคู่ขนาน (Dual-Engine Business Model in LINE OA)**:
    - บอท LINE OA (`@137gsref`) ต้องรองรับ 2 ธุรกิจอย่างกลมกลืน:
      - 🛍️ **Shopee Affiliate Shopping:** ค้นหาสินค้าจากคลัง 2,471 ชิ้น, รับรหัสสินค้าตรงตัว (`รหัส {id}`), ตอบคำถามจากคลิป (`ของในคลิป`), ส่งการ์ด Flex พร้อมปุ่มซื้อ Shopee
-     - 🤖 **AI Bot SaaS Sales:** แพ็กเกจขายบอท 5 ระดับ (🟡 Lean 490฿ · 🟢 Starter 990฿ · 🔵 Business 1,990฿ · 🟣 White-Label 4,990฿ · 🟠 ซื้อขาด 15,000–25,000฿) + พร้อมเพย์ `0935325959` + ธนาคารกสิกรไทย `0380816931` (จีรวัฒน์ พลอาจ) + ระบบตรวจรับรูปภาพสลิป
+     - 🤖 **AI Bot SaaS Sales:** แพ็กเกจขายบอท 5 ระดับ (🟡 Lean 490฿ · 🟢 Starter 990฿ · 🔵 Business 1,990฿ · 🟣 White-Label 4,990฿ · 🟠 ซื้อขาด 15,000–25,000฿) + พร้อมเพย์ `0935325959` + ธนาคารกรุงไทย `038-025-3631` (จีรวัฒน์ พลอาจ) + ระบบตรวจรับรูปภาพสลิป
 10. **ระบบ Serverless Webhook บน Google Apps Script (Always-On Zero-Cost Webhook)**:
     - ตัวรับ Webhook หลักของ LINE OA รันผ่าน `tools/shopee_pakhem_bot.gs` บน Google Cloud โดยตรงเพื่อหลีกเลี่ยงข้อจำกัดชั่วโมงของ Render คิวรี่ฐานข้อมูล Supabase REST API และประมวลผล Groq AI Multi-Key 7 Keys ตลอด 24 ชม. ฟรีถาวร
 12. **การจัดการ Multi-Channel YouTube Shorts & Google OAuth 403 Fix**:
@@ -64,6 +64,19 @@
     - **ปัญหาที่พบบ่อย (OAuth 403 `access_denied` / App not verified)**:
       - **สาเหตุ**: Google Cloud Console อยู่ในสถานะ `Testing` และยังไม่ได้เพิ่มอีเมลเจ้าของช่องลงในรายชื่อผู้ทดสอบ
       - **วิธีแก้**: ไปที่ Google Cloud Console > `APIs & Services` > `OAuth consent screen` > เลื่อนไปที่ `Test users` > กด `+ ADD USERS` > ใส่อีเมล (เช่น `regency2919@gmail.com`) แล้วกด `SAVE` จะล็อกอินผ่านฉลุย 100%
+13. **ศูนย์บัญชาการ Telegram Commander & การปกป้องโควต้า LINE OA (Zero-Cost 100% Unlimited Telegram Ops)**:
+    - การแจ้งเตือนระบบหลังบ้านและข้อมูลลูกค้าทั้งหมด (รายงาน Reels ทุก 30 นาที, สรุปสุขภาพ VPS, ลูกค้าใหม่, สลิปโอนเงิน, สั่งซื้อแพ็กเกจ, ฝากคำถาม) ต้องวิ่งเข้า **Telegram Commander (`@pakhem_commander_bot`, Chat ID: `6734965582`)** ผ่าน `tools/telegram_notifier.py` และ `tools/telegram_commander.py` ตลอด 24 ชม. ฟรีถาวร ไม่จำกัดจำนวนครั้ง
+    - **ห้ามใช้ LINE OA Push Message สำหรับงานหลังบ้านเด็ดขาด** เพื่อสงวนโควต้าฟรี 300 ข้อความ/เดือนของ LINE Official Account ไว้คุยและขายของกับลูกค้า 100%
+    - รองรับคำสั่งควบคุมระยะไกล: `/status` (เช็คสด), `/post` (ยิงคลิปด่วน), `/produce` (ผลิตคลิป 3 ตัว), `/stock` (ดูคลัง), `/reply <uid> <msg>` (ตอบแชทลูกค้า LINE จาก Telegram ได้โดยตรง)
+14. **มาตรฐานการรายงานผลและข้อมูลจริง 100% (Strict Factual Verification & Clean Bullet Format)**:
+    - **ห้ามมโน ห้ามคาดเดาข้อมูลเองเด็ดขาด**: ตัวเลข สถิติ เวลา และสถานะระบบต้องผ่านการตรวจสอบจาก Process, Database, หรือ API จริงเสมอ
+    - **การจัดรูปแบบรายงาน**: ต้องขึ้นต้นด้วยหัวข้อสำคัญชัดเจน ใช้สัญลักษณ์ Bullet Points (`•`, `📌`, `👉`, `🟢`, `📊`), เว้นวรรคสบายตา ไม่รก ไม่ยาวเป็นพืด อ่านจบเข้าใจทันทีใน 5 วินาที
+15. **กฎเหล็กการเชื่อมต่อฐานข้อมูล Supabase Production (No SQLite Fallback)**:
+    - ค่า `DATABASE_URL` ใน `backend/.env` ทั้งบนเครื่องและบน VPS ต้องเป็น **Supabase PostgreSQL Transaction Pooler** (`aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres`) เสมอ ห้าม fallback เป็น SQLite ว่างเปล่าเด็ดขาด เพราะสินค้าจริง 2,472 รายการอยู่ที่ Supabase เท่านั้น
+16. **ระบบรับรหัสสินค้าตรงตัวจากคลิป YouTube Shorts / Reels (Pure Digit & Prefix Recognition)**:
+    - ฟังก์ชัน `parse_product_code` ต้องรองรับตัวเลขล้วน 1-5 หลัก (เช่น `86`, `447`, `1628`) และตัวเลขผสมคำสุภาพ (`86 ครับ`, `86 ค่ะ`) เพื่อให้ตรงกับป้ายพิกัดท้ายคลิป และส่งการ์ดสินค้าชิ้นนั้นทันทีใน 0.1 วินาที
+17. **ระบบเฝ้าระวังและซิงค์ LINE Webhook อัตโนมัติ (Tunnel Watchdog Auto-Sync)**:
+    - บริการ `tunnel-watchdog.service` ต้องรันคู่ขนานตลอด 24 ชม. ตรวจจับ URL ของ Cloudflare ทุก 15 วินาที และอัปเดต LINE Webhook ทันทีที่ URL มีการเปลี่ยนแปลง ป้องกันปัญหาบอทเงียบถาวร (ดูบันทึกฉบับเต็มที่ `docs/ROOT_CAUSE_ANALYSIS_2026_08_30.md`)
 
 
 **API/Admin:** `products-and-links` (สินค้า API + link policy) · `admin-dashboard` (/admin + cookie) · `cron-jobs` (ทุก cron + CRON_TOKEN)

@@ -528,8 +528,8 @@ def create_product_posters_multiphase(product_name: str, price: float, rating: f
         draw.rounded_rectangle([40, 1705, W - 40, 1860], radius=24, fill=(15, 23, 42, 245), outline=(34, 197, 94), width=4)
         f_foot1 = get_font(FONT_BOLD, 33)
         f_foot2 = get_font(FONT_BOLD, 27)
-        draw.text((W // 2, 1750), f"🛒 พิกัดของแท้: แอด LINE @137gsref พิมพ์ \"{seed_id}\"", font=f_foot1, fill=(255, 255, 255), anchor="mm")
-        draw.text((W // 2, 1810), f"👉 รับลิงก์ตรงตัวทันที! (หรือกดดูที่หน้าช่อง Anda)", font=f_foot2, fill=(74, 222, 128), anchor="mm")
+        draw.text((W // 2, 1750), f"พิกัดของแท้: แอด LINE @137gsref พิมพ์ \"{seed_id}\"", font=f_foot1, fill=(255, 255, 255), anchor="mm")
+        draw.text((W // 2, 1810), f"รับลิงก์ตรงตัวทันที! (หรือกดดูที่หน้าช่อง Anda)", font=f_foot2, fill=(74, 222, 128), anchor="mm")
 
         posters.append(canvas.convert("RGB"))
     return posters

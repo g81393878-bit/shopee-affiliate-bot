@@ -23,8 +23,10 @@ ENV/
 # Render env vars (real secret values for tools/render_set_env.py) — NEVER commit
 tools/render_env.local.json
 tools/render2_env_export.txt
-tools/client_secret.json
-tools/youtube_token.json
+tools/client_secret*.json
+client_secret*.json
+tools/youtube_token*.json
+youtube_token*.json
 tools/*.gs
 telegram-smart-memo-*.json
 *.mp3
