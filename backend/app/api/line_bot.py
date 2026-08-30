@@ -3630,10 +3630,18 @@ def follow_event(event):
             logger.info(f"Mock follow welcome -> {user.name}")
         elif not push_guard(db):
             logger.warning(f"ข้าม welcome push (quota หมด) -> {user.name}")
-        else:
             # welcome (มี quick reply) ต้องเป็นข้อความสุดท้ายของชุด — ไม่งั้น
             # LINE ลบปุ่มทันทีที่ push ข้อความถัดไป (privacy/ปุ่ม PDPA) ตามมา
             line_bot_api.push_message(line_user_id, [privacy, PRIVACY_BUTTON, welcome])
+            admin_uid = os.getenv("ADMIN_LINE_USER_ID", "Uc88eb3896b0e4bcc5fbaa9b78ac1294e")
+            if admin_uid and admin_uid != line_user_id:
+                try:
+                    line_bot_api.push_message(
+                        admin_uid,
+                        TextSendMessage(text=f"👋 [ลูกค้าใหม่เพิ่มเพื่อน] คุณ \"{user.name}\" เพิ่มเพื่อนร้านป้าเข็มเข้ามาใหม่จ้า!")
+                    )
+                except Exception:
+                    pass
     except Exception as e:
         logger.error(f"Follow welcome error: {e}")
     finally:
