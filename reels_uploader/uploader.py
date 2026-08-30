@@ -403,79 +403,108 @@ def build_intro_caption(advance: bool = True) -> str:
     return caption.replace("https://line.me/R/ti/p/@xxxxx", LINE_OA_URL)
 
 
+CATEGORY_HOOKS = {
+    "สัตว์เลี้ยง & ของใช้หมาแมว": [
+        "🐾 ทาสหมาทาสแมวต้องมีติดบ้านไว้! ป้าคัดของแท้ตัวเด็ดมาให้แล้วจ้า ✨",
+        "🚨 เลี้ยงน้องแล้วเจอปัญหากวนใจใช่ไหม? ตัวนี้ช่วยได้เยอะมาก รีวิว 5 ดาวแน่น!",
+        "✨ ไอเทมลับประจำบ้านสำหรับคนรักสัตว์ ใช้งานดีจนป้าต้องมาบอกต่อลูก 💕",
+    ],
+    "สมาร์ตโฮม & เครื่องใช้ไฟฟ้า": [
+        "💡 เปลี่ยนชีวิตให้ง่ายและสะดวกขึ้น 10 เท่า! ตัวนี้ป้าแนะนำเลยจ้า ✨",
+        "🚨 ใครกำลังมองหาตัวช่วยประหยัดแรงและเวลา ป้าคัดของแท้ตัวเด็ดมาให้แล้ว!",
+        "🔥 ไอเทมเด็ดประจำบ้านที่คนแย่งกันสั่งถล่มทลาย รีวิวแน่นมาก คุ้มค่าน่าใช้สุดๆ!",
+    ],
+    "ของใช้ในบ้าน & จัดระเบียบบ้าน": [
+        "🏠 ไอเทมลับประจำบ้านที่ทุกคนต้องมีติดไว้! ใช้ดีจนป้าต้องบอกต่อจ้า ✨",
+        "🚨 เตือนแล้วนะ! ใครยังไม่มีตัวนี้ติดบ้านคือพลาดมาก รีวิว 5 ดาวแน่นสุดๆ",
+        "✨ ตัวช่วยจัดบ้านและทำความสะอาดให้ชีวิตง่ายขึ้น ป้าคัดของแท้มาให้แล้วลูก 💕",
+    ],
+    "เครื่องครัว & ของกินของใช้": [
+        "🍳 สายทำอาหารและสายของกินต้องมีติดครัวไว้! ป้าคัดตัวเด็ดมาให้แล้วจ้า ✨",
+        "🔥 ไอเทมลับประจำห้องครัวที่แม่บ้านยกนิ้วให้ การันตีของแท้ ใช้งานคุ้มค่ามาก!",
+        "🚨 ของดีมีคุณภาพที่ต้องมีติดครัว ซื้อแล้วคุ้มเงินทุกบาทแน่นอนลูก ✨",
+    ],
+    "ไอที & แกดเจ็ตมือถือ": [
+        "📱 แกดเจ็ตตัวเด็ดที่ทุกคนต้องมีพกติดตัว! ป้าคัดของแท้คุณภาพดีมาให้แล้วจ้า ✨",
+        "💡 อย่าเพิ่งเลื่อนผ่าน ถ้าไม่อยากพลาดไอเทมไอทีสุดคุ้มตัวนี้!",
+        "🔥 ตัวช่วยคู่ใจสายมือถือและไอที รีวิว 5 ดาวแน่น สเปกดีคุ้มเกินราคาแน่นอน!",
+    ],
+    "สุขภาพ & ดูแลตัวเอง": [
+        "🩺 ไอเทมดูแลสุขภาพประจำบ้านที่ต้องมีติดไว้! ป้าคัดของแท้มาให้แล้วจ้า ✨",
+        "🚨 ใครกำลังมองหาตัวช่วยดูแลตัวเองตัวนี้อยู่ การันตีคุณภาพ รีวิวแน่นมาก!",
+        "✨ ตัวช่วยสุขภาพดี ใช้งานง่าย อุ่นใจได้ทุกวัน ป้าแนะนำเลยลูก 💕",
+    ],
+    "ความงาม & ของใช้ส่วนตัว": [
+        "💄 ไอเทมดูแลตัวเองที่คนรีวิวแน่นที่สุด! ป้าคัดของแท้ร้อยเปอร์เซ็นต์มาให้แล้วจ้า ✨",
+        "✨ ของใช้ส่วนตัวตัวเด็ดที่ทุกคนต้องมีติดตัว ใช้ดีจนป้าต้องบอกต่อลูก 💕",
+        "🔥 ตัวนี้ยอดขายปัง รีวิว 5 ดาวแน่นมาก การันตีของแท้ คุ้มค่าน่าใช้สุดๆ!",
+    ],
+    "ของใช้ติดรถ & เดินทาง/ช่าง": [
+        "🚗 มีติดรถและพกติดบ้านไว้อุ่นใจที่สุด! ป้าคัดของแท้ตัวท็อปมาให้แล้วจ้า ✨",
+        "🚨 ไอเทมฉุกเฉินและของจำเป็นสำหรับคนรักรถและการเดินทาง รีวิวแน่นมาก!",
+        "🔧 ของใช้จำเป็นสุดทนทาน ใช้งานดี คุ้มค่าเงินทุกบาทแน่นอนลูก ✨",
+    ],
+}
+
+
+def classify_product_category(name: str, category: str) -> str:
+    """จำแนกหมวดหมู่สินค้าเข้าสู่ 8 หมวดหมู่หลักตามคีย์เวิร์ดอย่างแม่นยำ 100%"""
+    full_text = f"{name} {category}".lower()
+    if any(k in full_text for k in ["สัตว์", "หมา", "แมว", "อึ", "ฉี่", "ขน", "แผ่นรอง", "pet", "ทาสแมว"]):
+        return "สัตว์เลี้ยง & ของใช้หมาแมว"
+    if any(k in full_text for k in ["รีโมท", "สมาร์ต", "โคมไฟ", "พัดลม", "โซล่า", "หลอดไฟ", "smart", "wifi", "tuya", "ไฟฟ้า"]):
+        return "สมาร์ตโฮม & เครื่องใช้ไฟฟ้า"
+    if any(k in full_text for k in ["หน้ากาก", "แมสก์", "mask", "ปวด", "เมื่อย", "นวด", "สุขภาพ", "หลัง", "คอ", "ไหล่", "เบาะ", "ยา", "pm2.5", "เชื้อโรค"]):
+        return "สุขภาพ & ดูแลตัวเอง"
+    if any(k in full_text for k in ["สิว", "หน้า", "สบู่", "ผิว", "ครีม", "เซรั่ม", "บำรุง", "ความงาม", "สำลี", "ลิป", "แปรง"]):
+        return "ความงาม & ของใช้ส่วนตัว"
+    if any(k in full_text for k in ["หูฟัง", "ฟิล์ม", "กล้อง", "บลูทูธ", "ไอที", "แกดเจ็ต", "เคส", "สายชาร์จ", "usb", "powerbank"]):
+        return "ไอที & แกดเจ็ตมือถือ"
+    if any(k in full_text for k in ["ครัว", "กระทะ", "หม้อ", "แก้ว", "อาหาร", "สาหร่าย", "ตะหลิว", "มีด", "จาน", "ช้อน"]):
+        return "เครื่องครัว & ของกินของใช้"
+    if any(k in full_text for k in ["รถ", "แดด", "ช่าง", "กีฬา", "เดินทาง", "ร่ม", "ปั๊ม", "เครื่องมือ"]):
+        return "ของใช้ติดรถ & เดินทาง/ช่าง"
+    return "ของใช้ในบ้าน & จัดระเบียบบ้าน"
+
+
+def clean_caption_text(text: str) -> str:
+    """ทำความสะอาดชื่อสินค้าสำหรับแสดงบนแคปชั่น — ลบ tag/bracket ขยะ"""
+    if not text:
+        return ""
+    t = re.sub(r'\[[^\]]*\]|\([^\)]*\)|【[^】]*】|\{[^\}]*\}', ' ', text)
+    t = re.sub(r'[^\u0E00-\u0E7Fa-zA-Z0-9\s.,/%+\-()]', ' ', t)
+    t = re.sub(r'\s+', ' ', t).strip()
+    return t
+
+
 def build_caption(product: dict) -> str:
-    """เขียนแคปชั่น Reels — คลิปสินค้า (มีใน products.json) ใช้ AI/template,
-    คลิปที่ไม่ใช่สินค้าใช้แคปชั่นแนะนำป้าเข็มจากคลัง (หมุนเวียน)."""
+    """เขียนแคปชั่น Reels — ระบบ Smart Category Template 100% ปลอดภัย ไม่มโนสเปกผิดเพี้ยน"""
     if not product:
         return build_intro_caption(advance=False)
-    name = (product or {}).get("product_name") or "สินค้าเด็ดจากป้าเข็ม"
-    price = (product or {}).get("price") or ""
+    raw_name = (product or {}).get("product_name") or "สินค้าเด็ดจากป้าเข็ม"
+    name = clean_caption_text(raw_name)
     link = (product or {}).get("affiliate_link") or ""
     category = (product or {}).get("category") or ""
 
-    _VIRAL_HOOKS = [
-        "🚨 เตือนแล้วนะ! ใครยังไม่มีตัวนี้ติดบ้านคือพลาดมาก 😱",
-        "✨ มีตัวนี้แล้วชีวิตง่ายขึ้น 10 เท่า! เสียดายที่เพิ่งมาเจอ 💕",
-        "🔥 ตัวนี้ทำไมคนแย่งกันซื้อถล่มทลาย? รีวิว 5 ดาวแน่นมาก!",
-        "💡 อย่าเพิ่งเลื่อนผ่าน ถ้าไม่อยากพลาดไอเทมเด็ดตัวนี้!",
-        "😱 ของหลักสิบแต่ประโยชน์หลักพัน คุ้มจนป้าต้องบอกต่อ!",
-        "🛒 ไอเทมลับที่คนทักถามพิกัดในไลน์ป้าเยอะที่สุด!",
-        "🎯 ถ้าไม่คุ้ม ป้าไม่กล้าบอกต่อแน่นอนลูก คัดของแท้มาให้แล้ว ✨",
-    ]
+    cat_key = classify_product_category(raw_name, category)
+    hooks_pool = CATEGORY_HOOKS.get(cat_key, CATEGORY_HOOKS["ของใช้ในบ้าน & จัดระเบียบบ้าน"])
+    
     import random
-    hook = random.choice(_VIRAL_HOOKS)
+    hook = random.choice(hooks_pool)
     line_url = os.getenv("LINE_OA_URL", "https://lin.ee/o9Kjp1N")
     line_id = os.getenv("LINE_OA_ID", "@137gsref")
 
-    template = f"{hook}\n\n✨ {name}\n\n🛒 สั่งซื้อของแท้ / ดูโปรโมชั่น Shopee:\n"
+    lines = [
+        f"{hook}\n",
+        f"📦 {name}",
+        "รีวิว 5 ดาวแน่นมาก การันตีคุณภาพ คุ้มค่าเงินทุกบาท จิ้มดูรายละเอียดที่ลิงก์ได้เลยลูก 👇\n"
+    ]
     if link:
-        template += f"👉 {link}\n"
-    template += f"\n💬 หรือทักแชทถามป้าเข็มได้ที่ LINE: {line_id}\n👉 {line_url}\n"
-    template += "\n#ของดีบอกต่อ #ของมันต้องมี #ป้าเข็มป้ายยา #ถ้าไม่คุ้มป้าบอกให้ #Shopee"
+        lines.append(f"🛒 สั่งซื้อของแท้ / ดูโปรโมชั่น Shopee 👉 {link}")
+    lines.append(f"💬 หรือทักแชทถามป้าเข็มได้ที่ LINE: {line_id} 👉 {line_url}\n")
+    lines.append("#ของดีบอกต่อ #ของมันต้องมี #ป้าเข็มป้ายยา #ถ้าไม่คุ้มป้าบอกให้ #Shopee")
 
-    # ลอง AI (Groq) — พัง/ไม่มี key → template
-    try:
-        from app.services.llm_clients import groq_clients, call_with_backoff
-        clients = groq_clients()
-        if not clients:
-            return template
-        prompt = (
-            "เขียนแคปชั่น Facebook Reels ป้ายยาสินค้าตามกฎ 'หยุดนิ้วใน 3 วินาที' (3-Second Hook Rule) ในเสียง 'ป้าเข็ม':\n"
-            f"- สินค้า: {name}\n- หมวด: {category}\n"
-            f"- ลิงก์: {link or '(ไม่มี)'}\n\n"
-            "โครงสร้างแคปชั่น 3 จังหวะ:\n"
-            "1. บรรทัดแรก: ประโยค Hook กระตุกความอยากรู้/แก้ปัญหาทันที หยุดนิ้วคนดูใน 3 วินาที (ใช้อิโมจิเด่น เช่น 🔥 🚨 💡 😱)\n"
-            "2. บรรทัดที่สอง: บอกจุดเด่นที่คุ้มค่าและแก้ปัญหาได้จริง 1-2 ประโยคสั้นกระชับ (ห้ามพูดเรื่องราคา และห้ามมีตัวเลขราคา)\n"
-            "3. บรรทัดสุดท้าย: ป้ายยาชวนกดสั่งซื้อ หรือทักแชทถามป้าเข็ม\n\n"
-            "ตอบเฉพาะข้อความแคปชั่น ไม่มีคำอธิบาย ไม่มีเครื่องหมายคำพูดครอบ ห้ามแปะลิงก์ปลอม"
-        )
-
-        def _gen():
-            last_exc = None
-            for c in clients:
-                try:
-                    return c.chat.completions.create(
-                        model=os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
-                        messages=[{"role": "user", "content": prompt}],
-                        temperature=0.85,
-                        max_tokens=300,
-                    )
-                except Exception as e:
-                    last_exc = e
-            raise (last_exc or RuntimeError("no groq client"))
-
-        resp = call_with_backoff(_gen)
-        text = (resp.choices[0].message.content or "").strip().strip('"“”').strip()
-        # ลบ URL ปลอมที่ AI อาจมโนขึ้นมาเอง
-        text = re.sub(r'https?://\S+', '', text).strip()
-        if link:
-            text = f"{text}\n\n🛒 สั่งซื้อของแท้ / ดูโปรโมชั่น Shopee 👉 {link}"
-        text += f"\n💬 หรือทักแชทถามป้าเข็มได้ที่ LINE: {line_id} 👉 {line_url}"
-        text += "\n\n#ของดีบอกต่อ #ของมันต้องมี #ป้าเข็มป้ายยา #ถ้าไม่คุ้มป้าบอกให้ #Shopee"
-        return text[:900]
-    except Exception as e:
-        log(f"[WARN] AI caption ล้ม ({e}) — ใช้ template")
-        return template
+    return "\n".join(lines)
 
 
 
@@ -516,6 +545,26 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
 
     item = pending[0]
     product = load_products().get(item.name, {})
+    if not product:
+        m_id = re.match(r'^prod_(\d+)_', item.name)
+        if m_id:
+            try:
+                from app.db import SessionLocal
+                from app import models
+                db = SessionLocal()
+                try:
+                    p = db.query(models.Product).filter(models.Product.id == int(m_id.group(1))).first()
+                    if p:
+                        product = {
+                            "product_name": p.name,
+                            "price": str(int(p.price or 0)),
+                            "category": p.category or "สินค้าแนะนำ",
+                            "affiliate_link": p.affiliate_url or ""
+                        }
+                finally:
+                    db.close()
+            except Exception as e:
+                log(f"[WARN] ดึงข้อมูลสินค้าจาก DB ล้ม ({e})")
     caption = build_caption(product)
 
     # ถ้าเป็นภาพนิ่ง → แปลงเป็นวิดีโอก่อน

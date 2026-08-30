@@ -66,9 +66,35 @@ PENDING_DIR = ROOT_DIR / "pending_videos"
 POSTED_DIR = ROOT_DIR / "posted"
 PRODUCTS_JSON = ROOT_DIR / "products.json"
 
-FONT_DIR = Path("C:/Windows/Fonts")
-FONT_BOLD = FONT_DIR / "leelawdb.ttf" if (FONT_DIR / "leelawdb.ttf").exists() else FONT_DIR / "tahomabd.ttf"
-FONT_REG = FONT_DIR / "leelawad.ttf" if (FONT_DIR / "leelawad.ttf").exists() else FONT_DIR / "tahoma.ttf"
+def _resolve_fonts():
+    """ค้นหาฟอนต์ภาษาไทยที่รองรับทั้ง Windows และ Linux VPS"""
+    # 1. รายการฟอนต์หนา (Bold)
+    bold_candidates = [
+        Path("C:/Windows/Fonts/leelawdb.ttf"),
+        Path("C:/Windows/Fonts/tahomabd.ttf"),
+        Path("C:/Windows/Fonts/leelawadeeuibold.ttf"),
+        Path("/usr/share/fonts/truetype/tlwg/Loma-Bold.ttf"),
+        Path("/usr/share/fonts/truetype/tlwg/Garuda-Bold.ttf"),
+        Path("/usr/share/fonts/truetype/noto/NotoSansThai-Bold.ttf"),
+        Path("/usr/share/fonts/opentype/noto/NotoSansThai-Bold.ttf"),
+        ROOT_DIR / "Prompt-Bold.ttf",
+    ]
+    # 2. รายการฟอนต์ปกติ (Regular)
+    reg_candidates = [
+        Path("C:/Windows/Fonts/leelawad.ttf"),
+        Path("C:/Windows/Fonts/tahoma.ttf"),
+        Path("C:/Windows/Fonts/leelawadeeui.ttf"),
+        Path("/usr/share/fonts/truetype/tlwg/Loma.ttf"),
+        Path("/usr/share/fonts/truetype/tlwg/Garuda.ttf"),
+        Path("/usr/share/fonts/truetype/noto/NotoSansThai-Regular.ttf"),
+        Path("/usr/share/fonts/opentype/noto/NotoSansThai-Regular.ttf"),
+        ROOT_DIR / "Prompt-Regular.ttf",
+    ]
+    bold_font = next((p for p in bold_candidates if p.exists()), None)
+    reg_font = next((p for p in reg_candidates if p.exists()), None)
+    return bold_font, reg_font
+
+FONT_BOLD, FONT_REG = _resolve_fonts()
 
 
 def _hex_to_rgb(hex_str: str, default: tuple = (238, 77, 45)) -> tuple:
@@ -83,8 +109,14 @@ def _hex_to_rgb(hex_str: str, default: tuple = (238, 77, 45)) -> tuple:
 
 
 def get_font(font_path: Path, size: int):
+    if font_path and font_path.exists():
+        try:
+            return ImageFont.truetype(str(font_path), size)
+        except Exception:
+            pass
     try:
-        return ImageFont.truetype(str(font_path), size)
+        # Fallback กรณีไม่มีฟอนต์เฉพาะ
+        return ImageFont.truetype("DejaVuSans.ttf", size)
     except Exception:
         return ImageFont.load_default()
 
@@ -132,9 +164,9 @@ def build_voice_script(product_name: str, price: float, category: str, seed_id: 
     """สร้างบทพูดสั้นกระชับ สไตล์ป้าเข็ม ด้วยสูตรจิตวิทยา 3 วินาทีหยุดนิ้ว (Pain-Point Driven Viral Hook)"""
     bot_name = os.getenv("BOT_NAME", "ป้าเข็ม")
     
-    # 1. กรองข้อความขยะ
+    # 1. กรองข้อความขยะ (ตัดเฉพาะรหัส SKU ยาวๆ ไม่ตัดตัวเลขปกติ)
     clean_name = clean_display_text(product_name)
-    clean_name = re.sub(r'\b[A-Za-z0-9_-]{1,8}\b', '', clean_name)
+    clean_name = re.sub(r'\b[A-Za-z]{2,}\d{3,}[A-Za-z0-9]*\b', '', clean_name)
     clean_name = re.sub(r'\s+', ' ', clean_name).strip()
 
     # 2. ลบคำที่ซ้ำกัน
@@ -567,7 +599,25 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
         }
         ALLOWED_DB_CATS = {c for sub in TREND_CATEGORIES_MAPPING.values() for c in sub}
 
-        # ดึงสินค้าคุณภาพดีจาก 8 หมวดหมู่เทรนด์ครอบคลุม 100% เต็มคลัง
+        # 1. ให้ Demand Radar เป็นตัวตัดสินใจอันดับ 1 (Top Priority Demand Radar Decider)
+        radar_prods = []
+        try:
+            radar_events = (db.query(models.FacebookDemandEvent)
+                              .filter(models.FacebookDemandEvent.demand_score >= 70,
+                                      models.FacebookDemandEvent.matched_product_id.isnot(None))
+                              .order_by(models.FacebookDemandEvent.demand_score.desc(),
+                                        models.FacebookDemandEvent.created_at.desc())
+                              .limit(20).all())
+            radar_pids = [ev.matched_product_id for ev in radar_events if ev.matched_product_id and ev.matched_product_id not in used_ids]
+            if radar_pids:
+                radar_prods = (db.query(models.Product)
+                                 .filter(models.Product.id.in_(radar_pids),
+                                         models.Product.link_status == "ok").all())
+                print(f"🎯 [Demand Radar Decider] ตรวจพบสินค้ากระแสความต้องการสูงจากเรดาร์: {len(radar_prods)} รายการ (จัดคิวผลิตเป็นอันดับแรก!)")
+        except Exception as e:
+            logger.warning(f"Demand Radar query: {e}")
+
+        # 2. ดึงสินค้าคุณภาพดีจาก 8 หมวดหมู่เทรนด์ครอบคลุม 100% เต็มคลัง
         query = (db.query(models.Product)
                    .filter(models.Product.link_status == "ok"))
         
@@ -598,7 +648,7 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
         for trend_name in by_cat:
             random.shuffle(by_cat[trend_name])
 
-        interleaved_prods = []
+        interleaved_prods = list(radar_prods)  # เอาสินค้าที่เรดาร์ตัดสินใจมาไว้หน้าสุด
         trend_keys = list(by_cat.keys())
         random.shuffle(trend_keys)
         while any(by_cat.values()):
