@@ -769,7 +769,14 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
         return 0
 
 
-    log(f"[FAIL] โพสต์ไม่สำเร็จ: {res['error']}")
+    err_msg = res.get("error", "ไม่ทราบสาเหตุ")
+    log(f"[FAIL] โพสต์ไม่สำเร็จ: {err_msg}")
+    _notify_owner(
+        f"🚨 [แจ้งเตือนระบบบอท]\n\n"
+        f"❌ การโพสต์รอบนี้ไม่สำเร็จ\n"
+        f"📌 สาเหตุ: {err_msg[:200]}\n\n"
+        f"⏱️ ระบบจะตรวจสอบและลองใหม่อัตโนมัติในรอบถัดไปจ้า"
+    )
     # ลบ temp file ที่แปลงจากภาพ (โพสต์ล้ม)
     if img_video_tmp is not None:
         try:

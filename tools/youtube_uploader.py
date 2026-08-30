@@ -275,6 +275,21 @@ def set_last_successful_channel(token_id: int, tokens: list):
         pass
 
 
+def notify_line_admin(message: str):
+    """ส่งแจ้งเตือนด่วนเข้า LINE เจ้าของร้านเมื่อติดลิมิตหรือมีระบบไม่ทำงาน"""
+    try:
+        from linebot import LineBotApi
+        from linebot.models import TextSendMessage
+        token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN") or ""
+        if not token or "mock" in token.lower():
+            return
+        admin_uid = (os.getenv("ADMIN_LINE_USER_ID") or "Uc88eb3896b0e4bcc5fbaa9b78ac1294e").strip()
+        LineBotApi(token).push_message(admin_uid, TextSendMessage(text=message[:1500]))
+        log(f"[LINE-ALERT] ส่งแจ้งเตือนปัญหาเข้า LINE แอดมินแล้ว: {message[:50]}...")
+    except Exception as e:
+        log(f"[LINE-ALERT] ส่งแจ้งเตือนปัญหาล้ม: {e}")
+
+
 def upload_shorts(video_path: Union[pathlib.Path, str], product_meta: Optional[Dict] = None, broadcast_all: bool = False):
     """อัปโหลดขึ้น YouTube Shorts:
     - โหมดหมุนเวียน (Default): สลับช่องวนรอบ (Round-Robin) เพื่อเฉลี่ยโควต้า 24 ชม. + สลับช่องอัตโนมัติหากช่องในคิวโควต้าเต็ม (Auto-Failover)
@@ -284,6 +299,7 @@ def upload_shorts(video_path: Union[pathlib.Path, str], product_meta: Optional[D
     tokens = get_token_files()
     if not tokens:
         log("[WARN] ไม่พบไฟล์ YouTube Token ใดๆ ใน tools/")
+        notify_line_admin("⚠️ [แจ้งเตือนระบบ YouTube]\n\nไม่พบไฟล์ Token สำหรับเชื่อมต่อ YouTube ในระบบ กรุณาตรวจสอบการล็อกอินจ้า")
         return None
 
     if broadcast_all:
@@ -316,7 +332,23 @@ def upload_shorts(video_path: Union[pathlib.Path, str], product_meta: Optional[D
                 log(f"🎯 [Rotation] โพสต์ YouTube Shorts สำเร็จด้วย {ch_display} (รอบถัดไปจะสลับช่องต่อไป)")
                 break  # โพสต์สำเร็จ 1 ช่องในรอบนี้เรียบร้อย (เฉลี่ยโควต้า)
         except Exception as e:
-            log(f"[WARN] ช่อง {t['name']} โควต้าเต็ม/ไม่พร้อม ({e}) ➔ สลับไปช่องสำรองถัดไปอัตโนมัติ (Auto-Failover)...")
+            err_str = str(e)
+            if "uploadLimitExceeded" in err_str:
+                reason = "ติดลิมิตการอัปโหลดรายวันของ Google (Daily Quota Exceeded)"
+            elif "invalid_grant" in err_str:
+                reason = "เซสชันล็อกอินหมดอายุ กรุณากดเชื่อมต่อใหม่"
+            elif "quotaExceeded" in err_str:
+                reason = "API Quota ประจำวันหมดชั่วคราว"
+            else:
+                reason = f"เกิดข้อผิดพลาด ({err_str[:80]})"
+
+            log(f"[WARN] ช่อง {t['name']} ไม่พร้อม ({reason}) ➔ สลับไปช่องสำรองถัดไปอัตโนมัติ (Auto-Failover)...")
+            notify_line_admin(
+                f"⚠️ [แจ้งเตือนสถานะ YouTube]\n\n"
+                f"🔴 ช่อง: {t['name']}\n"
+                f"📌 สถานะ: {reason}\n\n"
+                f"🔄 ระบบ Auto-Failover สลับไปโพสต์ช่องสำรองถัดไปให้อัตโนมัติเรียบร้อยจ้า"
+            )
 
     return results
 
