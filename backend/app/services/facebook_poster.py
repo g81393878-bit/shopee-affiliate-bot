@@ -700,6 +700,7 @@ def post_reel(description: str = "", file_path: str = "", file_url: str = "",
     finish_data = {
         "upload_phase": "finish",
         "video_state": "PUBLISHED",
+        "video_id": video_id,
         "access_token": token,
     }
     if description:
