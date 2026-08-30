@@ -14,6 +14,8 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- **Shopee/AI automation hardening (30/08):** เพิ่มโหมดคัดสินค้า `discount`/`bestseller`/`balanced` พร้อม `--dry-run`, แก้ ADB/UIAutomator สำหรับ Shopee Android, ปิด `httpx/httpcore` transport logs ที่อาจแสดง token, deploy และ restart VPS แล้ว; ตรวจล่าสุด service 5 ตัว active และ health 200. หมายเหตุ: token ที่อยู่ใน journal เก่าก่อน restart ต้องหมุนจาก Facebook ด้วยตนเอง และ YouTube comment scope ยังต้อง re-authorize หากต้องการคอมเมนต์อัตโนมัติ
+
 - **ระบบโพสต์ Reels อัตโนมัติ 100% ทุก 30 นาที สำหรับ 3 เพจ (29/08) — [Autonomous Bot Mode]:**
   ① **บอททำงานเองสมบูรณ์แบบ 100% (No Human/AI Intervention):** บอททำงานผ่าน Windows Task Scheduler `\PaKhem Reels Uploader` ทุก ๆ 30 นาที (`PT30M`) แบบเบื้องหลัง ไม่ต้องเปิดโปรแกรมทิ้งไว้ ไม่ต้องให้คนหรือ AI ช่วยกด
   ② **ปรับเวลาโพสต์ (Pacing):** ตั้ง `POSTING_SPACING_HOURS=0.5` (ทุก 30 นาที) และ `MAX_REELS_PER_DAY=48` ใน `backend/.env` + `reels_uploader/uploader.py`
