@@ -91,7 +91,10 @@ def get_authenticated_service(token_path: Optional[pathlib.Path] = None, channel
         if not creds:
             secret_file = TOOLS_DIR / f"client_secret_{channel_id}.json"
             if not secret_file.exists():
-                secret_file = CLIENT_SECRET_FILE
+                for sf in [TOOLS_DIR / "client_secret_3.json", TOOLS_DIR / "client_secret_2.json", CLIENT_SECRET_FILE]:
+                    if sf.exists():
+                        secret_file = sf
+                        break
             if not secret_file.exists():
                 raise FileNotFoundError(
                     f"ไม่พบไฟล์ OAuth Client Secret ({secret_file.name} หรือ {CLIENT_SECRET_FILE.name})\n"
