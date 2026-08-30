@@ -939,13 +939,25 @@ def _track_bot_purchase(db, line_user_id: str, text: str) -> None:
     db.commit()
 
 
-def _send_telegram(text: str) -> bool:
-    """ส่งแจ้งเตือนเข้า Telegram Commander แอดมิน (ฟรี 100% ไม่จำกัดจำนวน ไม่กินโควต้า LINE)"""
-    # Guard: ห้ามส่งข้อความจาก Unit Test / Mock Data เข้า Telegram จริงเด็ดขาด
+_telegram_rate_cache: dict = {}  # throttle_key -> timestamp
+
+
+def _send_telegram(text: str, throttle_key: str = None, cooldown_seconds: int = 20) -> bool:
+    """ส่งแจ้งเตือนเข้า Telegram Commander แอดมิน (พร้อมระบบ Anti-Spam Throttle ป้องกันสแปม 100%)"""
+    # Guard 1: ห้ามส่งข้อความจาก Unit Test / Mock Data เข้า Telegram จริงเด็ดขาด
     if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("TESTING"):
         return True
     if "U_cust_" in text or "U_mock" in text or "test_user" in text:
         return True
+
+    # Guard 2: Anti-Spam Cooldown Throttle (กันลูกค้ากดปุ่มรัวๆ หรือสแปมข้อความซ้ำ)
+    now = time.time()
+    t_key = throttle_key or text[:100]
+    last_sent = _telegram_rate_cache.get(t_key, 0)
+    if (now - last_sent) < cooldown_seconds:
+        logger.info(f"[ANTI-SPAM] Throttled duplicate alert: {t_key[:50]}")
+        return True
+    _telegram_rate_cache[t_key] = now
 
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
@@ -963,7 +975,7 @@ def _send_telegram(text: str) -> bool:
 
 
 def _notify_owner_payment_intent(user, text: str = "") -> None:
-    """แจ้งเตือนเจ้าของร้านผ่าน Telegram ทันทีเมื่อลูกค้ากดปุ่มชำระเงิน / ขอเลขบัญชี / สนใจแพ็กเกจ"""
+    """แจ้งเตือนเจ้าของร้านผ่าน Telegram ทันทีเมื่อลูกค้ากดปุ่มชำระเงิน (มี Anti-Spam 60 วินาที/คน)"""
     try:
         uid = user.line_user_id
         name = user.name or "ลูกค้า LINE"
@@ -980,7 +992,7 @@ def _notify_owner_payment_intent(user, text: str = "") -> None:
             f"• 💬 ตอบกลับลูกค้าได้ทันที: `/reply {uid} <ข้อความ>`\n"
             f"━━━━━━━━━━━━━━━━━━"
         )
-        _send_telegram(msg)
+        _send_telegram(msg, throttle_key=f"pay_intent_{uid}_{key}", cooldown_seconds=60)
     except Exception as e:
         logger.warning(f"Payment intent notify failed: {e}")
 
