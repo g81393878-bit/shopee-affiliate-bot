@@ -77,6 +77,12 @@
     - ฟังก์ชัน `parse_product_code` ต้องรองรับตัวเลขล้วน 1-5 หลัก (เช่น `86`, `447`, `1628`) และตัวเลขผสมคำสุภาพ (`86 ครับ`, `86 ค่ะ`) เพื่อให้ตรงกับป้ายพิกัดท้ายคลิป และส่งการ์ดสินค้าชิ้นนั้นทันทีใน 0.1 วินาที
 17. **ระบบเฝ้าระวังและซิงค์ LINE Webhook อัตโนมัติ (Tunnel Watchdog Auto-Sync)**:
     - บริการ `tunnel-watchdog.service` ต้องรันคู่ขนานตลอด 24 ชม. ตรวจจับ URL ของ Cloudflare ทุก 15 วินาที และอัปเดต LINE Webhook ทันทีที่ URL มีการเปลี่ยนแปลง ป้องกันปัญหาบอทเงียบถาวร (ดูบันทึกฉบับเต็มที่ `docs/ROOT_CAUSE_ANALYSIS_2026_08_30.md`)
+18. **ระบบกระจาย 4 แพลตฟอร์ม & Multi-Channel YouTube Shorts (4-Channel Multi-Broadcast)**:
+    - ระบบยิงพร้อมกันครบ **4 ช่องทางทุก 30 นาที**: Facebook 3 เพจ (`FACEBOOK_PAGE_ID`, `FACEBOOK_PAGE_2_ID`, `FACEBOOK_PAGE_3_ID`) + YouTube Shorts 4 ช่องหมุนเวียน Round-Robin (`youtube_token.json`, `youtube_token_2.json`, `youtube_token_3.json`, `youtube_token_4.json`)
+    - การเพิ่มช่องใหม่ให้ใช้คำสั่ง `python tools/youtube_uploader.py --add-channel <N>` (ดูคู่มือฉบับเต็มที่ `docs/MULTI_CHANNEL_AND_ANTI_SPAM_OPERATIONS.md`)
+19. **ระบบเกราะป้องกันสแปม (Anti-Spam Shield & Unit Test Quarantine Guard)**:
+    - ระบบส่งแจ้งเตือน Telegram ต้องมี Cooldown Throttle รายบุคคล 60 วินาที/คน ป้องกันการกดปุ่มชำระเงิน/แพ็กเกจรัวๆ
+    - ห้ามให้การรัน Unit Test (`pytest`, `PYTEST_CURRENT_TEST`, `U_cust_`, `mock`) ส่งข้อความจริงออกนอกระบบเด็ดขาด
 
 
 **API/Admin:** `products-and-links` (สินค้า API + link policy) · `admin-dashboard` (/admin + cookie) · `cron-jobs` (ทุก cron + CRON_TOKEN)
