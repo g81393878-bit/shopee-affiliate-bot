@@ -186,10 +186,9 @@ def decode_env_var(env_var):
 
 
 def fetch_env_vars() -> list:
-    """GET /services/{id}/env-vars ทุกหน้า (API paginate 20 ตัว/หน้า ตาม cursor).
-
-    เดิม cmd_list/get/diff อ่านแค่หน้าแรก → env vars หน้า 2+ หายจากผลลัพธ์
-    (เจอจริงตอน env vars เกิน 20 ตัว)."""
+    """GET /services/{id}/env-vars ทุกหน้า (API paginate 20 ตัว/หน้า ตาม cursor)."""
+    if not API_KEY:
+        return []
     items = []
     cursor = None
     seen = set()
@@ -199,7 +198,7 @@ def fetch_env_vars() -> list:
             path += "?" + urllib.parse.urlencode({"cursor": cursor})
         status, resp = request("GET", path)
         if status != 200:
-            raise SystemExit(f"❌ GET env-vars ล้ม: HTTP {status} → {resp}")
+            return []
         page = resp if isinstance(resp, list) else []
         if not page:
             break
