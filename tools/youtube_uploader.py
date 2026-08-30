@@ -50,17 +50,33 @@ def log(msg: str):
         pass
 
 
-def get_authenticated_service():
-    """สร้างหรือโหลดเซสชัน YouTube API จาก OAuth token"""
+def get_token_files() -> list:
+    """ค้นหาไฟล์ YouTube OAuth Token ทั้งหมดในโฟลเดอร์ tools/"""
+    tokens = []
+    # 1. Token ช่องหลัก
+    if TOKEN_FILE.exists():
+        tokens.append({"id": 1, "name": "ช่องหลัก (@regency1229)", "path": TOKEN_FILE})
+    
+    # 2. Token ช่องเสริม (youtube_token_2.json, youtube_token_3.json, ...)
+    for f in sorted(TOOLS_DIR.glob("youtube_token_*.json")):
+        m = re.search(r'youtube_token_(\d+)\.json$', f.name)
+        cid = int(m.group(1)) if m else len(tokens) + 1
+        tokens.append({"id": cid, "name": f"ช่องที่ {cid}", "path": f})
+    return tokens
+
+
+def get_authenticated_service(token_path: Optional[pathlib.Path] = None, channel_id: int = 1):
+    """สร้างหรือโหลดเซสชัน YouTube API จาก OAuth token ของช่องที่ระบุ"""
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
     from google.auth.transport.requests import Request
     from googleapiclient.discovery import build
 
+    target_token_file = token_path or (TOOLS_DIR / f"youtube_token_{channel_id}.json" if channel_id > 1 else TOKEN_FILE)
     creds = None
-    if TOKEN_FILE.exists():
+    if target_token_file.exists():
         try:
-            creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), SCOPES)
+            creds = Credentials.from_authorized_user_file(str(target_token_file), SCOPES)
         except Exception as e:
             log(f"[WARN] โหลด token เก่าล้มเหลว ({e}) — จะขอใหม่อีกครั้ง")
 
@@ -76,18 +92,17 @@ def get_authenticated_service():
             if not CLIENT_SECRET_FILE.exists():
                 raise FileNotFoundError(
                     f"ไม่พบไฟล์ {CLIENT_SECRET_FILE}\n"
-                    f"กรุณาดาวน์โหลด client_secret.json จาก Google Cloud Console (Project: telegram-smart-memo)\n"
-                    f"แล้วนำมาวางที่: {CLIENT_SECRET_FILE}"
+                    f"กรุณาดาวน์โหลด client_secret.json จาก Google Cloud Console แล้วนำมาวางที่: {CLIENT_SECRET_FILE}"
                 )
             flow = InstalledAppFlow.from_client_secrets_file(str(CLIENT_SECRET_FILE), SCOPES)
             print("\n=======================================================")
-            print("🔑 กำลังเปิดเบราว์เซอร์เพื่อขอสิทธิ์อัปโหลด YouTube Shorts")
-            print("กรุณาเลือกบัญชีที่เป็นเจ้าของช่อง Anda (@regency1229)")
+            print(f"🔑 กำลังเปิดเบราว์เซอร์เพื่อขอสิทธิ์อัปโหลด YouTube Shorts ช่องที่ {channel_id}")
+            print("กรุณาเลือกบัญชี Google และช่อง YouTube ที่ต้องการเชื่อมต่อ")
             print("=======================================================\n")
             creds = flow.run_local_server(port=0)
 
-        TOKEN_FILE.write_text(creds.to_json(), encoding="utf-8")
-        log("[OK] บันทึก YouTube OAuth Token สำเร็จ (รันอัตโนมัติรอบถัดไปได้ทันที)")
+        target_token_file.write_text(creds.to_json(), encoding="utf-8")
+        log(f"[OK] บันทึก YouTube OAuth Token ช่องที่ {channel_id} สำเร็จ: {target_token_file.name}")
 
     return build("youtube", "v3", credentials=creds)
 
@@ -103,11 +118,9 @@ def build_shorts_title(product_name: str) -> str:
     ]
     import random
     hook = random.choice(_HOOKS)
-    # ตัด prod_xxx_ นำหน้าออกถ้ามี
     clean_name = re.sub(r'^prod_\d+_', '', product_name)
     clean_name = re.sub(r'[_<>]+', ' ', clean_name).strip()
     
-    # รวม Title ไม่ให้เกิน 80 ตัวอักษร
     title = f"{hook} {clean_name} #Shorts"
     if len(title) > 80:
         title = title[:75] + "... #Shorts"
@@ -128,18 +141,17 @@ def build_shorts_description(product_name: str, link: str, prod_id: Optional[int
         f"💬 ทักแชท LINE ป้าเข็ม รับพิกัดตรงทันที:\n"
         f"👉 แอด LINE ไอดี: {line_id}{code_prompt}\n"
         f"👉 ลิงก์เปิดแชทรับพิกัด: {deep_link}\n\n"
-        f"📍 หรือกดที่ชื่อช่อง @regency1229 เพื่อดูลิงก์พิกัดหน้าโปรไฟล์ได้เลยจ้า!\n"
+        f"📍 หรือกดที่ชื่อช่องเพื่อดูลิงก์พิกัดหน้าโปรไฟล์ได้เลยจ้า!\n"
         f"----------------------------------------\n"
         f"#Shorts #ของดีบอกต่อ #ของมันต้องมี #ป้าเข็มป้ายยา #ถ้าไม่คุ้มป้าบอกให้ #ShopeeAffiliate #Shopee"
     )
     return desc
 
 
-def upload_shorts(video_path: Union[pathlib.Path, str], product_meta: Optional[Dict] = None) -> Optional[str]:
-    """อัปโหลดไฟล์วิดีโอขึ้น YouTube Shorts"""
+def upload_shorts_to_channel(youtube_service, video_path: pathlib.Path, product_meta: Optional[Dict] = None, channel_name: str = "YouTube Shorts") -> Optional[str]:
+    """อัปโหลดไฟล์วิดีโอขึ้น YouTube Shorts ของ 1 ช่อง"""
     from googleapiclient.http import MediaFileUpload
 
-    video_path = pathlib.Path(video_path)
     name = (product_meta or {}).get("product_name") or video_path.stem
     link = (product_meta or {}).get("affiliate_link") or ""
 
@@ -150,8 +162,6 @@ def upload_shorts(video_path: Union[pathlib.Path, str], product_meta: Optional[D
 
     title = build_shorts_title(name)
     description = build_shorts_description(name, link, prod_id=prod_id)
-
-    youtube = get_authenticated_service()
 
     body = {
         "snippet": {
@@ -166,10 +176,10 @@ def upload_shorts(video_path: Union[pathlib.Path, str], product_meta: Optional[D
         }
     }
 
-    log(f"🚀 กำลังอัปโหลดคลิปขึ้น YouTube Shorts: {title[:50]}...")
+    log(f"🚀 กำลังอัปโหลดคลิปขึ้น {channel_name}: {title[:50]}...")
     media = MediaFileUpload(str(video_path), mimetype="video/mp4", resumable=True)
 
-    request = youtube.videos().insert(
+    request = youtube_service.videos().insert(
         part="snippet,status",
         body=body,
         media_body=media
@@ -179,19 +189,19 @@ def upload_shorts(video_path: Union[pathlib.Path, str], product_meta: Optional[D
     while response is None:
         status, response = request.next_chunk()
         if status:
-            log(f"   อัปโหลดแล้ว {int(status.progress() * 100)}%")
+            log(f"   [{channel_name}] อัปโหลดแล้ว {int(status.progress() * 100)}%")
 
     video_id = response.get("id")
     video_url = f"https://youtube.com/shorts/{video_id}"
-    log(f"✅ อัปโหลด YouTube Shorts สำเร็จ! -> {video_url}")
+    log(f"✅ อัปโหลด {channel_name} สำเร็จ! -> {video_url}")
 
     # โพสต์คอมเมนต์พิกัดสินค้าใต้คลิปอัตโนมัติ
     try:
         comment_text = (
             f"🛒 พิกัดสั่งซื้อของแท้ Shopee: {link}\n"
-            f"💬 ปรึกษาป้าเข็มแอด LINE ID: @137gsref หรือกดลิงก์หน้าช่อง @regency1229 ได้เลยจ้า!"
+            f"💬 ปรึกษาป้าเข็มแอด LINE ID: @137gsref ได้เลยจ้า!"
         )
-        youtube.commentThreads().insert(
+        youtube_service.commentThreads().insert(
             part="snippet",
             body={
                 "snippet": {
@@ -204,23 +214,59 @@ def upload_shorts(video_path: Union[pathlib.Path, str], product_meta: Optional[D
                 }
             }
         ).execute()
-        log("💬 โพสต์คอมเมนต์พิกัดสินค้าใต้คลิป Shorts สำเร็จ!")
+        log(f"💬 [{channel_name}] โพสต์คอมเมนต์พิกัดสินค้าใต้คลิป Shorts สำเร็จ!")
     except Exception as ec:
-        log(f"[INFO] คอมเมนต์อัตโนมัติ: {ec}")
+        log(f"[INFO] คอมเมนต์อัตโนมัติ ({channel_name}): {ec}")
 
     return video_url
 
 
+def upload_shorts(video_path: Union[pathlib.Path, str], product_meta: Optional[Dict] = None):
+    """อัปโหลดขึ้น YouTube Shorts ทุกช่องที่มีการเชื่อมต่อไว้พร้อมกัน (Multi-Channel)"""
+    video_path = pathlib.Path(video_path)
+    tokens = get_token_files()
+    if not tokens:
+        log("[WARN] ไม่พบไฟล์ YouTube Token ใดๆ ใน tools/")
+        return None
+
+    results = []
+    for t in tokens:
+        try:
+            yt_service = get_authenticated_service(token_path=t["path"], channel_id=t["id"])
+            url = upload_shorts_to_channel(yt_service, video_path, product_meta, channel_name=t["name"])
+            if url:
+                results.append({"channel": t["name"], "url": url, "id": t["id"]})
+        except Exception as e:
+            log(f"[WARN] อัปโหลดขึ้น {t['name']} ล้มเหลว: {e}")
+
+    return results
+
+
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="YouTube Shorts Uploader")
-    parser.add_argument("--auth-only", action="store_true", help="ทำแค่ยืนยันสิทธิ์ OAuth ครั้งแรก")
+    parser = argparse.ArgumentParser(description="Multi-Channel YouTube Shorts Uploader")
+    parser.add_argument("--auth-only", action="store_true", help="ทำแค่ยืนยันสิทธิ์ OAuth ช่องหลัก")
+    parser.add_argument("--add-channel", type=int, default=0, help="ล็อกอินเพิ่มช่อง YouTube ลำดับที่ระบุ (เช่น --add-channel 2)")
+    parser.add_argument("--list-channels", action="store_true", help="แสดงรายการช่อง YouTube ที่เชื่อมต่อไว้")
     parser.add_argument("--video", type=str, help="อัปโหลดวิดีโอที่ระบุ")
     args = parser.parse_args()
 
+    if args.list_channels:
+        tokens = get_token_files()
+        print(f"\n📺 รายการช่อง YouTube ที่เชื่อมต่อไว้ในระบบ ({len(tokens)} ช่อง):")
+        for t in tokens:
+            print(f"  • [{t['id']}] {t['name']} (ไฟล์: {t['path'].name})")
+        print("")
+        return
+
+    if args.add_channel > 0:
+        get_authenticated_service(channel_id=args.add_channel)
+        print(f"🎉 สำเร็จ! เชื่อมต่อช่อง YouTube ช่องที่ {args.add_channel} เรียบร้อยแล้ว!")
+        return
+
     if args.auth_only:
-        get_authenticated_service()
-        print("✅ ยืนยันสิทธิ์บัญชี YouTube สำเร็จเรียบร้อยแล้ว!")
+        get_authenticated_service(channel_id=1)
+        print("✅ ยืนยันสิทธิ์บัญชี YouTube ช่องหลักสำเร็จเรียบร้อยแล้ว!")
         return
 
     vids = sorted(PENDING_DIR.glob("*.mp4"), key=os.path.getmtime)
@@ -238,9 +284,11 @@ def main():
         except Exception:
             pass
 
-    url = upload_shorts(target_vid, meta)
-    if url:
-        print(f"\n🎉 สำเร็จ! คลิปสั้นของคุณเผยแพร่แล้วที่: {url}")
+    urls = upload_shorts(target_vid, meta)
+    if urls:
+        print(f"\n🎉 สำเร็จ! เผยแพร่แล้ว {len(urls)} ช่องทาง:")
+        for u in urls:
+            print(f"  • {u['channel']}: {u['url']}")
 
 
 if __name__ == "__main__":

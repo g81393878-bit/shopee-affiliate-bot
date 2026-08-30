@@ -651,15 +651,17 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
                     log(f"[WARN] โพสต์เพจ 3 ไม่สำเร็จ: {res_p3.get('error')}")
             except Exception as ep3:
                 log(f"[WARN] โพสต์เพจ 3 ล้ม: {ep3}")
-        # อัปโหลดขึ้น YouTube Shorts (@regency1229) อัตโนมัติถ้ามี token
-        yt_url = None
+        # อัปโหลดขึ้น YouTube Shorts ทุกช่องที่เชื่อมต่อไว้ (Multi-Channel)
+        yt_results = []
         try:
-            yt_token_file = TOOLS / "youtube_token.json"
-            if yt_token_file.exists():
-                import youtube_uploader
-                yt_url = youtube_uploader.upload_shorts(Path(upload_path), product)
-                if yt_url:
-                    log(f"[OK] YouTube Shorts โพสต์สำเร็จ -> {yt_url}")
+            import youtube_uploader
+            tokens = youtube_uploader.get_token_files()
+            if tokens:
+                yt_res = youtube_uploader.upload_shorts(Path(upload_path), product)
+                if isinstance(yt_res, list):
+                    yt_results = yt_res
+                elif isinstance(yt_res, str):
+                    yt_results = [{"channel": "ช่องหลัก (@regency1229)", "url": yt_res}]
         except Exception as e_yt:
             log(f"[WARN] อัปโหลด YouTube Shorts ล้มเหลว: {e_yt}")
 
@@ -670,7 +672,7 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
             except Exception:
                 pass
 
-    if res["ok"] or (res_p2 and res_p2.get("ok")) or (res_p3 and res_p3.get("ok")) or yt_url:
+    if res["ok"] or (res_p2 and res_p2.get("ok")) or (res_p3 and res_p3.get("ok")) or yt_results:
         POSTED_DIR.mkdir(parents=True, exist_ok=True)
         # ย้ายไฟล์ต้นฉบับ (ภาพหรือคลิป) ไป posted/
         original = pending[0]  # ใช้ไฟล์ต้นฉบับจาก pending
@@ -708,7 +710,7 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
         if res.get("ok") and res.get("video_id"): vids.append(f"P1:{res['video_id']}")
         if res_p2 and res_p2.get("ok") and res_p2.get("video_id"): vids.append(f"P2:{res_p2['video_id']}")
         if res_p3 and res_p3.get("ok") and res_p3.get("video_id"): vids.append(f"P3:{res_p3['video_id']}")
-        if yt_url: vids.append("YT:Shorts")
+        if yt_results: vids.append(f"YT:{len(yt_results)}ch")
         vid_summary = ", ".join(vids)
         log(f"[OK] วิดีโอโพสต์สำเร็จ ({vid_summary}) → {dst.name}")
         
@@ -724,8 +726,9 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
                 fb_links.append(f"📍 เพจ 2 (ป้าเข็ม ชี้เป้าของดี):\nhttps://www.facebook.com/reel/{res_p2['video_id']}")
             if res_p3 and res_p3.get("ok") and res_p3.get("video_id"):
                 fb_links.append(f"📍 เพจ 3 (ป้าเข็ม ของดีบอกต่อ):\nhttps://www.facebook.com/reel/{res_p3['video_id']}")
-            if yt_url:
-                fb_links.append(f"🔴 YouTube Shorts (ช่อง Anda):\n{yt_url}")
+            if yt_results:
+                for yt in yt_results:
+                    fb_links.append(f"🔴 YouTube Shorts ({yt['channel']}):\n{yt['url']}")
             
             fb_url_text = "\n\n".join(fb_links) if fb_links else "โพสต์สำเร็จเรียบร้อย"
             
