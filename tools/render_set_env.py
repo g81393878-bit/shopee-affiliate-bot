@@ -122,9 +122,9 @@ def get_api_key() -> str:
                 s = line.strip()
                 if s.startswith("key:"):
                     return s.split(":", 1)[1].strip()
-    except OSError as e:
-        raise SystemExit(f"❌ อ่าน {p} ไม่ได้: {e}")
-    raise SystemExit(f"❌ ไม่พบบรรทัด key: ใน {p}")
+    except OSError:
+        pass
+    return ""
 
 
 def request(method: str, path: str, payload=None):
