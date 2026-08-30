@@ -36,6 +36,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import logging
+
 # บังคับ stdout UTF-8 (กัน emoji/ไทย พังบน Windows console ที่ใช้ cp874/850)
 if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
     try:
@@ -63,6 +65,12 @@ except Exception:
 
 from dotenv import load_dotenv  # noqa: E402
 load_dotenv(BACKEND / ".env")
+
+# Transport-level INFO logs can print Facebook URLs containing access_token.
+# Keep them disabled even when uploader.py is run directly, outside
+# tools/system_runner.py.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 from app.services.facebook_poster import PAGE_ID, post_reel  # noqa: E402
 from app.services.facebook_intro import intro_posts  # noqa: E402

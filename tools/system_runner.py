@@ -51,6 +51,11 @@ logging.basicConfig(
     format="[%(asctime)s] %(levelname)s: %(message)s",
     datefmt="%H:%M:%S"
 )
+# httpx/httpcore INFO logs include full query strings. Facebook Graph calls
+# carry access_token in those query strings, so keep transport logs quiet and
+# retain only the application's redacted success/failure messages.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger("SystemRunner")
 
 ICT = timezone(timedelta(hours=7))
@@ -252,4 +257,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

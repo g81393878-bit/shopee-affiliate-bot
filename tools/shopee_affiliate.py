@@ -95,10 +95,14 @@ def dump_ui(adb_bin, retries=6, wait=2):
     """
     for i in range(retries):
         out = shell(adb_bin, "uiautomator", "dump", "/sdcard/ui.xml")
-        if "dumped to" in out:
-            xml = shell(adb_bin, "cat", "/sdcard/ui.xml")
-            if xml.strip():
-                return xml
+        # Shopee's autoplay/React screens can report "could not get idle
+        # state" even though uiautomator has already written a usable XML
+        # snapshot. The old code discarded that snapshot and therefore
+        # stopped every navigation before the first tap.
+        xml = shell(adb_bin, "cat", "/sdcard/ui.xml")
+        if (xml.strip() and "<hierarchy" in xml and
+                'package="com.shopee.th"' in xml):
+            return xml
         time.sleep(wait)
     return None
 
@@ -214,8 +218,20 @@ def open_convert_link(adb_bin):
     launch_shopee(adb_bin)
     xml = dump_ui(adb_bin)
 
-    # main app home -> Me tab (bottom-right of the 5-tab nav)
-    tap(adb_bin, 972, 2330)
+    # main app home -> Me tab. Prefer the live accessibility node because
+    # Shopee's current layout may have 5 or 6 bottom-nav items; the previous
+    # hard-coded x=972 target can land on Membership/Choice instead.
+    c = None
+    for label in ("ฉัน", "บัญชี", "Me", "ฉัน/บัญชี"):
+        c = find_text(xml, label) if xml else None
+        if c:
+            break
+    if c:
+        tap(adb_bin, c[0], c[1])
+    else:
+        # Last-resort fallback for a home screen whose bottom labels are
+        # rendered without accessibility text.
+        tap(adb_bin, 972, 2330)
     time.sleep(3)
     xml = dump_ui(adb_bin)
 

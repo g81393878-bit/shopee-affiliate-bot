@@ -621,8 +621,38 @@ def get_used_product_ids() -> set:
     return used_ids
 
 
-def generate_product_reels(limit: int = 3) -> List[dict]:
-    """ดึงสินค้าใหม่ 100% จากฐานข้อมูล 2,000+ รายการ หมุนเวียน 20 หมวดหมู่ ไม่ซ้ำสินค้าเดิม"""
+def _latest_price_drop_map(db) -> dict:
+    """คืนเปอร์เซ็นต์ลดราคาล่าสุดต่อสินค้า จาก price_history (อ่านอย่างเดียว)"""
+    drops = {}
+    try:
+        rows = (db.query(models.PriceHistory)
+                .order_by(models.PriceHistory.created_at.desc(),
+                          models.PriceHistory.id.desc())
+                .all())
+        for row in rows:
+            if row.product_id in drops:
+                continue
+            try:
+                drops[row.product_id] = max(0.0, float(row.drop_pct or 0))
+            except (TypeError, ValueError):
+                drops[row.product_id] = 0.0
+    except Exception as e:
+        logger.warning(f"Price history query: {e}")
+    return drops
+
+
+def generate_product_reels(limit: int = 3, selection: str = "balanced",
+                           dry_run: bool = False) -> List[dict]:
+    """เลือกสินค้าไม่ซ้ำตามโหมด แล้วสร้างคลิปพร้อมเสียงพากย์ AI.
+
+    selection:
+      - discount: ลดราคาล่าสุดสูงสุด (ต้องมี price_history)
+      - bestseller: ยอดขายสูงสุด
+      - balanced: ผสม AI score, ยอดขาย และส่วนลด (ค่าเริ่มต้น)
+    dry_run แสดงรายการที่เลือกโดยไม่ดาวน์โหลดรูป/เรียก AI/สร้างไฟล์
+    """
+    if selection not in {"discount", "bestseller", "balanced"}:
+        raise ValueError("selection ต้องเป็น discount, bestseller หรือ balanced")
     PENDING_DIR.mkdir(parents=True, exist_ok=True)
     POSTED_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -681,6 +711,28 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
                                models.Product.sales_count.desc()) \
                      .limit(4000).all()
 
+        drop_map = _latest_price_drop_map(db)
+
+        if selection == "discount":
+            # โหมดนี้ต้องใช้หลักฐานจาก price_history เท่านั้น ไม่เติมสินค้า
+            # ที่ลด 0% เพราะจะทำให้คลิปอ้างโปรโมชันที่ระบบยืนยันไม่ได้
+            radar_prods = [p for p in radar_prods if drop_map.get(p.id, 0.0) > 0]
+            prods = [p for p in prods if drop_map.get(p.id, 0.0) > 0]
+            print(f"🔻 พบสินค้าที่มีประวัติลดราคาจริง: {len(prods)} รายการ")
+
+        def rank_key(p):
+            drop = drop_map.get(p.id, 0.0)
+            sales = int(p.sales_count or 0)
+            ai = int(p.ai_score or 0)
+            if selection == "discount":
+                return (drop, sales, ai)
+            if selection == "bestseller":
+                return (sales, ai, drop)
+            # คะแนนสมดุล: ให้ส่วนลดมีน้ำหนัก แต่ไม่ดันสินค้าที่ขาย/คุณภาพต่ำขึ้นมา
+            return (ai * 2 + min(sales, 100000) / 1000 + drop * 2,
+                    sales, drop)
+        prods.sort(key=rank_key, reverse=True)
+
         print(f"✨ คัดเลือกสินค้าตรงกับ 8 หมวดหมู่เทรนด์ยอดฮิต: {len(prods)} รายการ (เต็มคลัง 100%)")
 
         # จัดกลุ่มสินค้าแยกตาม 8 หมวดหมู่เทรนด์ แล้วสับเปลี่ยนแบบ Round-Robin
@@ -697,17 +749,39 @@ def generate_product_reels(limit: int = 3) -> List[dict]:
             if matched_trend:
                 by_cat[matched_trend].append(p)
 
-        # สลับลำดับในแต่ละหมวดเพื่อความสดใหม่
-        for trend_name in by_cat:
-            random.shuffle(by_cat[trend_name])
+        if selection == "balanced":
+            # balanced ยังคงกระจายหมวด เพื่อไม่ให้คลิปติดอยู่หมวดเดียว
+            for trend_name in by_cat:
+                by_cat[trend_name].sort(key=rank_key, reverse=True)
+            interleaved_prods = list(radar_prods)
+            trend_keys = list(by_cat.keys())
+            random.shuffle(trend_keys)
+            while any(by_cat.values()):
+                for tk in trend_keys:
+                    if by_cat[tk]:
+                        interleaved_prods.append(by_cat[tk].pop(0))
+        else:
+            # discount/bestseller ต้องรักษาอันดับจริง ไม่สุ่มทิ้ง ranking
+            interleaved_prods = list(radar_prods) + sorted(
+                [p for values in by_cat.values() for p in values],
+                key=rank_key, reverse=True)
 
-        interleaved_prods = list(radar_prods)  # เอาสินค้าที่เรดาร์ตัดสินใจมาไว้หน้าสุด
-        trend_keys = list(by_cat.keys())
-        random.shuffle(trend_keys)
-        while any(by_cat.values()):
-            for tk in trend_keys:
-                if by_cat[tk]:
-                    interleaved_prods.append(by_cat[tk].pop(0))
+        if dry_run:
+            preview = []
+            for p in interleaved_prods[:limit]:
+                preview.append({
+                    "id": p.id,
+                    "name": clean_display_text(p.name),
+                    "category": p.category or "",
+                    "price": float(p.price or 0),
+                    "sales_count": int(p.sales_count or 0),
+                    "ai_score": int(p.ai_score or 0),
+                    "latest_drop_pct": drop_map.get(p.id, 0.0),
+                    "affiliate_url": p.affiliate_url or "",
+                })
+            print(json.dumps({"selection": selection, "products": preview},
+                             ensure_ascii=False, indent=2))
+            return preview
 
         for p in interleaved_prods:
             if len(generated) >= limit:
@@ -1003,10 +1077,21 @@ if __name__ == "__main__":
         generate_intro_reel()
     else:
         count = 2
-        if len(sys.argv) > 1 and sys.argv[1].isdigit():
-            count = int(sys.argv[1])
-        print(f"🚀 เริ่มต้นสร้างคลิปสินค้าพร้อมเสียงพากย์ไทยอัตโนมัติ {count} คลิป...")
-        res = generate_product_reels(count)
-        print(f"\n🎉 สร้างสำเร็จทั้งหมด {len(res)} คลิป พร้อมสำหรับอัปโหลดลง Reels!")
+        selection = "balanced"
+        dry_run = "--dry-run" in sys.argv
+        positional = [a for a in sys.argv[1:] if not a.startswith("--")]
+        if positional and positional[0].isdigit():
+            count = int(positional[0])
+        if "--mode" in sys.argv:
+            try:
+                selection = sys.argv[sys.argv.index("--mode") + 1].strip().lower()
+            except (IndexError, ValueError):
+                raise SystemExit("ใช้ --mode discount|bestseller|balanced")
+        print(f"🚀 โหมด {selection}: {'ดูรายการ' if dry_run else 'สร้าง'} {count} คลิป...")
+        res = generate_product_reels(count, selection=selection, dry_run=dry_run)
+        if dry_run:
+            print(f"\n✅ dry-run เสร็จสิ้น แสดงรายการ {len(res)} สินค้า (ยังไม่สร้าง/อัปโหลดคลิป)")
+        else:
+            print(f"\n🎉 สร้างสำเร็จทั้งหมด {len(res)} คลิป พร้อมสำหรับอัปโหลดลง Reels!")
 
 
