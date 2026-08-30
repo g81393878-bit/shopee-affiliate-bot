@@ -98,20 +98,8 @@ def get_authenticated_service(token_path: Optional[pathlib.Path] = None, channel
                     f"กรุณาวางไฟล์ที่: {TOOLS_DIR}"
                 )
             flow = InstalledAppFlow.from_client_secrets_file(str(secret_file), SCOPES)
-            auth_url, _ = flow.authorization_url(prompt='consent', access_type='offline')
-            print("\n=======================================================")
-            print(f"🔑 กรุณาคลิกลิงก์ด้านล่างนี้เพื่อขอสิทธิ์อัปโหลด YouTube Shorts ช่องที่ {channel_id}:")
-            print(auth_url)
-            print("=======================================================\n")
-            
-            # เปิดเบราว์เซอร์อัตโนมัติด้วยคำสั่ง OS
-            try:
-                import webbrowser
-                webbrowser.open(auth_url)
-            except Exception:
-                pass
-
-            creds = flow.run_local_server(port=8080, prompt='consent', authorization_prompt_message="")
+            log(f"🔑 กำลังเปิดเบราว์เซอร์เพื่อขอสิทธิ์อัปโหลด YouTube Shorts ช่องที่ {channel_id}...")
+            creds = flow.run_local_server(port=0, open_browser=True, prompt='consent', access_type='offline')
         
         target_token_file.write_text(creds.to_json(), encoding="utf-8")
         log(f"[OK] บันทึก YouTube OAuth Token ช่องที่ {channel_id} สำเร็จ: {target_token_file.name}")

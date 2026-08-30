@@ -15,7 +15,7 @@ echo.
 echo ========================================================
 set /p choice=Select (1-5) and press Enter: 
 
-cd /d "%~dp0"
+cd /d "%~dp0\tools"
 
 if "%choice%"=="1" goto list_ch
 if "%choice%"=="2" goto add_2
