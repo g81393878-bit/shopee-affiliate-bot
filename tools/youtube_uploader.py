@@ -277,6 +277,46 @@ def upload_shorts_to_channel(youtube_service, video_path: pathlib.Path, product_
 
 
 LAST_CHANNEL_INDEX_FILE = TOOLS_DIR / "last_youtube_channel_index.txt"
+CHANNEL_STATS_FILE = TOOLS_DIR / "youtube_channel_stats.json"
+
+
+def increment_channel_counter(channel_id: int, channel_name: str = ""):
+    """เพิ่มตัวนับจำนวนครั้งที่โพสต์สำเร็จของแต่ละช่อง (persistent JSON)"""
+    try:
+        stats = {}
+        if CHANNEL_STATS_FILE.exists():
+            stats = json.loads(CHANNEL_STATS_FILE.read_text(encoding="utf-8"))
+        key = str(channel_id)
+        if key not in stats:
+            stats[key] = {"name": channel_name, "count": 0, "last_post": ""}
+        stats[key]["count"] = stats[key].get("count", 0) + 1
+        stats[key]["name"] = channel_name or stats[key].get("name", "")
+        stats[key]["last_post"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        CHANNEL_STATS_FILE.write_text(json.dumps(stats, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def get_channel_stats() -> dict:
+    """อ่านตัวนับจำนวนครั้งที่โพสต์ของทุกช่อง"""
+    try:
+        if CHANNEL_STATS_FILE.exists():
+            return json.loads(CHANNEL_STATS_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def format_channel_stats(stats: dict, tokens: list) -> str:
+    """จัดรูปแบบตัวนับเป็นข้อความสั้นๆ สำหรับ log"""
+    if not stats:
+        return ""
+    parts = []
+    for t in tokens:
+        s = stats.get(str(t["id"]), {})
+        count = s.get("count", 0)
+        parts.append(f"Ch{t['id']}={count}")
+    return " ".join(parts)
 
 
 def get_next_channel_rotation(tokens: list):
@@ -359,8 +399,11 @@ def upload_shorts(video_path: Union[pathlib.Path, str], product_meta: Optional[D
             url = upload_shorts_to_channel(yt_service, video_path, product_meta, channel_name=ch_display)
             if url:
                 set_last_successful_channel(t["id"], tokens)
+                increment_channel_counter(t["id"], ch_display)
                 results.append({"channel": ch_display, "url": url, "id": t["id"]})
-                log(f"🎯 [Rotation] โพสต์ YouTube Shorts สำเร็จด้วย {ch_display} (รอบถัดไปจะสลับช่องต่อไป)")
+                stats = get_channel_stats()
+                stats_text = format_channel_stats(stats, tokens)
+                log(f"🎯 [Rotation] โพสต์ YouTube Shorts สำเร็จด้วย {ch_display} ({stats_text})")
                 break  # โพสต์สำเร็จ 1 ช่องในรอบนี้เรียบร้อย (เฉลี่ยโควต้า)
         except Exception as e:
             err_str = str(e)
