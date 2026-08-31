@@ -13,6 +13,7 @@
 """
 import hashlib
 import html
+import re
 import json
 import logging
 import os
@@ -202,8 +203,29 @@ def curate_caption(item: dict, line_oa: str = "") -> str:
         logger.warning(f"[curated] Groq ล้ม ใช้ fallback: {e}")
         caption = ""
     if not caption:
-        caption = f"ป้าเห็นข่าว {item['title']} แล้วต้องรีบเอามาบอกลูกหลานเลยจ้า เข้ากับยุคนี้มาก 😊"
+        caption = f"ป้าเห็นข่าว {item['title']} แล้วต้องรีบเอามาบอกทุกคนเลยจ้า เข้ากับยุคนี้มาก 😊"
+    caption = _remove_child_address(caption)
     parts = [caption]
     parts.append(line_cta_footer(line_oa))
     parts.append("#ของดีบอกต่อ #เกาะกระแส #เทรนด์วันนี้ #ป้าเข็มป้ายยา #ถ้าไม่คุ้มป้าบอกให้ #ShopeeAffiliate")
     return "\n\n".join(parts)
+
+
+def _remove_child_address(text: str) -> str:
+    for old, new in (
+        ("ลูกหลาน", "ทุกคน"),
+        ("ลูกรัก", "สัตว์เลี้ยงที่รัก"),
+        ("นะลูก", "นะจ๊ะ"),
+        ("เลยลูก", "เลยจ้า"),
+        ("จ้ะลูก", "จ้ะทุกคน"),
+        ("จ้าลูก", "จ้าทุกคน"),
+        ("ดูแลลูก", "ดูแลทุกคน"),
+        ("ให้ลูก", "ให้ทุกคน"),
+        ("ช่วยลูก", "ช่วยทุกคน"),
+        ("ลูกได้", "ได้"),
+        ("ลูกมี", "มี"),
+    ):
+        text = text.replace(old, new)
+    # catch-all: ตัด "ลูก" ที่หลุดมาเดี่ยวๆ (ไม่ใช่ "ลูกค้า")
+    text = re.sub(r'(?<!ค้า)ลูก(?!ค้า)', '', text)
+    return text

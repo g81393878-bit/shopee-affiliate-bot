@@ -105,5 +105,6 @@ def test_curate_caption_uses_groq_output(monkeypatch):
     """Groq สำเร็จ → ใช้คอมเมนต์ที่เขียน + ต่อท้ายลิงก์ LINE + hashtags"""
     monkeypatch.setattr(fc, "_groq_caption", lambda item: "ป้าเห็นข่าวนี้แล้วต้องเตือนลูกหลาน 😊")
     cap = fc.curate_caption({"title": "ข่าว"}, line_oa="https://lin.ee/test")
-    assert cap.startswith("ป้าเห็นข่าวนี้แล้วต้องเตือนลูกหลาน 😊")
+    # _remove_child_address() ต้องแทนที่ "ลูกหลาน" → "ทุกคน" (ห้ามใช้คำว่า "ลูก" ในสาธารณะ)
+    assert cap.startswith("ป้าเห็นข่าวนี้แล้วต้องเตือนทุกคน 😊")
     assert "https://lin.ee/test" in cap

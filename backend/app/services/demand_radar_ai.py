@@ -20,6 +20,7 @@ from app.config import settings
 from app.services.category import CATEGORY_KEYWORDS, guess_category, normalize_query
 from app.services.llm_clients import call_with_backoff, parse_llm_json
 from app.services.persona import persona_system_prompt
+from app.services.product_price_policy import sanitize_public_product_text
 
 logger = logging.getLogger(__name__)
 
@@ -506,7 +507,7 @@ AUNTIE_KHEM_COPY_SYSTEM_PROMPT = """\
 1. เปิดด้วยความเป็นกันเองและเห็นอกเห็นใจในปัญหาของผู้โพสต์ (ใช้คำเรียก เช่น "หนู", "น้อง", "คุณแม่", "ตัวเอง" ตามความเหมาะสม)
 2. แนะนำสินค้าที่เลือกให้ พร้อมบอกจุดเด่นสั้นๆ ว่าทำไมถึงตอบโจทย์
 3. ปิดท้ายด้วยการบอกพิกัดลิงก์ Affiliate ที่ระบุอย่างสุภาพและเป็นธรรมชาติ
-4. ลงท้ายด้วยคำอบอุ่น เช่น "จ้ะ", "จ้า", "นะจ๊ะ", "ลองดูนะลูก"
+4. ลงท้ายด้วยคำอบอุ่น เช่น "จ้ะ", "จ้า", "นะจ๊ะ", "ลองดูนะจ๊ะ" และ**ห้ามใช้คำว่า "ลูก", "ลูกหลาน", "นะลูก", "เลยลูก" หรือคำเรียก "ลูก" ในทุกรูปแบบเด็ดขาด**
 """
 
 
@@ -528,12 +529,12 @@ def _generate_heuristic_deal_comment(
         empathy = "ถ้าหาชุดใส่สบายไม่อึดอัดสำหรับช่วงนี้ "
     elif any(k in p_text for k in ("แมว", "สุนัข", "หมา", "สัตว์เลี้ยง")):
         opener = "สวัสดีจ้าทาสแมว/คนรักสัตว์! "
-        empathy = "เรื่องของลูกรักป้าเข้าใจดีเลยจ้ะ "
+        empathy = "เรื่องสัตว์เลี้ยงที่รัก ป้าเข้าใจดีเลยจ้ะ "
     elif any(k in p_text for k in ("พัง", "เสีย", "ด่วน", "รีบใช้")):
-        opener = "ใจเย็นๆ นะลูก! "
+        opener = "ใจเย็นๆ นะจ๊ะ! "
         empathy = "ป้าเข้าใจเลยเวลาของจำเป็นพังต้องรีบใช้ด่วน "
     else:
-        opener = "สวัสดีจ้ะลูกหลาน! "
+        opener = "สวัสดีจ้ะทุกคน! "
         empathy = "ถ้ากำลังมองหาตัวช่วยดีๆ ที่คุ้มค่า "
 
     # 2. จุดเด่นสินค้า
@@ -544,12 +545,12 @@ def _generate_heuristic_deal_comment(
         highlights.append(f"ยอดขายสะสมกว่า {sales_count:,} ชิ้น")
 
     highlight_str = f" ({', '.join(highlights)})" if highlights else ""
-    price_str = f" ในราคาคุ้มๆ แค่ {price:,.2f} บาทเองจ้า" if price > 0 else " ราคาจับต้องได้สบายกระเป๋าจ้ะ"
+    price_str = " ดูราคาล่าสุดและโปรโมชันได้จากลิงก์ Shopee จ้ะ"
 
     # 3. ประกอบข้อความร่าง
-    body = f"ป้าแนะนำตัวนี้เลยจ้ะ '{product_name}'{highlight_str}{price_str} ของดีตรงปกแน่นอนลูก"
+    body = f"ป้าแนะนำตัวนี้เลยจ้ะ '{product_name}'{highlight_str}{price_str} ของดีตรงปกแน่นอนจ้า"
     cta = f"\n\n👉 ป้าปักพิกัดร้านแท้ราคาดีไว้ให้นะจ๊ะ: {affiliate_url}"
-    closing = "\nลองดูนะลูก ป้าคัดมาให้แล้วจ้า 💕"
+    closing = "\nลองดูนะจ๊ะ ป้าคัดมาให้แล้วจ้า 💕"
 
     return f"{opener}{empathy}{body}{cta}{closing}"
 
@@ -572,7 +573,7 @@ def generate_auntie_khem_deal_comment(
     ช่วยเขียนข้อความคอมเมนต์ตอบโพสต์นี้ให้หน่อยจ้ะ:
     ข้อความโพสต์ของผู้ใช้: "{post_text}"
     สินค้าที่ป้าคัดมาให้: "{product_name}"
-    ราคา: {price:,.2f} บาท
+    ราคา: ห้ามระบุตัวเลข ให้ผู้ใช้ดูราคาล่าสุดในลิงก์ Shopee
     คะแนนรีวิว: {rating:.1f}/5 ดาว
     ยอดขาย: {sales_count:,} ชิ้น
     เหตุผลที่คัดเลือก:
@@ -580,6 +581,8 @@ def generate_auntie_khem_deal_comment(
     ลิงก์สินค้าที่จะให้ผู้ใช้คลิก: {affiliate_url}
 
     เขียนเป็นข้อความสั้น 2-4 ประโยค พร้อมแนบลิงก์ {affiliate_url} ท้ายข้อความ
+    ห้ามเขียนราคาสินค้าเป็นตัวเลขหรือเปอร์เซ็นต์ส่วนลด เพราะราคาเปลี่ยนตามตัวเลือกและโปรโมชัน
+    ห้ามใช้คำว่า "ลูก", "ลูกหลาน", "นะลูก", "เลยลูก" หรือคำเรียก "ลูก" ในทุกรูปแบบ ให้ใช้ "ทุกคน" หรือ "จ๊ะ"/"จ้า" แทน
     """
 
     provider = (settings.LLM_PROVIDER or "groq").lower()
@@ -605,7 +608,7 @@ def generate_auntie_khem_deal_comment(
                     comment = response.choices[0].message.content.strip()
                     if affiliate_url not in comment:
                         comment += f"\n\n👉 พิกัดสินค้าจ้ะ: {affiliate_url}"
-                    return comment
+                    return _remove_child_address(sanitize_public_product_text(comment))
                 except Exception as ex:
                     logger.warning(f"Groq deal copy generation failed: {ex}")
         except Exception as e:
@@ -632,14 +635,14 @@ def generate_auntie_khem_deal_comment(
                     comment = response.choices[0].message.content.strip()
                     if affiliate_url not in comment:
                         comment += f"\n\n👉 พิกัดสินค้าจ้ะ: {affiliate_url}"
-                    return comment
+                    return _remove_child_address(sanitize_public_product_text(comment))
                 except Exception as ex:
                     logger.warning(f"Anthropic deal copy generation failed: {ex}")
         except Exception as e:
             logger.warning(f"Anthropic provider error: {e}")
 
     # 3. Fallback to Heuristic generator
-    return _generate_heuristic_deal_comment(
+    return _remove_child_address(sanitize_public_product_text(_generate_heuristic_deal_comment(
         post_text=post_text,
         product_name=product_name,
         price=price,
@@ -647,7 +650,28 @@ def generate_auntie_khem_deal_comment(
         sales_count=sales_count,
         affiliate_url=affiliate_url,
         suggested_reasons=suggested_reasons,
-    )
+    )))
+
+
+def _remove_child_address(text: str) -> str:
+    """รักษาโทนอบอุ่นโดยไม่ใช้คำเรียกผู้ฟังที่สร้างความรู้สึกไม่ดี."""
+    for old, new in (
+        ("ลูกหลาน", "ทุกคน"),
+        ("ลูกรัก", "สัตว์เลี้ยงที่รัก"),
+        ("นะลูก", "นะจ๊ะ"),
+        ("เลยลูก", "เลยจ้า"),
+        ("จ้ะลูก", "จ้ะทุกคน"),
+        ("จ้าลูก", "จ้าทุกคน"),
+        ("ดูแลลูก", "ดูแลทุกคน"),
+        ("ให้ลูก", "ให้ทุกคน"),
+        ("ช่วยลูก", "ช่วยทุกคน"),
+        ("ลูกได้", "ได้"),
+        ("ลูกมี", "มี"),
+    ):
+        text = text.replace(old, new)
+    # catch-all: ตัด "ลูก" ที่หลุดมาเดี่ยวๆ (ไม่ใช่ "ลูกค้า")
+    text = re.sub(r'(?<!ค้า)ลูก(?!ค้า)', '', text)
+    return text
 
 
 INSIGHTS_ANALYSIS_SYSTEM_PROMPT = """
@@ -741,4 +765,3 @@ def analyze_facebook_insights(insights_text: str) -> Dict[str, Any]:
         "traffic_sources": [],
         "recommendations": ["กรุณาตั้งค่า API Key เพื่อใช้การวิเคราะห์ขั้นสูง"]
     }
-
