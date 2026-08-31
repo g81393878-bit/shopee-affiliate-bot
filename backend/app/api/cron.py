@@ -31,6 +31,7 @@ from app.services.hermes_brain import analyze_market, market_tone
 from app.services.price_refresh import refresh_price
 from app.services.line_quota import push_guard
 from app.services.product_cards import product_cards_message
+from app.services.product_price_policy import sanitize_public_product_text
 from app.services.facebook_poster import (
     post_feed,
     log_post_async,
@@ -168,7 +169,7 @@ def cron_refresh_prices(token: str = "", limit: int = 300):
     - เปิดหน้าเว็บสินค้าทุกตัว (ลิงก์ affiliate) → อ่านราคาจาก HTML → อัปเดต
     - ราคาเปลี่ยน → บันทึก price_history + ถ้าลด ≥ PRICE_DROP_PCT (ค่าเริ่มต้น 5%)
       แจ้งเตือนราคาตกให้ลูกค้าที่สนใจหมวดนั้น (จำกัดคน/ตัว กันสแปม)
-    - โดนบล็อก/หาไม่เจอ → คงราคาเดิม ไม่พัง (การ์ดลูกค้าแสดง "ราคาเริ่มต้น")
+    - โดนบล็อก/หาไม่เจอ → คงราคาเดิมไว้ใช้ภายใน แต่การ์ดลูกค้าไม่แสดงตัวเลข
     - พอได้ Open API จะแทนที่ด้วยข้อมูลทางการ (productOfferV2 priceMin/priceMax)
     """
     if not _authorized(token):
@@ -220,7 +221,7 @@ def cron_refresh_prices(token: str = "", limit: int = 300):
                 name = u.name if u else "LINE User"
                 card = product_cards_message(db, type("U", (), {"name": name})(),
                                              [prod],
-                                             title=f"💰 ราคาลดลง! ฿{_fmt(old)} → ฿{_fmt(new)} (-{dp:g}%)",
+                                             title="📉 ระบบพบการเปลี่ยนแปลงราคา — ดูราคาล่าสุดใน Shopee",
                                              is_owner=False)
                 if "mock" in (os.getenv("LINE_CHANNEL_ACCESS_TOKEN") or "").lower():
                     alerted += 1
@@ -241,7 +242,7 @@ def cron_refresh_prices(token: str = "", limit: int = 300):
             "unchanged": unchanged,
             "skipped_blocked": blocked,
             "price_drop_alerts": alerted_detail or (f"({alerted} ใน mock)" if alerted else []),
-            "note": "ราคา = ราคาเริ่มต้นจริงในหน้าเว็บ; โดนบล็อก = คงราคาเดิม",
+            "note": "ราคาใช้ภายในเพื่อประวัติ/ตรวจการเปลี่ยนแปลง; ข้อความลูกค้าไม่แสดงตัวเลข",
         }
     finally:
         db.close()
@@ -314,10 +315,6 @@ def cron_reengage(token: str = "", days_silent: int = 7, limit: int = 10):
         db.close()
 
 
-def _fmt(n: float) -> str:
-    return f"{n:,.2f}".rstrip("0").rstrip(".")
-
-
 def _build_fb_caption(p) -> str:
     """caption สำหรับโพสต์เพจ Facebook = caption (Groq/fallback) + แฮชแท็ก
 
@@ -332,8 +329,9 @@ def _build_fb_caption(p) -> str:
     except Exception as e:
         logger.warning(f"[facebook-post] generate caption failed: {e}")
     if not caption:
-        caption = (f"🛍️ {p.name} — ราคา {float(p.price or 0):,.0f} บาท "
+        caption = (f"🛍️ {p.name} — ดูราคาล่าสุดและโปรโมชันในลิงก์ Shopee "
                    f"ขายแล้ว {p.sales_count:,} ชิ้น ⭐ {p.rating}")
+    caption = sanitize_public_product_text(caption)
     # หัวโพสต์สินค้าทุกตัว: ป้ายกำกับชัดเจน แยกจากโพสต์แนะนำบอท (เจ้าของสั่ง 18/08)
     lines = [f"🛍️ โพสต์ขายสินค้า\n\n{caption}"]
     if tags:

@@ -51,17 +51,19 @@ TOOLS = ROOT.parent / "tools"
 sys.path.insert(0, str(BACKEND))
 sys.path.insert(0, str(TOOLS))
 
-# โหลด Credential จาก Render หรือ .env
-try:
-    import render_set_env
-    render_set_env.API_KEY = render_set_env.get_api_key()
-    items = render_set_env.fetch_env_vars()
-    for it in items:
-        k, v = render_set_env.decode_env_var(it.get("envVar"))
-        if k:
-            os.environ[k] = v
-except Exception:
-    pass
+# VPS is the primary runtime. Render env sync is opt-in so it cannot silently
+# overwrite VPS values (especially per-page Facebook tokens).
+if os.getenv("USE_RENDER_ENV", "false").lower() in ("1", "true", "yes"):
+    try:
+        import render_set_env
+        render_set_env.API_KEY = render_set_env.get_api_key()
+        items = render_set_env.fetch_env_vars()
+        for it in items:
+            k, v = render_set_env.decode_env_var(it.get("envVar"))
+            if k:
+                os.environ[k] = v
+    except Exception as e:
+        print(f"[WARN] Render env sync skipped: {e}")
 
 from dotenv import load_dotenv  # noqa: E402
 load_dotenv(BACKEND / ".env")
@@ -72,9 +74,10 @@ load_dotenv(BACKEND / ".env")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
-from app.services.facebook_poster import PAGE_ID, post_reel  # noqa: E402
+from app.services.facebook_poster import PAGE_ID, configured_pages, post_reel  # noqa: E402
 from app.services.facebook_intro import intro_posts  # noqa: E402
 from app.services.bot_profile import LINE_OA_URL  # noqa: E402
+from app.services.product_price_policy import sanitize_public_product_text  # noqa: E402
 
 
 
@@ -88,9 +91,9 @@ def product_selection_mode() -> str:
     mode = os.getenv("PRODUCT_SELECTION_MODE", "balanced").strip().lower()
     return mode if mode in {"discount", "bestseller", "balanced"} else "balanced"
 
-# รองรับภาพนิ่ง — แปลงเป็นวิดีโอ 5 วินาทีอัตโนมัติ
+# รองรับภาพนิ่ง — แปลงเป็นวิดีโอความยาวขั้นต่ำ 10 วินาทีอัตโนมัติ
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
-IMAGE_VIDEO_DURATION = 5  # วินาที
+IMAGE_VIDEO_DURATION = max(5, int(os.getenv("REELS_MIN_DURATION", "10") or 10))  # วินาที
 LAST_POST_FILE = ROOT / "last_post_time.txt"
 DAILY_COUNT_FILE = ROOT / "posts_today.txt"
 NOTIFY_STATE_FILE = ROOT / ".reels_notify_state.json"
@@ -329,8 +332,7 @@ def _notify_owner(text: str) -> bool:
     """ส่งแจ้งเตือนเจ้าของร้านผ่าน Telegram Commander (ฟรี 100% ไม่จำกัดจำนวน ไม่กินโควต้า LINE)"""
     try:
         from telegram_notifier import send_telegram_alert
-        send_telegram_alert(text)
-        return True
+        return bool(send_telegram_alert(text))
     except Exception as e:
         log(f"[TELEGRAM] ส่งแจ้งเตือนล้ม: {e}")
         return False
@@ -420,7 +422,7 @@ CATEGORY_HOOKS = {
     "สัตว์เลี้ยง & ของใช้หมาแมว": [
         "🐾 ทาสหมาทาสแมวต้องมีติดบ้านไว้! ป้าคัดของแท้ตัวเด็ดมาให้แล้วจ้า ✨",
         "🚨 เลี้ยงน้องแล้วเจอปัญหากวนใจใช่ไหม? ตัวนี้ช่วยได้เยอะมาก รีวิว 5 ดาวแน่น!",
-        "✨ ไอเทมลับประจำบ้านสำหรับคนรักสัตว์ ใช้งานดีจนป้าต้องมาบอกต่อลูก 💕",
+        "✨ ไอเทมลับประจำบ้านสำหรับคนรักสัตว์ ใช้งานดีจนป้าต้องมาบอกต่อ 💕",
     ],
     "สมาร์ตโฮม & เครื่องใช้ไฟฟ้า": [
         "💡 เปลี่ยนชีวิตให้ง่ายและสะดวกขึ้น 10 เท่า! ตัวนี้ป้าแนะนำเลยจ้า ✨",
@@ -430,12 +432,12 @@ CATEGORY_HOOKS = {
     "ของใช้ในบ้าน & จัดระเบียบบ้าน": [
         "🏠 ไอเทมลับประจำบ้านที่ทุกคนต้องมีติดไว้! ใช้ดีจนป้าต้องบอกต่อจ้า ✨",
         "🚨 เตือนแล้วนะ! ใครยังไม่มีตัวนี้ติดบ้านคือพลาดมาก รีวิว 5 ดาวแน่นสุดๆ",
-        "✨ ตัวช่วยจัดบ้านและทำความสะอาดให้ชีวิตง่ายขึ้น ป้าคัดของแท้มาให้แล้วลูก 💕",
+        "✨ ตัวช่วยจัดบ้านและทำความสะอาดให้ชีวิตง่ายขึ้น ป้าคัดของแท้มาให้แล้ว 💕",
     ],
     "เครื่องครัว & ของกินของใช้": [
         "🍳 สายทำอาหารและสายของกินต้องมีติดครัวไว้! ป้าคัดตัวเด็ดมาให้แล้วจ้า ✨",
         "🔥 ไอเทมลับประจำห้องครัวที่แม่บ้านยกนิ้วให้ การันตีของแท้ ใช้งานคุ้มค่ามาก!",
-        "🚨 ของดีมีคุณภาพที่ต้องมีติดครัว ซื้อแล้วคุ้มเงินทุกบาทแน่นอนลูก ✨",
+        "🚨 ของดีมีคุณภาพที่ต้องมีติดครัว ซื้อแล้วคุ้มเงินทุกบาทแน่นอน ✨",
     ],
     "ไอที & แกดเจ็ตมือถือ": [
         "📱 แกดเจ็ตตัวเด็ดที่ทุกคนต้องมีพกติดตัว! ป้าคัดของแท้คุณภาพดีมาให้แล้วจ้า ✨",
@@ -445,17 +447,17 @@ CATEGORY_HOOKS = {
     "สุขภาพ & ดูแลตัวเอง": [
         "🩺 ไอเทมดูแลสุขภาพประจำบ้านที่ต้องมีติดไว้! ป้าคัดของแท้มาให้แล้วจ้า ✨",
         "🚨 ใครกำลังมองหาตัวช่วยดูแลตัวเองตัวนี้อยู่ การันตีคุณภาพ รีวิวแน่นมาก!",
-        "✨ ตัวช่วยสุขภาพดี ใช้งานง่าย อุ่นใจได้ทุกวัน ป้าแนะนำเลยลูก 💕",
+        "✨ ตัวช่วยสุขภาพดี ใช้งานง่าย อุ่นใจได้ทุกวัน ป้าแนะนำเลยจ้า 💕",
     ],
     "ความงาม & ของใช้ส่วนตัว": [
         "💄 ไอเทมดูแลตัวเองที่คนรีวิวแน่นที่สุด! ป้าคัดของแท้ร้อยเปอร์เซ็นต์มาให้แล้วจ้า ✨",
-        "✨ ของใช้ส่วนตัวตัวเด็ดที่ทุกคนต้องมีติดตัว ใช้ดีจนป้าต้องบอกต่อลูก 💕",
+        "✨ ของใช้ส่วนตัวตัวเด็ดที่ทุกคนต้องมีติดตัว ใช้ดีจนป้าต้องบอกต่อ 💕",
         "🔥 ตัวนี้ยอดขายปัง รีวิว 5 ดาวแน่นมาก การันตีของแท้ คุ้มค่าน่าใช้สุดๆ!",
     ],
     "ของใช้ติดรถ & เดินทาง/ช่าง": [
         "🚗 มีติดรถและพกติดบ้านไว้อุ่นใจที่สุด! ป้าคัดของแท้ตัวท็อปมาให้แล้วจ้า ✨",
         "🚨 ไอเทมฉุกเฉินและของจำเป็นสำหรับคนรักรถและการเดินทาง รีวิวแน่นมาก!",
-        "🔧 ของใช้จำเป็นสุดทนทาน ใช้งานดี คุ้มค่าเงินทุกบาทแน่นอนลูก ✨",
+        "🔧 ของใช้จำเป็นสุดทนทาน ใช้งานดี คุ้มค่าเงินทุกบาทแน่นอน ✨",
     ],
 }
 
@@ -510,7 +512,7 @@ def build_caption(product: dict) -> str:
     if not product:
         return build_intro_caption(advance=False)
     raw_name = (product or {}).get("product_name") or "สินค้าเด็ดจากป้าเข็ม"
-    name = clean_caption_text(raw_name)
+    name = sanitize_public_product_text(clean_caption_text(raw_name))
     link = (product or {}).get("affiliate_link") or ""
     category = (product or {}).get("category") or ""
 
@@ -525,7 +527,7 @@ def build_caption(product: dict) -> str:
     lines = [
         f"{hook}\n",
         f"📦 {name}",
-        "รีวิว 5 ดาวแน่นมาก การันตีคุณภาพ คุ้มค่าเงินทุกบาท จิ้มดูรายละเอียดที่ลิงก์ได้เลยลูก 👇\n"
+        "รีวิว 5 ดาวแน่นมาก การันตีคุณภาพ คุ้มค่าเงินทุกบาท จิ้มดูรายละเอียดที่ลิงก์ได้เลยจ้า 👇\n"
     ]
     if link:
         lines.append(f"🛒 สั่งซื้อของแท้ / ดูโปรโมชั่น Shopee 👉 {link}")
@@ -638,48 +640,27 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
 
     try:
         title_text = str((product or {}).get("product_name", "") or "")[:80]
-        # โพสต์เพจหลัก 1 (ป้าเข็ม ขายของ)
-        res = post_reel(description=caption, file_path=upload_path, title=title_text)
-        
-        # โพสต์เพจ 2 (ป้าเข็ม ชี้เป้าของดี) พร้อมกัน
-        page_2_id = os.getenv("FACEBOOK_PAGE_2_ID")
-        page_2_token = os.getenv("FACEBOOK_PAGE_2_ACCESS_TOKEN")
-        res_p2 = None
-        if page_2_id and page_2_token:
+        # Broadcast เฉพาะเพจที่มี ID/token ครบ และ configured_pages() ตัด ID ซ้ำแล้ว
+        page_results = []
+        for page in configured_pages():
             try:
-                res_p2 = post_reel(
+                page_result = post_reel(
                     description=caption,
                     file_path=upload_path,
                     title=title_text,
-                    page_id=page_2_id,
-                    access_token=page_2_token,
+                    page_id=page["id"],
+                    access_token=page["token"],
                 )
-                if res_p2.get("ok"):
-                    log(f"[OK] โพสต์เพจ 2 (ชี้เป้าของดี) สำเร็จ video_id={res_p2['video_id']}")
+                page_result["page_index"] = page["index"]
+                page_results.append(page_result)
+                if page_result.get("ok"):
+                    log(f"[OK] โพสต์เพจ {page['index']} สำเร็จ video_id={page_result['video_id']}")
                 else:
-                    log(f"[WARN] โพสต์เพจ 2 ไม่สำเร็จ: {res_p2.get('error')}")
-            except Exception as ep2:
-                log(f"[WARN] โพสต์เพจ 2 ล้ม: {ep2}")
-
-        # โพสต์เพจ 3 (ป้าเข็ม ของดีบอกต่อ) พร้อมกัน
-        page_3_id = os.getenv("FACEBOOK_PAGE_3_ID")
-        page_3_token = os.getenv("FACEBOOK_PAGE_3_ACCESS_TOKEN")
-        res_p3 = None
-        if page_3_id and page_3_token:
-            try:
-                res_p3 = post_reel(
-                    description=caption,
-                    file_path=upload_path,
-                    title=title_text,
-                    page_id=page_3_id,
-                    access_token=page_3_token,
-                )
-                if res_p3.get("ok"):
-                    log(f"[OK] โพสต์เพจ 3 (ป้าเข็ม ของดีบอกต่อ) สำเร็จ video_id={res_p3['video_id']}")
-                else:
-                    log(f"[WARN] โพสต์เพจ 3 ไม่สำเร็จ: {res_p3.get('error')}")
-            except Exception as ep3:
-                log(f"[WARN] โพสต์เพจ 3 ล้ม: {ep3}")
+                    log(f"[WARN] โพสต์เพจ {page['index']} ไม่สำเร็จ: {page_result.get('error')}")
+            except Exception as page_error:
+                page_results.append({"ok": False, "error": str(page_error)[:200]})
+                log(f"[WARN] โพสต์เพจ {page['index']} ล้ม: {page_error}")
+        res = page_results[0] if page_results else {"ok": False, "error": "ไม่มีเพจที่ตั้งค่า token ครบ"}
         # อัปโหลดขึ้น YouTube Shorts ทุกช่องที่เชื่อมต่อไว้ (Multi-Channel)
         yt_results = []
         try:
@@ -701,7 +682,7 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
             except Exception:
                 pass
 
-    if res["ok"] or (res_p2 and res_p2.get("ok")) or (res_p3 and res_p3.get("ok")) or yt_results:
+    if any(r.get("ok") for r in page_results) or yt_results:
         POSTED_DIR.mkdir(parents=True, exist_ok=True)
         # ย้ายไฟล์ต้นฉบับ (ภาพหรือคลิป) ไป posted/
         original = pending[0]  # ใช้ไฟล์ต้นฉบับจาก pending
@@ -736,26 +717,37 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
         if not product:
             build_intro_caption(advance=True)  # เลื่อนแคปชั่นแนะนำป้าเข็ม (กันโพสต์ซ้ำติดกัน)
         vids = []
-        if res.get("ok") and res.get("video_id"): vids.append(f"P1:{res['video_id']}")
-        if res_p2 and res_p2.get("ok") and res_p2.get("video_id"): vids.append(f"P2:{res_p2['video_id']}")
-        if res_p3 and res_p3.get("ok") and res_p3.get("video_id"): vids.append(f"P3:{res_p3['video_id']}")
+        for index, page_result in enumerate(page_results, start=1):
+            if page_result.get("ok") and page_result.get("video_id"):
+                page_index = page_result.get("page_index", index)
+                vids.append(f"P{page_index}:{page_result['video_id']}")
         if yt_results: vids.append(f"YT:{len(yt_results)}ch")
         vid_summary = ", ".join(vids)
         log(f"[OK] วิดีโอโพสต์สำเร็จ ({vid_summary}) → {dst.name}")
         
         # ส่งแจ้งเตือนตรงเข้า LINE แอดมินทันทีทุกครั้งที่โพสต์สำเร็จ (ไม่ต้องกดเช็คเอง)
         try:
-            pname = (product or {}).get("product_name") or original.name
+            pname = sanitize_public_product_text(
+                (product or {}).get("product_name") or original.name
+            )
             aff_link = (product or {}).get("affiliate_link") or ""
             
             # จัดรูปแบบรายงานผลการโพสต์แบบ Bullet Point สวยงาม สบายตา
             channels_bullet = []
-            if res.get("ok") and res.get("video_id"):
-                channels_bullet.append(f"  • 📍 FB เพจ 1 (ป้าเข็ม ขายของ):\n    👉 https://www.facebook.com/reel/{res['video_id']}")
-            if res_p2 and res_p2.get("ok") and res_p2.get("video_id"):
-                channels_bullet.append(f"  • 📍 FB เพจ 2 (ป้าเข็ม ชี้เป้าของดี):\n    👉 https://www.facebook.com/reel/{res_p2['video_id']}")
-            if res_p3 and res_p3.get("ok") and res_p3.get("video_id"):
-                channels_bullet.append(f"  • 📍 FB เพจ 3 (ป้าเข็ม ของดีบอกต่อ):\n    👉 https://www.facebook.com/reel/{res_p3['video_id']}")
+            page_names = {
+                1: "ป้าเข็ม ขายของ",
+                2: "ป้าเข็ม ชี้เป้าของดี",
+                3: "ป้าเข็ม ของดีบอกต่อ",
+            }
+            for fallback_index, page_result in enumerate(page_results, start=1):
+                if not (page_result.get("ok") and page_result.get("video_id")):
+                    continue
+                page_index = page_result.get("page_index", fallback_index)
+                page_name = page_names.get(page_index, f"เพจ {page_index}")
+                channels_bullet.append(
+                    f"  • 📍 FB เพจ {page_index} ({page_name}):\n"
+                    f"    👉 https://www.facebook.com/reel/{page_result['video_id']}"
+                )
             if yt_results:
                 for yt in yt_results:
                     channels_bullet.append(f"  • 🔴 YouTube ({yt.get('channel', 'Shorts')}):\n    👉 {yt.get('url', '')}")

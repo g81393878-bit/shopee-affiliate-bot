@@ -87,10 +87,23 @@ def test_dry_run_never_notifies(up):
     assert up.sent == []
 
 
-def test_notify_owner_skips_without_real_token(up, monkeypatch):
-    """token ไม่ตั้ง / เป็น mock → ข้าม ไม่ crash (best-effort, ไม่ยิง LINE จริง)"""
+def test_notify_owner_returns_telegram_notifier_result(up, monkeypatch):
+    """Telegram notifier ล้ม/สำเร็จต้องสะท้อนผลจริง โดยเทสต์ไม่ยิง network."""
     real = up.real_notify_owner
-    monkeypatch.delenv("LINE_CHANNEL_ACCESS_TOKEN", raising=False)
+    import telegram_notifier
+
+    monkeypatch.setattr(telegram_notifier, "send_telegram_alert", lambda text: False)
     assert real("test") is False
-    monkeypatch.setenv("LINE_CHANNEL_ACCESS_TOKEN", "mock-token")
-    assert real("test") is False
+    monkeypatch.setattr(telegram_notifier, "send_telegram_alert", lambda text: True)
+    assert real("test") is True
+
+
+def test_reels_caption_filters_price_embedded_in_product_name(up):
+    caption = up.build_caption({
+        "product_name": "หูฟังรุ่น X ราคา 250 บาท",
+        "category": "ไอที",
+        "affiliate_link": "https://s.shopee.co.th/9pdS1rMwH8",
+    })
+
+    assert "250 บาท" not in caption
+    assert "ดูราคาล่าสุดในลิงก์ Shopee" in caption

@@ -31,17 +31,19 @@ if hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
-# โหลด Environment Variables
-try:
-    import render_set_env
-    render_set_env.API_KEY = render_set_env.get_api_key()
-    items = render_set_env.fetch_env_vars()
-    for it in items:
-        k, v = render_set_env.decode_env_var(it.get("envVar"))
-        if k:
-            os.environ[k] = v
-except Exception:
-    pass
+# VPS is the primary runtime. Render env sync is opt-in so it cannot silently
+# overwrite VPS values (especially per-page Facebook tokens).
+if os.getenv("USE_RENDER_ENV", "false").lower() in ("1", "true", "yes"):
+    try:
+        import render_set_env
+        render_set_env.API_KEY = render_set_env.get_api_key()
+        items = render_set_env.fetch_env_vars()
+        for it in items:
+            k, v = render_set_env.decode_env_var(it.get("envVar"))
+            if k:
+                os.environ[k] = v
+    except Exception as e:
+        print(f"[WARN] Render env sync skipped: {e}")
 
 from dotenv import load_dotenv
 load_dotenv(BACKEND_DIR / ".env")
@@ -162,7 +164,7 @@ def get_system_health_summary(title: str = "รายงานสถานะร
         f"🟢 สถานะบริการ & API Quota:\n"
         f"  • 🎬 โรงงานผลิตคลิป (Pre-buffer): 🟢 ออนไลน์\n"
         f"  • 📍 Facebook Reels: 🟢 ปกติ (3 เพจหลักพร้อมยิง)\n"
-        f"  • 🔴 YouTube Shorts: 🟢 ปกติ (ระบบหมุนเวียน 4 ช่องเฉลี่ยโควต้า)\n"
+        f"  • 🔴 YouTube Shorts: 🟢 ปกติ (ระบบหมุนเวียน 5 ช่องเฉลี่ยโควต้า)\n"
         f"  • 🎙️ เสียงพากย์ไทย: Google/Edge Neural TTS (เสียงป้าเข็ม)\n"
         f"  • 🧠 สมองกล AI Caption: Groq AI Multi-Key (7 Keys Failover)\n\n"
         f"📦 สถานะคลังคลิปพร้อมโพสต์:\n"

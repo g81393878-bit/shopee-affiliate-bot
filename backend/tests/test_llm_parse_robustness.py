@@ -158,6 +158,23 @@ def test_generate_script_parses_prose_wrapped_json(monkeypatch):
     assert result["hook"] == "หยุดก่อนจ๊ะ!"
 
 
+def test_generate_script_filters_stale_price_from_provider(monkeypatch):
+    """Even a disobedient provider cannot put a catalog price into public copy."""
+    monkeypatch.setattr(settings, "LLM_PROVIDER", "groq")
+    monkeypatch.setattr(settings, "GROQ_API_KEY", "gsk-test")
+    monkeypatch.setattr(settings, "GROQ_MODEL", "openai/gpt-oss-120b")
+    data = json.loads(_full_script_json())
+    data["caption"] = "ซื้อวันนี้ราคา 250 บาท โปรลด 20%"
+    fake = _FakeClient("gsk-test", json.dumps(data))
+    monkeypatch.setattr("app.services.llm_clients.groq_clients", lambda: [fake])
+
+    result = generate_script_for_product("หูฟังไร้สาย", "หูฟัง", 250, tone="neutral")
+
+    assert "250" not in result["caption"]
+    assert "20%" not in result["caption"]
+    assert "ดูราคาล่าสุดในลิงก์ Shopee" in result["caption"]
+
+
 # ---------------------------------------------------------------------------
 # Circuit breaker + fail-fast (กัน key เสียถูกยิงซ้ำทุก call)
 # ---------------------------------------------------------------------------

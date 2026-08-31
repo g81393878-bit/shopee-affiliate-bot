@@ -24,12 +24,30 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 
 from app.services.link_checker import is_valid_shopee_affiliate_url
+from app.services.product_price_policy import sanitize_public_product_text
 from app.services.text_cleaner import sanitize_post_text
 
 logger = logging.getLogger(__name__)
 
 PAGE_ID = os.getenv("FACEBOOK_PAGE_ID", "1307380735783361")
 GRAPH_URL = "https://graph.facebook.com/v21.0"
+
+
+def configured_pages() -> list[dict]:
+    """Return configured pages for broadcast, without exposing tokens."""
+    pages = []
+    seen = set()
+    for index in (1, 2, 3):
+        id_key = "FACEBOOK_PAGE_ID" if index == 1 else f"FACEBOOK_PAGE_{index}_ID"
+        token_key = ("FACEBOOK_PAGE_ACCESS_TOKEN" if index == 1
+                     else f"FACEBOOK_PAGE_{index}_ACCESS_TOKEN")
+        page_id = (os.getenv(id_key) or (PAGE_ID if index == 1 else "")).strip()
+        token = (os.getenv(token_key) or "").strip()
+        if not page_id or not token or page_id in seen:
+            continue
+        seen.add(page_id)
+        pages.append({"index": index, "id": page_id, "token": token})
+    return pages
 
 # เขียนโพสต์ลง Google ชีทอัตโนมัติ (ผ่าน Apps Script Web App — ดู tools/sheet_posts_apps_script.gs)
 # ตั้ง env POSTS_SHEET_WEBHOOK_URL = URL web app ที่ deploy — ไม่ตั้ง = ไม่บันทึก (โค้ดทำงานปกติ)
@@ -149,6 +167,12 @@ def preflight_ready() -> tuple:
     page_id = (os.getenv("FACEBOOK_PAGE_ID") or "1307380735783361").strip()
     if not page_id:
         reasons.append("FACEBOOK_PAGE_ID ไม่ได้ตั้ง")
+    for index in (2, 3):
+        page_value = (os.getenv(f"FACEBOOK_PAGE_{index}_ID") or "").strip()
+        token_value = (os.getenv(f"FACEBOOK_PAGE_{index}_ACCESS_TOKEN") or "").strip()
+        if bool(page_value) != bool(token_value):
+            reasons.append(
+                f"FACEBOOK_PAGE_{index}_ID และ FACEBOOK_PAGE_{index}_ACCESS_TOKEN ต้องตั้งค่าคู่กัน")
     return (not reasons, reasons)
 
 
@@ -220,8 +244,10 @@ def _log_rate_limit_usage(r) -> None:
         (logger.warning if high else logger.info)(f"[fb_rate_usage] {header}: {data}")
 
 
-def post_feed(message: str, link: str = "", image_url: str = "",
-              background_preset_id: str = "") -> dict:
+def _post_feed_single(message: str, link: str = "", image_url: str = "",
+                      background_preset_id: str = "", *,
+                      page_id: Optional[str] = None,
+                      access_token: Optional[str] = None) -> dict:
     """โพสต์ลง feed เพจ — คืน {ok, post_id, error}
 
     link: ถ้าระบุ Facebook จะดึง preview (รูปสินค้า + ชื่อ) จากหน้าเว็บปลายทางอัตโนมัติ
@@ -233,7 +259,8 @@ def post_feed(message: str, link: str = "", image_url: str = "",
       ข้อจำกัดของ Facebook: ห้ามมี media/link (มีแล้วพื้นสีจะถูก ignore) → ถ้าส่งค่านี้
       จะไม่แนบ link และ image_url ด้วย
     """
-    token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or ""
+    token = access_token or os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or ""
+    target_page_id = page_id or PAGE_ID
     if not token:
         return {"ok": False, "post_id": None, "error": "FACEBOOK_PAGE_ACCESS_TOKEN ไม่ได้ตั้ง"}
     # กรองอักษรต่างภาษาที่ LLM หลุด (เปอร์เซีย/ซีริลลิก/CJK...) ก่อนโพสต์ขึ้นเพจ
@@ -262,20 +289,25 @@ def post_feed(message: str, link: str = "", image_url: str = "",
         return {"ok": False, "post_id": None,
                 "error": "ข้อความมีลิงก์ shope.ee (ปลอม) — ไม่อนุญาต"}
 
+    # Affiliate product posts must never publish a catalog price as if it were live.
+    if ((link and "s.shopee.co.th" in link.lower())
+            or "s.shopee.co.th" in (message or "").lower()):
+        message = sanitize_public_product_text(message)
+
     if background_preset_id:
         # พื้นสี (text-only): Facebook กำหนดให้โพสต์ข้อความล้วน (ไม่มี media/link)
         # และข้อความ ≤ 130 ตัวอักษร — เกินจะถูก 400 ปฏิเสธ
-        endpoint = f"{GRAPH_URL}/{PAGE_ID}/feed"
+        endpoint = f"{GRAPH_URL}/{target_page_id}/feed"
         data = {"message": (message or "").strip(),
                 "text_format_preset_id": background_preset_id}
     elif image_url:
         # โพสต์รูป: url ต้องเป็นลิงก์สาธารณะ (Facebook ดาวน์โหลดเอง); message = caption (ไม่บังคับ)
-        endpoint = f"{GRAPH_URL}/{PAGE_ID}/photos"
+        endpoint = f"{GRAPH_URL}/{target_page_id}/photos"
         data = {"url": image_url}
         if (message or "").strip():
             data["message"] = (message or "").strip()
     else:
-        endpoint = f"{GRAPH_URL}/{PAGE_ID}/feed"
+        endpoint = f"{GRAPH_URL}/{target_page_id}/feed"
         data = {"message": message}
         if link:
             data["link"] = link
@@ -301,6 +333,40 @@ def post_feed(message: str, link: str = "", image_url: str = "",
         return {"ok": True, "post_id": pid, "error": None}
     err = (body.get("error") or {}).get("message") or f"HTTP {r.status_code}"
     return {"ok": False, "post_id": None, "error": str(err)[:200]}
+
+
+def post_feed(message: str, link: str = "", image_url: str = "",
+              background_preset_id: str = "") -> dict:
+    """Broadcast one feed post to every fully configured Facebook page.
+
+    A single configured page keeps the legacy response shape. With multiple
+    pages, ``pages`` contains the per-page result and a partial success still
+    counts as success so one broken page cannot stop the rotation.
+    """
+    pages = configured_pages()
+    if not pages:
+        return {"ok": False, "post_id": None,
+                "error": "ไม่มี Facebook page ที่ตั้งค่า ID และ token ครบ"}
+    results = []
+    for page in pages:
+        result = _post_feed_single(
+            message, link, image_url, background_preset_id,
+            page_id=page["id"], access_token=page["token"])
+        results.append({"page": page["index"], "page_id": page["id"], **result})
+        if not result["ok"] and classify_post_error(result.get("error", "")):
+            notify_owner_once(
+                f"fb_post_hard_error_page_{page['index']}",
+                f"⚠️ Facebook Page {page['index']} โพสต์ไม่สำเร็จ: {result['error']}"[:1500])
+    successful = [r for r in results if r["ok"]]
+    first = successful[0] if successful else results[0]
+    return {
+        "ok": bool(successful),
+        "post_id": first.get("post_id"),
+        "error": None if successful else first.get("error"),
+        "pages": results,
+        "posted_pages": [r["page"] for r in successful],
+        "failed_pages": [r["page"] for r in results if not r["ok"]],
+    }
 
 
 def post_comment(post_id: str, message: str) -> dict:
@@ -550,6 +616,9 @@ def post_video(description: str = "", file_url: str = "", file_path: str = "",
     if not token:
         return {"ok": False, "video_id": None, "error": "FACEBOOK_PAGE_ACCESS_TOKEN ไม่ได้ตั้ง"}
     description = sanitize_post_text(description or "")
+    if "s.shopee.co.th" in description.lower():
+        description = sanitize_public_product_text(description)
+        title = sanitize_public_product_text(title)
     file_url = (file_url or "").strip()
     file_path = (file_path or "").strip()
     if not file_url and not file_path:
@@ -632,6 +701,9 @@ def post_reel(description: str = "", file_path: str = "", file_url: str = "",
     if not token:
         return {"ok": False, "video_id": None, "error": "FACEBOOK_PAGE_ACCESS_TOKEN ไม่ได้ตั้ง"}
     description = sanitize_post_text(description or "")
+    if "s.shopee.co.th" in description.lower():
+        description = sanitize_public_product_text(description)
+        title = sanitize_public_product_text(title)
     file_path = (file_path or "").strip()
     file_url = (file_url or "").strip()
     if not file_path and not file_url:

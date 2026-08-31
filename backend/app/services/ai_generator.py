@@ -4,10 +4,16 @@ from app.config import settings
 from app.services.llm_clients import call_with_backoff, parse_llm_json, groq_json_schema_format
 from app.schemas import ScriptGeneratorResponse
 from app.services.persona import persona_system_prompt
+from app.services.product_price_policy import sanitize_public_product_script
 
 logger = logging.getLogger(__name__)
 
 SCRIPT_KEYS = {"hook", "problem", "solution", "cta", "caption", "hashtags", "title", "thumbnail_prompt"}
+
+NO_PUBLIC_PRICE_RULE = (
+    "ห้ามระบุราคาสินค้าเป็นตัวเลข สกุลเงิน หรือเปอร์เซ็นต์ส่วนลด เพราะราคาเปลี่ยนตาม "
+    "ตัวเลือก คูปอง และโปรโมชัน หากกล่าวถึงราคาให้ใช้คำว่า 'ดูราคาล่าสุดในลิงก์ Shopee' เท่านั้น"
+)
 
 # JSON Schema สำหรับ Groq json_schema (strict) — ต้องมี required ครบ + additionalProperties: false
 SCRIPT_JSON_SCHEMA = {
@@ -60,6 +66,11 @@ def _require_script_keys(data: dict) -> dict:
         raise ValueError(f"script JSON invalid: {e}") from e
 
 
+def _finalize_script(data: dict) -> dict:
+    """Validate schema and enforce the no-stale-price rule on every provider."""
+    return sanitize_public_product_script(_require_script_keys(data))
+
+
 def build_template_script(product_name: str, category: str = "", price: float = 0.0,
                           style: str = "standard", tone: str = "neutral") -> dict:
     """สคริปต์คอนเทนต์แบบ template (ไม่เรียก LLM) — เสียงป้าเข็มสำเร็จรูป
@@ -110,6 +121,7 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
             Category: {category}
             Price: {price} Baht
             Script Style: {style} ({style_desc})
+            Price policy: {NO_PUBLIC_PRICE_RULE}
             
             Your response must be JSON only. Return a JSON object matching this schema:
             {{
@@ -129,7 +141,7 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
                     generation_config={"response_mime_type": "application/json"}
                 )
             )
-            return _require_script_keys(parse_llm_json(response.text))
+            return _finalize_script(parse_llm_json(response.text))
         except Exception as e:
             logger.error(f"Gemini script generation failed: {e}. Falling back to default script.")
             
@@ -141,6 +153,7 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
             prompt = f"""
             Write a TikTok script in Thai for {product_name} ({category}) priced at {price} Baht.
             Style: {style} ({style_desc})
+            {NO_PUBLIC_PRICE_RULE}
             Format the response exactly as JSON matching the fields: hook, problem, solution, cta, caption, hashtags, title, thumbnail_prompt.
             """
             response = call_with_backoff(
@@ -153,7 +166,7 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
                     response_format={"type": "json_object"}
                 )
             )
-            return _require_script_keys(parse_llm_json(response.choices[0].message.content))
+            return _finalize_script(parse_llm_json(response.choices[0].message.content))
         except Exception as e:
             logger.error(f"OpenAI script generation failed: {e}. Falling back to default script.")
 
@@ -163,6 +176,7 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
         prompt = f"""
         Write a TikTok script in Thai for {product_name} ({category}) priced at {price} Baht.
         Style: {style} ({style_desc})
+        {NO_PUBLIC_PRICE_RULE}
         Format the response exactly as JSON matching the fields: hook, problem, solution, cta, caption, hashtags, title, thumbnail_prompt.
         """
         last_err = None
@@ -181,7 +195,7 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
                     ),
                     circuit_key=client.api_key,
                 )
-                return _require_script_keys(parse_llm_json(response.choices[0].message.content))
+                return _finalize_script(parse_llm_json(response.choices[0].message.content))
             except Exception as e:
                 last_err = e
                 logger.warning(f"Groq key {client.api_key[:8]}... failed: {e} — ลอง key ถัดไป")
@@ -193,6 +207,7 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
         prompt = f"""
         Write a TikTok script in Thai for {product_name} ({category}) priced at {price} Baht.
         Style: {style} ({style_desc})
+        {NO_PUBLIC_PRICE_RULE}
         Respond with ONLY the raw JSON object (no markdown fences, no extra text)
         matching the fields: hook, problem, solution, cta, caption, hashtags, title, thumbnail_prompt.
         """
@@ -210,11 +225,13 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
                     ),
                     circuit_key=client.api_key,
                 )
-                return _require_script_keys(parse_llm_json(response.choices[0].message.content))
+                return _finalize_script(parse_llm_json(response.choices[0].message.content))
             except Exception as e:
                 last_err = e
                 logger.warning(f"Anthropic key {client.api_key[:8]}... failed: {e} — ลอง key ถัดไป")
         logger.error(f"Anthropic script generation failed with all keys: {last_err}. Falling back to default script.")
 
     # Mock script generation fallback (เสียงป้าเข็ม) — ไม่เรียก LLM
-    return build_template_script(product_name, category, price, style, tone)
+    return sanitize_public_product_script(
+        build_template_script(product_name, category, price, style, tone)
+    )

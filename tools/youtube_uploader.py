@@ -33,11 +33,20 @@ PENDING_DIR = REELS_DIR / "pending_videos"
 POSTED_DIR = REELS_DIR / "posted"
 PRODUCTS_JSON = REELS_DIR / "products.json"
 
+sys.path.insert(0, str(BACKEND_DIR))
+from app.services.product_price_policy import sanitize_public_product_text  # noqa: E402
+
 CLIENT_SECRET_FILE = TOOLS_DIR / "client_secret.json"
 TOKEN_FILE = TOOLS_DIR / "youtube_token.json"
 YOUTUBE_LOG_FILE = TOOLS_DIR / "youtube_uploader.log"
 
-SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube"]
+# `youtube.upload` alone cannot create a top-level comment.  Keep the existing
+# scopes and explicitly request the write scope used by commentThreads.insert.
+SCOPES = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube",
+    "https://www.googleapis.com/auth/youtube.force-ssl",
+]
 
 def log(msg: str):
     ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -48,6 +57,15 @@ def log(msg: str):
             f.write(line + "\n")
     except Exception:
         pass
+
+
+def notify_telegram(message: str) -> None:
+    """แจ้งผล YouTube เข้า Telegram โดยไม่ส่ง token/URL credential ออกไป"""
+    try:
+        from telegram_notifier import send_telegram_alert
+        send_telegram_alert(message[:1500])
+    except Exception as e:
+        log(f"[WARN] แจ้ง Telegram ไม่สำเร็จ: {type(e).__name__}")
 
 
 def get_token_files() -> list:
@@ -77,6 +95,11 @@ def get_authenticated_service(token_path: Optional[pathlib.Path] = None, channel
     if target_token_file.exists():
         try:
             creds = Credentials.from_authorized_user_file(str(target_token_file), SCOPES)
+            granted_scopes = set(getattr(creds, "scopes", None) or [])
+            if not set(SCOPES).issubset(granted_scopes):
+                # อย่าบังคับเปิดเบราว์เซอร์บน VPS: token เดิมยังอัปโหลดได้
+                # ส่วนคอมเมนต์จะข้าม/แจ้งเตือนจนกว่าจะ reauthorize ผ่าน CLI
+                log(f"[WARN] {target_token_file.name} ขาด OAuth scope สำหรับคอมเมนต์ — อัปโหลดได้ แต่คอมเมนต์ต้องยืนยัน OAuth ใหม่")
         except Exception as e:
             log(f"[WARN] โหลด token เก่าล้มเหลว ({e}) — จะขอใหม่อีกครั้ง")
 
@@ -89,9 +112,12 @@ def get_authenticated_service(token_path: Optional[pathlib.Path] = None, channel
                 creds = None
 
         if not creds:
-            secret_file = TOOLS_DIR / f"client_secret_{channel_id}.json"
+            # ช่องหลักใช้ OAuth client ชื่อ Shopee Shorts โดยตรง
+            # ห้าม fallback ไปใช้ client ของช่องอื่น/โปรเจกต์อื่น เพราะจะทำให้
+            # Test users และ OAuth consent ตรวจคนละโปรเจกต์
+            secret_file = CLIENT_SECRET_FILE if channel_id == 1 else TOOLS_DIR / f"client_secret_{channel_id}.json"
             if not secret_file.exists():
-                for sf in [TOOLS_DIR / "client_secret_3.json", TOOLS_DIR / "client_secret_2.json", CLIENT_SECRET_FILE]:
+                for sf in [TOOLS_DIR / "client_secret_3.json", TOOLS_DIR / "client_secret_2.json"]:
                     if sf.exists():
                         secret_file = sf
                         break
@@ -176,7 +202,9 @@ def upload_shorts_to_channel(youtube_service, video_path: pathlib.Path, product_
     ch_info = get_channel_info(youtube_service)
     display_name = f"{ch_info['title']} ({ch_info['handle']})" if ch_info['handle'] else ch_info['title']
 
-    name = (product_meta or {}).get("product_name") or video_path.stem
+    name = sanitize_public_product_text(
+        (product_meta or {}).get("product_name") or video_path.stem
+    )
     link = (product_meta or {}).get("affiliate_link") or ""
 
     prod_id = None
@@ -218,6 +246,7 @@ def upload_shorts_to_channel(youtube_service, video_path: pathlib.Path, product_
     video_id = response.get("id")
     video_url = f"https://youtube.com/shorts/{video_id}"
     log(f"✅ อัปโหลด {channel_name} สำเร็จ! -> {video_url}")
+    notify_telegram(f"✅ YouTube อัปโหลดสำเร็จ\nช่อง: {channel_name}\nคลิป: {video_url}")
 
     # โพสต์คอมเมนต์พิกัดสินค้าใต้คลิปอัตโนมัติ
     try:
@@ -239,8 +268,10 @@ def upload_shorts_to_channel(youtube_service, video_path: pathlib.Path, product_
             }
         ).execute()
         log(f"💬 [{channel_name}] โพสต์คอมเมนต์พิกัดสินค้าใต้คลิป Shorts สำเร็จ!")
+        notify_telegram(f"💬 YouTube คอมเมนต์สำเร็จ\nช่อง: {channel_name}\nคลิป: {video_url}")
     except Exception as ec:
-        log(f"[INFO] คอมเมนต์อัตโนมัติ ({channel_name}): {ec}")
+        log(f"[INFO] คอมเมนต์อัตโนมัติ ({channel_name}): {type(ec).__name__}: {str(ec)[:160]}")
+        notify_telegram(f"⚠️ YouTube อัปโหลดได้ แต่คอมเมนต์ไม่สำเร็จ\nช่อง: {channel_name}\nคลิป: {video_url}\nสาเหตุ: {type(ec).__name__}")
 
     return video_url
 

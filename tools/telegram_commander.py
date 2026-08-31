@@ -124,7 +124,7 @@ def execute_status_command() -> str:
         f"🟢 สถานะบริการ & เครือข่าย:\n"
         f"  • 🎬 โรงงานผลิตคลิป (Pre-buffer): 🟢 ออนไลน์\n"
         f"  • 📍 Facebook Reels: 🟢 ออนไลน์ (3 เพจพร้อมยิง)\n"
-        f"  • 🔴 YouTube Shorts: 🟢 ปกติ (หมุนเวียน 4 ช่อง)\n"
+        f"  • 🔴 YouTube Shorts: 🟢 ปกติ (หมุนเวียน 5 ช่อง)\n"
         f"  • 🧠 Groq AI Multi-Key: 🟢 7 Keys Failover\n\n"
         f"📦 สถานะคลังคลิป:\n"
         f"  • สต็อกรอโพสต์: {pending_count} คลิป\n\n"

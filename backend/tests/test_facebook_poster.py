@@ -28,6 +28,8 @@ def test_build_fb_caption_fallback(monkeypatch):
     assert "หูฟังบลูทูธ" in out
     assert "shope.ee" not in out  # ลิงก์แยกเป็น link param (ไม่ติดในข้อความ)
     assert out.startswith("🛍️ โพสต์ขายสินค้า")  # ป้ายกำกับแยกจากโพสต์แนะนำบอท
+    assert "250" not in out
+    assert "ดูราคาล่าสุด" in out
 
 
 def test_build_fb_caption_with_tags(monkeypatch):
@@ -38,6 +40,18 @@ def test_build_fb_caption_with_tags(monkeypatch):
     assert "#คุ้มมาก" in out
     assert "shope.ee" not in out
     assert out.startswith("🛍️ โพสต์ขายสินค้า")  # ป้ายกำกับชัดเจนทุกโพสต์สินค้า
+
+
+def test_build_fb_caption_filters_price_in_llm_output(monkeypatch):
+    def script_with_stale_price(*args, **kwargs):
+        return {"caption": "หูฟังตัวเด็ด ราคา 250 บาท โปรลด 20%", "hashtags": []}
+
+    monkeypatch.setattr(cron, "generate_script_for_product", script_with_stale_price)
+    out = cron._build_fb_caption(_prod())
+
+    assert "250" not in out
+    assert "20%" not in out
+    assert "ดูราคาล่าสุดในลิงก์ Shopee" in out
 
 
 def test_push_post_to_sheet_sends_row(monkeypatch):
@@ -89,6 +103,33 @@ def test_post_feed_passes_link(monkeypatch):
     assert res["ok"] is True and res["post_id"] == "post_999"
     assert captured["data"]["message"] == "ข้อความโปรโมท"
     assert captured["data"]["link"] == "https://s.shopee.co.th/9pdS1rMwH8"
+
+
+def test_post_feed_central_guard_filters_price_for_affiliate_posts(monkeypatch):
+    monkeypatch.setenv("FACEBOOK_PAGE_ACCESS_TOKEN", "tok123")
+    captured = {}
+
+    class Resp:
+        status_code = 200
+        headers = {}
+
+        def json(self):
+            return {"id": "post_price_guard"}
+
+    def fake_post(url, params=None, data=None, timeout=None):
+        captured["data"] = data
+        return Resp()
+
+    monkeypatch.setattr(fp.httpx, "post", fake_post)
+    result = fp.post_feed(
+        "หูฟัง ราคา 250 บาท โปรลด 20%",
+        link="https://s.shopee.co.th/9pdS1rMwH8",
+    )
+
+    assert result["ok"] is True
+    assert "250" not in captured["data"]["message"]
+    assert "20%" not in captured["data"]["message"]
+    assert "ดูราคาล่าสุดในลิงก์ Shopee" in captured["data"]["message"]
 
 
 def test_post_feed_image_url_uses_photos_endpoint(monkeypatch):
@@ -1306,7 +1347,8 @@ def test_post_reel_three_step_upload(monkeypatch, tmp_path):
         if "rupload.facebook.com" in url:
             return Resp(200, {"success": True})
         if url.endswith("/video_reels"):
-            phase = ((kwargs.get("json") or {}).get("upload_phase")
+            phase = ((kwargs.get("params") or {}).get("upload_phase")
+                     or (kwargs.get("json") or {}).get("upload_phase")
                      or (kwargs.get("data") or {}).get("upload_phase"))
             if phase == "start":
                 return Resp(200, {"video_id": "v123",
@@ -1322,7 +1364,8 @@ def test_post_reel_three_step_upload(monkeypatch, tmp_path):
     assert res["video_id"] == "v123"
     assert len(calls) == 3
     # Step 1: init
-    assert calls[0]["kwargs"]["json"] == {"upload_phase": "start"}
+    phase_init = calls[0]["kwargs"].get("params", {}).get("upload_phase") or calls[0]["kwargs"].get("json", {}).get("upload_phase")
+    assert phase_init == "start"
     # Step 2: upload file bytes + OAuth header
     assert calls[1]["url"].startswith("https://rupload.facebook.com")
     assert calls[1]["kwargs"]["content"] == b"fake-video-bytes"

@@ -108,6 +108,9 @@ affiliate_open_api_application.json
 /*.webp
 
 fb_cookies.json
+
+# Local credential drop files — never commit
+โทเคน.txt
 .promo_caption_state.json
 .promo_poster_state.json
 

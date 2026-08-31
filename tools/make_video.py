@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """tools/make_video.py — สร้างคลิปสั้นแบบสไลด์ (9:16) จากไฟล์คอนเทนต์ป้าเข็ม
 
-อ่านไฟล์ CSV คอนเทนต์ (Hook/แคปชัน/ราคา/ยอดขาย) → สร้างคลิป .mp4:
+อ่านไฟล์ CSV คอนเทนต์ (Hook/แคปชัน/ยอดขาย) → สร้างคลิป .mp4:
   - ตัวหนังสือ Hook ใหญ่ + เสียงอ่านไทย (edge-tts)
-  - ราคา/ยอดขาย/ค่านายหน้า + การ์ดท้ายชวนกดลิงก์
+  - ยอดขาย + การ์ดท้ายชวนดูราคาล่าสุดที่ลิงก์
 
 วิธีใช้:
   python tools/make_video.py --top 5          # สร้างคลิป 5 ตัวแรกที่ขายดีสุด
@@ -24,6 +24,9 @@ from PIL import Image, ImageDraw, ImageFont
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE_DIR)
+sys.path.insert(0, os.path.join(BASE_DIR, "backend"))
+
+from app.services.product_price_policy import sanitize_public_product_text
 
 CSV_DEFAULT = r"D:\คอนเทนต์ป้าเข็ม_20260812.csv"
 OUT_DIR = r"D:\คลิปป้าเข็ม"
@@ -121,7 +124,7 @@ def render_hook_frame(product, t, dur):
     draw.text((W // 2, 99), brand, font=bf, fill=(255, 255, 255), anchor="mm")
 
     # Hook ตัวหนังสือใหญ่
-    hook = product.get("Hook") or product.get("สินค้า", "")
+    hook = sanitize_public_product_text(product.get("Hook") or product.get("สินค้า", ""))
     hf = font(52, bold=True)
     max_w = int(W * 0.86)
     lines = wrap_thai(draw, hook, hf, max_w)
@@ -132,10 +135,9 @@ def render_hook_frame(product, t, dur):
                   fill=(255, 255, 255), anchor="mm",
                   stroke_width=4, stroke_fill=(90, 20, 60))
 
-    # กรอบข้อมูลสินค้า (ราคา / ยอดขาย — ไม่โชว์ค่านายหน้า: เป็นกำไรของเรา)
+    # กรอบข้อมูลสินค้า — ราคาสดให้ดูใน Shopee เท่านั้น
     pf = font(34, bold=True)
     sf = font(30)
-    price = product.get("ราคา(฿)") or "?"
     sales = fmt_num(product.get("ยอดขาย", 0))
     panel = (int(W * 0.08), H - 430, int(W * 0.92), H - 250)
     overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
@@ -143,7 +145,7 @@ def render_hook_frame(product, t, dur):
     od.rounded_rectangle(panel, radius=26, fill=(0, 0, 0, 90))
     img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
     draw = ImageDraw.Draw(img)
-    lines1 = f"💰 ราคา {price}฿"
+    lines1 = "🏷️ ดูราคาล่าสุดใน Shopee"
     lines2 = f"🔥 ขายแล้ว {sales} ชิ้น"
     draw.text((W // 2, H - 390), lines1, font=pf, fill=(255, 220, 120), anchor="mm")
     draw.text((W // 2, H - 325), lines2, font=sf, fill=(255, 255, 255), anchor="mm")
@@ -171,7 +173,7 @@ def render_end_frame(product):
     draw = ImageDraw.Draw(img)
 
     # สินค้า
-    name = product.get("สินค้า", "")
+    name = sanitize_public_product_text(product.get("สินค้า", ""))
     nf = font(34, bold=True)
     max_w = int(W * 0.84)
     lines = wrap_thai(draw, name, nf, max_w)
@@ -180,11 +182,10 @@ def render_end_frame(product):
         draw.text((W // 2, y), ln, font=nf, fill=(255, 255, 255), anchor="mm", stroke_width=3, stroke_fill=(90, 20, 60))
         y += 50
 
-    # ราคา/ยอดขาย (ไม่โชว์ค่านายหน้า)
+    # ราคาไม่แสดงตัวเลข เพราะเปลี่ยนตามตัวเลือก/โปรโมชัน
     pf = font(48, bold=True)
-    price = product.get("ราคา(฿)") or "?"
     sales = fmt_num(product.get("ยอดขาย", 0))
-    draw.text((W // 2, 560), f"💰 {price}฿", font=pf, fill=(255, 220, 120), anchor="mm")
+    draw.text((W // 2, 560), "🏷️ ดูราคาล่าสุดใน Shopee", font=pf, fill=(255, 220, 120), anchor="mm")
     draw.text((W // 2, 650), f"🔥 ขายแล้ว {sales} ชิ้น", font=font(32), fill=(255, 255, 255), anchor="mm")
 
     # ปุ่ม CTA
@@ -193,7 +194,7 @@ def render_end_frame(product):
     draw.text((W // 2, 880), "สั่งซื้อผ่านลิงก์ใน BIO", font=font(38, bold=True), fill=(178, 69, 146), anchor="mm")
 
     draw.text((W // 2, 1030), "ป้าเข็ม ขายของ 💕", font=font(34, bold=True), fill=(255, 255, 255), anchor="mm")
-    draw.text((W // 2, 1100), "ของดีราคาเท่าร้าน · คัดให้แล้ว", font=font(26), fill=(255, 240, 245), anchor="mm")
+    draw.text((W // 2, 1100), "ของดีคัดให้แล้ว · ราคาสุดท้ายดูใน Shopee", font=font(26), fill=(255, 240, 245), anchor="mm")
     return np.array(img)
 
 
@@ -223,13 +224,11 @@ def find_by_id(products, pid):
 
 
 def make_voice_text(product):
-    parts = [product.get("Hook", "")]
+    parts = [sanitize_public_product_text(product.get("Hook", ""))]
     cta = (product.get("CTA") or "").strip()
     if cta and cta not in parts[0]:
         parts.append(cta)
-    price = product.get("ราคา(฿)") or ""
-    if price:
-        parts.append(f"ราคาเพียง {price} บาทเท่านั้นจ๊ะ")
+    parts.append("ดูราคาล่าสุดและโปรโมชันได้ในลิงก์ Shopee จ้ะ")
     return " ".join(parts)
 
 

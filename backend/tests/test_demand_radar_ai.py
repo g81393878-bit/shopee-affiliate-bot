@@ -369,6 +369,8 @@ def test_auntie_khem_deal_comment_generation():
     assert isinstance(comment, str)
     assert len(comment) > 20
     assert affiliate_url in comment
+    assert "350.00 บาท" not in comment
+    assert "ดูราคาล่าสุด" in comment
     # Auntie Khem tone markers
     assert any(marker in comment for marker in ("จ้ะ", "จ้า", "นะจ๊ะ", "ลูก", "ป้า"))
     assert product_name in comment or "ชุดคลุมท้อง" in comment

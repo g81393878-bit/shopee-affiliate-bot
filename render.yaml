@@ -60,6 +60,14 @@ services:
         value: 240  # นาทีระหว่างโพสต์สินค้า (0 = ปิด) — 4 ชม. (แยกจากคอนเทนต์)
       - key: FB_CONTENT_POST_INTERVAL
         value: 1440  # นาทีระหว่างโพสต์คอนเทนต์ แนะนำ/ข่าว/ร้าน (0 = ปิด) — 1 ครั้ง/วัน
+      - key: FACEBOOK_PAGE_2_ID
+        sync: false
+      - key: FACEBOOK_PAGE_2_ACCESS_TOKEN
+        sync: false
+      - key: FACEBOOK_PAGE_3_ID
+        sync: false
+      - key: FACEBOOK_PAGE_3_ACCESS_TOKEN
+        sync: false
       - key: FB_POST_PRODUCTS
         value: "1"  # โหมดสินค้า: โพสต์เฉพาะสินค้า (link_status=ok + sales_count>=MIN_SALES)
       - key: POSTS_SHEET_WEBHOOK_URL
