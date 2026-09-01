@@ -14,11 +14,11 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
-- **TikTok Web Studio Automation & Multi-Broadcast 5 แพลตฟอร์มบน VPS (01/09):**
-  ① **ระบบอัปโหลด TikTok อัตโนมัติ (`tools/tiktok_studio_uploader.py`):** ใช้ Playwright Headless Browser อัปโหลดวิดีโอ 9:16 Full HD เข้าสู่ TikTok Studio ช่อง `@healthgooddeals` โดยไม่ต้องขอ App Review หรือ Verify URL และมีระบบตัดราคา No-Price อัตโนมัติ
-  ② **สถาปัตยกรรมแยกเธรดอิสระ (Decoupled Engine):** Facebook 3 เพจ + YouTube Shorts 5 ช่อง ยิงทุก 30 นาที, TikTok Studio ยิงทุก 60 นาที ไม่บล็อกหรือกระทบต่อระบบเสียงพากย์ TTS หรือ AI คอนเทนต์
-  ③ **Deploy สู่ VPS สำเร็จ 100%:** เชื่อมต่อ SSH เข้า VPS `157.85.111.232` ซิงค์คุกกี้ ติดตั้ง Playwright + Chromium และรีสตาร์ท `shopee-bot.service` รันงาน 24/7 เรียบร้อย
-  ④ **คู่มือและเอกสาร:** สร้าง `docs/TIKTOK_AUTOMATION_GUIDE.md`, `docs/VPS_OPERATIONS_MANUAL.md`, และ `.agents/skills/tiktok-uploader/SKILL.md` ครบถ้วน
+- **TikTok Studio Multi-Account Automation & ป้องกันคลิปซ้ำ 100% (01-02/09):**
+  ① **ระบบอัปโหลด TikTok Multi-Account (`tools/tiktok_studio_uploader.py`):** ใช้ Playwright Headless Chromium อัปโหลดคลิปเข้าช่อง 1 (`@healthgooddeals`) และช่อง 2 (`@cheepao.review`) พร้อมระบบปลดล็อค Pop-up (Escape Hashtag Dropdown, Onboarding Joyride, และ Double Confirmation `Post now`) ทำงานอัตโนมัติ 100%
+  ② **สถาปัตยกรรมแยกเธรดเด็ดขาด (Decoupled Engine):** ตัดการเรียก TikTok ออกจาก `uploader.py` เพื่อให้ดูแลเฉพาะ Facebook (3 เพจ) + YouTube Shorts (5 ช่อง) ทุก 30 นาที และให้ `run_tiktok_uploader_loop` ใน `system_runner.py` ดูแล TikTok แต่เพียงผู้เดียวทุก 60 นาที
+  ③ **ระบบป้องกันคลิปซ้ำแยกรายช่อง (`tools/posted_tiktok_history.json`):** บันทึกประวัติคลิปที่เคยโพสต์แยกตามบัญชี ป้องกันการโพสต์ซ้ำข้ามช่องหรือซ้ำในช่องเดิม 100%
+  ④ **Deploy & Sync สู่ VPS สำเร็จ 100%:** ดึงโค้ดขึ้น VPS `157.85.111.232` รีสตาร์ท `shopee-bot.service` และบันทึกคู่มือครบใน `docs/TIKTOK_AUTOMATION_GUIDE.md` และ `docs/ROOT_CAUSE_ANALYSIS_2026_08_30.md`
 
 
 - **ระบบโพสต์ Reels อัตโนมัติ 100% ทุก 30 นาที สำหรับ 3 เพจ (29/08) — [Autonomous Bot Mode]:**

@@ -83,6 +83,10 @@
 19. **ระบบเกราะป้องกันสแปม (Anti-Spam Shield & Unit Test Quarantine Guard)**:
     - ระบบส่งแจ้งเตือน Telegram ต้องมี Cooldown Throttle รายบุคคล 60 วินาที/คน ป้องกันการกดปุ่มชำระเงิน/แพ็กเกจรัวๆ
     - ห้ามให้การรัน Unit Test (`pytest`, `PYTEST_CURRENT_TEST`, `U_cust_`, `mock`) ส่งข้อความจริงออกนอกระบบเด็ดขาด
+20. **ระบบตัดแยกหน้าที่การโพสต์และการป้องกันคลิปซ้ำ 100% (Decoupled Uploader & Strict Anti-Duplicate History)**:
+    - โมดูล `reels_uploader/uploader.py` ดูแลเฉพาะ Facebook Reels (3 เพจ) และ YouTube Shorts (5 ช่อง) เท่านั้น **ห้ามเรียก TikTok ใน `uploader.py` เด็ดขาด**
+    - เธรด `run_tiktok_uploader_loop()` ใน `tools/system_runner.py` เป็นผู้รับผิดชอบการโพสต์ TikTok ทุกช่องแต่เพียงผู้เดียว (ยิงทุก 60 นาที)
+    - ต้องบันทึกและตรวจสอบประวัติการโพสต์แยกรายช่องแบบ JSON ใน `tools/posted_tiktok_history.json` เสมอ เพื่อป้องกันปัญหาคลิปซ้ำข้ามช่องหรือซ้ำในช่องเดิม 100%
 
 
 **API/Admin:** `products-and-links` (สินค้า API + link policy) · `admin-dashboard` (/admin + cookie) · `cron-jobs` (ทุก cron + CRON_TOKEN)

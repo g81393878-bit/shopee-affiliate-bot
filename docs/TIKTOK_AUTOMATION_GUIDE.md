@@ -165,3 +165,16 @@ for _ in range(15):
   ssh root@157.85.111.232 "journalctl -u shopee-bot -f"
   ```
 * **ศูนย์สั่งการผ่านมือถือ:** ควบคุมระยะไกลผ่าน Telegram Commander (`@pakhem_commander_bot`) ตลอด 24 ชั่วโมง
+
+---
+
+## 7. สถาปัตยกรรมป้องกันคลิปซ้ำ 100% (Decoupled Thread Separation & Anti-Duplicate History)
+
+เพื่อป้องกันปัญหาคลิปถูกโพสต์ซ้ำซ้อน ระบบได้จัดโครงสร้างการทำงานดังนี้:
+
+1. **Decoupled Thread Separation:**
+   - โมดูล `reels_uploader/uploader.py` ดูแลเฉพาะ Facebook Reels (3 เพจ) และ YouTube Shorts (5 ช่อง) ยิงทุก 30 นาที **โดยไม่แตะต้อง TikTok เด็ดขาด**
+   - เธรด `run_tiktok_uploader_loop()` ใน `tools/system_runner.py` รับผิดชอบ TikTok ทุกช่องแต่เพียงผู้เดียว (ยิงทุก 60 นาที)
+2. **Per-Channel JSON History Tracking (`tools/posted_tiktok_history.json`):**
+   - บันทึกประวัติคลิปที่เคยโพสต์แยกตามคีย์บัญชี (เช่น `tiktok_cookies` และ `tiktok_cookies_2`)
+   - ก่อนจะหยิบคลิปใหม่จากคลัง `pending_videos/` หรือ `posted/` ระบบจะนำชื่อไฟล์มาเทียบกับประวัติของช่องนั้น ๆ หากพบว่าช่องนั้นเคยโพสต์ไปแล้ว จะข้ามไปหาคลิปถัดไปทันที ทำให้ไม่เกิดคลิปซ้ำ 100%
