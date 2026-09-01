@@ -218,18 +218,25 @@ def upload_video_via_web(
 
             page.wait_for_timeout(3000)
 
-            # 5. กดปุ่ม Post (โพสต์)
+            # 5. กดปุ่ม Post (โพสต์) — ใช้ exact match เพื่อไม่ให้ไปโดนเมนู "Posts"
             log("🚀 กำลังกดปุ่มโพสต์วิดีโอ...")
-            post_btn = page.locator('button:has-text("Post"), button:has-text("โพสต์"), button:has-text("Publish")').first
+            post_btn = page.locator('button').filter(has_text=re.compile(r'^(Post|โพสต์|Publish)$')).first
             if post_btn.count() > 0:
                 post_btn.click(force=True)
-                log("   ✓ คลิกปุ่ม Post เรียบร้อยแล้ว")
+                log("   ✓ คลิกปุ่ม Post จริงเรียบร้อยแล้ว!")
             else:
-                log("⚠️ ไม่พบปุ่ม Post โดยตรง ลองค้นหาปุ่ม Submit...")
-                page.locator('button[type="submit"]').first.click(force=True)
+                # Fallback ค้นหาปุ่มที่มีคำว่า Post แต่ไม่ใช่ Posts
+                alt_btn = page.locator('button:text-is("Post"), button:text-is("โพสต์")').first
+                if alt_btn.count() > 0:
+                    alt_btn.click(force=True)
+                    log("   ✓ คลิกปุ่ม Post (Exact Text) เรียบร้อยแล้ว!")
+                else:
+                    log("⚠️ ไม่พบปุ่ม Post โดยตรง ลองค้นหาปุ่ม Submit...")
+                    page.locator('button[type="submit"]').first.click(force=True)
 
-            # 6. รอยืนยันการโพสต์สำเร็จ
-            page.wait_for_timeout(7000)
+            # 6. รอยืนยันการโพสต์สำเร็จ (รอ TikTok ประมวลผลและแสดงผลสำเร็จ)
+            log("⏳ รอระบบ TikTok ประมวลผลการโพสต์ (15 วินาที)...")
+            page.wait_for_timeout(15000)
             log("🎉 อัปโหลดและสั่งโพสต์คลิปขึ้น TikTok สำเร็จ 100%!")
 
             browser.close()
