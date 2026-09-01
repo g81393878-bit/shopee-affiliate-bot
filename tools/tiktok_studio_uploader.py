@@ -10,6 +10,7 @@
 
 import argparse
 import datetime
+import json
 import os
 import pathlib
 import re
@@ -28,10 +29,12 @@ PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 BACKEND_DIR = PROJECT_ROOT / "backend"
 TOOLS_DIR = PROJECT_ROOT / "tools"
 USER_DATA_DIR = TOOLS_DIR / "tiktok_user_data"
+COOKIE_FILE = TOOLS_DIR / "tiktok_cookies.json"
 LOG_FILE = TOOLS_DIR / "tiktok_studio_uploader.log"
 
-UPLOAD_URL = "https://www.tiktok.com/creator-center/upload?from=webapp"
+UPLOAD_URL = "https://www.tiktok.com/tiktokstudio/upload"
 LOGIN_URL = "https://www.tiktok.com/login"
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
 
 def log(msg: str):
@@ -46,7 +49,9 @@ def log(msg: str):
 
 
 def is_logged_in() -> bool:
-    """เช็คว่ามีโฟลเดอร์เซสชัน TikTok ที่เคยล็อกอินไว้หรือไม่"""
+    """เช็คว่ามี Cookie JSON หรือโฟลเดอร์เซสชัน TikTok หรือไม่"""
+    if COOKIE_FILE.exists() and COOKIE_FILE.stat().st_size > 20:
+        return True
     return USER_DATA_DIR.exists() and any(USER_DATA_DIR.iterdir())
 
 
@@ -67,6 +72,7 @@ def login_flow():
         browser = p.chromium.launch_persistent_context(
             user_data_dir=str(USER_DATA_DIR),
             headless=False,
+            user_agent=USER_AGENT,
             channel="chrome" if os.name == "nt" else None,
             args=[
                 "--disable-blink-features=AutomationControlled",
@@ -85,9 +91,7 @@ def login_flow():
         start_time = time.time()
         while time.time() - start_time < 180:
             current_url = page.url
-            # ถ้า URL เปลี่ยนไปหน้า creator-center หรือหน้าหลัก แปลว่าล็อกอินผ่านแล้ว
             if "login" not in current_url and ("tiktok.com" in current_url):
-                # ตรวจสอบว่ามี avatar หรือ cookie บัญชี
                 cookies = page.context.cookies()
                 session_cookies = [c for c in cookies if c.get("name") in ("sessionid", "sessionid_ss", "sid_guard")]
                 if session_cookies:
@@ -141,18 +145,26 @@ def upload_video_via_web(
             browser = p.chromium.launch_persistent_context(
                 user_data_dir=str(USER_DATA_DIR),
                 headless=headless,
+                user_agent=USER_AGENT,
                 args=[
                     "--disable-blink-features=AutomationControlled",
                     "--no-sandbox",
                 ],
-                viewport={"width": 1280, "height": 800},
+                viewport={"width": 1440, "height": 900},
             )
+            if COOKIE_FILE.exists():
+                try:
+                    c_data = json.loads(COOKIE_FILE.read_text(encoding="utf-8"))
+                    browser.add_cookies(c_data)
+                except Exception as e_cook:
+                    log(f"⚠️ Load cookies error: {e_cook}")
+
             page = browser.new_page()
 
             # 1. ไปหน้า Creator Center Upload
             log("🌐 กำลังเปิดหน้า TikTok Studio Upload...")
             page.goto(UPLOAD_URL, timeout=60000, wait_until="domcontentloaded")
-            page.wait_for_timeout(3000)
+            page.wait_for_timeout(5000)
 
             # ตรวจสอบว่าหลุดไปหน้า Login ไหม
             if "login" in page.url:
@@ -175,17 +187,33 @@ def upload_video_via_web(
             # 3. รอให้วิดีโออัปโหลดขึ้นเซิร์ฟเวอร์เสร็จ (รอสูงสุด 90 วินาที)
             page.wait_for_timeout(8000)
 
+            # ปิด Onboarding Joyride / Tooltip Popup ถ้ามี
+            try:
+                page.evaluate("""() => {
+                    const joyride = document.querySelector('#react-joyride-portal, .react-joyride__overlay');
+                    if (joyride) joyride.remove();
+                    document.querySelectorAll('button').forEach(b => {
+                        const txt = (b.innerText || '').toLowerCase();
+                        if (txt.includes('got it') || txt.includes('understand') || txt.includes('เข้าใจ') || txt.includes('skip')) {
+                            b.click();
+                        }
+                    });
+                }""")
+            except Exception:
+                pass
+
             # 4. ใส่ Caption & Hashtags
             log("✍️ กำลังกรอกแคปชั่นและแฮชแท็ก...")
             # หา element กล่องข้อความ Caption (contenteditable หรือ textarea)
             caption_box = page.locator('div[contenteditable="true"]').first
             if caption_box.count() > 0:
-                caption_box.click()
+                caption_box.click(force=True)
                 caption_box.fill("")
-                caption_box.type(clean_caption, delay=30)
+                caption_box.type(clean_caption, delay=20)
             else:
                 txt_area = page.locator('textarea').first
                 if txt_area.count() > 0:
+                    txt_area.click(force=True)
                     txt_area.fill(clean_caption)
 
             page.wait_for_timeout(3000)
@@ -194,14 +222,14 @@ def upload_video_via_web(
             log("🚀 กำลังกดปุ่มโพสต์วิดีโอ...")
             post_btn = page.locator('button:has-text("Post"), button:has-text("โพสต์"), button:has-text("Publish")').first
             if post_btn.count() > 0:
-                post_btn.click()
+                post_btn.click(force=True)
                 log("   ✓ คลิกปุ่ม Post เรียบร้อยแล้ว")
             else:
                 log("⚠️ ไม่พบปุ่ม Post โดยตรง ลองค้นหาปุ่ม Submit...")
-                page.locator('button[type="submit"]').first.click()
+                page.locator('button[type="submit"]').first.click(force=True)
 
             # 6. รอยืนยันการโพสต์สำเร็จ
-            page.wait_for_timeout(5000)
+            page.wait_for_timeout(7000)
             log("🎉 อัปโหลดและสั่งโพสต์คลิปขึ้น TikTok สำเร็จ 100%!")
 
             browser.close()

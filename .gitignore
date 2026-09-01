@@ -29,6 +29,8 @@ tools/youtube_token*.json
 youtube_token*.json
 tools/tiktok_token*.json
 tiktok_token*.json
+tools/tiktok_cookies*.json
+tiktok_cookies*.json
 tools/tiktok_user_data/
 tiktok_user_data/
 tools/*.gs
