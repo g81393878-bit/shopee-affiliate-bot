@@ -414,3 +414,18 @@ def terms_of_service():
 </body>
 </html>"""
 
+
+@app.get("/tiktok-developers-site-verification{rest:path}", response_class=HTMLResponse)
+def tiktok_verification_route(rest: str = ""):
+    """TikTok Developer Site Signature Verification Handler (รองรับทุกพาธและนามสกุล)"""
+    return """<!DOCTYPE html>
+<html>
+<head>
+<meta name="tiktok-developers-site-verification" content="aw2u4qsbt1fl8su8">
+</head>
+<body>
+tiktok-developers-site-verification=aw2u4qsbt1fl8su8
+</body>
+</html>"""
+
+
