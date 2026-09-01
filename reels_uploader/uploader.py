@@ -675,28 +675,6 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
         except Exception as e_yt:
             log(f"[WARN] อัปโหลด YouTube Shorts ล้มเหลว: {e_yt}")
 
-        # อัปโหลดขึ้น TikTok (รองรับทั้ง API และ Web Studio Automation)
-        tiktok_results = []
-        try:
-            import tiktok_uploader
-            import tiktok_studio_uploader
-            if tiktok_uploader.TOKEN_FILE.exists():
-                tt_res = tiktok_uploader.upload_video_to_tiktok(Path(upload_path), caption=title_text)
-                if tt_res.get("success"):
-                    tiktok_results.append(tt_res)
-                    log(f"[OK] อัปโหลด TikTok API สำเร็จ: {tt_res.get('publish_id')}")
-                else:
-                    log(f"[WARN] อัปโหลด TikTok API ไม่สำเร็จ: {tt_res.get('error')}")
-            elif tiktok_studio_uploader.is_logged_in():
-                tt_res = tiktok_studio_uploader.upload_video_via_web(Path(upload_path), caption=title_text)
-                if tt_res.get("success"):
-                    tiktok_results.append(tt_res)
-                    log(f"[OK] อัปโหลด TikTok Studio สำเร็จ!")
-                else:
-                    log(f"[WARN] อัปโหลด TikTok Studio ไม่สำเร็จ: {tt_res.get('error')}")
-        except Exception as e_tt:
-            log(f"[WARN] อัปโหลด TikTok ล้มเหลว: {e_tt}")
-
     finally:
         if tmp is not None:
             try:
@@ -704,7 +682,7 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
             except Exception:
                 pass
 
-    if any(r.get("ok") for r in page_results) or yt_results or tiktok_results:
+    if any(r.get("ok") for r in page_results) or yt_results:
         POSTED_DIR.mkdir(parents=True, exist_ok=True)
         # ย้ายไฟล์ต้นฉบับ (ภาพหรือคลิป) ไป posted/
         original = pending[0]  # ใช้ไฟล์ต้นฉบับจาก pending

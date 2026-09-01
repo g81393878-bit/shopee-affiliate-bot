@@ -118,7 +118,7 @@ def run_tiktok_uploader_loop():
     """เธรดแยกอิสระ 100% สำหรับโพสต์คลิปลง TikTok Studio หมุนเวียนทุกช่อง (ไม่รบกวน FB / YouTube)"""
     logger.info("⚫ เริ่มต้นระบบ TikTok Auto-Uploader (รองรับ Multi-Account Rotation)")
     interval_minutes = int(os.getenv("TIKTOK_INTERVAL_MINUTES", "60"))
-    history_file = TOOLS_DIR / "posted_tiktok_videos.txt"
+    history_file = TOOLS_DIR / "posted_tiktok_history.json"
     tt_account_index = 0
 
     while True:
@@ -127,51 +127,58 @@ def run_tiktok_uploader_loop():
                 import tiktok_studio_uploader
                 if tiktok_studio_uploader.is_logged_in():
                     accounts = tiktok_studio_uploader.get_available_tiktok_accounts()
-                    active_cookie = accounts[tt_account_index % len(accounts)] if accounts else None
-                    # แผนผังชื่อช่อง TikTok ชัดเจน
-                    TT_CHANNEL_NAMES = {
-                        "tiktok_cookies": "ช่อง 1: Anda Review (@healthgooddeals)",
-                        "tiktok_cookies_2": "ช่อง 2: ชี้เป้าโปรคุ้ม (@cheepao.review)",
-                    }
-                    account_key = active_cookie.stem if active_cookie else "tiktok_cookies"
-                    display_channel = TT_CHANNEL_NAMES.get(account_key, f"TikTok ({account_key})")
+                    if accounts:
+                        active_cookie = accounts[tt_account_index % len(accounts)]
+                        TT_CHANNEL_NAMES = {
+                            "tiktok_cookies": "ช่อง 1: Anda Review (@healthgooddeals)",
+                            "tiktok_cookies_2": "ช่อง 2: ชี้เป้าโปรคุ้ม (@cheepao.review)",
+                        }
+                        account_key = active_cookie.stem if active_cookie else "tiktok_cookies"
+                        display_channel = TT_CHANNEL_NAMES.get(account_key, f"TikTok ({account_key})")
 
-                    posted_tt = set()
-                    if history_file.exists():
-                        posted_tt = set(history_file.read_text(encoding="utf-8").splitlines())
-
-                    pending_videos = sorted((REELS_DIR / "pending_videos").glob("*.mp4"))
-                    posted_videos = sorted((REELS_DIR / "posted").glob("*.mp4"), key=lambda f: f.stat().st_mtime, reverse=True)
-                    candidate = None
-
-                    for v in pending_videos + posted_videos:
-                        if v.name not in posted_tt:
-                            candidate = v
-                            break
-
-                    if candidate:
-                        logger.info(f"⚫ [TikTok: {display_channel}] กำลังโพสต์คลิปอิสระ: {candidate.name}")
-                        clean_title = candidate.stem.replace("_", " ")
-                        res = tiktok_studio_uploader.upload_video_via_web(candidate, caption=clean_title, cookie_file=active_cookie)
-                        if res.get("success"):
-                            logger.info(f"✅ [TikTok: {display_channel}] โพสต์คลิปสำเร็จ: {candidate.name}")
-                            with open(history_file, "a", encoding="utf-8") as f:
-                                f.write(candidate.name + "\n")
-                            tt_account_index += 1
+                        # อ่านประวัติการโพสต์แยกรายช่อง 100% กันคลิปซ้ำ
+                        history = {}
+                        if history_file.exists():
                             try:
-                                from telegram_notifier import send_telegram_notification
-                                send_telegram_notification(
-                                    f"⚫ [TikTok Auto-Post]\n"
-                                    f"• คลิป: {candidate.name[:40]}\n"
-                                    f"• ช่อง: {display_channel}\n"
-                                    f"• สถานะ: โพสต์สำเร็จ 100%"
-                                )
+                                history = json.loads(history_file.read_text(encoding="utf-8"))
                             except Exception:
-                                pass
+                                history = {}
+                        channel_posted = set(history.get(account_key, []))
+
+                        pending_videos = sorted((REELS_DIR / "pending_videos").glob("*.mp4"))
+                        posted_videos = sorted((REELS_DIR / "posted").glob("*.mp4"), key=lambda f: f.stat().st_mtime, reverse=True)
+                        candidate = None
+
+                        for v in pending_videos + posted_videos:
+                            if v.name not in channel_posted:
+                                candidate = v
+                                break
+
+                        if candidate:
+                            logger.info(f"⚫ [TikTok: {display_channel}] กำลังโพสต์คลิปอิสระ: {candidate.name}")
+                            clean_title = candidate.stem.replace("_", " ")
+                            res = tiktok_studio_uploader.upload_video_via_web(candidate, caption=clean_title, cookie_file=active_cookie)
+                            if res.get("success"):
+                                logger.info(f"✅ [TikTok: {display_channel}] โพสต์คลิปสำเร็จ: {candidate.name}")
+                                if account_key not in history:
+                                    history[account_key] = []
+                                history[account_key].append(candidate.name)
+                                history_file.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
+                                tt_account_index += 1
+                                try:
+                                    from telegram_notifier import send_telegram_notification
+                                    send_telegram_notification(
+                                        f"⚫ [TikTok Auto-Post]\n"
+                                        f"• คลิป: {candidate.name[:40]}\n"
+                                        f"• ช่อง: {display_channel}\n"
+                                        f"• สถานะ: โพสต์สำเร็จ 100%"
+                                    )
+                                except Exception:
+                                    pass
+                            else:
+                                logger.warning(f"⚠️ [TikTok: {display_channel}] โพสต์ไม่สำเร็จ: {res.get('error')}")
                         else:
-                            logger.warning(f"⚠️ [TikTok Worker: {account_label}] โพสต์ไม่สำเร็จ: {res.get('error')}")
-                    else:
-                        logger.info("⚫ [TikTok Worker] ยังไม่มีคลิปใหม่สำหรับ TikTok ในรอบนี้")
+                            logger.info(f"⚫ [TikTok: {display_channel}] ไม่มีคลิปใหม่ที่ยังไม่เคยโพสต์ในช่องนี้")
         except Exception as e_tt:
             logger.error(f"❌ ระบบ TikTok Auto-Uploader เกิดข้อผิดพลาด: {e_tt}")
 
