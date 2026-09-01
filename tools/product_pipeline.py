@@ -171,73 +171,116 @@ def _backfill_images(db, new_prods, workers: int = 8) -> Tuple[int, int]:
 def cmd_import_csv(args):
     rows = read_csv(args.file)
     db = sessionmaker(bind=get_engine(args.sqlite))()
-    existing_names = {p.name for p in db.query(models.Product).all()}
-    existing_urls = {p.affiliate_url for p in db.query(models.Product).all() if p.affiliate_url}
+    existing_all = db.query(models.Product).all()
+    existing_by_name = {p.name: p for p in existing_all}
+    existing_by_url = {p.affiliate_url: p for p in existing_all if p.affiliate_url}
 
-    inserted, skipped_dupe, skipped_link = [], [], []
+    inserted, updated, skipped_dupe, skipped_link = [], [], [], []
     new_prods = []  # (product_id, affiliate_url) — ใช้ eager backfill รูป
-    fresh = []
+    candidates = [] # ("insert"|"update", target_obj_or_none, row_dict, new_score)
+
     for r in rows:
-        if r["name"] in existing_names or r["affiliate_url"] in existing_urls:
-            skipped_dupe.append(r["name"])
-            continue
         if not r["affiliate_url"]:
             skipped_link.append((r["name"], "ไม่มีลิงก์ข้อเสนอใน CSV"))
             continue
-        fresh.append(r)
 
-    # นโยบายเด็ดขาด: ตรวจลิงก์ก่อน insert — ผ่าน (OK) เท่านั้นถึงเข้าระบบ
+        score = calculate_heuristic_score(r["sales"], 0.0, float(r["commission"]), float(r["price"]))
+        old_p = existing_by_name.get(r["name"]) or existing_by_url.get(r["affiliate_url"])
+
+        if old_p:
+            old_score = old_p.ai_score or 0
+            old_sales = old_p.sales_count or 0
+            old_comm = float(old_p.commission or 0)
+            # เงื่อนไข "ดีกว่า": คะแนนสูงขึ้น, ยอดขายเพิ่มขึ้น, ค่าคอมเพิ่มขึ้น, หรือลิงก์เดิมเคยเสีย
+            is_better = (
+                score > old_score or
+                r["sales"] > old_sales or
+                float(r["commission"]) > old_comm or
+                old_p.link_status != "ok"
+            )
+            if is_better:
+                candidates.append(("update", old_p, r, score))
+            else:
+                skipped_dupe.append((r["name"], f"ของเดิมดีกว่า/เท่ากัน (เดิม score={old_score}, sales={old_sales} | ใหม่ score={score}, sales={r['sales']})"))
+        else:
+            candidates.append(("insert", None, r, score))
+
+    # นโยบายเด็ดขาด: ตรวจลิงก์ก่อน insert/update — ผ่าน (OK) เท่านั้นถึงเข้าระบบ
     with ThreadPoolExecutor(max_workers=8) as ex:
-        futures = {ex.submit(check_affiliate_link, r["affiliate_url"]): r for r in fresh}
+        futures = {ex.submit(check_affiliate_link, item[2]["affiliate_url"]): item for item in candidates}
         for fut in as_completed(futures):
-            r = futures[fut]
+            action, old_p, r, score = futures[fut]
             status, detail = fut.result()
             if status != "OK":
                 skipped_link.append((r["name"], f"{status}: {detail}"))
                 continue
-            score = calculate_heuristic_score(r["sales"], 0.0, float(r["commission"]), float(r["price"]))
-            p = models.Product(
-                name=r["name"], category=r["category"], price=r["price"], rating=0.0,
-                sales_count=r["sales"], commission=r["commission"],
-                affiliate_url=r["affiliate_url"], link_status="ok", ai_score=score,
-            )
-            db.add(p)
-            db.flush()
-            inserted.append(p)
-            new_prods.append((p.id, r["affiliate_url"]))
-            existing_names.add(r["name"])
-            existing_urls.add(r["affiliate_url"])
-    db.commit()
-    print(f"imported {len(inserted)} / dupe {len(skipped_dupe)} / ลิงก์ไม่ผ่าน {len(skipped_link)} / จากไฟล์ {len(rows)}")
 
-    # Eager backfill รูปสินค้า — สินค้าใหม่ได้รูปทันทีตอน import ไม่ต้องรอโพสต์ Facebook
-    # (fetch แบบใหม่ ฟรี/เร็ว ไม่พึ่ง FB token / Firecrawl)
+            if action == "insert":
+                p = models.Product(
+                    name=r["name"], category=r["category"], price=r["price"], rating=0.0,
+                    sales_count=r["sales"], commission=r["commission"],
+                    affiliate_url=r["affiliate_url"], link_status="ok", ai_score=score,
+                    price_checked_at=datetime.datetime.utcnow()
+                )
+                db.add(p)
+                db.flush()
+                inserted.append(p)
+                new_prods.append((p.id, r["affiliate_url"]))
+                existing_by_name[r["name"]] = p
+                existing_by_url[r["affiliate_url"]] = p
+            elif action == "update":
+                old_p.price = r["price"]
+                old_p.sales_count = r["sales"]
+                old_p.commission = r["commission"]
+                old_p.affiliate_url = r["affiliate_url"]
+                old_p.category = r["category"]
+                old_p.ai_score = score
+                old_p.link_status = "ok"
+                old_p.price_checked_at = datetime.datetime.utcnow()
+                updated.append(old_p)
+                if not old_p.image_url or old_p.affiliate_url != r["affiliate_url"]:
+                    new_prods.append((old_p.id, r["affiliate_url"]))
+
+    db.commit()
+    print(f"📊 ผลการประมวลผล: เพิ่มใหม่ {len(inserted)} / อัปเกรดของเดิม {len(updated)} / ข้ามซ้ำ {len(skipped_dupe)} / ลิงก์ไม่ผ่าน {len(skipped_link)} / จากทั้งหมด {len(rows)}")
+
+    # Eager backfill รูปสินค้า
     if new_prods:
         got, miss = _backfill_images(db, new_prods)
-        print(f"รูปสินค้าใหม่: ได้ {got} / ไม่ได้ {miss} (จาก {len(new_prods)} ตัว)")
+        print(f"🖼️ รูปสินค้า: ดึงสำเร็จ {got} / ไม่สำเร็จ {miss} (จาก {len(new_prods)} รายการ)")
+
+    if updated:
+        print("\n--- ⚡ อัปเกรดสินค้าเดิม (ของใหม่ดีกว่า) ---")
+        for p in updated[:20]:
+            print(f"   ⬆️ [Score {p.ai_score}] {p.name[:50]} (ขาย {p.sales_count}, คอม {p.commission}฿)")
+
+    if skipped_dupe:
+        print("\n--- ⏭️ ข้ามสินค้าซ้ำ (ของเดิมดีกว่า/เท่ากัน) ---")
+        for name, reason in skipped_dupe[:15]:
+            print(f"   • {name[:45]} -> {reason}")
+
     if skipped_link:
-        print("\n--- ข้าม (ลิงก์ไม่ผ่านการตรวจ) ---")
+        print("\n--- ❌ ข้าม (ลิงก์ไม่ผ่านการตรวจ) ---")
         for name, why in skipped_link:
             print(f"   ✗ {name[:50]} — {why}")
 
-    # self-heal: จัดหมวดซ้ำด้วย keywords ล่าสุด (กันของใหม่ตกหมวดผิดเพราะ
-    # keyword เพิ่งถูกเพิ่ม/แก้ทีหลัง) — ทำงานอัตโนมัติทุก import ไม่ต้องรัน recategorize แยก
-    if inserted:
+    # self-heal: จัดหมวดซ้ำด้วย keywords ล่าสุด
+    affected = inserted + updated
+    if affected:
         changed, total = _recategorize(db)
         if changed:
-            print(f"\n--- จัดหมวดใหม่ {len(changed)} ตัว (self-heal ด้วย keywords ล่าสุด) ---")
-            for name, old, new in changed[:30]:
+            print(f"\n--- 🏷️ จัดหมวดใหม่ {len(changed)} ตัว (self-heal) ---")
+            for name, old, new in changed[:20]:
                 print(f"   {(old or 'อื่นๆ')!r:14s} -> {new!r:14s}  {name[:45]}")
-        new_other = [p for p in inserted if (p.category or "อื่นๆ") == "อื่นๆ"]
+        new_other = [p for p in affected if (p.category or "อื่นๆ") == "อื่นๆ"]
         if new_other:
-            print(f"\n⚠️ ของใหม่ {len(new_other)} ตัวยังตก 'อื่นๆ' (ชื่อไม่มีคำหมวดที่รู้จัก):")
-            print("   ต้องการให้ขึ้นเมนูหมวด → เพิ่ม keyword ใน backend/app/services/category.py แล้วรัน recategorize")
-            for p in new_other[:20]:
+            print(f"\n⚠️ สินค้า {len(new_other)} ตัวยังจัดเป็น 'อื่นๆ':")
+            for p in new_other[:10]:
                 print(f"   • {p.name[:55]}")
 
-    if inserted and args.analyze:
-        top = sorted(inserted, key=lambda p: p.ai_score or 0, reverse=True)[: args.top]
-        print(f"\n--- AI สร้างคอนเทนต์ {len(top)} ตัว (style={args.style}) ---")
+    if affected and args.analyze:
+        top = sorted(affected, key=lambda p: p.ai_score or 0, reverse=True)[: args.top]
+        print(f"\n--- 🤖 AI สร้างคอนเทนต์ {len(top)} ตัว (style={args.style}) ---")
         for p in top:
             c = save_script(db, p, args.style)
             db.commit()

@@ -675,6 +675,20 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
         except Exception as e_yt:
             log(f"[WARN] อัปโหลด YouTube Shorts ล้มเหลว: {e_yt}")
 
+        # อัปโหลดขึ้น TikTok ผ่าน Content Posting API (v2)
+        tiktok_results = []
+        try:
+            import tiktok_uploader
+            if tiktok_uploader.TOKEN_FILE.exists():
+                tt_res = tiktok_uploader.upload_video_to_tiktok(Path(upload_path), caption=title_text)
+                if tt_res.get("success"):
+                    tiktok_results.append(tt_res)
+                    log(f"[OK] อัปโหลด TikTok สำเร็จ: {tt_res.get('publish_id')}")
+                else:
+                    log(f"[WARN] อัปโหลด TikTok ไม่สำเร็จ: {tt_res.get('error')}")
+        except Exception as e_tt:
+            log(f"[WARN] อัปโหลด TikTok ล้มเหลว: {e_tt}")
+
     finally:
         if tmp is not None:
             try:
@@ -682,7 +696,7 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
             except Exception:
                 pass
 
-    if any(r.get("ok") for r in page_results) or yt_results:
+    if any(r.get("ok") for r in page_results) or yt_results or tiktok_results:
         POSTED_DIR.mkdir(parents=True, exist_ok=True)
         # ย้ายไฟล์ต้นฉบับ (ภาพหรือคลิป) ไป posted/
         original = pending[0]  # ใช้ไฟล์ต้นฉบับจาก pending
@@ -751,6 +765,10 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
             if yt_results:
                 for yt in yt_results:
                     channels_bullet.append(f"  • 🔴 YouTube ({yt.get('channel', 'Shorts')}):\n    👉 {yt.get('url', '')}")
+            if tiktok_results:
+                for tt in tiktok_results:
+                    v_url = tt.get("video_url") or "https://www.tiktok.com/@me"
+                    channels_bullet.append(f"  • 🎵 TikTok Video:\n    👉 {v_url}")
             
             channels_text = "\n".join(channels_bullet) if channels_bullet else "  • โพสต์สำเร็จเรียบร้อย"
             pending_count = len(list_pending())

@@ -361,29 +361,56 @@ def health_check():
 
 @app.get("/privacy", response_class=HTMLResponse)
 def privacy_policy():
-    """นโยบายข้อมูลส่วนบุคคล (PDPA) — ลูกค้าดูได้จากลิงก์ใน welcome/ข้อความบอท"""
+    """นโยบายข้อมูลส่วนบุคคล (PDPA) & TikTok Privacy Policy"""
     return """<!DOCTYPE html>
 <html lang="th">
-<head><meta charset="utf-8"><title>นโยบายความเป็นส่วนตัว</title>
+<head>
+<meta charset="utf-8">
+<meta name="tiktok-developers-site-verification" content="aw2u4qsbt1fl8su8">
+<title>นโยบายความเป็นส่วนตัว | Pakhem Privacy Policy</title>
 <style>body{font-family:'Leelawadee UI',Tahoma,sans-serif;max-width:640px;margin:40px auto;padding:0 20px;line-height:1.7;color:#333}h1{color:#E74C3C}</style>
 </head>
 <body>
-<h1>🔒 นโยบายความเป็นส่วนตัว (PDPA)</h1>
-<p>ร้าน "ป้าเข็ม ขายของ" (LINE Official Account) เก็บข้อมูลส่วนบุคคลเพียงเท่าที่จำเป็น เพื่อให้บริการค้นหาและแนะนำสินค้าให้คุณ</p>
+<h1>🔒 นโยบายความเป็นส่วนตัว (Privacy Policy & PDPA)</h1>
+<p>ร้าน "ป้าเข็ม ขายของ" และแอปพลิเคชันระบบอัตโนมัติ เก็บข้อมูลส่วนบุคคลเพียงเท่าที่จำเป็น เพื่อให้บริการค้นหา แนะนำสินค้า และเผยแพร่คอนเทนต์</p>
 <h2>เราเก็บอะไร</h2>
 <ul>
-<li>ชื่อ LINE และ ID (เพื่อเรียกชื่อคุณในการสนทนา)</li>
-<li>ประวัติการสนทนา (เฉพาะข้อความที่คุณส่ง + ประเภทคำถาม) นานสูงสุด 90 วัน</li>
+<li>ชื่อบัญชี และ ID สำหรับการยืนยันตัวตนและการบริการ</li>
+<li>ประวัติการสนทนาและบันทึกการส่งคอนเทนต์ นานสูงสุด 90 วัน</li>
 </ul>
 <h2>เราไม่เก็บอะไร</h2>
 <ul>
-<li>ไม่เก็บข้อความส่วนตัวเกิน 90 วัน · ไม่เก็บข้อมูลบัตร/การเงิน · ไม่ขายข้อมูล</li>
+<li>ไม่เก็บข้อมูลบัตร/ข้อมูลการเงินที่ละเอียดอ่อน · ไม่ขายข้อมูลให้บุคคลภายนอก</li>
 </ul>
 <h2>สิทธิ์ของคุณ</h2>
 <ul>
-<li>ลบข้อมูลได้ตลอด: พิมพ์ <b>ลบข้อมูลฉัน</b> ในแชท → ลบชื่อ + ประวัติทันที</li>
-<li>ขอดู/แก้ไขข้อมูล: ติดต่อผ่านแชทบอทได้</li>
+<li>ลบข้อมูลได้ตลอดเวลา หรือติดต่อเจ้าหน้าที่ได้ตลอด 24 ชม.</li>
 </ul>
-<p>สอบถามเพิ่มเติม: ส่งข้อความในแชทบอทได้ตลอด 24 ชม. ค่ะ</p>
+<p>สอบถามเพิ่มเติม: ติดต่อผ่านระบบ LINE OA หรืออีเมล g81393878@gmail.com ค่ะ</p>
 </body>
 </html>"""
+
+
+@app.get("/terms", response_class=HTMLResponse)
+def terms_of_service():
+    """เงื่อนไขการให้บริการ (Terms of Service) สำหรับ TikTok App Review"""
+    return """<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="tiktok-developers-site-verification" content="aw2u4qsbt1fl8su8">
+<title>เงื่อนไขการให้บริการ | Pakhem Terms of Service</title>
+<style>body{font-family:'Leelawadee UI',Tahoma,sans-serif;max-width:640px;margin:40px auto;padding:0 20px;line-height:1.7;color:#333}h1{color:#2C3E50}</style>
+</head>
+<body>
+<h1>📜 เงื่อนไขการให้บริการ (Terms of Service)</h1>
+<p>ยินดีต้อนรับสู่บริการระบบจัดการคอนเทนต์และแนะนำสินค้า "ป้าเข็ม"</p>
+<h2>1. การใช้งานบริการ</h2>
+<p>ผู้ใช้บริการตกลงที่จะใช้ระบบเพื่อการบริหารจัดการคอนเทนต์ แนะนำสินค้า และรับข้อมูลข่าวสารโปรโมชั่นอย่างถูกต้องตามกฎหมายและนโยบายของแต่ละแพลตฟอร์ม</p>
+<h2>2. ความรับผิดชอบในเนื้อหา</h2>
+<p>เนื้อหาวิดีโอและแคปชั่นที่ผลิตขึ้นผ่านระบบเป็นไปตามมาตรฐานการตลาด ไม่ละเมิดลิขสิทธิ์ และเคารพกฎเกณฑ์ของชุมชน TikTok / Meta / YouTube</p>
+<h2>3. การติดต่อ</h2>
+<p>หากมีข้อสงสัยเกี่ยวกับเงื่อนไขการให้บริการ สามารถติดต่อได้ที่ g81393878@gmail.com</p>
+</body>
+</html>"""
+
