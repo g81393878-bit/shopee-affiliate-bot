@@ -115,16 +115,21 @@ def run_reels_uploader_loop():
 
 
 def run_tiktok_uploader_loop():
-    """เธรดแยกอิสระ 100% สำหรับโพสต์คลิปลง TikTok Studio ทุก 60 นาที (ไม่รบกวน FB / YouTube)"""
-    logger.info("⚫ เริ่มต้นระบบ TikTok Auto-Uploader (รอบโพสต์อิสระทุก 60 นาที)")
+    """เธรดแยกอิสระ 100% สำหรับโพสต์คลิปลง TikTok Studio หมุนเวียนทุกช่อง (ไม่รบกวน FB / YouTube)"""
+    logger.info("⚫ เริ่มต้นระบบ TikTok Auto-Uploader (รองรับ Multi-Account Rotation)")
     interval_minutes = int(os.getenv("TIKTOK_INTERVAL_MINUTES", "60"))
     history_file = TOOLS_DIR / "posted_tiktok_videos.txt"
+    tt_account_index = 0
 
     while True:
         try:
             if is_active_hours():
                 import tiktok_studio_uploader
                 if tiktok_studio_uploader.is_logged_in():
+                    accounts = tiktok_studio_uploader.get_available_tiktok_accounts()
+                    active_cookie = accounts[tt_account_index % len(accounts)] if accounts else None
+                    account_label = active_cookie.stem if active_cookie else "Account 1"
+
                     posted_tt = set()
                     if history_file.exists():
                         posted_tt = set(history_file.read_text(encoding="utf-8").splitlines())
@@ -139,25 +144,26 @@ def run_tiktok_uploader_loop():
                             break
 
                     if candidate:
-                        logger.info(f"⚫ [TikTok Worker] กำลังโพสต์คลิปอิสระ: {candidate.name}")
+                        logger.info(f"⚫ [TikTok Worker: {account_label}] กำลังโพสต์คลิปอิสระ: {candidate.name}")
                         clean_title = candidate.stem.replace("_", " ")
-                        res = tiktok_studio_uploader.upload_video_via_web(candidate, caption=clean_title)
+                        res = tiktok_studio_uploader.upload_video_via_web(candidate, caption=clean_title, cookie_file=active_cookie)
                         if res.get("success"):
-                            logger.info(f"✅ [TikTok Worker] โพสต์คลิปสำเร็จ: {candidate.name}")
+                            logger.info(f"✅ [TikTok Worker: {account_label}] โพสต์คลิปสำเร็จ: {candidate.name}")
                             with open(history_file, "a", encoding="utf-8") as f:
                                 f.write(candidate.name + "\n")
+                            tt_account_index += 1
                             try:
                                 from telegram_notifier import send_telegram_notification
                                 send_telegram_notification(
                                     f"⚫ [TikTok Auto-Post]\n"
                                     f"• คลิป: {candidate.name[:40]}\n"
-                                    f"• ช่อง: @healthgooddeals\n"
+                                    f"• ช่อง: {account_label}\n"
                                     f"• สถานะ: โพสต์สำเร็จ 100%"
                                 )
                             except Exception:
                                 pass
                         else:
-                            logger.warning(f"⚠️ [TikTok Worker] โพสต์ไม่สำเร็จ: {res.get('error')}")
+                            logger.warning(f"⚠️ [TikTok Worker: {account_label}] โพสต์ไม่สำเร็จ: {res.get('error')}")
                     else:
                         logger.info("⚫ [TikTok Worker] ยังไม่มีคลิปใหม่สำหรับ TikTok ในรอบนี้")
         except Exception as e_tt:

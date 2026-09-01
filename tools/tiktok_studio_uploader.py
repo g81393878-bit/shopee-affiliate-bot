@@ -37,6 +37,17 @@ LOGIN_URL = "https://www.tiktok.com/login"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
 
+def get_available_tiktok_accounts():
+    """ค้นหาไฟล์คุกกี้ของทุกบัญชี TikTok ที่มีในระบบ (tiktok_cookies.json, tiktok_cookies_2.json, ...)"""
+    accounts = []
+    if COOKIE_FILE.exists() and COOKIE_FILE.stat().st_size > 20:
+        accounts.append(COOKIE_FILE)
+    for p in sorted(TOOLS_DIR.glob("tiktok_cookies_*.json")):
+        if p.exists() and p.stat().st_size > 20 and p not in accounts:
+            accounts.append(p)
+    return accounts
+
+
 def log(msg: str):
     ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts} UTC] [TikTok Studio] {msg}"
@@ -126,6 +137,7 @@ def upload_video_via_web(
     video_path: Union[str, pathlib.Path],
     caption: str = "",
     headless: bool = True,
+    cookie_file: Optional[Union[str, pathlib.Path]] = None,
 ) -> Dict:
     """อัปโหลดวิดีโอ 9:16 เข้าสู่ TikTok Creator Center โดยอัตโนมัติผ่าน Playwright"""
     from playwright.sync_api import sync_playwright
@@ -137,8 +149,12 @@ def upload_video_via_web(
     if not is_logged_in():
         return {"success": False, "error": "TikTok session not found. Please run: python tools/tiktok_studio_uploader.py --login"}
 
+    # เลือกไฟล์คุกกี้
+    target_cookie = pathlib.Path(cookie_file) if cookie_file else COOKIE_FILE
+    cookie_label = target_cookie.name if target_cookie.exists() else "Default Session"
+
     clean_caption = sanitize_caption(caption)
-    log(f"🎬 เริ่มต้นอัปโหลดคลิป: {video_file.name} (Caption: {clean_caption[:50]}...)")
+    log(f"🎬 เริ่มต้นอัปโหลดคลิป: {video_file.name} [{cookie_label}] (Caption: {clean_caption[:50]}...)")
 
     with sync_playwright() as p:
         try:
@@ -152,9 +168,9 @@ def upload_video_via_web(
                 ],
                 viewport={"width": 1440, "height": 900},
             )
-            if COOKIE_FILE.exists():
+            if target_cookie.exists():
                 try:
-                    c_data = json.loads(COOKIE_FILE.read_text(encoding="utf-8"))
+                    c_data = json.loads(target_cookie.read_text(encoding="utf-8"))
                     browser.add_cookies(c_data)
                 except Exception as e_cook:
                     log(f"⚠️ Load cookies error: {e_cook}")
