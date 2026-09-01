@@ -276,18 +276,19 @@ def upload_video_via_web(
                     clicked = True
                     break
 
-            if not clicked:
-                log("⚠️ ลองใช้ JS direct click สำหรับปุ่ม Post...")
-                page.evaluate("""() => {
-                    const b = document.querySelector('button[data-e2e="post_video_button"]') ||
-                              document.querySelector('div.css-fsbw52 button.Button__root--type-primary') ||
-                              Array.from(document.querySelectorAll('button')).find(el => /^(Post|โพสต์)$/i.test(el.innerText.trim()));
-                    if (b) b.click();
-                }""")
+            # 6. รอยืนยันการโพสต์สำเร็จ & ตรวจจับปุ่มยืนยัน "Post now" ถ้ามี
+            log("⏳ รอระบบ TikTok ประมวลผลและตรวจจับปุ่มยืนยัน Post now...")
+            for _ in range(15):
+                page.wait_for_timeout(1000)
+                if "content" in page.url:
+                    break
+                confirm_btn = page.locator('button').filter(has_text=re.compile(r'^(Post now|โพสต์เลย|Confirm|Got it)$', re.I)).first
+                if confirm_btn.count() > 0 and confirm_btn.is_visible():
+                    log("   ✓ คลิกปุ่มยืนยัน Post now จาก Modal เรียบร้อยแล้ว!")
+                    confirm_btn.click(force=True)
+                    page.wait_for_timeout(3000)
+                    break
 
-            # 6. รอยืนยันการโพสต์สำเร็จ (รอ TikTok ประมวลผลและแสดงผลสำเร็จ)
-            log("⏳ รอระบบ TikTok ประมวลผลการโพสต์ (15 วินาที)...")
-            page.wait_for_timeout(15000)
             log("🎉 อัปโหลดและสั่งโพสต์คลิปขึ้น TikTok สำเร็จ 100%!")
 
             browser.close()
