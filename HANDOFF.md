@@ -14,7 +14,12 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
-- **Shopee/AI automation hardening (30/08):** เพิ่มโหมดคัดสินค้า `discount`/`bestseller`/`balanced` พร้อม `--dry-run`, แก้ ADB/UIAutomator สำหรับ Shopee Android, ปิด `httpx/httpcore` transport logs ที่อาจแสดง token, deploy และ restart VPS แล้ว; ตรวจล่าสุด service 5 ตัว active และ health 200. หมายเหตุ: token ที่อยู่ใน journal เก่าก่อน restart ต้องหมุนจาก Facebook ด้วยตนเอง และ YouTube comment scope ยังต้อง re-authorize หากต้องการคอมเมนต์อัตโนมัติ
+- **TikTok Web Studio Automation & Multi-Broadcast 5 แพลตฟอร์มบน VPS (01/09):**
+  ① **ระบบอัปโหลด TikTok อัตโนมัติ (`tools/tiktok_studio_uploader.py`):** ใช้ Playwright Headless Browser อัปโหลดวิดีโอ 9:16 Full HD เข้าสู่ TikTok Studio ช่อง `@healthgooddeals` โดยไม่ต้องขอ App Review หรือ Verify URL และมีระบบตัดราคา No-Price อัตโนมัติ
+  ② **สถาปัตยกรรมแยกเธรดอิสระ (Decoupled Engine):** Facebook 3 เพจ + YouTube Shorts 5 ช่อง ยิงทุก 30 นาที, TikTok Studio ยิงทุก 60 นาที ไม่บล็อกหรือกระทบต่อระบบเสียงพากย์ TTS หรือ AI คอนเทนต์
+  ③ **Deploy สู่ VPS สำเร็จ 100%:** เชื่อมต่อ SSH เข้า VPS `157.85.111.232` ซิงค์คุกกี้ ติดตั้ง Playwright + Chromium และรีสตาร์ท `shopee-bot.service` รันงาน 24/7 เรียบร้อย
+  ④ **คู่มือและเอกสาร:** สร้าง `docs/TIKTOK_AUTOMATION_GUIDE.md`, `docs/VPS_OPERATIONS_MANUAL.md`, และ `.agents/skills/tiktok-uploader/SKILL.md` ครบถ้วน
+
 
 - **ระบบโพสต์ Reels อัตโนมัติ 100% ทุก 30 นาที สำหรับ 3 เพจ (29/08) — [Autonomous Bot Mode]:**
   ① **บอททำงานเองสมบูรณ์แบบ 100% (No Human/AI Intervention):** บอททำงานผ่าน Windows Task Scheduler `\PaKhem Reels Uploader` ทุก ๆ 30 นาที (`PT30M`) แบบเบื้องหลัง ไม่ต้องเปิดโปรแกรมทิ้งไว้ ไม่ต้องให้คนหรือ AI ช่วยกด
