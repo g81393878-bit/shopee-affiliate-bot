@@ -248,31 +248,6 @@ def upload_shorts_to_channel(youtube_service, video_path: pathlib.Path, product_
     log(f"✅ อัปโหลด {channel_name} สำเร็จ! -> {video_url}")
     notify_telegram(f"✅ YouTube อัปโหลดสำเร็จ\nช่อง: {channel_name}\nคลิป: {video_url}")
 
-    # โพสต์คอมเมนต์พิกัดสินค้าใต้คลิปอัตโนมัติ
-    try:
-        comment_text = (
-            f"🛒 พิกัดสั่งซื้อของแท้ Shopee: {link}\n"
-            f"💬 ปรึกษาป้าเข็มแอด LINE ID: @137gsref ได้เลยจ้า!"
-        )
-        youtube_service.commentThreads().insert(
-            part="snippet",
-            body={
-                "snippet": {
-                    "videoId": video_id,
-                    "topLevelComment": {
-                        "snippet": {
-                            "textOriginal": comment_text
-                        }
-                    }
-                }
-            }
-        ).execute()
-        log(f"💬 [{channel_name}] โพสต์คอมเมนต์พิกัดสินค้าใต้คลิป Shorts สำเร็จ!")
-        notify_telegram(f"💬 YouTube คอมเมนต์สำเร็จ\nช่อง: {channel_name}\nคลิป: {video_url}")
-    except Exception as ec:
-        log(f"[INFO] คอมเมนต์อัตโนมัติ ({channel_name}): {type(ec).__name__}: {str(ec)[:160]}")
-        notify_telegram(f"⚠️ YouTube อัปโหลดได้ แต่คอมเมนต์ไม่สำเร็จ\nช่อง: {channel_name}\nคลิป: {video_url}\nสาเหตุ: {type(ec).__name__}")
-
     return video_url
 
 
