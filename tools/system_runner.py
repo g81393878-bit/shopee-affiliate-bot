@@ -96,8 +96,8 @@ def run_prebuffer_producer_loop():
 
 
 def run_reels_uploader_loop():
-    """เธรดหลักสำหรับโพสต์คลิปพร้อมใช้งานลง Facebook Reels ทุกๆ 10 นาที"""
-    logger.info("🎬 เริ่มต้นระบบ Facebook Reels Auto-Uploader (รอบโพสต์ทุกๆ 10 นาที)")
+    """เธรดหลักสำหรับโพสต์คลิปพร้อมใช้งานลง Facebook Reels และ YouTube Shorts ทุกๆ 30 นาที"""
+    logger.info("🎬 เริ่มต้นระบบ Facebook & YouTube Shorts Auto-Uploader (รอบโพสต์ทุกๆ 30 นาที)")
     import uploader
     
     while True:
@@ -112,6 +112,59 @@ def run_reels_uploader_loop():
         
         # ตรวจสอบเวลาโพสต์ทุกๆ 60 วินาที
         time.sleep(60)
+
+
+def run_tiktok_uploader_loop():
+    """เธรดแยกอิสระ 100% สำหรับโพสต์คลิปลง TikTok Studio ทุก 60 นาที (ไม่รบกวน FB / YouTube)"""
+    logger.info("⚫ เริ่มต้นระบบ TikTok Auto-Uploader (รอบโพสต์อิสระทุก 60 นาที)")
+    interval_minutes = int(os.getenv("TIKTOK_INTERVAL_MINUTES", "60"))
+    history_file = TOOLS_DIR / "posted_tiktok_videos.txt"
+
+    while True:
+        try:
+            if is_active_hours():
+                import tiktok_studio_uploader
+                if tiktok_studio_uploader.is_logged_in():
+                    posted_tt = set()
+                    if history_file.exists():
+                        posted_tt = set(history_file.read_text(encoding="utf-8").splitlines())
+
+                    pending_videos = sorted((REELS_DIR / "pending_videos").glob("*.mp4"))
+                    posted_videos = sorted((REELS_DIR / "posted").glob("*.mp4"), key=lambda f: f.stat().st_mtime, reverse=True)
+                    candidate = None
+
+                    for v in pending_videos + posted_videos:
+                        if v.name not in posted_tt:
+                            candidate = v
+                            break
+
+                    if candidate:
+                        logger.info(f"⚫ [TikTok Worker] กำลังโพสต์คลิปอิสระ: {candidate.name}")
+                        clean_title = candidate.stem.replace("_", " ")
+                        res = tiktok_studio_uploader.upload_video_via_web(candidate, caption=clean_title)
+                        if res.get("success"):
+                            logger.info(f"✅ [TikTok Worker] โพสต์คลิปสำเร็จ: {candidate.name}")
+                            with open(history_file, "a", encoding="utf-8") as f:
+                                f.write(candidate.name + "\n")
+                            try:
+                                from telegram_notifier import send_telegram_notification
+                                send_telegram_notification(
+                                    f"⚫ [TikTok Auto-Post]\n"
+                                    f"• คลิป: {candidate.name[:40]}\n"
+                                    f"• ช่อง: @healthgooddeals\n"
+                                    f"• สถานะ: โพสต์สำเร็จ 100%"
+                                )
+                            except Exception:
+                                pass
+                        else:
+                            logger.warning(f"⚠️ [TikTok Worker] โพสต์ไม่สำเร็จ: {res.get('error')}")
+                    else:
+                        logger.info("⚫ [TikTok Worker] ยังไม่มีคลิปใหม่สำหรับ TikTok ในรอบนี้")
+        except Exception as e_tt:
+            logger.error(f"❌ ระบบ TikTok Auto-Uploader เกิดข้อผิดพลาด: {e_tt}")
+
+        # พักตามช่วงเวลาที่กำหนด (เช่น 60 นาที)
+        time.sleep(interval_minutes * 60)
 
 
 def get_system_health_summary(title: str = "รายงานสถานะระบบบอท 24/7") -> str:
@@ -239,11 +292,15 @@ def main():
     t_producer = threading.Thread(target=run_prebuffer_producer_loop, daemon=True, name="ReelsPrebuffer")
     t_producer.start()
 
-    # 2. รันเธรดอัปโหลดตามรอบเวลา
+    # 2. รันเธรดอัปโหลด Facebook & YouTube Shorts (รอบทุก 30 นาที)
     t_uploader = threading.Thread(target=run_reels_uploader_loop, daemon=True, name="ReelsUploader")
     t_uploader.start()
 
-    # 3. รันเธรดรายงานสรุปประจำเวลา (08:00 / 20:00 น.)
+    # 3. รันเธรดอัปโหลด TikTok อิสระ 100% (รอบทุก 60 นาที ไม่รบกวน FB / YouTube)
+    t_tiktok = threading.Thread(target=run_tiktok_uploader_loop, daemon=True, name="TikTokUploader")
+    t_tiktok.start()
+
+    # 4. รันเธรดรายงานสรุปประจำเวลา (08:00 / 20:00 น.)
     t_reporter = threading.Thread(target=run_daily_reporter_loop, daemon=True, name="SystemReporter")
     t_reporter.start()
 

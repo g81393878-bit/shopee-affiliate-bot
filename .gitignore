@@ -33,6 +33,8 @@ tools/tiktok_cookies*.json
 tiktok_cookies*.json
 tools/tiktok_user_data/
 tiktok_user_data/
+tools/posted_tiktok_videos.txt
+posted_tiktok_videos.txt
 tools/*.gs
 telegram-smart-memo-*.json
 *.mp3
