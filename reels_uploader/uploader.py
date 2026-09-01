@@ -751,10 +751,6 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
             if yt_results:
                 for yt in yt_results:
                     channels_bullet.append(f"  • 🔴 YouTube ({yt.get('channel', 'Shorts')}):\n    👉 {yt.get('url', '')}")
-            if tiktok_results:
-                for tt in tiktok_results:
-                    v_url = tt.get("video_url") or "https://www.tiktok.com/@me"
-                    channels_bullet.append(f"  • 🎵 TikTok Video:\n    👉 {v_url}")
             
             channels_text = "\n".join(channels_bullet) if channels_bullet else "  • โพสต์สำเร็จเรียบร้อย"
             pending_count = len(list_pending())

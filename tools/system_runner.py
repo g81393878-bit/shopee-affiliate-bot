@@ -119,7 +119,13 @@ def run_tiktok_uploader_loop():
     logger.info("⚫ เริ่มต้นระบบ TikTok Auto-Uploader (รองรับ Multi-Account Rotation)")
     interval_minutes = int(os.getenv("TIKTOK_INTERVAL_MINUTES", "60"))
     history_file = TOOLS_DIR / "posted_tiktok_history.json"
+    index_file = TOOLS_DIR / "last_tiktok_channel_index.txt"
     tt_account_index = 0
+    if index_file.exists():
+        try:
+            tt_account_index = int(index_file.read_text(encoding="utf-8").strip())
+        except Exception:
+            tt_account_index = 0
 
     while True:
         try:
@@ -165,6 +171,10 @@ def run_tiktok_uploader_loop():
                                 history[account_key].append(candidate.name)
                                 history_file.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
                                 tt_account_index += 1
+                                try:
+                                    index_file.write_text(str(tt_account_index), encoding="utf-8")
+                                except Exception:
+                                    pass
                                 try:
                                     from telegram_notifier import send_telegram_notification
                                     send_telegram_notification(
