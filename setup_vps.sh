@@ -34,9 +34,12 @@ if [ ! -d ".venv" ]; then
 fi
 source .venv/bin/activate
 
-echo -e "\n${YELLOW}[3/5] 📚 กำลังติดตั้ง Python Dependencies...${NC}"
+echo -e "\n${YELLOW}[3/5] 📚 กำลังติดตั้ง Python Dependencies & Playwright Browser Engine...${NC}"
 pip install --upgrade pip
 pip install -r backend/requirements.txt
+pip install playwright edge-tts pythainlp Pillow google-api-python-client google-auth-oauthlib
+playwright install chromium
+playwright install-deps
 
 echo -e "\n${YELLOW}[4/5] 🔐 กำลังตรวจสอบการตั้งค่า Environment Variables (.env)...${NC}"
 if [ ! -f "backend/.env" ]; then
