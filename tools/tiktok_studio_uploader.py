@@ -149,33 +149,33 @@ def upload_video_via_web(
     if not is_logged_in():
         return {"success": False, "error": "TikTok session not found. Please run: python tools/tiktok_studio_uploader.py --login"}
 
-    # เลือกไฟล์คุกกี้
+    # เลือกไฟล์คุกกี้และแยกโฟลเดอร์เซสชันของแต่ละบัญชีออกจากกันเด็ดขาด
     target_cookie = pathlib.Path(cookie_file) if cookie_file else COOKIE_FILE
     cookie_label = target_cookie.name if target_cookie.exists() else "Default Session"
+    account_user_data = TOOLS_DIR / f"tiktok_user_data_{target_cookie.stem}"
+    account_user_data.mkdir(parents=True, exist_ok=True)
 
     clean_caption = sanitize_caption(caption)
     log(f"🎬 เริ่มต้นอัปโหลดคลิป: {video_file.name} [{cookie_label}] (Caption: {clean_caption[:50]}...)")
 
     with sync_playwright() as p:
         try:
-            browser = p.chromium.launch_persistent_context(
-                user_data_dir=str(USER_DATA_DIR),
+            browser = p.chromium.launch(
                 headless=headless,
-                user_agent=USER_AGENT,
                 args=[
                     "--disable-blink-features=AutomationControlled",
                     "--no-sandbox",
                 ],
-                viewport={"width": 1440, "height": 900},
             )
+            context = browser.new_context(user_agent=USER_AGENT, viewport={"width": 1440, "height": 900})
             if target_cookie.exists():
                 try:
                     c_data = json.loads(target_cookie.read_text(encoding="utf-8"))
-                    browser.add_cookies(c_data)
+                    context.add_cookies(c_data)
                 except Exception as e_cook:
                     log(f"⚠️ Load cookies error: {e_cook}")
 
-            page = browser.new_page()
+            page = context.new_page()
 
             # 1. ไปหน้า Creator Center Upload
             log("🌐 กำลังเปิดหน้า TikTok Studio Upload...")
