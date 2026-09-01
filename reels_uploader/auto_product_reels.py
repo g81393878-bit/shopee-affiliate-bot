@@ -694,18 +694,43 @@ def generate_product_reels(limit: int = 3, selection: str = "balanced",
             except Exception:
                 products_meta = {}
 
-        # 8 หมวดหมู่สินค้าเทรนด์ขายดีและของจำเป็นต้องมี (ครอบคลุมสินค้าทั้งคลัง 2,471 รายการ 100%)
-        TREND_CATEGORIES_MAPPING = {
-            "ของใช้ในบ้าน & จัดระเบียบบ้าน": ["ของใช้บ้าน", "กระดาษทิชชู่", "จัดระเบียบ", "ของใช้", "อื่นๆ", "เครื่องเขียน", "ของสะสม"],
-            "สมาร์ตโฮม & เครื่องใช้ไฟฟ้า": ["เครื่องใช้ไฟฟ้า", "โคมไฟ", "พัดลม", "สมาร์ตโฮม", "โซล่าเซลล์"],
-            "สุขภาพ & คลายปวดเมื่อย": ["สุขภาพ", "นวด", "ปวดหลัง", "ดูแลตัวเอง"],
-            "ความงาม & แฟชั่นไลฟ์สไตล์": ["ความงาม", "แฟชั่น", "เครื่องประดับ", "สกินแคร์", "สำลี", "บำรุงผิว"],
-            "ไอที & แกดเจ็ตมือถือ": ["หูฟัง", "กล้อง", "อุปกรณ์เสริม", "บลูทูธ", "ไอที", "แกดเจ็ต"],
-            "สัตว์เลี้ยง & ของใช้หมาแมว": ["สัตว์เลี้ยง", "ทาสแมว", "อาหารสัตว์"],
-            "เครื่องครัว & ของกินของฝาก": ["เครื่องครัว", "แก้วน้ำ", "หม้อ", "กระทะ", "อาหาร"],
-            "ของใช้ติดรถ & เดินทาง/ช่าง": ["เครื่องมือช่าง", "กีฬา", "อุปกรณ์ติดรถ", "เดินทาง"],
+        # 8 หมวดหมู่หลัก และหมวดย่อยเทรนด์ยอดฮิต (ครอบคลุมสินค้า 2,530 รายการ 100%)
+        SUB_CATEGORIES_TAXONOMY = {
+            "1. ไอที อุปกรณ์คอมพิวเตอร์ & มือถือ": [
+                "คีย์บอร์ด", "keyboard", "เมาส์", "mouse", "hub", "usb", "โน้ตบุ๊ก", "laptop", "แผ่นรอง",
+                "หูฟัง", "headset", "earphone", "ลำโพง", "speaker", "tws", "bluetooth", "ไอที", "แกดเจ็ต",
+                "สายชาร์จ", "charger", "พาวเวอร์แบงค์", "eloop", "power bank", "ฟิล์ม", "เคส", "ขาตั้งกล้อง",
+                "tuya", "smart remote", "เซนเซอร์", "กล้องวงจรปิด", "wifi mini"
+            ],
+            "2. ของใช้ในบ้าน & ช่างประจำบ้าน": [
+                "คาปาซิเตอร์", "cbb61", "หลอดไฟ", "led", "สวิตช์", "เทป", "ปลั๊ก", "เต้ารับ", "เครื่องมือช่าง",
+                "พัดลม", "hatari", "พัดลมพกพา", "พัดลมมือถือ", "พัดลมตั้งพื้น", "เครื่องใช้ไฟฟ้า", "โคมไฟ",
+                "กระดาษทิชชู่", "ทิชชู่", "แปรง", "ไม้กวาด", "กล่องเก็บของ", "ถุงขยะ", "ปรับผ้านุ่ม", "downy", "ซักผ้า", "ของใช้บ้าน"
+            ],
+            "3. สุขภาพ & อาหารเสริม": [
+                "dr.pong", "coq10", "วิตามิน", "vitamin", "คอลลาเจน", "โปรตีน", "นมถั่วเหลือง", "ดีน่า", "dna", "cider", "สุขภาพ",
+                "วัดความดัน", "sinocare", "เครื่องวัด", "หน้ากาก", "mask", "3d mask", "welcare", "ตรวจน้ำตาล"
+            ],
+            "4. ความงาม & สกินแคร์": [
+                "cerave", "moisturising", "โลชั่น", "lotion", "เซรั่ม", "serum", "la roche", "cicaplast", "ordinary", "สกินแคร์", "บำรุงผิว",
+                "กันแดด", "uv defend", "sunscreen", "สบู่", "suk skin", "โฟมล้างหน้า", "คลีนซิ่ง", "ความงาม"
+            ],
+            "5. เครื่องครัว & อุปกรณ์ทำอาหาร": [
+                "หม้อ", "หม้อไฟฟ้า", "กระทะ", "กระทะไฟฟ้า", "เครื่องปั่น", "หม้อทอด", "กาต้มน้ำ", "เครื่องครัว", "อาหาร",
+                "กระติกน้ำ", "แก้วน้ำ", "eskimo", "civago", "สูญญากาศ", "สแตนเลส", "แก้วเก็บความเย็น", "มีด", "เขียง"
+            ],
+            "6. ของใช้สัตว์เลี้ยง": [
+                "ทรายแมว", "kasty", "ห้องน้ำแมว", "แผ่นรองฉี่", "ดับกลิ่นทราย", "สัตว์เลี้ยง", "ทาสแมว",
+                "อาหารแมว", "อาหารหมา", "ขนมแมวเลีย", "แคทนิป", "แชมพูหมา", "แชมพูแมว", "yoyopet", "ของเล่นแมว"
+            ],
+            "7. อุปกรณ์ติดรถยนต์ & เดินทาง": [
+                "พรมปูพื้น", "carptah", "ที่วางมือถือในรถ", "ม่านบังแดด", "เบาะรอง", "ที่ชาร์จในรถ", "กล้องหน้ารถ", "ปั๊มลมพกพา", "อุปกรณ์ติดรถ", "เดินทาง"
+            ],
+            "8. แฟชั่น & เครื่องแต่งกาย": [
+                "กางเกงวิ่ง", "yuedpao", "กางเกงขาสั้น", "เสื้อยืด", "เสื้อคลุม", "คาร์ดิแกน", "bemingtop", "แฟชั่น",
+                "กางเกงใน", "บรา", "ถุงเท้า", "ผ้าเช็ดตัว", "frolina"
+            ]
         }
-        ALLOWED_DB_CATS = {c for sub in TREND_CATEGORIES_MAPPING.values() for c in sub}
 
         # 1. ให้ Demand Radar เป็นตัวตัดสินใจอันดับ 1 (Top Priority Demand Radar Decider)
         radar_prods = []
@@ -739,8 +764,6 @@ def generate_product_reels(limit: int = 3, selection: str = "balanced",
         drop_map = _latest_price_drop_map(db)
 
         if selection == "discount":
-            # โหมดนี้ต้องใช้หลักฐานจาก price_history เท่านั้น ไม่เติมสินค้า
-            # ที่ลด 0% เพราะจะทำให้คลิปอ้างโปรโมชันที่ระบบยืนยันไม่ได้
             radar_prods = [p for p in radar_prods if drop_map.get(p.id, 0.0) > 0]
             prods = [p for p in prods if drop_map.get(p.id, 0.0) > 0]
             print(f"🔻 พบสินค้าที่มีประวัติลดราคาจริง: {len(prods)} รายการ")
@@ -753,7 +776,6 @@ def generate_product_reels(limit: int = 3, selection: str = "balanced",
                 return (drop, sales, ai)
             if selection == "bestseller":
                 return (sales, ai, drop)
-            # คะแนนสมดุล: ให้ส่วนลดมีน้ำหนัก แต่ไม่ดันสินค้าที่ขาย/คุณภาพต่ำขึ้นมา
             return (ai * 2 + min(sales, 100000) / 1000 + drop * 2,
                     sales, drop)
         prods.sort(key=rank_key, reverse=True)
@@ -762,17 +784,18 @@ def generate_product_reels(limit: int = 3, selection: str = "balanced",
 
         # จัดกลุ่มสินค้าแยกตาม 8 หมวดหมู่เทรนด์ แล้วสับเปลี่ยนแบบ Round-Robin
         import random
-        by_cat = {trend_name: [] for trend_name in TREND_CATEGORIES_MAPPING}
+        by_cat = {cat_name: [] for cat_name in SUB_CATEGORIES_TAXONOMY}
         for p in prods:
-            p_cat = (p.category or "").strip()
-            # แมปเข้า 8 หมวดหมู่หลัก
-            matched_trend = None
-            for trend_name, sub_cats in TREND_CATEGORIES_MAPPING.items():
-                if any(sc in p_cat for sc in sub_cats):
-                    matched_trend = trend_name
+            p_text = f"{p.name or ''} {p.category or ''}".lower()
+            matched_cat = None
+            for cat_name, sub_keywords in SUB_CATEGORIES_TAXONOMY.items():
+                if any(kw in p_text for kw in sub_keywords):
+                    matched_cat = cat_name
                     break
-            if matched_trend:
-                by_cat[matched_trend].append(p)
+            if not matched_cat:
+                # Fallback to category 1 or 2
+                matched_cat = "2. ของใช้ในบ้าน & ช่างประจำบ้าน"
+            by_cat[matched_cat].append(p)
 
         if selection == "balanced":
             # balanced ยังคงกระจายหมวด เพื่อไม่ให้คลิปติดอยู่หมวดเดียว
