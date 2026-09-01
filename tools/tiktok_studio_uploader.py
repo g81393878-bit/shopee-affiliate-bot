@@ -220,35 +220,70 @@ def upload_video_via_web(
 
             # 4. ใส่ Caption & Hashtags
             log("✍️ กำลังกรอกแคปชั่นและแฮชแท็ก...")
-            # หา element กล่องข้อความ Caption (contenteditable หรือ textarea)
             caption_box = page.locator('div[contenteditable="true"]').first
             if caption_box.count() > 0:
                 caption_box.click(force=True)
                 caption_box.fill("")
                 caption_box.type(clean_caption, delay=20)
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(1000)
             else:
                 txt_area = page.locator('textarea').first
                 if txt_area.count() > 0:
                     txt_area.click(force=True)
                     txt_area.fill(clean_caption)
 
-            page.wait_for_timeout(3000)
+            page.wait_for_timeout(2000)
 
-            # 5. กดปุ่ม Post (โพสต์) — ใช้ exact match เพื่อไม่ให้ไปโดนเมนู "Posts"
+            # เคลียร์ Modal Popup และ Joyride (Got it / Turn on)
+            try:
+                # 1. คลิกปุ่ม Got it ของ Joyride ถ้ามี
+                joyride_btn = page.locator('div.react-joyride__tooltip button, [aria-label="Got it"]').first
+                if joyride_btn.count() > 0 and joyride_btn.is_visible():
+                    joyride_btn.click(force=True)
+                    page.wait_for_timeout(1000)
+
+                # 2. เคลียร์ Modal Turn on / Got it ผ่าน JS
+                page.evaluate("""() => {
+                    const joyride = document.querySelector('#react-joyride-portal, .react-joyride__overlay');
+                    if (joyride) joyride.remove();
+                    document.querySelectorAll('button').forEach(b => {
+                        const t = (b.innerText || '').trim().toLowerCase();
+                        if (t === 'turn on' || t === 'got it' || t === 'เข้าใจแล้ว' || t === 'agree') {
+                            b.click();
+                        }
+                    });
+                }""")
+                page.wait_for_timeout(1000)
+            except Exception:
+                pass
+
+            # 5. กดปุ่ม Post (โพสต์) — ใช้ exact match และ Selectors จาก Chrome Recorder
             log("🚀 กำลังกดปุ่มโพสต์วิดีโอ...")
-            post_btn = page.locator('button').filter(has_text=re.compile(r'^(Post|โพสต์|Publish)$')).first
-            if post_btn.count() > 0:
-                post_btn.click(force=True)
-                log("   ✓ คลิกปุ่ม Post จริงเรียบร้อยแล้ว!")
-            else:
-                # Fallback ค้นหาปุ่มที่มีคำว่า Post แต่ไม่ใช่ Posts
-                alt_btn = page.locator('button:text-is("Post"), button:text-is("โพสต์")').first
-                if alt_btn.count() > 0:
-                    alt_btn.click(force=True)
-                    log("   ✓ คลิกปุ่ม Post (Exact Text) เรียบร้อยแล้ว!")
-                else:
-                    log("⚠️ ไม่พบปุ่ม Post โดยตรง ลองค้นหาปุ่ม Submit...")
-                    page.locator('button[type="submit"]').first.click(force=True)
+            post_selectors = [
+                'button[data-e2e="post_video_button"]',
+                'div.css-fsbw52 button.Button__root--type-primary',
+                'xpath=//*[@id="root"]/div/div/div[2]/div[2]/div/div/div/div/div/div[6]/div/button[1]',
+                'button:has-text("Post")',
+                'button:has-text("โพสต์")',
+            ]
+            clicked = False
+            for sel in post_selectors:
+                btn = page.locator(sel).first
+                if btn.count() > 0 and btn.is_visible():
+                    btn.click(force=True)
+                    log(f"   ✓ คลิกปุ่ม Post สำเร็จ (Selector: {sel})")
+                    clicked = True
+                    break
+
+            if not clicked:
+                log("⚠️ ลองใช้ JS direct click สำหรับปุ่ม Post...")
+                page.evaluate("""() => {
+                    const b = document.querySelector('button[data-e2e="post_video_button"]') ||
+                              document.querySelector('div.css-fsbw52 button.Button__root--type-primary') ||
+                              Array.from(document.querySelectorAll('button')).find(el => /^(Post|โพสต์)$/i.test(el.innerText.trim()));
+                    if (b) b.click();
+                }""")
 
             # 6. รอยืนยันการโพสต์สำเร็จ (รอ TikTok ประมวลผลและแสดงผลสำเร็จ)
             log("⏳ รอระบบ TikTok ประมวลผลการโพสต์ (15 วินาที)...")
