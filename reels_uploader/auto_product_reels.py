@@ -162,27 +162,27 @@ def download_image(url: str) -> Optional[Image.Image]:
 
 
 CONTENT_MODES = [
-    # กระจายสลับกันตามสัดส่วน (สินค้า 30%, คนดัง 20%, ข่าวด่วน 15%, เลขเด็ด 15%, ทริคแม่บ้าน 15%, ทริคคนทำงาน 5%)
-    "PRODUCT_HIGHLIGHT",   # 1. 🛍️ สินค้าตรงจุด (30%)
-    "CELEBRITY_TREND",     # 2. 🌟 ตามรอยคนดัง (20%)
-    "TRENDING_NEWS",       # 3. 📰 ข่าวด่วนจริง RSS (15%)
-    "LUCKY_FORTUNE",       # 4. 🔮 เลขเด็ด & สายมู (15%)
-    "LIFE_HACK_TIP",       # 5. 💡 ทริคแม่บ้าน (15%)
-    "PRODUCT_HIGHLIGHT",   # 6. 🛍️ สินค้าตรงจุด (30%)
-    "CELEBRITY_TREND",     # 7. 🌟 ตามรอยคนดัง (20%)
-    "TRENDING_NEWS",       # 8. 📰 ข่าวด่วนจริง RSS (15%)
-    "LUCKY_FORTUNE",       # 9. 🔮 เลขเด็ด & สายมู (15%)
-    "LIFE_HACK_TIP",       # 10. 💡 ทริคแม่บ้าน (15%)
-    "PRODUCT_HIGHLIGHT",   # 11. 🛍️ สินค้าตรงจุด (30%)
-    "CELEBRITY_TREND",     # 12. 🌟 ตามรอยคนดัง (20%)
-    "TRENDING_NEWS",       # 13. 📰 ข่าวด่วนจริง RSS (15%)
-    "LUCKY_FORTUNE",       # 14. 🔮 เลขเด็ด & สายมู (15%)
-    "LIFE_HACK_TIP",       # 15. 💡 ทริคแม่บ้าน (15%)
-    "PRODUCT_HIGHLIGHT",   # 16. 🛍️ สินค้าตรงจุด (30%)
-    "CELEBRITY_TREND",     # 17. 🌟 ตามรอยคนดัง (20%)
-    "WORK_PRODUCTIVITY",   # 18. 💼 ทริคคนทำงาน (5%)
-    "PRODUCT_HIGHLIGHT",   # 19. 🛍️ สินค้าตรงจุด (30%)
-    "PRODUCT_HIGHLIGHT"    # 20. 🛍️ สินค้าตรงจุด (30%)
+    # สัดส่วนใหม่ 90% คอนเทนต์ไวรัลหยุดดู 3 วิ / 10% สินค้า Shopee แท้
+    "TRENDING_NEWS",       # 1. 🌍 ข่าวด่วนจริง (BBC/Sanook)
+    "CELEBRITY_TREND",     # 2. 🌟 ตามรอยคนดัง (Sanook/BBC)
+    "LIFE_HACK_TIP",       # 3. 💡 ทริคแม่บ้าน
+    "TRENDING_NEWS",       # 4. 🌍 ข่าวด่วนจริง
+    "CELEBRITY_TREND",     # 5. 🌟 ตามรอยคนดัง
+    "LUCKY_FORTUNE",       # 6. 🔮 ดวง & เลขมงคล (Sanook)
+    "WORK_PRODUCTIVITY",   # 7. 💼 ทริคคนทำงาน
+    "TRENDING_NEWS",       # 8. 🌍 ข่าวด่วนจริง
+    "CELEBRITY_TREND",     # 9. 🌟 ตามรอยคนดัง
+    "PRODUCT_HIGHLIGHT",   # 10. 🛍️ สินค้า Shopee แท้ (10%)
+    "LIFE_HACK_TIP",       # 11. 💡 ทริคแม่บ้าน
+    "TRENDING_NEWS",       # 12. 🌍 ข่าวด่วนจริง
+    "CELEBRITY_TREND",     # 13. 🌟 ตามรอยคนดัง
+    "LUCKY_FORTUNE",       # 14. 🔮 ดวง & เลขมงคล
+    "WORK_PRODUCTIVITY",   # 15. 💼 ทริคคนทำงาน
+    "LIFE_HACK_TIP",       # 16. 💡 ทริคแม่บ้าน
+    "TRENDING_NEWS",       # 17. 🌍 ข่าวด่วนจริง
+    "CELEBRITY_TREND",     # 18. 🌟 ตามรอยคนดัง
+    "LIFE_HACK_TIP",       # 19. 💡 ทริคแม่บ้าน
+    "PRODUCT_HIGHLIGHT",   # 20. 🛍️ สินค้า Shopee แท้ (10%)
 ]
 
 
