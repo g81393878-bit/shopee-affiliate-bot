@@ -43,36 +43,29 @@ PENDING_DIR.mkdir(parents=True, exist_ok=True)
 POSTED_DIR.mkdir(parents=True, exist_ok=True)
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
-FONT_BOLD = Path(r"C:\Windows\Fonts\tahoma.ttf")
-if not FONT_BOLD.exists():
-    for f_name in ["THSarabunNew Bold.ttf", "Garuda-Bold.ttf", "arialbd.ttf", "DejaVuSans-Bold.ttf"]:
-        p = Path(f"/usr/share/fonts/truetype/{f_name}")
-        if p.exists():
-            FONT_BOLD = p
-            break
-        p_win = Path(f"C:/Windows/Fonts/{f_name}")
-        if p_win.exists():
-            FONT_BOLD = p_win
-            break
+import auto_product_reels
+FONT_BOLD, FONT_REG = auto_product_reels._resolve_fonts()
 
 def get_font(font_path: Path, size: int) -> ImageFont.FreeTypeFont:
-    try:
-        return ImageFont.truetype(str(font_path), size)
-    except Exception:
-        return ImageFont.load_default()
+    return auto_product_reels.get_font(font_path, size)
 
 def clean_render_text(text: str) -> str:
-    """ลบอิโมจิและอักขระพิเศษที่ทำให้ Pillow แสดงผลเป็นกล่องสี่เหลี่ยม □"""
+    """ลบอิโมจิ, HTML tags, และอักขระพิเศษที่ทำให้ Pillow แสดงผลเป็นกล่องสี่เหลี่ยม □"""
     if not text:
         return ""
-    # Strip emojis and symbols that standard fonts cannot render
-    cleaned = re.sub(r"[\U00010000-\U0010ffff]", "", text)
+    # 1. ลบ HTML tags เช่น <img ...>, <a ...>
+    cleaned = re.sub(r'<[^>]+>', ' ', text)
+    # 2. ลบ URLs ที่อาจติดมาใน description
+    cleaned = re.sub(r'https?://\S+', '', cleaned)
+    # 3. ลบ Emojis และ Symbols
+    cleaned = re.sub(r"[\U00010000-\U0010ffff]", "", cleaned)
     cleaned = re.sub(r"[\u2600-\u27ff]", "", cleaned)
     cleaned = re.sub(r"[\u2300-\u23ff]", "", cleaned)
     cleaned = re.sub(r"[\u2b50-\u2b55]", "", cleaned)
     cleaned = re.sub(r"[\ufe0e\ufe0f]", "", cleaned)
     cleaned = cleaned.replace("🚨", "").replace("🔴", "").replace("💬", "").replace("👇", "").replace("💡", "").replace("🌟", "").replace("🔮", "").replace("💼", "").replace("🏠", "").replace("✨", "").replace("🦛", "")
-    return cleaned.strip()
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    return cleaned
 
 def wrap_thai_lines(text: str, max_chars_per_line: int = 24, max_lines: int = 8) -> List[str]:
     text = clean_render_text(text)
@@ -110,8 +103,10 @@ def fetch_real_live_rss(feed_url: str, default_title: str, default_summary: str,
                     enc_el = it.find("enclosure")
                     media_thumb = it.find(".//{http://search.yahoo.com/mrss/}thumbnail")
                     if t_el is not None and t_el.text:
-                        title = html.unescape(t_el.text).strip()
-                        desc = html.unescape(d_el.text or "").strip() if d_el is not None and d_el.text else ""
+                        raw_title = html.unescape(t_el.text).strip()
+                        raw_desc = html.unescape(d_el.text or "").strip() if d_el is not None and d_el.text else ""
+                        title = clean_render_text(raw_title)
+                        desc = clean_render_text(raw_desc)
                         img_url = ""
                         if enc_el is not None and enc_el.get("url"):
                             img_url = enc_el.get("url")
