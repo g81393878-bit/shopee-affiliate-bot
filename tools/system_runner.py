@@ -7,6 +7,7 @@
 2. 🎙️ Natural Thai Neural TTS Voiceover (เสียงพากย์ป้าเข็ม/มืออาชีพ แนะนำสินค้าและราคาจริง)
 3. 🔄 Auto-Reconnect & Self-Healing Watchdog (กู้คืนระบบอัตโนมัติเมื่อเน็ตหลุด)
 """
+import json
 import logging
 import os
 import sys
@@ -78,21 +79,37 @@ def is_active_hours() -> bool:
 
 
 def run_prebuffer_producer_loop():
-    """เธรดผลิตคลิปสินค้าล่วงหน้าในคลัง (Pre-buffer Producer) — ผลิตคลิปรอไว้เสมอ 3-5 คลิป"""
-    logger.info("🏭 เริ่มต้นระบบ Auto Pre-buffer Producer (ผลิตคลิปรอไว้ในคลังเสมอ 3-5 คลิป)")
+    """เธรดผลิตคลิปล่วงหน้าในคลัง (Pre-buffer Producer) — สัดส่วน 90% คอนเทนต์ไวรัลหยุดดู 3 วิ / 10% สินค้า Shopee"""
+    logger.info("🏭 เริ่มต้นระบบ Auto Pre-buffer Producer (โควตา: 90% คอนเทนต์ไวรัล 3 วิ / 10% สินค้า Shopee)")
     while True:
         try:
             import uploader
             from auto_product_reels import generate_product_reels
+            import standalone_content_generator
+            import random
+
             pending = uploader.list_pending()
-            if len(pending) < 3:
-                needed = 3 - len(pending)
-                logger.info(f"📦 คิวคลิปพร้อมโพสต์เหลือ {len(pending)} คลิป — กำลังผลิตเพิ่มล่วงหน้า {needed} คลิป...")
-                generate_product_reels(limit=needed,
-                                       selection=product_selection_mode())
+            if len(pending) < 4:
+                needed = 4 - len(pending)
+                logger.info(f"📦 คิวคลิปพร้อมโพสต์เหลือ {len(pending)} คลิป — กำลังผลิตเติมคลัง {needed} คลิป (90% ไวรัล / 10% สินค้า)...")
+                for _ in range(needed):
+                    # 90% คอนเทนต์หยุดดู 3 วิ (ข่าวด่วนโลก, ไวรัลดารา, ทริคแก้ปัญหา, ดวง) / 10% สินค้า Shopee
+                    if random.random() < 0.90:
+                        cat = random.choice([
+                            "TRENDING_NEWS",
+                            "CELEBRITY_TREND",
+                            "LIFE_HACK_TIP",
+                            "WORK_PRODUCTIVITY",
+                            "LUCKY_FORTUNE",
+                        ])
+                        res = standalone_content_generator.generate_standalone_reel(cat)
+                        if res:
+                            logger.info(f"✨ ผลิตคลิปไวรัล 3 วิสำเร็จ [{cat}]: {res.get('title')}")
+                    else:
+                        generate_product_reels(limit=1, selection=product_selection_mode())
         except Exception as e:
             logger.warning(f"⚠️ Pre-buffer producer warning: {e}")
-        time.sleep(120)  # ตรวจสอบทุก 2 นาที
+        time.sleep(90)  # ตรวจสอบทุก 90 วินาที
 
 
 def run_reels_uploader_loop():
@@ -115,11 +132,20 @@ def run_reels_uploader_loop():
 
 
 def run_tiktok_uploader_loop():
-    """เธรดแยกอิสระ 100% สำหรับโพสต์คลิปลง TikTok Studio หมุนเวียนทุกช่อง (ไม่รบกวน FB / YouTube)"""
-    logger.info("⚫ เริ่มต้นระบบ TikTok Auto-Uploader (รองรับ Multi-Account Rotation)")
+    """เธรดอัปโหลด TikTok แบบ Multi-Account Rotation — เฉลี่ยครบ 8 คลิป/ช่อง/วัน (รวม 24 คลิป/วัน)"""
+    logger.info("⚫ เริ่มต้นระบบ TikTok Auto-Uploader (โควตาเฉลี่ย 8 คลิป/ช่อง/วัน ทั้ง 3 ช่อง)")
     interval_minutes = int(os.getenv("TIKTOK_INTERVAL_MINUTES", "60"))
+    daily_target = int(os.getenv("TIKTOK_DAILY_TARGET_PER_CHANNEL", "8"))
     history_file = TOOLS_DIR / "posted_tiktok_history.json"
     index_file = TOOLS_DIR / "last_tiktok_channel_index.txt"
+    daily_tracker_file = TOOLS_DIR / "daily_tiktok_counts.json"
+
+    TT_CHANNEL_NAMES = {
+        "tiktok_cookies": "ช่อง 1: Anda Review (@healthgooddeals)",
+        "tiktok_cookies_2": "ช่อง 2: ชี้เป้าโปรคุ้ม (@cheepao.review)",
+        "tiktok_cookies_3": "ช่อง 3: ป้าเข็ม รีวิว (@pakhem.review99)",
+    }
+
     tt_account_index = 0
     if index_file.exists():
         try:
@@ -129,70 +155,101 @@ def run_tiktok_uploader_loop():
 
     while True:
         try:
+            now_ict = datetime.now(ICT)
+            today_str = now_ict.strftime("%Y-%m-%d")
+
+            # โหลดหรือรีเซ็ตตัวนับยอดโพสต์ประจำวัน
+            daily_data = {"date": today_str, "counts": {}}
+            if daily_tracker_file.exists():
+                try:
+                    loaded = json.loads(daily_tracker_file.read_text(encoding="utf-8"))
+                    if loaded.get("date") == today_str:
+                        daily_data = loaded
+                except Exception:
+                    pass
+
             if is_active_hours():
                 import tiktok_studio_uploader
                 if tiktok_studio_uploader.is_logged_in():
                     accounts = tiktok_studio_uploader.get_available_tiktok_accounts()
                     if accounts:
-                        active_cookie = accounts[tt_account_index % len(accounts)]
-                        TT_CHANNEL_NAMES = {
-                            "tiktok_cookies": "ช่อง 1: Anda Review (@healthgooddeals)",
-                            "tiktok_cookies_2": "ช่อง 2: ชี้เป้าโปรคุ้ม (@cheepao.review)",
-                        }
-                        account_key = active_cookie.stem if active_cookie else "tiktok_cookies"
-                        display_channel = TT_CHANNEL_NAMES.get(account_key, f"TikTok ({account_key})")
+                        # คัดกรองเฉพาะช่องที่ยังโพสต์ไม่ครบ 8 คลิปวันนี้
+                        eligible_accounts = [
+                            acc for acc in accounts
+                            if daily_data["counts"].get(acc.stem, 0) < daily_target
+                        ]
 
-                        # อ่านประวัติการโพสต์แยกรายช่อง 100% กันคลิปซ้ำ
-                        history = {}
-                        if history_file.exists():
-                            try:
-                                history = json.loads(history_file.read_text(encoding="utf-8"))
-                            except Exception:
-                                history = {}
-                        channel_posted = set(history.get(account_key, []))
-
-                        pending_videos = sorted((REELS_DIR / "pending_videos").glob("*.mp4"))
-                        posted_videos = sorted((REELS_DIR / "posted").glob("*.mp4"), key=lambda f: f.stat().st_mtime, reverse=True)
-                        candidate = None
-
-                        for v in pending_videos + posted_videos:
-                            if v.name not in channel_posted:
-                                candidate = v
-                                break
-
-                        if candidate:
-                            logger.info(f"⚫ [TikTok: {display_channel}] กำลังโพสต์คลิปอิสระ: {candidate.name}")
-                            clean_title = candidate.stem.replace("_", " ")
-                            res = tiktok_studio_uploader.upload_video_via_web(candidate, caption=clean_title, cookie_file=active_cookie)
-                            if res.get("success"):
-                                logger.info(f"✅ [TikTok: {display_channel}] โพสต์คลิปสำเร็จ: {candidate.name}")
-                                if account_key not in history:
-                                    history[account_key] = []
-                                history[account_key].append(candidate.name)
-                                history_file.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
-                                tt_account_index += 1
-                                try:
-                                    index_file.write_text(str(tt_account_index), encoding="utf-8")
-                                except Exception:
-                                    pass
-                                try:
-                                    from telegram_notifier import send_telegram_notification
-                                    send_telegram_notification(
-                                        f"⚫ [TikTok Auto-Post]\n"
-                                        f"• คลิป: {candidate.name[:40]}\n"
-                                        f"• ช่อง: {display_channel}\n"
-                                        f"• สถานะ: โพสต์สำเร็จ 100%"
-                                    )
-                                except Exception:
-                                    pass
-                            else:
-                                logger.warning(f"⚠️ [TikTok: {display_channel}] โพสต์ไม่สำเร็จ: {res.get('error')}")
+                        if not eligible_accounts:
+                            logger.info(f"🎉 [TikTok] วันนี้ทุกช่องโพสต์ครบโควตา {daily_target} คลิป/ช่องแล้ว (รวม {daily_target * len(accounts)} คลิป) รอเริ่มวันใหม่")
                         else:
-                            logger.info(f"⚫ [TikTok: {display_channel}] ไม่มีคลิปใหม่ที่ยังไม่เคยโพสต์ในช่องนี้")
+                            # เลือกช่องถัดไปตามคิว
+                            active_cookie = eligible_accounts[tt_account_index % len(eligible_accounts)]
+                            account_key = active_cookie.stem if active_cookie else "tiktok_cookies"
+                            display_channel = TT_CHANNEL_NAMES.get(account_key, f"TikTok ({account_key})")
+
+                            # อ่านประวัติการโพสต์แยกรายช่อง 100% กันคลิปซ้ำ
+                            history = {}
+                            if history_file.exists():
+                                try:
+                                    history = json.loads(history_file.read_text(encoding="utf-8"))
+                                except Exception:
+                                    history = {}
+                            channel_posted = set(history.get(account_key, []))
+
+                            pending_videos = sorted((REELS_DIR / "pending_videos").glob("*.mp4"))
+                            posted_videos = sorted((REELS_DIR / "posted").glob("*.mp4"), key=lambda f: f.stat().st_mtime, reverse=True)
+                            candidate = None
+
+                            for v in pending_videos + posted_videos:
+                                if v.name not in channel_posted:
+                                    candidate = v
+                                    break
+
+                            if candidate:
+                                cur_ch_count = daily_data["counts"].get(account_key, 0) + 1
+                                logger.info(f"⚫ [TikTok: {display_channel}] กำลังโพสต์คลิปที่ {cur_ch_count}/{daily_target} ของวันนี้: {candidate.name}")
+                                clean_title = candidate.stem.replace("_", " ")
+                                res = tiktok_studio_uploader.upload_video_via_web(candidate, caption=clean_title, cookie_file=active_cookie)
+                                if res.get("success"):
+                                    logger.info(f"✅ [TikTok: {display_channel}] โพสต์คลิปสำเร็จ ({cur_ch_count}/{daily_target}): {candidate.name}")
+                                    if account_key not in history:
+                                        history[account_key] = []
+                                    history[account_key].append(candidate.name)
+                                    history_file.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
+
+                                    daily_data["counts"][account_key] = cur_ch_count
+                                    daily_tracker_file.write_text(json.dumps(daily_data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+                                    tt_account_index += 1
+                                    try:
+                                        index_file.write_text(str(tt_account_index), encoding="utf-8")
+                                    except Exception:
+                                        pass
+
+                                    try:
+                                        from telegram_notifier import send_telegram_notification
+                                        c1 = daily_data["counts"].get("tiktok_cookies", 0)
+                                        c2 = daily_data["counts"].get("tiktok_cookies_2", 0)
+                                        c3 = daily_data["counts"].get("tiktok_cookies_3", 0)
+                                        send_telegram_notification(
+                                            f"⚫ [TikTok Auto-Post]\n"
+                                            f"• ช่อง: {display_channel}\n"
+                                            f"• คลิป: {candidate.name[:35]}\n"
+                                            f"• ยอดวันนี้: ช่อง 1={c1}/{daily_target} | ช่อง 2={c2}/{daily_target} | ช่อง 3={c3}/{daily_target}\n"
+                                            f"• สถานะ: โพสต์สำเร็จ 100%"
+                                        )
+                                    except Exception:
+                                        pass
+                                else:
+                                    logger.warning(f"⚠️ [TikTok: {display_channel}] โพสต์ไม่สำเร็จ: {res.get('error')}")
+                                    tt_account_index += 1
+                            else:
+                                logger.info(f"⚫ [TikTok: {display_channel}] ไม่มีคลิปใหม่ที่ยังไม่เคยโพสต์ในช่องนี้")
+                                tt_account_index += 1
         except Exception as e_tt:
             logger.error(f"❌ ระบบ TikTok Auto-Uploader เกิดข้อผิดพลาด: {e_tt}")
 
-        # พักตามช่วงเวลาที่กำหนด (เช่น 60 นาที)
+        # พักตามช่วงเวลาที่กำหนด (60 นาที เพื่อให้ครบ 24 คลิป/วัน พอดี)
         time.sleep(interval_minutes * 60)
 
 
@@ -246,7 +303,7 @@ def get_system_health_summary(title: str = "รายงานสถานะร
         f"🟢 สถานะบริการ & API Quota:\n"
         f"  • 🎬 โรงงานผลิตคลิป (Pre-buffer): 🟢 ออนไลน์\n"
         f"  • 📍 Facebook Reels: 🟢 ปกติ (3 เพจหลักพร้อมยิง)\n"
-        f"  • 🔴 YouTube Shorts: 🟢 ปกติ (ระบบหมุนเวียน 5 ช่องเฉลี่ยโควต้า)\n"
+        f"  • 🔴 YouTube Shorts: 🟢 ปกติ (ระบบหมุนเวียน 6 ช่องเฉลี่ยโควต้า)\n"
         f"  • 🎙️ เสียงพากย์ไทย: Google/Edge Neural TTS (เสียงป้าเข็ม)\n"
         f"  • 🧠 สมองกล AI Caption: Groq AI Multi-Key (7 Keys Failover)\n\n"
         f"📦 สถานะคลังคลิปพร้อมโพสต์:\n"

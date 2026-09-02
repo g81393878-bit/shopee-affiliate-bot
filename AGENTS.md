@@ -78,15 +78,29 @@
 17. **ระบบเฝ้าระวังและซิงค์ LINE Webhook อัตโนมัติ (Tunnel Watchdog Auto-Sync)**:
     - บริการ `tunnel-watchdog.service` ต้องรันคู่ขนานตลอด 24 ชม. ตรวจจับ URL ของ Cloudflare ทุก 15 วินาที และอัปเดต LINE Webhook ทันทีที่ URL มีการเปลี่ยนแปลง ป้องกันปัญหาบอทเงียบถาวร (ดูบันทึกฉบับเต็มที่ `docs/ROOT_CAUSE_ANALYSIS_2026_08_30.md`)
 18. **ระบบกระจาย Multi-Platform & Multi-Channel YouTube Shorts (Multi-Channel Broadcast)**:
-    - ระบบยิงพร้อมกันครบทุกช่องทางทุก 30 นาที: Facebook เพจหลัก + YouTube Shorts 5 ช่องหมุนเวียน Round-Robin (`youtube_token.json`, `youtube_token_2.json`, `youtube_token_3.json`, `youtube_token_4.json`, `youtube_token_5.json`)
+    - ระบบยิงพร้อมกันครบทุกช่องทางทุก 30 นาที: Facebook เพจหลัก + YouTube Shorts 6 ช่องหมุนเวียน Round-Robin (`youtube_token.json`, `youtube_token_2.json`, `youtube_token_3.json`, `youtube_token_4.json`, `youtube_token_5.json`, `youtube_token_6.json`)
     - การเพิ่มช่องใหม่ให้ใช้คำสั่ง `python tools/youtube_uploader.py --add-channel <N>` (ดูคู่มือฉบับเต็มที่ `docs/MULTI_CHANNEL_AND_ANTI_SPAM_OPERATIONS.md`)
 19. **ระบบเกราะป้องกันสแปม (Anti-Spam Shield & Unit Test Quarantine Guard)**:
     - ระบบส่งแจ้งเตือน Telegram ต้องมี Cooldown Throttle รายบุคคล 60 วินาที/คน ป้องกันการกดปุ่มชำระเงิน/แพ็กเกจรัวๆ
     - ห้ามให้การรัน Unit Test (`pytest`, `PYTEST_CURRENT_TEST`, `U_cust_`, `mock`) ส่งข้อความจริงออกนอกระบบเด็ดขาด
 20. **ระบบตัดแยกหน้าที่การโพสต์และการป้องกันคลิปซ้ำ 100% (Decoupled Uploader & Strict Anti-Duplicate History)**:
-    - โมดูล `reels_uploader/uploader.py` ดูแลเฉพาะ Facebook Reels (3 เพจ) และ YouTube Shorts (5 ช่อง) เท่านั้น **ห้ามเรียก TikTok ใน `uploader.py` เด็ดขาด**
+    - โมดูล `reels_uploader/uploader.py` ดูแลเฉพาะ Facebook Reels (3 เพจ) และ YouTube Shorts (6 ช่อง) เท่านั้น **ห้ามเรียก TikTok ใน `uploader.py` เด็ดขาด**
     - เธรด `run_tiktok_uploader_loop()` ใน `tools/system_runner.py` เป็นผู้รับผิดชอบการโพสต์ TikTok ทุกช่องแต่เพียงผู้เดียว (ยิงทุก 60 นาที)
     - ต้องบันทึกและตรวจสอบประวัติการโพสต์แยกรายช่องแบบ JSON ใน `tools/posted_tiktok_history.json` เสมอ เพื่อป้องกันปัญหาคลิปซ้ำข้ามช่องหรือซ้ำในช่องเดิม 100%
+21. **ระบบคู่มือมาตรฐาน 7 หมวดหมู่ (Modular Documentation Standard in `docs/manual/`)**:
+    - เอเจนต์ AI ทุกตัวที่จะทำการแก้ไขระบบต่อจากนี้ **ต้องอ่านและยึดถือคู่มือเฉพาะหมวดใน `docs/manual/` เสมอ** เพื่อป้องกันการทำงานสะเปะสะปะ:
+      - `docs/manual/01_ARCHITECTURE_AND_DUAL_TRACK.md`: สถาปัตยกรรมระบบ & ระบบ 2 รางคู่ขนาน (10% สินค้า / 90% ไวรัล 5 หมวด)
+      - `docs/manual/02_YOUTUBE_SHORTS_SETUP.md`: YouTube Shorts 6 ช่องหมุนเวียน Round-Robin + วิธีแก้ OAuth 403
+      - `docs/manual/03_TIKTOK_MULTI_ACCOUNT.md`: TikTok Multi-Account Rotation
+      - `docs/manual/04_FACEBOOK_PAGES_REELS.md`: Facebook Pages 3 เพจ + Long-Lived Token 60 วัน
+      - `docs/manual/05_LINE_OA_AND_SAAS.md`: LINE OA ป้าเข็ม, การ์ด Flex, ขาย SaaS 5 แพ็กเกจ, ตรวจสลิป
+      - `docs/manual/06_TELEGRAM_COMMANDER.md`: ศูนย์บัญชาการ Telegram Commander + คำสั่งด่วนระยะไกล
+      - `docs/manual/07_TROUBLESHOOTING_AND_RECOVERY.md`: ตารางแก้ปัญหาฉุกเฉินทุกแพลตฟอร์ม + One-Click Reset
+22. **กฎเหล็กภาพถ่ายจริง 10000000% (Strict 100% Real Authentic Photography Policy)**:
+    - ทุกวิดีโอต้องใช้ **ภาพถ่ายจริงระดับความคมชัดสูง (Real Authentic HD Photography)** เท่านั้น ห้ามใช้ภาพการ์ตูน AI, ภาพวาด หรือภาพมโนเด็ดขาด
+    - **ข่าวด่วน & ดารา**: ต้องดึงภาพถ่ายจริงจากช่างภาพสำนักข่าวต้นสังกัด (BBC World News, ไทยรัฐ) ที่ผูกตรงกับบทความนั้น 100%
+    - **ทริคแก้ปัญหา & คนทำงาน**: ต้องใช้ภาพถ่ายสถานที่จริง อุปกรณ์จริง (ปัญหา -> วิธีแก้ -> ผลลัพธ์)
+    - **สินค้า Shopee (10%)**: ต้องใช้ภาพถ่ายสินค้าของแท้จาก Shopee Official CDN ตรงปก 100%
 
 
 **API/Admin:** `products-and-links` (สินค้า API + link policy) · `admin-dashboard` (/admin + cookie) · `cron-jobs` (ทุก cron + CRON_TOKEN)

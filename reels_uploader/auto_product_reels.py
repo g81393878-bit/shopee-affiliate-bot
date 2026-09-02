@@ -161,26 +161,99 @@ def download_image(url: str) -> Optional[Image.Image]:
     return None
 
 
-def generate_ai_voice_script(product_name: str, category: str = "") -> Optional[str]:
-    """ใช้ Groq AI Multi-Key สร้างบทพูดเสียงพากย์วิดีโอสั้นตรงกับสินค้าจริง 100% (No Price, 3-Sec Viral Hook)"""
+CONTENT_MODES = [
+    # กระจายสลับกันตามสัดส่วน (สินค้า 30%, คนดัง 20%, ข่าวด่วน 15%, เลขเด็ด 15%, ทริคแม่บ้าน 15%, ทริคคนทำงาน 5%)
+    "PRODUCT_HIGHLIGHT",   # 1. 🛍️ สินค้าตรงจุด (30%)
+    "CELEBRITY_TREND",     # 2. 🌟 ตามรอยคนดัง (20%)
+    "TRENDING_NEWS",       # 3. 📰 ข่าวด่วนจริง RSS (15%)
+    "LUCKY_FORTUNE",       # 4. 🔮 เลขเด็ด & สายมู (15%)
+    "LIFE_HACK_TIP",       # 5. 💡 ทริคแม่บ้าน (15%)
+    "PRODUCT_HIGHLIGHT",   # 6. 🛍️ สินค้าตรงจุด (30%)
+    "CELEBRITY_TREND",     # 7. 🌟 ตามรอยคนดัง (20%)
+    "TRENDING_NEWS",       # 8. 📰 ข่าวด่วนจริง RSS (15%)
+    "LUCKY_FORTUNE",       # 9. 🔮 เลขเด็ด & สายมู (15%)
+    "LIFE_HACK_TIP",       # 10. 💡 ทริคแม่บ้าน (15%)
+    "PRODUCT_HIGHLIGHT",   # 11. 🛍️ สินค้าตรงจุด (30%)
+    "CELEBRITY_TREND",     # 12. 🌟 ตามรอยคนดัง (20%)
+    "TRENDING_NEWS",       # 13. 📰 ข่าวด่วนจริง RSS (15%)
+    "LUCKY_FORTUNE",       # 14. 🔮 เลขเด็ด & สายมู (15%)
+    "LIFE_HACK_TIP",       # 15. 💡 ทริคแม่บ้าน (15%)
+    "PRODUCT_HIGHLIGHT",   # 16. 🛍️ สินค้าตรงจุด (30%)
+    "CELEBRITY_TREND",     # 17. 🌟 ตามรอยคนดัง (20%)
+    "WORK_PRODUCTIVITY",   # 18. 💼 ทริคคนทำงาน (5%)
+    "PRODUCT_HIGHLIGHT",   # 19. 🛍️ สินค้าตรงจุด (30%)
+    "PRODUCT_HIGHLIGHT"    # 20. 🛍️ สินค้าตรงจุด (30%)
+]
+
+
+def generate_ai_voice_script(product_name: str, category: str = "", content_mode: str = "PRODUCT_HIGHLIGHT") -> Optional[str]:
+    """ใช้ Groq AI Multi-Key สร้างบทพูดเสียงพากย์สั้น 7-10 วินาที ไวรัล คมชัด 100% (No Price, 3-Sec Viral Hook)
+    แบ่งขาด 2 ส่วน:
+    1. ขายสินค้าตรงจุด (30%): ป้ายยาและขายสินค้า Shopee
+    2. คอนเทนต์เพียวๆ ไม่ขายของ (70%): คนดัง 20%, ทริคแม่บ้าน 15%, เลขเด็ด 15%, ข่าวด่วน 15%, แนะนำการทำงาน 5%
+    """
     groq_keys = os.getenv("GROQ_API_KEY", "").split(",")
     models = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"]
     
     clean_pname = sanitize_public_product_text(clean_display_text(product_name))
+    
+    # กำหนดโจทย์สไตล์และ Hook
+    if content_mode == "CELEBRITY_TREND":
+        mode_instruction = (
+            "สไตล์: '🌟 ส่องไอเทมคนดัง & เรื่องเล่าไวรัล (คอนเทนต์เพียว 100% ไม่ขายสินค้า ไม่เอ่ยถึงการซื้อของ)'\n"
+            "- ประโยคที่ 1 (0-3 วิ): Hook หยุดดูด้วยกระแสคนดัง เช่น '🚨 ส่องกระแสลิซ่า! ตัวนี้ทำไมคนถึงตามหากันทั้งเมือง?' หรือ 'ตามรอยกระแสหมูเด้งฟีเวอร์ใน 10 วิ!'\n"
+            "- ประโยคที่ 2 (4-7 วิ): เล่าความปังและเหตุผลที่ไวรัลแบบสนุกสนาน\n"
+            "- ประโยคที่ 3 (8-10 วิ): จบด้วยการชวนคุย เช่น 'ชอบเรื่องฮิตๆ แบบนี้ แอด LINE @137gsref มาคุยกับป้าเข็มนะจ๊ะ'"
+        )
+    elif content_mode == "LIFE_HACK_TIP":
+        mode_instruction = (
+            "สไตล์: '💡 ทริคแม่บ้าน & เกร็ดความรู้แก้ปัญหาบ้าน (คอนเทนต์เพียว 100% ไม่ขายสินค้า ไม่เอ่ยถึงการซื้อของ)'\n"
+            "- ประโยคที่ 1 (0-3 วิ): Hook หยุดดูด้วยทริคหรือปัญหา เช่น '🚨 อย่าเพิ่งทิ้ง! ก้นกระทะไหม้ดำ มีวิธีแก้ใน 1 นาที' หรือ 'ทริคง่ายๆ จัดบ้านแคบให้จุของเพิ่ม 3 เท่า'\n"
+            "- ประโยคที่ 2 (4-7 วิ): อธิบายวิธีแก้ปัญหา/ทริคภูมิปัญญาชาวบ้านแบบสั้นกระชับ นำไปทำตามได้ทันที\n"
+            "- ประโยคที่ 3 (8-10 วิ): จบด้วยการชวนคุย เช่น 'ลองเอาทริคนี้ไปใช้ดูนะจ๊ะ แอด LINE @137gsref มาคุยกับป้าเข็มได้เลย'"
+        )
+    elif content_mode == "LUCKY_FORTUNE":
+        mode_instruction = (
+            "สไตล์: '🔮 เลขเด็ด & แนวทางโชคลาภ เสริมดวงการเงิน (คอนเทนต์เพียว 100% ไม่ขายสินค้า ไม่เอ่ยถึงการซื้อของ)'\n"
+            "- ประโยคที่ 1 (0-3 วิ): Hook หยุดดูด้วยเรื่องดวง/เลขเด็ด เช่น '🔮 เลขเด็ดป้าเข็ม งวดนี้ใครอยากดวงเฮงรับทรัพย์!' หรือ 'เปิดดวงการเงินรับโชคประจำงวด!'\n"
+            "- ประโยคที่ 2 (4-7 วิ): บอกแนวทางเลขมงคล/เสริมพลังบวกเพื่อความเป็นสิริมงคล\n"
+            "- ประโยคที่ 3 (8-10 วิ): จบด้วยการอวยพร เช่น 'ขอให้ทุกคนเฮงๆ รวยๆ แอด LINE @137gsref มาคุยกับป้าเข็มนะจ๊ะ'"
+        )
+    elif content_mode == "TRENDING_NEWS":
+        mode_instruction = (
+            "สไตล์: '📰 สรุปข่าวด่วน & สถานการณ์สำคัญ (เช่น ข่าวเนปาล, สภาพอากาศ, ภัยพิบัติ) (คอนเทนต์เพียว 100% ไม่ขายสินค้า)'\n"
+            "- ประโยคที่ 1 (0-3 วิ): Hook หยุดดูด้วยข่าวด่วน เช่น '🚨 สรุปข่าวด่วนเนปาลล่าสุด ใครมีแพลนเดินทางต้องระวัง!' หรือ 'เตือนภัยสภาพอากาศแปรปรวนหนัก!'\n"
+            "- ประโยคที่ 2 (4-7 วิ): สาระสั้นๆ สรุปข้อเท็จจริงของเหตุการณ์ให้คนฟังเข้าใจใน 5 วินาที\n"
+            "- ประโยคที่ 3 (8-10 วิ): จบด้วยการเตือนและชวนคุย เช่น 'ติดตามสรุปข่าวกับป้าเข็มได้ที่ LINE @137gsref จ้า'"
+        )
+    elif content_mode == "WORK_PRODUCTIVITY":
+        mode_instruction = (
+            "สไตล์: '💼 แนะนำการทำงาน & ทริคชีวิตชาวออฟฟิศ (คอนเทนต์เพียว 100% ไม่ขายสินค้า ไม่เอ่ยถึงการซื้อของ)'\n"
+            "- ประโยคที่ 1 (0-3 วิ): Hook หยุดดูด้วยเรื่องงาน เช่น '💼 ทริคคนทำงาน! เลิกงานตรงเวลา ชีวิตง่ายขึ้น 10 เท่า' หรือ 'วิธีคุยกับหัวหน้าให้ราบรื่นใน 10 วิ!'\n"
+            "- ประโยคที่ 2 (4-7 วิ): แนะนำเทคนิคการจัดเวลา/การทำงานให้มีประสิทธิภาพ\n"
+            "- ประโยคที่ 3 (8-10 วิ): จบด้วยการให้กำลังใจ เช่น 'ลองปรับใช้ดูนะจ๊ะ ทักมาคุยกับป้าเข็มใน LINE @137gsref ได้เลย'"
+        )
+    else:
+        # PRODUCT_HIGHLIGHT (30% ขายสินค้าตรงๆ)
+        mode_instruction = (
+            "สไตล์: '🛍️ รีวิวและป้ายยาของแท้ Shopee ยอดขายดี (ขายสินค้าตรงจุด)'\n"
+            "- ประโยคที่ 1 (0-3 วิ): Hook หยุดดูด้วย Pain Point หรือจุดเด่นของสินค้าชิ้นนี้จริงๆ เช่น 'เตือนแล้วนะ! ใครยังไม่มีตัวนี้ติดบ้านคือพลาดมาก'\n"
+            "- ประโยคที่ 2 (4-7 วิ): บอกจุดเด่น ความคุ้มค่า น่าใช้\n"
+            "- ประโยคที่ 3 (8-10 วิ): จบด้วย Call-To-Action เช่น 'กดดูรายละเอียดหรือสั่งซื้อของแท้ที่ลิงก์ในแคปชั่นได้เลยนะจ๊ะ'"
+        )
+
     prompt = (
-        f"คุณคือ 'ป้าเข็ม' แม่ค้าใจดีและนักรีวิวของดีใน Shopee\n"
-        f"จงเขียน 'บทพูดเสียงพากย์วิดีโอสั้น 9:16 (Shorts / Reels)' สำหรับสินค้าชิ้นนี้:\n"
-        f"ชื่อสินค้า: {clean_pname}\n"
+        f"คุณคือ 'ป้าเข็ม' แม่ค้าใจดีและผู้เชี่ยวชาญด้านคอนเทนต์วิดีโอสั้น\n"
+        f"จงเขียน 'บทพูดเสียงพากย์วิดีโอสั้น 9:16 (Shorts / Reels)' ความยาวเป๊ะ 7-10 วินาที (สั้น กระชับ คมกริบ)\n"
+        f"หัวข้อ/สินค้า: {clean_pname}\n"
         f"หมวดหมู่: {category}\n\n"
+        f"{mode_instruction}\n\n"
         f"กฎเหล็กสำคัญที่สุด:\n"
-        f"1. ความยาวบทพูด 2-3 ประโยคสั้นๆ (อ่านจบใน 10-15 วินาที)\n"
-        f"2. ประโยคที่ 1: ดึงดูดความสนใจด้วย Pain Point หรือประโยชน์เด็ดที่ตรงกับตัวสินค้านี้จริงๆ (ห้ามมั่วหมวด ห้ามเอาเรื่องปวดหลังมาใส่กับอาหาร/เครื่องดื่ม ห้ามเอาเรื่องหูฟัง/สายชาร์จมาใส่กับข้าว/ของกิน)\n"
-        f"3. ประโยคที่ 2: อธิบายจุดเด่นของสินค้านี้อย่างชัดเจน เป็นธรรมชาติ น่าใช้\n"
-        f"4. ประโยคที่ 3: จบด้วย Call-To-Action สไตล์ป้าเข็ม เช่น 'กดดูรายละเอียดหรือสั่งซื้อของแท้ที่ลิงก์ในแคปชั่นได้เลยนะจ๊ะ'\n"
-        f"5. **ห้ามพูดเรื่องราคา และห้ามมีตัวเลขราคาเด็ดขาด** (Strict No-Price Policy)\n"
-        f"6. เขียนภาษาไทยที่เป็นธรรมชาติ สละสลวย สำหรับนำไปอ่านด้วยเสียงพากย์ TTS ทันที\n"
-        f"7. **ห้ามใช้คำว่า 'ลูก', 'ลูกหลาน', 'นะลูก', 'เลยลูก', หรือคำเรียกผู้ฟังใดๆ ที่ไม่สุภาพ ให้เรียก 'ทุกคน', 'จ๊ะ', 'จ้า' หรือไม่ต้องระบุคำเรียกแทน**\n"
-        f"8. ตอบเฉพาะข้อความบทพูดภาษาไทยล้วนๆ ไม่ต้องมีคำอธิบายอื่น ไม่ต้องใส่เครื่องหมายคำพูด"
+        f"1. **ความยาวสคริปต์สั้นกระชับ รวมประมาณ 50-80 ตัวอักษรไทย (อ่านจบใน 7-9 วินาทีพอดี ห้ามยาวเกินเด็ดขาด)**\n"
+        f"2. **ห้ามพูดเรื่องราคา และห้ามมีตัวเลขราคาเด็ดขาด** (Strict No-Price Policy)\n"
+        f"3. เขียนภาษาไทยที่เป็นธรรมชาติ สละสลวย สำหรับนำไปอ่านด้วยเสียงพากย์ TTS ทันที\n"
+        f"4. **ห้ามใช้คำว่า 'ลูก', 'ลูกหลาน', 'นะลูก', 'เลยลูก', ให้เรียก 'ทุกคน', 'จ๊ะ', 'จ้า' หรือไม่ต้องระบุคำเรียกแทน**\n"
+        f"5. ตอบเฉพาะข้อความบทพูดภาษาไทยล้วนๆ 1 ย่อหน้า ไม่ต้องมีคำอธิบายอื่น ไม่ต้องใส่เครื่องหมายคำพูด"
     )
 
     for k in groq_keys:
@@ -194,11 +267,11 @@ def generate_ai_voice_script(product_name: str, category: str = "") -> Optional[
                 resp = client.chat.completions.create(
                     model=m,
                     messages=[
-                        {"role": "system", "content": "คุณคือนักเขียนสคริปต์เสียงพากย์รีวิวสินค้า Shopee สไตล์ป้าเข็ม ผู้เชี่ยวชาญด้านการทำคลิปสั้น Viral 9:16"},
+                        {"role": "system", "content": "คุณคือนักเขียนสคริปต์เสียงพากย์วิดีโอสั้น Viral 9:16 สไตล์ป้าเข็ม สั้นกระชับ 7-10 วินาที"},
                         {"role": "user", "content": prompt}
                     ],
                     temperature=0.7,
-                    max_tokens=220
+                    max_tokens=150
                 )
                 script = (resp.choices[0].message.content or "").strip()
                 script = script.replace('"', '').replace("'", "").replace("“", "").replace("”", "").strip()
@@ -206,7 +279,7 @@ def generate_ai_voice_script(product_name: str, category: str = "") -> Optional[
                 script = re.sub(r'(\d+[\d,]*\s*(?:บาท|.-|บ\.))', '', script)
                 script = re.sub(r'(?:ราคาเพียง|ราคาแค่|ในราคา|ราคา)\s*\d+', '', script)
                 script = _remove_child_address(script)
-                if len(script) >= 35:
+                if len(script) >= 30:
                     return script
             except Exception as e:
                 logger.warning(f"Groq script error ({m}, key ...{k[-4:]}): {e}")
@@ -235,12 +308,12 @@ def _remove_child_address(text: str) -> str:
     return text
 
 
-def build_voice_script(product_name: str, price: float, category: str, seed_id: int = 0) -> str:
-    """สร้างบทพูดสั้นกระชับ สไตล์ป้าเข็ม ด้วย AI อัจฉริยะ (พร้อมระบบ Fallback ตรงหมวด 100%)"""
+def build_voice_script(product_name: str, price: float, category: str, seed_id: int = 0, content_mode: str = "PRODUCT_HIGHLIGHT") -> str:
+    """สร้างบทพูดสั้นกระชับ สไตล์ป้าเข็ม 7-10 วิ ด้วย AI อัจฉริยะ (พร้อมระบบ Fallback ตรงหมวด 100%)"""
     # 1. พยายามใช้ Groq AI ก่อนเสมอ เพื่อให้ได้บทพูดที่ตรงกับจุดเด่นของสินค้านั้นจริงๆ
-    ai_script = generate_ai_voice_script(product_name, category)
+    ai_script = generate_ai_voice_script(product_name, category, content_mode=content_mode)
     if ai_script:
-        logger.info(f"🎙️ สร้างสคริปต์ด้วย Groq AI สำเร็จ: {ai_script[:60]}...")
+        logger.info(f"🎙️ สร้างสคริปต์ [{content_mode}] ด้วย Groq AI สำเร็จ: {ai_script[:60]}...")
         return ai_script
 
     # 2. กรณีออฟไลน์/API ล้มเหลว -> ใช้ Smart Semantic Fallback ที่จำแนกตรงตามประเภทสินค้าจริง
@@ -260,8 +333,37 @@ def build_voice_script(product_name: str, price: float, category: str, seed_id: 
 
     full_text = f"{product_name} {category}".lower()
 
-    # วิเคราะห์คำสำคัญในชื่อสินค้าจริง
-    if any(k in full_text for k in ["โปรตีน", "อาหารเสริม", "วิตามิน", "คอลลาเจน", "ข้าว", "อาหาร", "ขนม", "อร่อย", "ชา", "กาแฟ", "กิน"]):
+    if content_mode == "LIFE_HACK_TIP":
+        hooks = [
+            f"อย่าเพิ่งทิ้งถ้ายังไม่ลองทริคนี้! {short_title} ตัวช่วยแก้ปัญหากวนใจในบ้าน กดสั่งซื้อที่ลิงก์ในแคปชั่นได้เลยจ้า",
+            f"ทริคง่ายๆ ช่วยประหยัดเวลาและพื้นที่! {short_title} ของแท้ใช้งานดีเว่อร์ ช้อปที่ลิงก์ในแคปชั่นนะจ๊ะ",
+            f"เคล็ดลับแก้ปัญหาประจำบ้านที่แม่บ้านบอกต่อ! {short_title} ใช้ง่าย จบปัญหากริบ สั่งที่ลิงก์ในแคปชั่นนะจ๊ะ"
+        ]
+    elif content_mode == "TRENDING_NEWS":
+        hooks = [
+            f"ข่าวด่วนสภาพอากาศและภัยพิบัติล่าสุด! ใครเดินทางต้องมี {short_title} ติดกระเป๋าไว้ สั่งที่ลิงก์ในแคปชั่นนะจ๊ะ",
+            f"เตือนภัยสถานการณ์ฉุกเฉิน! เตรียมพร้อมด้วย {short_title} ของแท้ปลอดภัย ช้อปที่ลิงก์ในแคปชั่นได้เลยจ้า",
+            f"เกาะติดกระแสด่วน! ไอเทมรับมือเหตุฉุกเฉิน {short_title} การันตีคุณภาพ สั่งซื้อที่ลิงก์ในแคปชั่นนะจ๊ะ"
+        ]
+    elif content_mode == "CELEBRITY_TREND":
+        hooks = [
+            f"ส่องไอเทมสุดฮิตตามรอยคนดัง! {short_title} ตัวนี้ทำไมคนตามหากันทั้งเมือง กดสั่งซื้อที่ลิงก์ในแคปชั่นเลยจ้า",
+            f"กระแสไวรัลที่ทุกคนต้องมี! {short_title} ของแท้ Official สวยปัง ช้อปที่ลิงก์ในแคปชั่นนะจ๊ะ",
+            f"ตามรอยไอเทมยอดฮิตระดับโลก! {short_title} รีวิวแน่น การันตีของแท้ สั่งซื้อที่ลิงก์ในแคปชั่นได้เลยนะจ๊ะ"
+        ]
+    elif content_mode == "LUCKY_FORTUNE":
+        hooks = [
+            f"งวดนี้ต้องมีติดตัวไว้! {short_title} เสริมดวงโชคลาภ การเงินปัง พลังบวกเต็มร้อย สั่งซื้อที่ลิงก์ในแคปชั่นได้เลยนะจ๊ะ",
+            f"ใครอยากดวงเฮงรับทรัพย์! {short_title} ไอเทมเสริมมงคลยอดฮิต การันตีของแท้ กดสั่งซื้อที่ลิงก์ในแคปชั่นได้เลยจ้า",
+            f"เคล็ดลับเสริมดวงการเงินและการงาน! {short_title} เสริมพลังบวก ช้อปของแท้ที่ลิงก์ในแคปชั่นนะจ๊ะ"
+        ]
+    elif content_mode == "WORK_PRODUCTIVITY":
+        hooks = [
+            f"ทริคคนทำงานให้เหนื่อยน้อยลง! {short_title} ตัวช่วยชีวิตชาวออฟฟิศ ชีวิตง่ายขึ้น 10 เท่า สั่งที่ลิงก์ในแคปชั่นนะจ๊ะ",
+            f"บอกลาอาการปวดเมื่อยจากการทำงาน! {short_title} ออกแบบตามหลักสรีระ นั่งสบาย ช้อปที่ลิงก์ในแคปชั่นได้เลยจ้า",
+            f"จัดโต๊ะทำงานให้โปร่ง โฟกัสงานได้ดีขึ้น! {short_title} แข็งแรงทนทาน ของแท้ สั่งซื้อที่ลิงก์ในแคปชั่นเลยนะจ๊ะ"
+        ]
+    elif any(k in full_text for k in ["โปรตีน", "อาหารเสริม", "วิตามิน", "คอลลาเจน", "ข้าว", "อาหาร", "ขนม", "อร่อย", "ชา", "กาแฟ", "กิน"]):
         hooks = [
             f"อยากดูแลสุขภาพตัวเองให้ดีขึ้น แนะนำ {short_title} ตัวนี้เลย ทานง่าย มีประโยชน์ ของแท้ สั่งที่ลิงก์ในแคปชั่นได้เลยนะจ๊ะ",
             f"สายรักสุขภาพหรือชอบของอร่อยต้องลอง! {short_title} คุณภาพเน้นๆ สะอาดปลอดภัย กดสั่งซื้อที่ลิงก์ในแคปชั่นได้เลยจ้า",
@@ -408,6 +510,21 @@ def create_product_posters_multiphase(product_name: str, price: float, rating: f
     bot_name = clean_display_text(os.getenv("BOT_NAME", "ป้าเข็ม ขายของ"))
     clean_pname = sanitize_public_product_text(clean_display_text(product_name))
 
+def create_product_posters_multiphase(
+    product_name: str,
+    price: float,
+    rating: float,
+    sales_count: int,
+    img: Image.Image,
+    seed_id: int = 0,
+    content_mode: str = "PRODUCT_HIGHLIGHT"
+) -> List[Image.Image]:
+    """สร้างภาพโปสเตอร์ 1080x1920 (9:16) 3 จังหวะ พร้อมหมุนเวียน 4 เสาหลักคอนเทนต์ (สินค้า/ทริค/ข่าว/คนดัง)
+    และ 5 ธีมสี ไม่พูดราคา 100%
+    """
+    W, H = 1080, 1920
+    clean_pname = sanitize_public_product_text(clean_display_text(product_name))
+
     # 1. ทำพื้นหลังแบบเบลอ (Blurred Background)
     bg_img = img.copy()
     bg_ratio = max(W / bg_img.width, H / bg_img.height)
@@ -476,33 +593,56 @@ def create_product_posters_multiphase(product_name: str, price: float, rating: f
     ]
     thm = themes[theme_idx]
 
+    # ปรับข้อความ Hook และ Badge ตาม Content Mode
+    p1_hook_text = thm["p1_text"]
+    badge_text = thm["badge"]
+    if content_mode == "LIFE_HACK_TIP":
+        p1_hook_text = "💡 ทริคแม่บ้าน • แก้ปัญหาใน 1 นาที!"
+        badge_text = "💡 ทริคแก้ปัญหา"
+    elif content_mode == "TRENDING_NEWS":
+        p1_hook_text = "🚨 สรุปข่าวด่วน • สิ่งจำเป็นต้องรู้!"
+        badge_text = "🚨 เกาะกระแสข่าวด่วน"
+    elif content_mode == "CELEBRITY_TREND":
+        p1_hook_text = "🌟 ส่องไอเทมคนดัง • ฮิตติดเทรนด์!"
+        badge_text = "🌟 ตามรอยคนดัง"
+    elif content_mode == "LUCKY_FORTUNE":
+        p1_hook_text = "🔮 เสริมดวงโชคลาภ • รับทรัพย์ปังๆ!"
+        badge_text = "🔮 สายมูเสริมดวง"
+    elif content_mode == "WORK_PRODUCTIVITY":
+        p1_hook_text = "💼 ทริคคนทำงาน • ชีวิตง่ายขึ้น 10 เท่า!"
+        badge_text = "💼 ทริคคนทำงาน"
+
+    # ปรับปุ่ม CTA ตาม Content Mode
+    cta_p1_text = "กดดูรายละเอียด / สั่งซื้อ ที่ลิงก์ในแคปชั่น" if content_mode == "PRODUCT_HIGHLIGHT" else "ติดตามสาระดีๆ แอด LINE @137gsref"
+    cta_p3_text = "สั่งซื้อของแท้ กดลิงก์ในแคปชั่นเลยจ้า!" if content_mode == "PRODUCT_HIGHLIGHT" else "คุยกับป้าเข็ม แอด LINE @137gsref จ้า!"
+
     phases = [
-        # Phase 1: Hook สะดุดตา
+        # Phase 1: Hook สะดุดตา 0-3 วิ
         {
             "top_bg": thm["p1_top_bg"],
             "top_border": thm["p1_border"],
-            "top_text": thm["p1_text"],
+            "top_text": p1_hook_text,
             "top_text_col": thm["p1_text_col"],
             "cta_bg": thm["brand_col"],
-            "cta_text": "กดดูรายละเอียด / สั่งซื้อ ที่ลิงก์ในแคปชั่น"
+            "cta_text": cta_p1_text
         },
-        # Phase 2: จุดเด่น & รีวิวแน่น
+        # Phase 2: จุดเด่น & รีวิวแน่น 4-7 วิ
         {
             "top_bg": thm["p2_top_bg"],
             "top_border": thm["p2_border"],
             "top_text": thm["p2_text"],
             "top_text_col": thm["p2_text_col"],
             "cta_bg": thm["brand_col"],
-            "cta_text": "กดดูรายละเอียด / สั่งซื้อ ที่ลิงก์ในแคปชั่น"
+            "cta_text": cta_p1_text
         },
-        # Phase 3: ชวนกดซื้อทันที
+        # Phase 3: ชวนกดซื้อ/ชวนคุย 8-10 วิ
         {
             "top_bg": thm["p3_top_bg"],
             "top_border": thm["p3_border"],
             "top_text": thm["p3_text"],
             "top_text_col": thm["p3_text_col"],
             "cta_bg": thm["p3_top_bg"],
-            "cta_text": "สั่งซื้อของแท้ กดลิงก์ในแคปชั่นเลยจ้า!"
+            "cta_text": cta_p3_text
         }
     ]
 
@@ -527,10 +667,10 @@ def create_product_posters_multiphase(product_name: str, price: float, rating: f
         draw_info.rounded_rectangle([0, 0, W - 120, 520], radius=32, fill=(255, 255, 255), outline=thm["brand_col"], width=4)
 
         f_badge = get_font(FONT_BOLD, 40)
-        draw_info.text((50, 70), thm["badge"], font=f_badge, fill=thm["brand_col"], anchor="lm")
+        draw_info.text((50, 70), badge_text, font=f_badge, fill=thm["brand_col"], anchor="lm")
         
         f_stat = get_font(FONT_BOLD, 30)
-        stat_str = f"คะแนน {rating:.1f}  |  ขายแล้ว {sales_count:,} ชิ้น"
+        stat_str = f"คะแนน {rating:.1f}  |  ขายแล้ว {sales_count:,} ชิ้น" if content_mode == "PRODUCT_HIGHLIGHT" else "สาระน่ารู้ • อัปเดตประจำวัน"
         draw_info.text((W - 170, 70), stat_str, font=f_stat, fill=(60, 60, 60), anchor="rm")
         draw_info.line([(40, 125), (W - 160, 125)], fill=(220, 220, 220), width=2)
 
@@ -549,12 +689,16 @@ def create_product_posters_multiphase(product_name: str, price: float, rating: f
 
         canvas.paste(info_box, (60, info_top), info_box)
 
-        # แถบ Conversion Bar เด่นชัด ลอยด้านล่าง พร้อมรหัสสินค้าตรงตัว (Direct Product Code)
+        # แถบ Conversion Bar เด่นชัด ลอยด้านล่าง
         draw.rounded_rectangle([40, 1705, W - 40, 1860], radius=24, fill=(15, 23, 42, 245), outline=(34, 197, 94), width=4)
         f_foot1 = get_font(FONT_BOLD, 33)
         f_foot2 = get_font(FONT_BOLD, 27)
-        draw.text((W // 2, 1750), f"พิกัดของแท้: แอด LINE @137gsref พิมพ์ \"{seed_id}\"", font=f_foot1, fill=(255, 255, 255), anchor="mm")
-        draw.text((W // 2, 1810), f"รับลิงก์ตรงตัวทันที! (หรือกดดูที่หน้าช่อง Anda)", font=f_foot2, fill=(74, 222, 128), anchor="mm")
+        if content_mode == "PRODUCT_HIGHLIGHT":
+            draw.text((W // 2, 1750), f"พิกัดของแท้: แอด LINE @137gsref พิมพ์ \"{seed_id}\"", font=f_foot1, fill=(255, 255, 255), anchor="mm")
+            draw.text((W // 2, 1810), f"รับลิงก์ตรงตัวทันที! (หรือกดดูที่หน้าช่อง Anda)", font=f_foot2, fill=(74, 222, 128), anchor="mm")
+        else:
+            draw.text((W // 2, 1750), f"ติดตามเกร็ดความรู้ & สาระดีๆ จากป้าเข็ม", font=f_foot1, fill=(255, 255, 255), anchor="mm")
+            draw.text((W // 2, 1810), f"แอด LINE: @137gsref (ทักมาคุยกันได้ 24 ชม.)", font=f_foot2, fill=(74, 222, 128), anchor="mm")
 
         posters.append(canvas.convert("RGB"))
     return posters
@@ -831,26 +975,61 @@ def generate_product_reels(limit: int = 3, selection: str = "balanced",
                              ensure_ascii=False, indent=2))
             return preview
 
-        for p in interleaved_prods:
-            if len(generated) >= limit:
-                break
-            if not p.affiliate_url or not p.affiliate_url.startswith("https://"):
+        import standalone_content_generator
+
+        slot_idx = len(list(PENDING_DIR.glob("*.mp4")))
+        prod_iter = iter(interleaved_prods)
+
+        while len(generated) < limit:
+            content_mode = CONTENT_MODES[slot_idx % len(CONTENT_MODES)]
+            slot_idx += 1
+
+            # -------------------------------------------------------------
+            # รางที่ 2: 🎬 คลิปคอนเทนต์เพียวๆ 70% (ไม่ขายของ ไม่ใช้รูปสินค้า)
+            # -------------------------------------------------------------
+            if content_mode != "PRODUCT_HIGHLIGHT":
+                topic_data = standalone_content_generator.get_pure_topic_data(content_mode)
+                pure_title = topic_data.get("title", "")
+                pure_filename = f"pure_{content_mode}_{int(time.time())}_{random.randint(100, 999)}.mp4"
+                pure_target_path = PENDING_DIR / pure_filename
+
+                print(f"\n🎨 [รางที่ 2: คอนเทนต์เพียว 100%] กำลังสร้างคลิป Reels [{content_mode}]: {pure_title[:45]}")
+                if standalone_content_generator.build_standalone_reel_video(content_mode, topic_data, pure_target_path):
+                    products_meta[pure_filename] = {
+                        "product_name": pure_title,
+                        "content_mode": content_mode,
+                        "topic_data": topic_data,
+                        "is_pure_content": True
+                    }
+                    generated.append({"id": None, "name": pure_title, "file": pure_filename, "content_mode": content_mode})
+                    print(f"✅ สร้างคลิปคอนเทนต์เพียว 3 จังหวะสำเร็จ -> {pure_filename}")
                 continue
 
-            if p.id in used_ids:
-                continue
+            # -------------------------------------------------------------
+            # รางที่ 1: 🛍️ คลิปสินค้า Shopee ตรงจุด 30% (รีวิวและขายสินค้าตรงๆ)
+            # -------------------------------------------------------------
+            p = None
+            for candidate_p in prod_iter:
+                if not candidate_p.affiliate_url or not candidate_p.affiliate_url.startswith("https://"):
+                    continue
+                if candidate_p.id in used_ids:
+                    continue
+                filename_check = f"prod_{candidate_p.id}_{sanitize_filename(candidate_p.name)}.mp4"
+                if (PENDING_DIR / filename_check).exists() or (POSTED_DIR / filename_check).exists():
+                    continue
+                p = candidate_p
+                break
+
+            if not p:
+                break
 
             filename = f"prod_{p.id}_{sanitize_filename(p.name)}.mp4"
             target_path = PENDING_DIR / filename
             posted_path = POSTED_DIR / filename
 
-            if target_path.exists() or posted_path.exists():
-                continue
-
             clean_name = sanitize_public_product_text(clean_display_text(p.name))
-            print(f"\n🎨 กำลังสร้างคลิป Reels สินค้าใหม่: {clean_name[:40]}... (หมวด: {p.category})")
+            print(f"\n🎨 [รางที่ 1: สินค้าตรงจุด 100%] กำลังสร้างคลิป Reels: {clean_name[:40]}... (หมวด: {p.category})")
 
-            
             # 1. ดึงรูปภาพสินค้าสดใหม่จากหน้าเว็บ Shopee จริงเสมอ (ป้องกันรูปเก่าที่ติดป้ายราคาเดิม)
             img_url = fetch_product_image(p.affiliate_url or "") or p.image_url
             if img_url and img_url != p.image_url:
@@ -867,23 +1046,24 @@ def generate_product_reels(limit: int = 3, selection: str = "balanced",
             if not pil_img:
                 continue
 
-            # 2. สร้างเสียงพากย์ภาษาไทย (TTS) ธรรมชาติ หลากหลายมุมมอง ไม่ซ้ำซาก
-            voice_script = build_voice_script(p.name, float(p.price or 0), p.category or "", seed_id=p.id)
-            print(f"🎙️ เสียงพากย์ไทย: \"{voice_script}\"")
+            # 2. สร้างเสียงพากย์ภาษาไทย (TTS) สั้นกระชับ 7-10 วินาที ไวรัล คมกริบ สำหรับสินค้าจริง
+            voice_script = build_voice_script(p.name, float(p.price or 0), p.category or "", seed_id=p.id, content_mode="PRODUCT_HIGHLIGHT")
+            print(f"🎙️ เสียงพากย์ไทย [สินค้าตรงจุด]: \"{voice_script}\"")
             
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_audio:
                 tmp_audio_path = Path(tmp_audio.name)
             
             tts_ok = generate_tts_audio(voice_script, tmp_audio_path)
 
-            # 3. สร้างภาพโปสเตอร์ 3 จังหวะ พร้อมหมุนเวียน 5 ธีมสี ไม่ซ้ำแบบ
+            # 3. สร้างภาพโปสเตอร์ 3 จังหวะ สำหรับสินค้า Shopee
             posters = create_product_posters_multiphase(
                 product_name=p.name,
                 price=float(p.price or 0),
                 rating=float(p.rating or 4.9),
                 sales_count=int(p.sales_count or 100),
                 img=pil_img,
-                seed_id=p.id
+                seed_id=p.id,
+                content_mode="PRODUCT_HIGHLIGHT"
             )
 
             tmp_poster_paths = []
@@ -892,26 +1072,23 @@ def generate_product_reels(limit: int = 3, selection: str = "balanced",
                     post_img.save(tmp_p.name, format="PNG")
                     tmp_poster_paths.append(Path(tmp_p.name))
 
-
             try:
-                # 4. รวมภาพ 3 จังหวะและเสียงพากย์เป็นวิดีโอ Reels (ความยาวตรงกับเสียงจริง + เผื่อเวลาหายใจ 1.2 วิ)
-
+                # 4. รวมภาพ 3 จังหวะและเสียงพากย์เป็นวิดีโอ Reels สั้นกระชับ 7-10 วินาทีพอดีเป๊ะ
                 audio_file = tmp_audio_path if tts_ok else None
                 audio_len = get_audio_duration(tmp_audio_path) if tts_ok else 5.0
-                # ให้คลิปมีเวลาพอสำหรับ hook/CTA และไม่สั้นเกินไปบน Reels
-                min_duration = max(5.5, float(os.getenv("REELS_MIN_DURATION", "10") or 10))
-                audio_tail = max(1.2, float(os.getenv("REELS_AUDIO_TAIL_SECONDS", "2") or 2))
-                target_duration = max(min_duration, audio_len + audio_tail)
+                min_duration = max(5.5, float(os.getenv("REELS_MIN_DURATION", "7.5") or 7.5))
+                audio_tail = max(0.5, float(os.getenv("REELS_AUDIO_TAIL_SECONDS", "0.8") or 0.8))
+                target_duration = min(10.0, max(min_duration, audio_len + audio_tail))
                 if multiphase_posters_to_video(tmp_poster_paths, target_path, audio_path=audio_file, duration=target_duration):
-
 
                     products_meta[filename] = {
                         "product_name": clean_name,
                         "price": str(int(p.price or 0)),
                         "category": p.category or "สินค้าแนะนำ",
-                        "affiliate_link": p.affiliate_url or ""
+                        "affiliate_link": p.affiliate_url or "",
+                        "content_mode": "PRODUCT_HIGHLIGHT"
                     }
-                    generated.append({"id": p.id, "name": clean_name, "file": filename})
+                    generated.append({"id": p.id, "name": clean_name, "file": filename, "content_mode": "PRODUCT_HIGHLIGHT"})
                     print(f"✅ สร้างคลิปวิดีโอ 3 จังหวะพร้อมไฮไลท์ข้อความสำเร็จ -> {filename}")
             finally:
                 for tp in tmp_poster_paths:

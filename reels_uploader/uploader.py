@@ -508,9 +508,20 @@ def clean_caption_text(text: str) -> str:
 
 
 def build_caption(product: dict) -> str:
-    """เขียนแคปชั่น Reels — ระบบ Smart Category Template 100% ปลอดภัย ไม่มโนสเปกผิดเพี้ยน"""
+    """เขียนแคปชั่น Reels — รองรับทั้งคลิปสินค้า Shopee (30%) และคลิปคอนเทนต์เพียวๆ (70%)"""
     if not product:
         return build_intro_caption(advance=False)
+
+    # 1. ตรวจสอบว่าเป็นคลิปคอนเทนต์เพียวๆ 70% (ไม่ขายของ) หรือไม่
+    if product.get("is_pure_content"):
+        try:
+            import standalone_content_generator
+            mode = product.get("content_mode", "LIFE_HACK_TIP")
+            topic_data = product.get("topic_data", {})
+            return standalone_content_generator.build_standalone_caption(mode, topic_data)
+        except Exception:
+            pass
+
     raw_name = (product or {}).get("product_name") or "สินค้าเด็ดจากป้าเข็ม"
     name = sanitize_public_product_text(clean_caption_text(raw_name))
     link = (product or {}).get("affiliate_link") or ""
