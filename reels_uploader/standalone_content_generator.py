@@ -97,22 +97,29 @@ def wrap_thai_lines(text: str, max_chars_per_line: int = 24, max_lines: int = 8)
     return lines
 
 def fetch_real_live_rss(feed_url: str, default_title: str, default_summary: str, default_hook: str, default_img: str) -> Dict[str, Any]:
-    """ดึงข้อมูลข่าว/กระแสสดใหม่วันนี้ 100% จาก RSS Feed พร้อมรูปภาพจริง 3 ภาพจากสำนักข่าว"""
+    """ดึงข้อมูลข่าว/กระแสสดใหม่วันนี้ 100% จาก RSS Feed โดยต้องมีรูปภาพข่าวจริงเท่านั้น"""
     try:
-        r = httpx.get(feed_url, timeout=6.0, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
+        r = httpx.get(feed_url, timeout=7.0, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
         if r.status_code == 200 and r.text:
-            root = ET.fromstring(r.text)
+            root = ET.fromstring(r.content)
             candidates = []
             for it in root.iter():
                 if it.tag.split("}")[-1] == "item":
                     t_el = it.find("title")
                     d_el = it.find("description")
                     enc_el = it.find("enclosure")
+                    media_thumb = it.find(".//{http://search.yahoo.com/mrss/}thumbnail")
                     if t_el is not None and t_el.text:
                         title = html.unescape(t_el.text).strip()
                         desc = html.unescape(d_el.text or "").strip() if d_el is not None and d_el.text else ""
-                        img_url = enc_el.get("url") if enc_el is not None else ""
-                        if len(title) >= 12 and not any(k in title for k in ["หวยออนไลน์", "คาสิโน"]):
+                        img_url = ""
+                        if enc_el is not None and enc_el.get("url"):
+                            img_url = enc_el.get("url")
+                        elif media_thumb is not None and media_thumb.get("url"):
+                            img_url = media_thumb.get("url").replace("/240/", "/1024/")
+
+                        # กรองเฉพาะข่าวที่มีรูปภาพจริงเท่านั้น 100%
+                        if img_url and len(title) >= 10 and not any(k in title for k in ["หวยออนไลน์", "คาสิโน"]):
                             candidates.append({
                                 "title": title[:65],
                                 "detail": desc[:160] if desc else title,
@@ -120,9 +127,9 @@ def fetch_real_live_rss(feed_url: str, default_title: str, default_summary: str,
                                 "img_url": img_url
                             })
             if candidates:
-                # เลือกข่าวด่วนล่าสุดอันดับ 1 ที่เพิ่งโพสต์สดๆ ร้อนๆ ทันที
+                # เลือกข่าวด่วนล่าสุดอันดับ 1 ที่มีรูปภาพพร้อม
                 chosen = candidates[0]
-                chosen_img = chosen.get("img_url") or default_img
+                chosen_img = chosen["img_url"]
                 return {
                     "title": chosen["title"],
                     "detail": chosen["detail"],
@@ -155,7 +162,7 @@ def fetch_global_world_trend(category: str = "world") -> Dict[str, Any]:
     try:
         r = httpx.get(url, timeout=8.0, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
         if r.status_code == 200 and r.text:
-            root = ET.fromstring(r.text)
+            root = ET.fromstring(r.content)
             items = []
             for it in root.iter():
                 if it.tag.split("}")[-1] == "item":
@@ -171,13 +178,12 @@ def fetch_global_world_trend(category: str = "world") -> Dict[str, Any]:
                             img_url = media_thumb.get("url").replace("/240/", "/1024/")
                         elif enc_el is not None and enc_el.get("url"):
                             img_url = enc_el.get("url")
-                        items.append((title_en, desc_en, img_url))
+                        if img_url:
+                            items.append((title_en, desc_en, img_url))
 
             if items:
                 # ดึงข่าวสดใหม่ล่าสุดอันดับ 1 ที่มีรูปภาพพร้อมจาก BBC
-                valid_items = [it for it in items if it[2]] or items
-                chosen_en_title, chosen_en_desc, chosen_img = valid_items[0]
-                exact_img = chosen_img or "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop"
+                chosen_en_title, chosen_en_desc, exact_img = items[0]
 
                 groq_keys = os.getenv("GROQ_API_KEY", "").split(",")
                 for k in groq_keys:
@@ -218,7 +224,7 @@ def fetch_global_world_trend(category: str = "world") -> Dict[str, Any]:
         logger.warning(f"ดึงข่าวระดับโลก {url} ผิดพลาด: {e}")
 
     return fetch_real_live_rss(
-        "https://www.thairath.co.th/rss/news",
+        "https://rssfeeds.sanook.com/rss/feeds/sanook/news.index.xml",
         default_title="สรุปข่าวเด่นประเด็นร้อนวันนี้ เกาะติดสถานการณ์สำคัญ",
         default_summary="อัปเดตข่าวสารทันเหตุการณ์วันนี้ สรุปประเด็นสำคัญที่ทุกคนต้องรู้",
         default_hook="🚨 สรุปข่าวด่วนวันนี้! เรื่องเด่นที่ทุกคนต้องรู้",
@@ -226,25 +232,35 @@ def fetch_global_world_trend(category: str = "world") -> Dict[str, Any]:
     )
 
 def fetch_real_news_headline() -> Dict[str, Any]:
-    """สลับดึงข่าวด่วนระดับโลก (BBC World) และข่าวด่วนสำคัญ"""
-    return fetch_global_world_trend("world")
-
-def fetch_real_celebrity_trend() -> Dict[str, Any]:
-    """สลับดึงกระแสคนดังระดับโลก (BBC Entertainment & Pop Culture) และข่าวบันเทิงกระแสแรง"""
+    """ดึงข่าวด่วนระดับโลก (BBC World) หรือข่าวด่วนจริงจาก Sanook News พร้อมภาพข่าวจริง"""
     import random
     if random.random() < 0.6:
-        return fetch_global_world_trend("entertain")
+        return fetch_global_world_trend("world")
     return fetch_real_live_rss(
-        "https://www.thairath.co.th/rss/entertain",
-        default_title="เจาะลึกกระแสคนดังไวรัล ประเด็นฮิตที่โซเชียลพูดถึง",
-        default_summary="เรื่องราวคนดังและกระแสไวรัลที่กำลังเป็นที่จับตามองทั่วโลกออนไลน์",
-        default_hook="🌟 ส่องกระแสคนดังวันนี้! เรื่องที่ทุกคนกำลังพูดถึง",
-        default_img="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&auto=format&fit=crop"
+        "https://rssfeeds.sanook.com/rss/feeds/sanook/news.index.xml",
+        default_title="สรุปข่าวเด่นประเด็นร้อนวันนี้ เกาะติดสถานการณ์สำคัญ",
+        default_summary="อัปเดตข่าวสารทันเหตุการณ์วันนี้ สรุปประเด็นสำคัญที่ทุกคนต้องรู้",
+        default_hook="🚨 สรุปข่าวด่วนวันนี้! เรื่องเด่นที่ทุกคนต้องรู้",
+        default_img="https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop"
     )
 
+def fetch_real_celebrity_trend() -> Dict[str, Any]:
+    """ดึงข่าวดาราบันเทิงกระแสแรงจาก Sanook Entertain หรือ BBC Entertainment พร้อมภาพถ่ายศิลปินจริง"""
+    import random
+    if random.random() < 0.5:
+        return fetch_real_live_rss(
+            "https://rssfeeds.sanook.com/rss/feeds/sanook/news.entertain.xml",
+            default_title="เจาะลึกกระแสคนดังไวรัล ประเด็นฮิตที่โซเชียลพูดถึง",
+            default_summary="เรื่องราวคนดังและกระแสไวรัลที่กำลังเป็นที่จับตามองทั่วโลกออนไลน์",
+            default_hook="🌟 ส่องกระแสคนดังวันนี้! เรื่องที่ทุกคนกำลังพูดถึง",
+            default_img="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&auto=format&fit=crop"
+        )
+    return fetch_global_world_trend("entertain")
+
 def fetch_real_horoscope_trend() -> Dict[str, Any]:
+    """ดึงดวงรายวันจาก Sanook Horoscope พร้อมภาพคอลัมน์ดวงจริง"""
     return fetch_real_live_rss(
-        "https://www.thairath.co.th/rss/horoscope",
+        "https://rssfeeds.sanook.com/rss/feeds/sanook/horoscope.index.xml",
         default_title="เช็คดวงวันนี้ ราศีไหนมีเกณฑ์รับทรัพย์ การเงินพุ่ง",
         default_summary="แนวทางดวงชะตาและเคล็ดลับเสริมโชคลาภประจำวัน รับพลังบวกและโชคดี",
         default_hook="🔮 เช็คดวงวันนี้! ราศีไหนมีเกณฑ์ดวงเฮงรับทรัพย์",
@@ -254,45 +270,33 @@ def fetch_real_horoscope_trend() -> Dict[str, Any]:
 CACHE_IMG_DIR = REELS_DIR / "cached_topic_images"
 CACHE_IMG_DIR.mkdir(parents=True, exist_ok=True)
 
-def fetch_topic_image(image_url: str, title: str = "") -> Image.Image:
-    """ดาวน์โหลดและ cache ภาพประกอบความคมชัดสูงสำหรับคอนเทนต์เพียว 100%"""
-    if not image_url:
-        return create_fallback_topic_image(title)
+def fetch_topic_image(image_url: str) -> Optional[Image.Image]:
+    """ดาวน์โหลดและตรวจสอบรูปภาพจริงความคมชัดสูง หากโหลดภาพจริงไม่ได้ให้ส่งคืน None ทันที ห้ามสร้างกล่องเปล่า"""
+    if not image_url or not image_url.startswith("http"):
+        return None
 
     import hashlib
     img_hash = hashlib.md5(image_url.encode("utf-8")).hexdigest()
     cached_path = CACHE_IMG_DIR / f"{img_hash}.jpg"
 
-    if cached_path.exists():
+    if cached_path.exists() and cached_path.stat().st_size > 3000:
         try:
             return Image.open(cached_path).convert("RGBA")
         except Exception:
             pass
 
     try:
-        r = httpx.get(image_url, timeout=10.0, follow_redirects=True)
-        if r.status_code == 200 and len(r.content) > 1000:
+        r = httpx.get(image_url, timeout=10.0, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
+        if r.status_code == 200 and len(r.content) > 3000:
             import io
             img = Image.open(io.BytesIO(r.content)).convert("RGBA")
-            cached_path.write_bytes(r.content)
-            return img
+            if img.width >= 300 and img.height >= 200:
+                cached_path.write_bytes(r.content)
+                return img
     except Exception as e:
-        logger.warning(f"ดาวน์โหลดภาพ {image_url} ล้มเหลว: {e}")
+        logger.warning(f"ดาวน์โหลดภาพจริงล้มเหลว {image_url}: {e}")
 
-    return create_fallback_topic_image(title)
-
-def create_fallback_topic_image(title: str = "") -> Image.Image:
-    """สร้างภาพกราฟิกสำรองความละเอียดสูงกรณีไม่มีอินเทอร์เน็ต"""
-    img = Image.new("RGBA", (800, 620), (15, 23, 42, 255))
-    draw = ImageDraw.Draw(img)
-    draw.rounded_rectangle([10, 10, 790, 610], radius=24, fill=(30, 41, 59), outline=(52, 211, 153), width=4)
-    f = get_font(FONT_BOLD, 42)
-    lines = wrap_thai_lines(title or "สาระน่ารู้ เรื่องเด็ดวันนี้", max_chars_per_line=18, max_lines=3)
-    y = 260
-    for l in lines:
-        draw.text((400, y), l, font=f, fill=(255, 255, 255), anchor="mm")
-        y += 55
-    return img
+    return None
 
 LIFE_HACK_TOPICS = [
     {
@@ -468,11 +472,15 @@ def create_standalone_posters(mode: str, topic_data: dict, seed_id: int = 1) -> 
     hook = topic_data.get("hook", title)
     raw_images = topic_data.get("image_urls") or ([topic_data.get("image_url")] if topic_data.get("image_url") else [])
     
-    # โหลดภาพ 3 ภาพ สำหรับ 3 จังหวะของวิดีโอ (0-3 วิ, 4-7 วิ, 8-10 วิ)
+    # โหลดภาพจริง 3 ภาพ สำหรับ 3 จังหวะของวิดีโอ (0-3 วิ, 4-7 วิ, 8-10 วิ)
     phase_raw_imgs = []
     for i in range(3):
         u = raw_images[i] if i < len(raw_images) and raw_images[i] else (raw_images[0] if raw_images else "")
-        phase_raw_imgs.append(fetch_topic_image(u, title))
+        loaded = fetch_topic_image(u)
+        if not loaded:
+            logger.error(f"❌ ภาพจริงโหลดไม่สำเร็จ ({u}) — ยกเลิกการผลิตโปสเตอร์ชุดนี้เด็ดขาด ห้ามปล่อยคลิปไม่มีภาพ!")
+            return []
+        phase_raw_imgs.append(loaded)
 
     hero_w, hero_h = 860, 600
     hero_y = 250
@@ -540,9 +548,9 @@ def create_standalone_posters(mode: str, topic_data: dict, seed_id: int = 1) -> 
         draw.rounded_rectangle([50, card_y, W - 50, card_y + card_h], radius=36, fill=(255, 255, 255, 245), outline=thm["brand_col"], width=4)
 
         # หัวข้อในกล่อง
-        f_card_title = get_font(FONT_BOLD, 38)
         title_lines = wrap_thai_lines(title, max_chars_per_line=24, max_lines=2)
         t_y = card_y + 55
+        f_card_title = get_font(FONT_BOLD, 38)
         for tl in title_lines:
             draw.text((W // 2, t_y), tl, font=f_card_title, fill=(15, 23, 42), anchor="mm")
             t_y += 48
@@ -585,6 +593,10 @@ def create_standalone_posters(mode: str, topic_data: dict, seed_id: int = 1) -> 
 
 def build_standalone_reel_video(mode: str, topic_data: dict, output_path: Path) -> bool:
     import auto_product_reels
+    posters = create_standalone_posters(mode, topic_data)
+    if not posters or len(posters) < 3:
+        logger.error("❌ โปสเตอร์มีไม่ครบ 3 ภาพจริง — ยกเลิกการผลิตวิดีโอ 100% ป้องกันคลิปไม่มีรูปภาพ")
+        return False
     voice_script = build_standalone_voice_script(mode, topic_data)
     audio_path = TEMP_DIR / f"tts_{int(time.time()*1000)}.mp3"
     tts_ok = auto_product_reels.generate_tts_audio(voice_script, audio_path)
