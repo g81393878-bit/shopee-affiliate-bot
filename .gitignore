@@ -31,8 +31,8 @@ tools/tiktok_token*.json
 tiktok_token*.json
 tools/tiktok_cookies*.json
 tiktok_cookies*.json
-tools/tiktok_user_data/
-tiktok_user_data/
+tools/tiktok_user_data*/
+tiktok_user_data*/
 tools/posted_tiktok_videos.txt
 posted_tiktok_videos.txt
 tools/*.gs
@@ -130,3 +130,31 @@ reels_uploader/uploaded_history.json
 # Local audio cache
 edge_tts_cache/
 tts_cache/
+reels_uploader/cached_topic_images/
+tools/cached_topic_images/
+tools/tiktok_user_data*/
+scratch*.json
+*.bak
+reels_uploader/posted/*.mp4
+reels_uploader/posted/duplicate_*
+tools/last_*_index.txt
+tools/daily_tiktok_counts.json
+tools/youtube_channel_stats.json
+tools/posted_content_history.json
+tools/posted_reels_title_history.json
+tools/posted_youtube_history.json
+reels_uploader/last_post_time.txt
+reels_uploader/posts_today.txt
+reels_uploader/.*_state.json
+backend/.*_state.json
+
+# Temporary frames & test outputs
+temp_frames/
+.tmp_cookies/
+*.jpg
+*.jpeg
+*.png
+*.mp4
+*.txt
+!requirements.txt
+!backend/requirements.txt

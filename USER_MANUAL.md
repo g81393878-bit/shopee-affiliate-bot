@@ -1,9 +1,50 @@
 # 📖 คู่มือระบบบอทอัตโนมัติเต็มรูปแบบ (Shopee Affiliate & AI Social Automation)
-## ฉบับเข้าใจง่าย ครบทุกระบบ (Updated 2026)
+## ฉบับแยกหมวดหมู่ 7 เล่ม เข้าใจง่าย เปิดอ่านได้เฉพาะเรื่อง (Updated 2026)
 
 ---
 
-## 🌟 1. ภาพรวมการทำงานของระบบ (How It Works)
+### 📑 สารบัญคู่มือฉบับแยกเล่ม (คลิกอ่านเฉพาะเรื่องที่ต้องการได้ทันที):
+
+1. 🏗️ **[คู่มือที่ 1: ภาพรวมสถาปัตยกรรมระบบ & ระบบ 2 รางคู่ขนาน 90/10](file:///d:/Shopee_Web_Scraping/docs/manual/01_ARCHITECTURE_AND_DUAL_TRACK.md)**
+2. 📺 **[คู่มือที่ 2: วิธีเพิ่มช่อง YouTube Shorts 6 ช่อง & การแก้ Error 403](file:///d:/Shopee_Web_Scraping/docs/manual/02_YOUTUBE_SHORTS_SETUP.md)**
+3. ⚫ **[คู่มือที่ 3: วิธีเพิ่มและจัดการบัญชี TikTok Studio หลายช่อง](file:///d:/Shopee_Web_Scraping/docs/manual/03_TIKTOK_MULTI_ACCOUNT.md)**
+4. 📘 **[คู่มือที่ 4: การตั้งค่า Facebook Pages 3 เพจ & ต่ออายุ Token](file:///d:/Shopee_Web_Scraping/docs/manual/04_FACEBOOK_PAGES_REELS.md)**
+5. 💬 **[คู่มือที่ 5: ระบบ LINE OA ป้าเข็ม, Flex การ์ด & ธุรกิจขายบอท SaaS](file:///d:/Shopee_Web_Scraping/docs/manual/05_LINE_OA_AND_SAAS.md)**
+6. 🤖 **[คู่มือที่ 6: ศูนย์บัญชาการ Telegram Commander & คำสั่งด่วนระยะไกล](file:///d:/Shopee_Web_Scraping/docs/manual/06_TELEGRAM_COMMANDER.md)**
+7. 🛠️ **[คู่มือที่ 7: ตารางแก้ปัญหาฉุกเฉิน & คำสั่งกู้คืนระบบ One-Click](file:///d:/Shopee_Web_Scraping/docs/manual/07_TROUBLESHOOTING_AND_RECOVERY.md)**
+8. 🔮 **[คู่มือที่ 8: มาตรฐานโหราศาสตร์และศาสตร์ความเชื่อแท้ 100%](file:///d:/Shopee_Web_Scraping/docs/manual/08_AUTHENTIC_ASTROLOGY_AND_ESOTERIC_GUIDE.md)**
+9. ☁️ **[คู่มือที่ 9: Google Cloud Architecture, Least Privilege Impersonation & Master Google Docs](file:///d:/Shopee_Web_Scraping/docs/manual/09_GOOGLE_CLOUD_AND_WORKSPACE_MCP.md)**
+
+---
+
+## 🖥️ 1. การแบ่งหน้าที่การทำงาน: คอมพิวเตอร์ vs เซิร์ฟเวอร์ VPS (Architecture Split)
+
+ระบบได้รับการออกแบบให้แบ่งหน้าที่การทำงาน 2 ส่วน เพื่อให้มีเสถียรภาพสูงสุดและไม่มีค่าใช้จ่ายเซิร์ฟเวอร์ส่วนเกิน:
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                               การแบ่งหน้าที่ของระบบ                                    │
+├────────────────────────────────────────┬───────────────────────────────────────────────┤
+│ 💻 1. บนคอมพิวเตอร์ของคุณ (Local PC)   │ ☁️ 2. บนคลาวด์ VPS (รัน 24 ชม. แม้ปิดคอม)     │
+├────────────────────────────────────────┼───────────────────────────────────────────────┤
+│ • โรงงานตัดต่อคลิปวิดีโอ 9:16 Full HD   │ • LINE OA Webhook (@137gsref)                 │
+│ • สร้างเสียงพากย์ภาษาไทย (TTS)          │ • ตอบแชทลูกค้าตลอด 24 ชม.                    │
+│ • ยิงโพสต์ Facebook Reels (3 เพจ)       │ • ค้นหาสินค้าจากคลัง 2,530 ชิ้น                │
+│ • ยิงโพสต์ YouTube Shorts (6 ช่อง)     │ • รับรหัสสินค้า & ตรวจสลิปโอนเงิน             │
+│ • ยิงโพสต์ TikTok Studio (3 ช่อง)       │ • ฐานข้อมูล Supabase PostgreSQL              │
+└────────────────────────────────────────┴───────────────────────────────────────────────┘
+```
+
+1. **💻 บนคอมพิวเตอร์ของคุณ (Local Workstation):**
+   * **หน้าที่:** ตัดต่อภาพ, สร้างเสียงพากย์ไทย, เรนเดอร์ไฟล์ MP4 9:16 Full HD, และยิงโพสต์ขึ้น Facebook 3 เพจ / YouTube Shorts 6 ช่อง / TikTok 3 ช่อง
+   * **การใช้งาน:** ต้องเปิดคอมพิวเตอร์และรันโปรแกรม `START.bat` (เมนูข้อ 1) ทิ้งไว้ ระบบจึงจะผลิตและโพสต์คลิปตามรอบเวลาทุก 30 นาที
+2. **☁️ บนเซิร์ฟเวอร์คลาวด์ VPS (`157.85.111.232`):**
+   * **หน้าที่:** รับ Webhook จาก LINE Official Account (`@137gsref`), ตอบแชทลูกค้า, ค้นหาสินค้าจากคลัง 2,530 รายการ, รับรหัสสินค้าตรงตัว, ตรวจสลิปโอนเงิน, และปิดการขาย
+   * **การใช้งาน:** ทำงานตลอด 24 ชั่วโมง 365 วัน **แม้คุณจะปิดคอมพิวเตอร์ เข้านอน หรือไม่อยู่บ้าน ลูกค้าทัก LINE มา บอทก็ยังตอบและขายของได้ตลอดเวลา 100% ครับ**
+
+---
+
+## 🌟 2. ภาพรวมการทำงานของระบบ (How It Works)
 
 ระบบนี้คือ **"หุ่นยนต์ผู้ช่วยสร้างยอดขาย Shopee Affiliate อัตโนมัติ 24 ชั่วโมง"** โดยทำหน้าที่ครบวงจรตั้งแต่:
 1. **ล่าเทรนด์และข่าวสดจากเน็ต** ➔ เชื่อมโยงเข้ากับสินค้า Shopee 8 หมวดหมู่
@@ -132,20 +173,219 @@
 
 ---
 
-## ⚡ 8. ระบบปิดการขายไร้รอยต่อข้ามแพลตฟอร์ม (Zero-Friction Fast Buy & Deep Link)
+## ⚡ 8. ระบบผลิตวิดีโอ 2 รางคู่ขนาน (Dual-Track Production Engine 90/10)
 
-เพื่อแก้ปัญหาคนดู YouTube Shorts หรือ Facebook Reels ไม่สะดวกค้นหาสินค้า ระบบได้ติดตั้ง **สะพานเชื่อมตรงสู่สินค้า 100% (Direct-to-Product Bridge)**:
+ระบบได้รับการจัดโครงสร้างให้แยก **คลิปรีวิวสินค้า Shopee (10%)** และ **คลิปคอนเทนต์ไวรัลหยุดดู 3 วิ (90%)** ขาดจากกัน 100% เพื่อดันยอดวิวและผู้ติดตามสูงสุด:
 
-1. **🔗 LINE Deep Link เปิดแชทพร้อมระบุสินค้าอัตโนมัติ:**
-   * ลิงก์ใต้คลิป YouTube Shorts ใช้รูปแบบ: `https://line.me/R/oaMessage/@137gsref/?รหัส{product_id}`
-   * เมื่อลูกค้ากดลิงก์ ระบบจะเปิดแอป LINE และส่งรหัสสินค้าให้เองอัตโนมัติ บอทป้าเข็มจะตอบกลับด้วยการ์ดสินค้าชิ้นนั้นทันทีใน 0.1 วินาที!
-2. **🏷️ รหัสสินค้าตรงตัวบนแถบป้ายวิดีโอ (On-Screen Direct Code):**
-   * บนคลิปวิดีโอทุกคลิปมีแถบป้าย: `🛒 พิกัดของแท้: แอด LINE @137gsref พิมพ์ "รหัส {id}"`
-   * ลูกค้าแค่เข้า LINE พิมพ์ตัวเลข `รหัส {id}` บอทจะดึงพิกัดสินค้าตัวนั้นให้ทันที
-3. **🗣️ ถามด้วยภาษาพูดธรรมชาติ (Natural Video Query):**
-   * ลูกค้าพิมพ์ว่า *"ของในคลิป"*, *"ดูจากยูทูป"*, *"คลิปล่าสุด"*, *"ขอพิกัดในคลิป"*
-   * บอทป้าเข็มจะดึงสินค้า 3 คลิปหลังสุดที่เพิ่งโพสต์ส่งให้ทันทีพร้อมปุ่มสั่งซื้อ 1 คลิก
+```text
+                                  ┌──► [รางที่ 1: คอนเทนต์ไวรัลหยุดดู 3 วิ 90%] ──► ข่าวด่วนโลก + ดารา + ทริคชีวิต + ดวง
+                                  │      ├── 🌍 ข่าวด่วนโลก BBC / สำนักข่าวจริง (25%)
+[ระบบคัดเลือกสัดส่วน 100%] ───────┤      ├── 🌟 ตามรอยคนดัง & ไวรัล (25%)
+                                  │      ├── 💡 ทริคแม่บ้านแก้ปัญหาบ้านจริง (20%)
+                                  │      ├── 🔮 เลขเด็ด & สายมูเสริมดวง (10%)
+                                  │      └── 💼 ทริคคนทำงาน & มนุษย์เงินเดือน (10%)
+                                  │
+                                  └──► [รางที่ 2: สินค้าตรงจุด 10%] ──────────► รูปสินค้า Shopee แท้ + สเปกแท้ + ลิงก์ Shopee
+```
+
+### 📋 กฎเหล็กการผลิตคลิปและเสียงพากย์:
+1. **🎬 กฎ Hook 3 วินาทีหยุดนิ้วคนดู 100% (3-Second Viral Hook):**
+   * **บนการ์ดวิดีโอ (Visual Phase 1):** ป้ายบนสุดและหัวข้อการ์ดแสดงประโยค Hook ตัวโตๆ คมชัด
+   * **เสียงพากย์ (Voiceover 0-3s):** ประโยคเปิดพูดประโยค Hook ที่ตื่นเต้น น่าติดตาม
+   * **ชื่อคลิป & แคปชั่น:** บรรทัดแรกขึ้นต้นด้วย Hook 3 วิเสมอ
+2. **🎙️ พจนานุกรมอ่านสัทศาสตร์ภาษาไทย (Phonetic TTS Normalizer):**
+   * แปลงคำศัพท์/ตัวย่อสากลให้ออกเสียงภาษาไทยถูกต้อง 100%: `NATO` ➔ *"นาโต้"*, `EU` ➔ *"อียู"*, `USA` ➔ *"สหรัฐฯ"*, `Shopee` ➔ *"ช้อปปี้"*, `TikTok` ➔ *"ติ๊กต็อก"*, `100%` ➔ *"ร้อยเปอร์เซ็นต์"*
+3. **🛍️ รางสินค้า Shopee (10%):** รีวิวคุณสมบัติจริง 100% ไม่พูดราคา แนบลิงก์ Shopee Affiliate ตรง + ลิงก์ LINE OA
+4. **🌍 รางคอนเทนต์ไวรัล (90%):** 
+   - ดึงข่าวจริงและภาพถ่ายจริงจาก RSS สำนักข่าวจริง (BBC World, ไทยรัฐ)
+   - ไม่ขายของในวิดีโอ ไม่ติดรูปสินค้า Shopee ชวนคอมเมนต์และติดตามช่อง
+5. **🔮 มาตรฐานโหราศาสตร์และศาสตร์ความเชื่อแท้ (Authentic Astrological Standard):**
+   - ดึงข้อมูลความรู้เชิงลึกจาก Google Search, Tavily, และสำนักโหรชั้นนำ สกัดแก่นความรู้ด้วย AI
+   - 4 ศาสตร์หลักตามตำรา: **คัมภีร์มหาทักษาปกรณ์** (สีเสื้อมงคล 7 วัน), **ศาสตร์ราศีจักร** (4 กลุ่มราศีธาตุ), **ศาสตร์ตัวเลขและคู่ดาวมงคล** (๒๔, ๓๖, ๑๕, ๕๖, ๗๘), **ศาสตร์ฮวงจุ้ยเบญจธาตุ** (โต๊ะทำงานมังกรเขียว-เสือขาว, กระเป๋าสตางค์, ลานหน้าบ้าน)
+   - *(ดูคู่มือฉบับเต็มที่ [08_AUTHENTIC_ASTROLOGY_AND_ESOTERIC_GUIDE.md](file:///d:/Shopee_Web_Scraping/docs/manual/08_AUTHENTIC_ASTROLOGY_AND_ESOTERIC_GUIDE.md))*
+
+---
+
+## 📺 9. วิธีเพิ่มช่อง YouTube Shorts ใหม่เข้าระบบ (Add YouTube Channel)
+
+ระบบรองรับช่อง YouTube ได้ไม่จำกัดจำนวน เพิ่มได้ตามต้องการ ใช้เวลาประมาณ 10-15 นาทีครับ
+
+> **ตัวอย่างช่องที่เพิ่มมาแล้ว (บันทึกจากการทำจริง 2 ก.ย. 2026):**
+> ช่อง 6 — ป้าเข็มบอกต่อ (`@PaaKhem-f7b`) เพิ่มสำเร็จด้วยขั้นตอนนี้ทุกข้อ
+
+---
+
+### 🔷 ขั้นตอนที่ 1 — สร้าง OAuth Client ID บน Google Cloud Console
+
+1. ไปที่ 👉 [https://console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials)
+2. เลือก **Project เดิม** ที่ใช้อยู่ (โปรเจกต์เดียวกับช่องอื่นๆ)
+3. กด **`+ CREATE CREDENTIALS`** → เลือก **`OAuth client ID`**
+4. Application type → เลือก **`Desktop app`**
+5. ตั้งชื่อ เช่น `YouTube Channel 6` → กด **`CREATE`**
+6. Popup แสดง Client ID และ Client Secret → กด **`DOWNLOAD JSON`**
+7. ไฟล์ชื่อยาวๆ จะดาวน์โหลดลงเครื่อง เช่น `client_secret_1077198238188-xxx.apps.googleusercontent.com.json`
+   - **วางไว้ใน** `D:\Shopee_Web_Scraping\` (ไม่ต้อง rename)
+
+---
+
+### 🔷 ขั้นตอนที่ 1.5 — เปิดใช้งาน YouTube Data API v3 ใน Project (สำคัญมาก)
+
+> ⚠️ หากเป็น Google Cloud Project ใหม่ หรือยังไม่เคยเปิด API จะติด Error `403 YouTube Data API v3 has not been used`
+
+1. ไปที่ 👉 [https://console.cloud.google.com/apis/library/youtube.googleapis.com](https://console.cloud.google.com/apis/library/youtube.googleapis.com)
+2. ตรวจสอบว่าเลือก Project ตรงกับ OAuth Client ID ที่สร้างในข้อ 1
+3. กดปุ่มสีน้ำเงิน **`ENABLE`** (หรือ **`เปิดใช้งาน`**)
+
+---
+
+### 🔷 ขั้นตอนที่ 2 — เพิ่ม Email บัญชี YouTube ช่องใหม่ใน Test Users
+
+> ⚠️ **ขั้นตอนนี้สำคัญมาก** — ถ้าข้ามจะเจอ Error `access_denied` ตอน OAuth
+
+1. ไปที่ **APIs & Services** → **OAuth consent screen**
+2. เลื่อนลงหัวข้อ **`Test users`** → กด **`+ ADD USERS`**
+3. ใส่ **อีเมล Google Account** ของบัญชีเจ้าของช่อง YouTube ใหม่
+4. กด **`SAVE`**
+
+---
+
+### 🔷 ขั้นตอนที่ 3 — แจ้ง AI ชื่อไฟล์ Client Secret ที่ดาวน์โหลดมา
+
+แจ้ง AI ชื่อไฟล์เต็ม เช่น:
+
+> `"D:\Shopee_Web_Scraping\client_secret_1077198238188-xxx.apps.googleusercontent.com.json"`
+
+AI จะคัดลอกไฟล์ไปไว้ที่ `D:\Shopee_Web_Scraping\tools\client_secret_6.json` ให้อัตโนมัติ
+
+---
+
+### 🔷 ขั้นตอนที่ 4 — รัน OAuth เพื่อล็อกอินช่อง YouTube ใหม่
+
+> ⚠️ **ต้องรันใน PowerShell หรือ Command Prompt เองโดยตรง**
+> ระบบ AI ไม่สามารถเปิดเบราว์เซอร์แทนได้
+
+**เปิด PowerShell หรือ Command Prompt แล้วพิมพ์ทีละบรรทัด:**
+
+```cmd
+D:
+cd D:\Shopee_Web_Scraping
+python tools/youtube_uploader.py --add-channel 6
+```
+
+> 🔁 เปลี่ยน `6` เป็นเลขลำดับช่องถัดไป เช่น `7`, `8`, ...
+
+**สิ่งที่จะเกิดขึ้น:**
+- เบราว์เซอร์เปิดขึ้นมาอัตโนมัติ → หน้า Google ล็อกอิน
+- ล็อกอินด้วย **บัญชี Google เจ้าของช่อง YouTube ใหม่**
+- ถ้าขึ้น **"Google hasn't verified this app"** → กด **`Advanced`** → กด **`Go to ... (unsafe)`** → กด **`Allow`**
+- เบราว์เซอร์แสดง: **"The authentication flow has completed. You may close this window."**
+- Terminal แสดง: `🎉 สำเร็จ! เชื่อมต่อช่อง YouTube ช่องที่ 6 เรียบร้อยแล้ว!`
+- ไฟล์ `tools/youtube_token_6.json` ถูกสร้างอัตโนมัติ
+
+---
+
+### 🔷 ขั้นตอนที่ 5 — แจ้ง AI เพื่อส่ง Token ขึ้น VPS
+
+เมื่อเบราว์เซอร์แสดง **"The authentication flow has completed"** แจ้ง AI ได้เลยว่า **"เสร็จแล้ว"**
+
+AI จะดำเนินการต่อทั้งหมดอัตโนมัติ:
+1. `scp youtube_token_6.json` → อัปโหลดขึ้น VPS (`157.85.111.232`)
+2. `scp client_secret_6.json` → อัปโหลด Client Secret ขึ้น VPS
+3. `systemctl restart shopee-bot` → รีสตาร์ท Service
+4. ตรวจสอบ Token ทั้งหมดบน VPS ว่าครบถ้วน
+5. อัปเดต Docs, AGENTS.md และโค้ดให้ตรงกับจำนวนช่องใหม่
+
+---
+
+### ✅ ผลลัพธ์หลังเพิ่มช่องสำเร็จ
+
+- ช่องใหม่เข้า **คิว Round-Robin อัตโนมัติทันที** (ไม่ต้องตั้งค่าเพิ่ม)
+- ระบบหมุนเวียน 1→2→3→4→5→6→1... ทุก 30 นาที ตลอด 24 ชม.
+- ถ้าช่องใดติด Quota หรือ Token มีปัญหา → **Auto-Failover** สลับช่องถัดไปทันที + แจ้ง Telegram + LINE Admin
+
+---
+
+### ⚠️ ปัญหาที่พบบ่อย (Pitfalls จากการทดสอบจริง)
+
+| ปัญหา | สาเหตุ | วิธีแก้ |
+|:---|:---|:---|
+| `access_denied` ตอน OAuth | ยังไม่ได้เพิ่มอีเมลใน Test Users | ทำขั้นตอนที่ 2 ก่อนเสมอ |
+| `403 YouTube Data API v3 has not been used` | ยังไม่ได้กดเปิด (Enable) API ใน Google Cloud | ทำขั้นตอนที่ 1.5 ไปกด Enable ใน Google Cloud Console |
+| `No such file or directory` ตอนรัน | ลืมพิมพ์ `D:` ก่อน `cd` | พิมพ์ `D:` Enter → แล้วค่อย `cd D:\Shopee_Web_Scraping` |
+| เบราว์เซอร์ไม่เปิดขึ้นมา | รันผ่าน AI (background mode) | ต้องรันใน **PowerShell/CMD โดยตรงเท่านั้น** |
+| Token เก่าค้างอยู่ | เคยรัน OAuth ด้วย Client ID เก่า | ลบ `youtube_token_6.json` ทิ้งก่อน แล้วรัน `--add-channel 6` ใหม่ |
+| `This app is blocked` | Google App ถูก Disable | ไปที่ Google Cloud Console → Credentials → Enable App |
+
+---
+
+## 10. วิธีเพิ่มบัญชี TikTok ช่องใหม่ (Multi-Account TikTok Rotation)
+
+ระบบรองรับการเชื่อมต่อ TikTok หลายบัญชีพร้อมกัน โดยจะหมุนเวียนโพสต์ทุกๆ 60 นาทีอัตโนมัติ
+
+### 📋 ขั้นตอนการเพิ่มช่อง TikTok ใหม่ (เช่น ช่องที่ 3):
+
+#### ขั้นตอนที่ 1: เปิด PowerShell บนเครื่องคอมพิวเตอร์ของคุณ
+```powershell
+D:
+cd D:\Shopee_Web_Scraping
+python tools/tiktok_studio_uploader.py --add-account 3
+```
+
+#### ขั้นตอนที่ 2: ล็อกอินผ่านหน้าต่างเบราว์เซอร์
+- ระบบจะเปิดหน้าต่าง Chrome สำหรับ TikTok ขึ้นมา
+- ให้คุณ **สแกน QR Code ด้วยแอป TikTok ในมือถือ** หรือล็อกอินด้วย Email/Google
+- เมื่อเข้าสู่หน้า TikTok สำเร็จ ระบบจะเซฟคุกกี้ลงไฟล์ `tools/tiktok_cookies_3.json` อัตโนมัติ 100%
+
+#### ขั้นตอนที่ 3: ส่งไฟล์ Cookie ขึ้นเซิร์ฟเวอร์ VPS
+```powershell
+scp tools/tiktok_cookies_3.json root@157.85.111.232:/root/shopee-affiliate-bot/tools/tiktok_cookies_3.json
+```
+
+#### ขั้นตอนที่ 4: รีสตาร์ทบริการบน VPS
+```powershell
+ssh root@157.85.111.232 "systemctl restart shopee-bot"
+```
+
+✅ **ผลลัพธ์:** บอทจะตรวจจับช่องที่ 3 อัตโนมัติ และนำเข้าสู่ลูปหมุนเวียนโพสต์ทุก 60 นาทีทันที!
+
+---
+
+## 🏗️ 10. สถาปัตยกรรมแบ่งงานแบบแยกส่วน (Decoupled Split Architecture)
+
+ระบบถูกออกแบบให้ทำงานแบบแยกส่วนอิสระ 100%:
+* ☁️ **บน VPS (Always-On 24 ชม.)**: รันเฉพาะบริการ Webhook เพื่อตอบแชทลูกค้าตลอด 24 ชม. ประกอบด้วย `shopee-backend.service` (FastAPI Webhook), `cloudflared-tunnel.service` (Cloudflare Tunnel), และ `tunnel-watchdog.service` (Watchdog ซิงค์ URL อัตโนมัติทุก 15 วิ)
+* 💻 **บนเครื่องคอมพิวเตอร์ของคุณ (Local Machine)**: รับผิดชอบงานโรงงานผลิตคลิป Reels/Shorts 9:16 Full HD (`auto_product_reels.py`), ตัวอัปโหลด Multi-Platform (`system_runner.py`, `uploader.py`, `tiktok_studio_uploader.py`), และ Telegram Commander
+* 🗄️ **Supabase PostgreSQL**: เชื่อมโยงข้อมูลสินค้า 2,472 รายการ และลูกค้า `users` เป็นศูนย์กลางเดียวกัน 100%
+
+### วิธีการเปิดใช้งานระบบบนเครื่องคอมพิวเตอร์ (Local):
+1. ดับเบิ้ลคลิกไฟล์ `START.bat` ที่โฟลเดอร์โปรเจกต์
+2. เลือกเมนู **`[1] เริ่มต้นระบบอัตโนมัติ 24 ชม.`** เพื่อเริ่มโรงงานผลิตคลิปและโพสต์อัตโนมัติทันที
+
+---
+
+## 🛠️ 11. ตารางแก้ปัญหาฉุกเฉินและการกู้คืนระบบ (Complete Troubleshooting Matrix)
+
+| อาการ / ปัญหา | สาเหตุหลัก | วิธีแก้ปัญหาทีละขั้นตอน |
+| :--- | :--- | :--- |
+| **YouTube ขึ้น `access_denied` / OAuth 403** | Google Cloud Console อยู่ในสถานะ Testing และยังไม่ได้เพิ่มอีเมลเจ้าของช่องลงในรายชื่อ Test Users | ไปที่ Google Cloud Console > APIs & Services > OAuth consent screen > เลื่อนลงไปที่ `Test users` > กด `+ ADD USERS` > ใส่อีเมลเจ้าของช่อง แล้วกด `SAVE` |
+| **YouTube ขึ้น `403 YouTube Data API v3 has not been used`** | ยังไม่ได้เปิดใช้งาน (Enable) YouTube Data API v3 ใน Google Cloud Project | ไปที่ Google Cloud Console > APIs & Services > Library > ค้นหา `YouTube Data API v3` แล้วกดปุ่มสีน้ำเงิน `ENABLE` |
+| **Facebook โพสต์ไม่ติด / Token Expired (Error 190)** | Page Access Token ของ Facebook หมดอายุ | ดึง User Token จาก Graph API Explorer แล้วรัน `python tools/exchange_fb_token.py` เพื่อต่ออายุเป็น Long-Lived Token 60 วัน |
+| **TikTok โพสต์ไม่ติด / Session หลุด** | Cookie เซสชันของ TikTok บนหน้าเว็บหมดอายุ | รัน `python tools/tiktok_studio_uploader.py --add-account <N>` บนเครื่องเพื่อล็อกอินใหม่ แล้วส่งไฟล์ `tiktok_cookies_<N>.json` |
+| **บอทเงียบ / ไม่ตอบ LINE Webhook** | IP หรือ URL ของ Cloudflare Tunnel เปลี่ยนแปลง | ระบบมี `tunnel-watchdog.service` บน VPS ตรวจจับและซิงค์ Webhook ให้อัตโนมัติทุก 15 วินาที หรือรันคำสั่ง `ssh root@157.85.111.232 "systemctl restart tunnel-watchdog"` |
+| **ต้องการรีสตาร์ทบริการ Webhook บน VPS** | เซสชันค้างหรืออัปเดตระบบ | รันคำสั่ง `ssh root@157.85.111.232 "systemctl restart shopee-backend tunnel-watchdog cloudflared-tunnel"` |
+
+---
+
+## 📞 12. สรุปคำสั่งด่วนสั่งการระยะไกล (Telegram Commander Shortcuts)
+
+สามารถพิมพ์สั่งการบอทได้ 24 ชม. ผ่าน **Telegram `@pakhem_commander_bot`**:
+* `/status` ➔ เช็คสถานะสดของระบบ, การรันของบอท, สุขภาพ VPS
+* `/stock` ➔ ดูรายชื่อคลิปที่รอโพสต์ในคลังสต็อก (ทั้งสินค้าและคอนเทนต์เพียว)
+* `/post` ➔ สั่งยิงโพสต์คลิปทันทีโดยไม่ต้องรอรอบ 30 นาที
+* `/produce` ➔ สั่งโรงงานเร่งผลิตคลิปใหม่เข้าคลังทันที 3 คลิป
+* `/reply <LINE_USER_ID> <ข้อความ>` ➔ ตอบแชทลูกค้า LINE จากใน Telegram ได้ทันที
 
 ---
 
 *© 2026 ระบบ Shopee Affiliate & AI Social Automation — ป้าเข็ม ของดีบอกต่อ*
+

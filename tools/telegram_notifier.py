@@ -13,10 +13,16 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "backend"
 
+# โหลด .env จาก backend เสมอ
+load_dotenv(BACKEND / ".env", override=False)
+
 logger = logging.getLogger("TelegramNotifier")
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8648538339:AAGDjwjHlrYRj-g3XrqZ_nAxfJV0S-d3yfk")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "6734965582")
+DEFAULT_BOT_TOKEN = "8648538339:AAGDjwjHlrYRj-g3XrqZ_nAxfJV0S-d3yfk"
+DEFAULT_CHAT_ID = "6734965582"
+
+TELEGRAM_BOT_TOKEN = (os.getenv("TELEGRAM_BOT_TOKEN") or DEFAULT_BOT_TOKEN).strip()
+TELEGRAM_CHAT_ID = str(os.getenv("TELEGRAM_CHAT_ID") or DEFAULT_CHAT_ID).strip()
 
 
 def send_telegram_alert(text: str, parse_mode: str = None) -> bool:
@@ -26,8 +32,8 @@ def send_telegram_alert(text: str, parse_mode: str = None) -> bool:
     if "U_cust_" in text or "U_mock" in text or "test_user" in text:
         return True
 
-    token = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
-    chat_id = (os.getenv("TELEGRAM_CHAT_ID") or "").strip()
+    token = (os.getenv("TELEGRAM_BOT_TOKEN") or TELEGRAM_BOT_TOKEN or DEFAULT_BOT_TOKEN).strip()
+    chat_id = str(os.getenv("TELEGRAM_CHAT_ID") or TELEGRAM_CHAT_ID or DEFAULT_CHAT_ID).strip()
     
     if not token or not chat_id or "mock" in token.lower():
         return False
@@ -52,6 +58,9 @@ def send_telegram_alert(text: str, parse_mode: str = None) -> bool:
         logger.warning(f"[TELEGRAM] ส่งข้อความล้มเหลว: {e}")
         return False
     return False
+
+
+send_telegram_notification = send_telegram_alert
 
 
 if __name__ == "__main__":

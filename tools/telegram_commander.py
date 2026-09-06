@@ -124,7 +124,7 @@ def execute_status_command() -> str:
         f"🟢 สถานะบริการ & เครือข่าย:\n"
         f"  • 🎬 โรงงานผลิตคลิป (Pre-buffer): 🟢 ออนไลน์\n"
         f"  • 📍 Facebook Reels: 🟢 ออนไลน์ (3 เพจพร้อมยิง)\n"
-        f"  • 🔴 YouTube Shorts: 🟢 ปกติ (หมุนเวียน 5 ช่อง)\n"
+        f"  • 🔴 YouTube Shorts: 🟢 ปกติ (หมุนเวียน 6 ช่อง)\n"
         f"  • 🧠 Groq AI Multi-Key: 🟢 7 Keys Failover\n\n"
         f"📦 สถานะคลังคลิป:\n"
         f"  • สต็อกรอโพสต์: {pending_count} คลิป\n\n"
@@ -138,16 +138,16 @@ def execute_status_command() -> str:
 
 
 def execute_post_command():
-    """สั่งโพสต์คลิปทันทีในเธรดแยก"""
+    """สั่งโพสต์คลิปทันทีในเธรดแยก (TikTok-Led Unified Broadcast)"""
     def _run():
-        send_tg_message("🚀 [กำลังเริ่มกระบวนการโพสต์ด่วน]\nบอทกำลังอัปโหลดคลิปขึ้น FB Reels 3 เพจ + YouTube Shorts ทันทีครับ...")
+        send_tg_message("🚀 [กำลังเริ่มกระบวนการโพสต์ด่วน 3 แพลตฟอร์ม]\nบอทกำลังคัดเลือกคลิปและซิงค์ขึ้น TikTok Studio + FB Reels + YouTube Shorts ทันทีครับ...")
         try:
-            import uploader
-            res = uploader.post_next(dry_run=False, force=True, normalize=True)
-            if res == 0:
-                send_tg_message("✅ [คำสั่งโพสต์ด่วนเสร็จสิ้น]\nโพสต์คลิปขึ้นทั้ง 4 ช่องทางเรียบร้อยแล้วครับ!")
+            from system_runner import execute_unified_broadcast
+            res = execute_unified_broadcast(force=True)
+            if res.get("success"):
+                send_tg_message(f"✅ [คำสั่งโพสต์ด่วนเสร็จสิ้น 100%]\n• 🎬 คลิป: {res.get('video')}\n• กระจายครบ TikTok, Facebook Reels, YouTube Shorts เรียบร้อยแล้วครับ")
             else:
-                send_tg_message("⚠️ [ผลการโพสต์ด่วน]\nไม่สามารถโพสต์ได้ในรอบนี้ (กรุณาตรวจ Log หรือสต็อกคลิป)")
+                send_tg_message(f"⚠️ [ผลการโพสต์ด่วน]\n• {res.get('error', 'ไม่สามารถโพสต์ได้ในรอบนี้')}")
         except Exception as e:
             send_tg_message(f"❌ โพสต์ด่วนเกิดข้อผิดพลาด: {e}")
 

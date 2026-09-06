@@ -37,6 +37,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import logging
+from typing import Optional, Union, Dict
 
 # บังคับ stdout UTF-8 (กัน emoji/ไทย พังบน Windows console ที่ใช้ cp874/850)
 if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
@@ -543,35 +544,212 @@ def build_caption(product: dict) -> str:
     if link:
         lines.append(f"🛒 สั่งซื้อของแท้ / ดูโปรโมชั่น Shopee 👉 {link}")
     lines.append(f"💬 หรือทักแชทถามป้าเข็มได้ที่ LINE: {line_id} 👉 {line_url}\n")
-    lines.append("#ของดีบอกต่อ #ของมันต้องมี #ป้าเข็มป้ายยา #ถ้าไม่คุ้มป้าบอกให้ #Shopee")
+    
+    fb_tags = "#ของดีบอกต่อ #ของมันต้องมี #ป้าเข็มป้ายยา #ถ้าไม่คุ้มป้าบอกให้ #Shopee"
+    try:
+        from hashtag_intelligence import generate_platform_hashtags
+        dyn = generate_platform_hashtags(name, category=cat_key, is_product=True)
+        if dyn.get("facebook"):
+            fb_tags = dyn["facebook"]
+    except Exception:
+        pass
+    lines.append(fb_tags)
 
     return "\n".join(lines)
 
 
 
-def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
-    pending = list_pending()
-    if not pending:
-        # ดึงสินค้าจากคลังมาสร้างคลิป Reels ให้อัตโนมัติ (Auto Product Reels จากภาพสินค้า)
+POSTED_HISTORY_TITLES_FILE = TOOLS / "posted_reels_title_history.json"
+POSTED_CONTENT_HISTORY_FILE = TOOLS / "posted_content_history.json"
+POSTED_YOUTUBE_HISTORY_FILE = TOOLS / "posted_youtube_history.json"
+
+
+def get_posted_titles() -> set:
+    """อ่านรายชื่อหัวข้อคลิปที่เคยโพสต์ไปแล้วจากทุกแพลตฟอร์ม เพื่อป้องกันการโพสต์ซ้ำ 100%"""
+    titles = set()
+    
+    # 1. จากประวัติ Facebook Reels
+    if POSTED_HISTORY_TITLES_FILE.exists():
         try:
-            from auto_product_reels import generate_product_reels
-            generated = generate_product_reels(
-                limit=3, selection=product_selection_mode())
-            if generated:
-                log(f"🎬 สร้างคลิปสินค้าใหม่อัตโนมัติ {len(generated)} คลิป -> pending_videos/")
-                pending = list_pending()
-        except Exception as e:
-            log(f"[WARN] สร้างคลิปสินค้าอัตโนมัติล้ม: {e}")
+            records = json.loads(POSTED_HISTORY_TITLES_FILE.read_text(encoding="utf-8"))
+            for r in records:
+                t = r.get("title", "") if isinstance(r, dict) else str(r)
+                c = re.sub(r'[^\u0E00-\u0E7Fa-zA-Z0-9]', '', t).lower()
+                if c:
+                    titles.add(c)
+        except Exception:
+            pass
 
-    if not pending:
-        # ตรวจสอบว่าเปิด Auto-recycle หรือไม่ (ค่าเริ่มต้น ปิด เพื่อรอคลิปใหม่)
-        auto_recycle = os.getenv("AUTO_RECYCLE_CLIPS", "0").lower() in ("1", "true", "yes")
-        if auto_recycle and recycle_clips():
-            pending = list_pending()
+    # 2. จากประวัติ YouTube Shorts
+    if POSTED_YOUTUBE_HISTORY_FILE.exists():
+        try:
+            yt_records = json.loads(POSTED_YOUTUBE_HISTORY_FILE.read_text(encoding="utf-8"))
+            for r in yt_records:
+                t = r.get("title", "") if isinstance(r, dict) else str(r)
+                c = re.sub(r'[^\u0E00-\u0E7Fa-zA-Z0-9]', '', t).lower()
+                if c:
+                    titles.add(c)
+        except Exception:
+            pass
+
+    return titles
+
+
+def record_posted_title(title: str) -> None:
+    """บันทึกหัวข้อคลิปที่เพิ่งโพสต์สำเร็จลงประวัติ"""
+    if not title:
+        return
+    try:
+        records = []
+        if POSTED_HISTORY_TITLES_FILE.exists():
+            try:
+                records = json.loads(POSTED_HISTORY_TITLES_FILE.read_text(encoding="utf-8"))
+                if not isinstance(records, list):
+                    records = []
+            except Exception:
+                records = []
+        records.append({
+            "title": title,
+            "posted_at": datetime.now(timezone.utc).isoformat()
+        })
+        if len(records) > 500:
+            records = records[-500:]
+        POSTED_HISTORY_TITLES_FILE.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        log(f"[WARN] บันทึกประวัติโพสต์ Reels ล้ม: {e}")
+
+
+def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True, custom_video: Optional[str] = None, custom_caption: Optional[str] = None, broadcast_all_yt: bool = False) -> int:
+    item = None
+    product = {}
+    pending: list[Path] = []
+
+    if custom_video:
+        c_path = Path(custom_video).resolve()
+        if not c_path.exists():
+            for alt in [Path("D:/") / custom_video, ROOT / "pending_videos" / custom_video, Path("D:/คลิปป้าเข็ม") / custom_video]:
+                if alt.exists():
+                    c_path = alt.resolve()
+                    break
+        if not c_path.exists():
+            stem_part = Path(custom_video).stem[:12]
+            for folder in [ROOT / "pending_videos", Path("D:/")]:
+                if folder.exists():
+                    for f in folder.glob("*.mp4"):
+                        if (stem_part and stem_part in f.stem) or (f.stem and f.stem in custom_video) or ("จัดการรีพอ" in f.name and "จัดการรีพอ" in custom_video):
+                            c_path = f.resolve()
+                            break
+                    if c_path.exists():
+                        break
+        if not c_path.exists():
+            log(f"[FAIL] ไม่พบไฟล์วิดีโอที่ระบุ: {c_path}")
+            return 1
+        item = c_path
+
+        # ตรวจหาไฟล์แคปชั่นคู่ (.txt sidecar) หากไม่ได้ระบุแคปชั่นมา
+        if not custom_caption and c_path:
+            sidecar_txt = c_path.with_suffix(".txt")
+            if not sidecar_txt.exists():
+                alt_txt = c_path.parent / f"{c_path.stem}.txt"
+                if alt_txt.exists():
+                    sidecar_txt = alt_txt
+            if sidecar_txt.exists():
+                try:
+                    custom_caption = sidecar_txt.read_text(encoding="utf-8").strip()
+                    log(f"📄 [Caption] ใช้แคปชั่นจากไฟล์คู่ (.txt): {sidecar_txt.name}")
+                except Exception:
+                    pass
+
+        # ค้นหา metadata เดิมหากคลิปนี้มีประวัติหรือเป็นคลิปสินค้า
+        products_db = load_products()
+        cand_product = products_db.get(item.name, {})
+
+        if not cand_product and (item.name.startswith("content_") or item.name.startswith("pure_")):
+            content_hist = {}
+            if POSTED_CONTENT_HISTORY_FILE.exists():
+                try:
+                    content_hist = json.loads(POSTED_CONTENT_HISTORY_FILE.read_text(encoding="utf-8"))
+                except Exception:
+                    pass
+            m_ts = re.search(r'_(\d+)(?:_\d+)?\.mp4$', item.name)
+            if m_ts:
+                ts_prefix = m_ts.group(1)[:9]
+                for ck, cv in content_hist.items():
+                    if ts_prefix in ck and isinstance(cv, dict):
+                        cand_product = {
+                            "product_name": cv.get("title", ""),
+                            "price": "",
+                            "category": "สาระความรู้ & คอนเทนต์เพียว",
+                            "affiliate_link": "",
+                            "is_pure_content": True,
+                            "content_mode": cv.get("category", "LIFE_HACK_TIP"),
+                            "topic_data": cv.get("details", {})
+                        }
+                        break
+
+        if not cand_product:
+            m_id = re.match(r'^prod_(\d+)_', item.name)
+            if m_id:
+                try:
+                    from app.db import SessionLocal
+                    from app import models
+                    db = SessionLocal()
+                    try:
+                        p = db.query(models.Product).filter(models.Product.id == int(m_id.group(1))).first()
+                        if p:
+                            cand_product = {
+                                "product_name": p.name,
+                                "price": str(int(p.price or 0)),
+                                "category": p.category or "สินค้าแนะนำ",
+                                "affiliate_link": p.affiliate_url or ""
+                            }
+                    finally:
+                        db.close()
+                except Exception as e:
+                    log(f"[WARN] ดึงข้อมูลสินค้าจาก DB ล้ม ({e})")
+
+        if cand_product:
+            product = cand_product
+            if custom_caption:
+                product["product_name"] = custom_caption
         else:
-            log("ไม่มีคลิปใหม่ใน pending_videos/ — พักรอคลิปใหม่")
-            return 0
+            product = {
+                "product_name": custom_caption or c_path.stem,
+                "category": "คลิปพิเศษ",
+                "is_pure_content": True,
+                "content_mode": "LIFE_HACK_TIP",
+                "topic_data": {
+                    "title": custom_caption or c_path.stem,
+                    "hook": custom_caption or c_path.stem,
+                    "detail": "คลิปพิเศษ สาระดีๆ จากป้าเข็ม"
+                }
+            }
+    else:
+        pending = list_pending()
+        if not pending:
+            # พักรอ 4 วินาทีให้เธรด producer ทำงานเสร็จก่อน ป้องกันการยิงซ้อนพร้อมกัน
+            time.sleep(4)
+            pending = list_pending()
+        if not pending:
+            # ดึงสินค้าจากคลังมาสร้างคลิป Reels ให้อัตโนมัติ (Auto Product Reels จากภาพสินค้า)
+            try:
+                from auto_product_reels import generate_product_reels
+                generated = generate_product_reels(
+                    limit=3, selection=product_selection_mode())
+                if generated:
+                    log(f"🎬 สร้างคลิปสินค้าใหม่อัตโนมัติ {len(generated)} คลิป -> pending_videos/")
+                    pending = list_pending()
+            except Exception as e:
+                log(f"[WARN] สร้างคลิปสินค้าอัตโนมัติล้ม: {e}")
 
+        if not pending:
+            # ตรวจสอบว่าเปิด Auto-recycle หรือไม่ (ค่าเริ่มต้น ปิด เพื่อรอคลิปใหม่)
+            auto_recycle = os.getenv("AUTO_RECYCLE_CLIPS", "0").lower() in ("1", "true", "yes")
+            if auto_recycle and recycle_clips():
+                pending = list_pending()
+            else:
+                log("ไม่มีคลิปใหม่ใน pending_videos/ — พักรอคลิปใหม่")
+                return 0
 
     spacing = _env_float("POSTING_SPACING_HOURS", DEFAULT_SPACING_HOURS)
     max_per_day = int(_env_float("MAX_REELS_PER_DAY", 50))
@@ -583,31 +761,107 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
             log(f"ครบลิมิต {max_per_day} โพสต์/วัน แล้ว — ข้าม ไม่โพสต์")
             return 0
 
+    if not item:
+        products_db = load_products()
+        posted_titles = get_posted_titles()
 
-
-    item = pending[0]
-    product = load_products().get(item.name, {})
-    if not product:
-        m_id = re.match(r'^prod_(\d+)_', item.name)
-        if m_id:
+        # โหลดประวัติ content เผื่อใช้กู้คืนชื่อหัวข้อคลิปคอนเทนต์เพียว
+        content_hist = {}
+        if POSTED_CONTENT_HISTORY_FILE.exists():
             try:
-                from app.db import SessionLocal
-                from app import models
-                db = SessionLocal()
-                try:
-                    p = db.query(models.Product).filter(models.Product.id == int(m_id.group(1))).first()
-                    if p:
-                        product = {
-                            "product_name": p.name,
-                            "price": str(int(p.price or 0)),
-                            "category": p.category or "สินค้าแนะนำ",
-                            "affiliate_link": p.affiliate_url or ""
-                        }
-                finally:
-                    db.close()
-            except Exception as e:
-                log(f"[WARN] ดึงข้อมูลสินค้าจาก DB ล้ม ({e})")
-    caption = build_caption(product)
+                content_hist = json.loads(POSTED_CONTENT_HISTORY_FILE.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
+        from app.services.content_safety_filter import is_sensitive_forbidden_topic, get_sensitive_matched_word
+
+        while pending and not item:
+            cand = pending.pop(0)
+            cand_product = products_db.get(cand.name, {})
+
+            # กู้คืน metadata หากเป็นคลิปคอนเทนต์เพียวแต่ไม่มีใน products.json
+            if not cand_product and (cand.name.startswith("content_") or cand.name.startswith("pure_")):
+                m_ts = re.search(r'_(\d+)(?:_\d+)?\.mp4$', cand.name)
+                if m_ts:
+                    ts_prefix = m_ts.group(1)[:9]
+                    for ck, cv in content_hist.items():
+                        if ts_prefix in ck and isinstance(cv, dict):
+                            cand_product = {
+                                "product_name": cv.get("title", ""),
+                                "price": "",
+                                "category": "สาระความรู้ & คอนเทนต์เพียว",
+                                "affiliate_link": "",
+                                "is_pure_content": True,
+                                "content_mode": cv.get("category", "LIFE_HACK_TIP"),
+                                "topic_data": cv.get("details", {})
+                            }
+                            break
+
+            if not cand_product:
+                m_id = re.match(r'^prod_(\d+)_', cand.name)
+                if m_id:
+                    try:
+                        from app.db import SessionLocal
+                        from app import models
+                        db = SessionLocal()
+                        try:
+                            p = db.query(models.Product).filter(models.Product.id == int(m_id.group(1))).first()
+                            if p:
+                                cand_product = {
+                                    "product_name": p.name,
+                                    "price": str(int(p.price or 0)),
+                                    "category": p.category or "สินค้าแนะนำ",
+                                    "affiliate_link": p.affiliate_url or ""
+                                }
+                        finally:
+                            db.close()
+                    except Exception as e:
+                        log(f"[WARN] ดึงข้อมูลสินค้าจาก DB ล้ม ({e})")
+
+            cand_title = cand_product.get("product_name") or cand.stem
+            clean_cand = re.sub(r'[^\u0E00-\u0E7Fa-zA-Z0-9]', '', cand_title).lower()
+
+            # 1. กฎเหล็กความปลอดภัย: กรองคำต้องห้ามเด็ดขาด (การเมือง / กษัตริย์ / 112 / ความรุนแรง)
+            topic_hook = (cand_product.get("topic_data", {}) or {}).get("hook", "")
+            bad_word = get_sensitive_matched_word(f"{cand.name} {cand_title} {topic_hook}")
+            if bad_word:
+                log(f"🚫 [SAFETY GUARD] ตรวจพบเนื้อหาต้องห้าม ({bad_word}): {cand.name} ({cand_title[:40]}) — ลบทิ้งทันทีเด็ดขาด!")
+                if not dry_run:
+                    try:
+                        cand.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                continue
+
+            # 2. ตรวจสอบว่าหัวข้อนี้เคยโพสต์ไปแล้วหรือไม่ (เทียบกับประวัติโพสต์จริงบน Facebook/YouTube)
+            is_dup = False
+            if clean_cand:
+                for pt in posted_titles:
+                    if clean_cand == pt or (len(clean_cand) >= 12 and len(pt) >= 12 and (clean_cand[:18] == pt[:18] or clean_cand in pt or pt in clean_cand)):
+                        is_dup = True
+                        break
+
+            if is_dup and not force:
+                log(f"⚠️ ตรวจพบคลิปซ้ำกับประวัติโพสต์จริง: {cand.name} ({cand_title[:40]}) — ข้าม")
+                if not dry_run:
+                    try:
+                        cand.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                continue
+
+            item = cand
+            product = cand_product
+            break
+
+    if not item:
+        log("ไม่มีคลิปใหม่ที่ไม่ซ้ำใน pending_videos/ — พักรอคลิปใหม่")
+        return 0
+
+    if custom_caption:
+        caption = custom_caption
+    else:
+        caption = build_caption(product)
 
     # ถ้าเป็นภาพนิ่ง → แปลงเป็นวิดีโอก่อน
     is_img = is_image(item)
@@ -679,7 +933,7 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
             import youtube_uploader
             tokens = youtube_uploader.get_token_files()
             if tokens:
-                yt_res = youtube_uploader.upload_shorts(Path(upload_path), product)
+                yt_res = youtube_uploader.upload_shorts(Path(upload_path), product, broadcast_all=broadcast_all_yt)
                 if isinstance(yt_res, list):
                     yt_results = yt_res
                 elif isinstance(yt_res, str):
@@ -697,13 +951,17 @@ def post_next(dry_run: bool, force: bool, normalize: bool = True) -> int:
     if any(r.get("ok") for r in page_results) or yt_results:
         POSTED_DIR.mkdir(parents=True, exist_ok=True)
         # ย้ายไฟล์ต้นฉบับ (ภาพหรือคลิป) ไป posted/
-        original = pending[0]  # ใช้ไฟล์ต้นฉบับจาก pending
+        original = item  # ใช้ไฟล์ต้นฉบับที่ถูกอัปโหลด
         dst = POSTED_DIR / original.name
         if dst.exists():
             dst = POSTED_DIR / f"{int(time.time())}_{original.name}"
-        shutil.move(str(original), str(dst))
+        if custom_video:
+            shutil.copy(str(original), str(dst))
+        else:
+            shutil.move(str(original), str(dst))
         LAST_POST_FILE.write_text(str(time.time()), encoding="utf-8")
         bump_daily_count()
+        record_posted_title((product or {}).get("product_name") or original.stem)
 
         # อัปเดต timestamp สินค้าที่เพิ่งโพสต์บน Supabase เพื่อให้ LINE Bot "ของในคลิป" ดึงขึ้นอันดับ 1 ทันที
         try:
@@ -822,8 +1080,11 @@ def main() -> int:
     ap.add_argument("--force", action="store_true", help="ข้าม pacing (โพสต์ทันที) — ยังนับ daily limit")
     ap.add_argument("--no-normalize", action="store_true",
                     help="ไม่แปลงคลิป (ใช้ไฟล์เดิม — คลิปต้องตรง spec Reels อยู่แล้ว)")
+    ap.add_argument("--video", type=str, default=None, help="พาธไฟล์วิดีโอ .mp4 หรือภาพที่ต้องการโพสต์เฉพาะเจาะจง")
+    ap.add_argument("--caption", type=str, default=None, help="แคปชั่นที่ต้องการใช้โพสต์")
+    ap.add_argument("--all-yt", action="store_true", help="ยิงขึ้น YouTube Shorts ทุกช่องพร้อมกัน (Broadcast All Channels)")
     args = ap.parse_args()
-    result = post_next(dry_run=args.dry_run, force=args.force, normalize=not args.no_normalize)
+    result = post_next(dry_run=args.dry_run, force=args.force, normalize=not args.no_normalize, custom_video=args.video, custom_caption=args.caption, broadcast_all_yt=args.all_yt)
     notify_reels_issues(result, dry_run=args.dry_run)
     return result
 

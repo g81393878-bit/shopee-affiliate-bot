@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import List, Optional
@@ -162,10 +163,10 @@ def download_image(url: str) -> Optional[Image.Image]:
 
 
 CONTENT_MODES = [
-    # สัดส่วนใหม่ 90% คอนเทนต์ไวรัลหยุดดู 3 วิ / 10% สินค้า Shopee แท้
+    # สัดส่วนใหม่ 90% คอนเทนต์ไวรัลหยุดดู 3 วิ (เน้นคนดัง & ข่าวโซเชียล) / 10% สินค้า Shopee แท้
     "TRENDING_NEWS",       # 1. 🌍 ข่าวด่วนจริง (BBC/Sanook)
-    "CELEBRITY_TREND",     # 2. 🌟 ตามรอยคนดัง (Sanook/BBC)
-    "LIFE_HACK_TIP",       # 3. 💡 ทริคแม่บ้าน
+    "CELEBRITY_TREND",     # 2. 🌟 ตามรอยคนดัง (Sanook/Khaosod)
+    "CELEBRITY_TREND",     # 3. 🌟 ตามรอยคนดัง
     "TRENDING_NEWS",       # 4. 🌍 ข่าวด่วนจริง
     "CELEBRITY_TREND",     # 5. 🌟 ตามรอยคนดัง
     "LUCKY_FORTUNE",       # 6. 🔮 ดวง & เลขมงคล (Sanook)
@@ -173,15 +174,15 @@ CONTENT_MODES = [
     "TRENDING_NEWS",       # 8. 🌍 ข่าวด่วนจริง
     "CELEBRITY_TREND",     # 9. 🌟 ตามรอยคนดัง
     "PRODUCT_HIGHLIGHT",   # 10. 🛍️ สินค้า Shopee แท้ (10%)
-    "LIFE_HACK_TIP",       # 11. 💡 ทริคแม่บ้าน
+    "CELEBRITY_TREND",     # 11. 🌟 ตามรอยคนดัง
     "TRENDING_NEWS",       # 12. 🌍 ข่าวด่วนจริง
     "CELEBRITY_TREND",     # 13. 🌟 ตามรอยคนดัง
-    "LUCKY_FORTUNE",       # 14. 🔮 ดวง & เลขมงคล
-    "WORK_PRODUCTIVITY",   # 15. 💼 ทริคคนทำงาน
-    "LIFE_HACK_TIP",       # 16. 💡 ทริคแม่บ้าน
+    "CELEBRITY_TREND",     # 14. 🌟 ตามรอยคนดัง
+    "TRENDING_NEWS",       # 15. 🌍 ข่าวด่วนจริง
+    "CELEBRITY_TREND",     # 16. 🌟 ตามรอยคนดัง
     "TRENDING_NEWS",       # 17. 🌍 ข่าวด่วนจริง
     "CELEBRITY_TREND",     # 18. 🌟 ตามรอยคนดัง
-    "LIFE_HACK_TIP",       # 19. 💡 ทริคแม่บ้าน
+    "CELEBRITY_TREND",     # 19. 🌟 ตามรอยคนดัง
     "PRODUCT_HIGHLIGHT",   # 20. 🛍️ สินค้า Shopee แท้ (10%)
 ]
 
@@ -333,37 +334,7 @@ def build_voice_script(product_name: str, price: float, category: str, seed_id: 
 
     full_text = f"{product_name} {category}".lower()
 
-    if content_mode == "LIFE_HACK_TIP":
-        hooks = [
-            f"อย่าเพิ่งทิ้งถ้ายังไม่ลองทริคนี้! {short_title} ตัวช่วยแก้ปัญหากวนใจในบ้าน กดสั่งซื้อที่ลิงก์ในแคปชั่นได้เลยจ้า",
-            f"ทริคง่ายๆ ช่วยประหยัดเวลาและพื้นที่! {short_title} ของแท้ใช้งานดีเว่อร์ ช้อปที่ลิงก์ในแคปชั่นนะจ๊ะ",
-            f"เคล็ดลับแก้ปัญหาประจำบ้านที่แม่บ้านบอกต่อ! {short_title} ใช้ง่าย จบปัญหากริบ สั่งที่ลิงก์ในแคปชั่นนะจ๊ะ"
-        ]
-    elif content_mode == "TRENDING_NEWS":
-        hooks = [
-            f"ข่าวด่วนสภาพอากาศและภัยพิบัติล่าสุด! ใครเดินทางต้องมี {short_title} ติดกระเป๋าไว้ สั่งที่ลิงก์ในแคปชั่นนะจ๊ะ",
-            f"เตือนภัยสถานการณ์ฉุกเฉิน! เตรียมพร้อมด้วย {short_title} ของแท้ปลอดภัย ช้อปที่ลิงก์ในแคปชั่นได้เลยจ้า",
-            f"เกาะติดกระแสด่วน! ไอเทมรับมือเหตุฉุกเฉิน {short_title} การันตีคุณภาพ สั่งซื้อที่ลิงก์ในแคปชั่นนะจ๊ะ"
-        ]
-    elif content_mode == "CELEBRITY_TREND":
-        hooks = [
-            f"ส่องไอเทมสุดฮิตตามรอยคนดัง! {short_title} ตัวนี้ทำไมคนตามหากันทั้งเมือง กดสั่งซื้อที่ลิงก์ในแคปชั่นเลยจ้า",
-            f"กระแสไวรัลที่ทุกคนต้องมี! {short_title} ของแท้ Official สวยปัง ช้อปที่ลิงก์ในแคปชั่นนะจ๊ะ",
-            f"ตามรอยไอเทมยอดฮิตระดับโลก! {short_title} รีวิวแน่น การันตีของแท้ สั่งซื้อที่ลิงก์ในแคปชั่นได้เลยนะจ๊ะ"
-        ]
-    elif content_mode == "LUCKY_FORTUNE":
-        hooks = [
-            f"งวดนี้ต้องมีติดตัวไว้! {short_title} เสริมดวงโชคลาภ การเงินปัง พลังบวกเต็มร้อย สั่งซื้อที่ลิงก์ในแคปชั่นได้เลยนะจ๊ะ",
-            f"ใครอยากดวงเฮงรับทรัพย์! {short_title} ไอเทมเสริมมงคลยอดฮิต การันตีของแท้ กดสั่งซื้อที่ลิงก์ในแคปชั่นได้เลยจ้า",
-            f"เคล็ดลับเสริมดวงการเงินและการงาน! {short_title} เสริมพลังบวก ช้อปของแท้ที่ลิงก์ในแคปชั่นนะจ๊ะ"
-        ]
-    elif content_mode == "WORK_PRODUCTIVITY":
-        hooks = [
-            f"ทริคคนทำงานให้เหนื่อยน้อยลง! {short_title} ตัวช่วยชีวิตชาวออฟฟิศ ชีวิตง่ายขึ้น 10 เท่า สั่งที่ลิงก์ในแคปชั่นนะจ๊ะ",
-            f"บอกลาอาการปวดเมื่อยจากการทำงาน! {short_title} ออกแบบตามหลักสรีระ นั่งสบาย ช้อปที่ลิงก์ในแคปชั่นได้เลยจ้า",
-            f"จัดโต๊ะทำงานให้โปร่ง โฟกัสงานได้ดีขึ้น! {short_title} แข็งแรงทนทาน ของแท้ สั่งซื้อที่ลิงก์ในแคปชั่นเลยนะจ๊ะ"
-        ]
-    elif any(k in full_text for k in ["โปรตีน", "อาหารเสริม", "วิตามิน", "คอลลาเจน", "ข้าว", "อาหาร", "ขนม", "อร่อย", "ชา", "กาแฟ", "กิน"]):
+    if any(k in full_text for k in ["โปรตีน", "อาหารเสริม", "วิตามิน", "คอลลาเจน", "ข้าว", "อาหาร", "ขนม", "อร่อย", "ชา", "กาแฟ", "กิน"]):
         hooks = [
             f"อยากดูแลสุขภาพตัวเองให้ดีขึ้น แนะนำ {short_title} ตัวนี้เลย ทานง่าย มีประโยชน์ ของแท้ สั่งที่ลิงก์ในแคปชั่นได้เลยนะจ๊ะ",
             f"สายรักสุขภาพหรือชอบของอร่อยต้องลอง! {short_title} คุณภาพเน้นๆ สะอาดปลอดภัย กดสั่งซื้อที่ลิงก์ในแคปชั่นได้เลยจ้า",
@@ -421,49 +392,208 @@ def build_voice_script(product_name: str, price: float, category: str, seed_id: 
     return hooks[seed_id % len(hooks)]
 
 
+# พจนานุกรมแปลงคำทับศัพท์/ตัวย่อสากลเป็นคำอ่านภาษาไทยสำหรับเสียงพากย์ TTS (Phonetic Normalizer)
+PHONETIC_TTS_MAP = [
+    # องค์กร/ข่าวสารระดับโลก
+    (r'\bNATO\b', 'นาโต้', re.IGNORECASE),
+    (r'\bEU\b', 'อียู', re.IGNORECASE),
+    (r'\bUSA\b|\bU\.S\.A\.\b', 'สหรัฐฯ', re.IGNORECASE),
+    (r'\bUS\b|\bU\.S\.\b', 'สหรัฐ', re.IGNORECASE),
+    (r'\bUK\b|\bU\.K\.\b', 'อังกฤษ', re.IGNORECASE),
+    (r'\bUN\b|\bU\.N\.\b', 'ยูเอ็น', re.IGNORECASE),
+    (r'\bNASA\b', 'นาซ่า', re.IGNORECASE),
+    (r'\bWHO\b', 'ดับเบิ้ลยูเอชโอ', re.IGNORECASE),
+    (r'\bFBI\b', 'เอฟบีไอ', re.IGNORECASE),
+    (r'\bCIA\b', 'ซีไอเอ', re.IGNORECASE),
+    (r'\bBBC\b', 'บีบีซี', re.IGNORECASE),
+    (r'\bCNN\b', 'ซีเอ็นเอ็น', re.IGNORECASE),
+    (r'\bGDP\b', 'จีดีพี', re.IGNORECASE),
+    (r'\bIMF\b', 'ไอเอ็มเอฟ', re.IGNORECASE),
+    (r'\bPM\s*2\.5\b', 'พีเอ็มสองจุดห้า', re.IGNORECASE),
+
+    # เทคโนโลยี/โซเชียลมีเดีย/แพลตฟอร์ม
+    (r'\bShopee\b', 'ช้อปปี้', re.IGNORECASE),
+    (r'\bTikTok\b', 'ติ๊กต็อก', re.IGNORECASE),
+    (r'\bFacebook\b', 'เฟซบุ๊ก', re.IGNORECASE),
+    (r'\bYouTube\b', 'ยูทูป', re.IGNORECASE),
+    (r'\bShorts\b', 'ช็อตส์', re.IGNORECASE),
+    (r'\bReels\b', 'รีลส์', re.IGNORECASE),
+    (r'\bInstagram\b|\bIG\b', 'ไอจี', re.IGNORECASE),
+    (r'\bAI\b|\bA\.I\.\b', 'เอไอ', re.IGNORECASE),
+    (r'\bWiFi\b|\bWi-Fi\b', 'ไวไฟ', re.IGNORECASE),
+    (r'\bBluetooth\b', 'บลูทูธ', re.IGNORECASE),
+    (r'\bGPS\b', 'จีพีเอส', re.IGNORECASE),
+    (r'\bUSB\b', 'ยูเอสบี', re.IGNORECASE),
+    (r'\bType-C\b|\bType C\b', 'ไทป์ซี', re.IGNORECASE),
+    (r'\bApp\b|\bApps\b', 'แอป', re.IGNORECASE),
+    (r'\bOnline\b', 'ออนไลน์', re.IGNORECASE),
+    (r'\bLink\b', 'ลิงก์', re.IGNORECASE),
+    (r'\bClick\b', 'คลิก', re.IGNORECASE),
+
+    # อุปกรณ์ สเปก และเทคโนโลยี
+    (r'\bLED\b', 'แอลอีดี', re.IGNORECASE),
+    (r'\bFast\s*Charge\b', 'ฟาสต์ชาร์จ', re.IGNORECASE),
+    (r'\bTWS\b', 'ทีดับเบิลยูเอส', re.IGNORECASE),
+    (r'(\d+)\s*mAh\b', r'\1 มิลลิแอมป์', re.IGNORECASE),
+    (r'(\d+)\s*W\b', r'\1 วัตต์', re.IGNORECASE),
+    (r'(\d+)\s*V\b', r'\1 โวลต์', re.IGNORECASE),
+    (r'(\d+)\s*Hz\b', r'\1 เฮิร์ตซ์', re.IGNORECASE),
+    (r'(\d+)\s*GB\b', r'\1 กิกะไบต์', re.IGNORECASE),
+    (r'(\d+)\s*TB\b', r'\1 เทระไบต์', re.IGNORECASE),
+    (r'\bPro\b', 'โปร', re.IGNORECASE),
+    (r'\bMax\b', 'แม็กซ์', re.IGNORECASE),
+    (r'\bMini\b', 'มินิ', re.IGNORECASE),
+    (r'\bPlus\b', 'พลัส', re.IGNORECASE),
+    (r'\bUltra\b', 'อัลตร้า', re.IGNORECASE),
+    (r'\bSmart\b', 'สมาร์ต', re.IGNORECASE),
+
+    # สัญลักษณ์และหน่วยนับ
+    (r'100%', 'ร้อยเปอร์เซ็นต์', 0),
+    (r'%', 'เปอร์เซ็นต์', 0),
+    (r'\bkm/h\b|\bกม\./ชม\.\b', 'กิโลเมตรต่อชั่วโมง', re.IGNORECASE),
+    (r'\bkg\b|\bกก\.\b', 'กิโลกรัม', re.IGNORECASE),
+    (r'\bcm\b|\bซม\.\b', 'เซนติเมตร', re.IGNORECASE),
+    (r'\bmm\b|\bมม\.\b', 'มิลลิเมตร', re.IGNORECASE),
+    (r'\bml\b|\bมล\.\b', 'มิลลิลิตร', re.IGNORECASE),
+    (r'\bEP\.?\s*(\d+)', r'ตอนที่ \1', re.IGNORECASE),
+    (r'\bStep\s*(\d+)', r'ขั้นตอนที่ \1', re.IGNORECASE),
+    (r'\bNo\.?\s*(\d+)', r'เบอร์ \1', re.IGNORECASE),
+]
+
+THAI_TO_ARABIC_DIGITS = str.maketrans('๐๑๒๓๔๕๖๗๘๙', '0123456789')
+
+
 def clean_for_tts(text: str) -> str:
-    """กรองให้เหลือเฉพาะตัวอักษรและตัวเลข เพื่อให้ TTS อ่านได้อย่างลื่นไหล ไม่ error"""
+    """แปลงตัวย่อ/คำทับศัพท์เป็นคำอ่านภาษาไทย และกรองอักขระพิเศษเพื่อให้เสียงพากย์ TTS อ่านได้ถูกต้องและลื่นไหล 100%"""
+    if not text:
+        return ""
+    
+    # แปลงเลขไทยเป็นเลขอารบิกเพื่อให้อ่านออกเสียงเป็นธรรมชาติ ไม่สะดุด
+    text = text.translate(THAI_TO_ARABIC_DIGITS)
+    
+    # ลบแฮชแท็กและ URL ออกจากบทพูดเสียงพากย์
+    text = re.sub(r'#\S+', '', text)
+    text = re.sub(r'https?://\S+', '', text)
+    
+    # ลบจุดไข่ปลา, สัญลักษณ์ bullet, จุดกลาง และเครื่องหมายคำพูด
+    text = re.sub(r'\.{2,}|…|[•·|]+', ' ', text)
+    text = re.sub(r'["\'«»“”‘’]', '', text)
+
+    # แปลงคำทับศัพท์และตัวย่อสากลเป็นคำอ่านภาษาไทย
+    for pattern, replacement, flags in PHONETIC_TTS_MAP:
+        text = re.sub(pattern, replacement, text, flags=flags)
+
+    # ปรับหางเสียงเป็นเพศหญิง (ป้าเข็ม) 100% สอดคล้องกับเสียงพากย์ th-TH-PremwadeeNeural
+    text = text.replace("นะครับ", "นะคะ")
+    text = text.replace("นะคับ", "นะคะ")
+    text = text.replace("ครับผม", "ค่ะ")
+    text = text.replace("ครับ", "ค่ะ")
+
     text = re.sub(r'[\+\-\*\/\\&%#@!\?=\(\)\[\]\{\}\<\>_\|~^]', ' ', text)
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
 
-async def _tts_save(text: str, output_path: str, voice: str = "th-TH-PremwadeeNeural"):
-    communicate = edge_tts.Communicate(text, voice)
-    await communicate.save(output_path)
+_TTS_LOCK = threading.Lock()
+
+
+async def _tts_save(text: str, output_path: str, voice: str = "th-TH-PremwadeeNeural", rate: str = "+0%"):
+    last_err = None
+    for attempt in range(3):
+        try:
+            communicate = edge_tts.Communicate(text, voice, rate=rate)
+            await communicate.save(output_path)
+            if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
+                return
+        except Exception as e:
+            last_err = e
+            await asyncio.sleep(0.8)
+    if last_err:
+        raise last_err
+
+
+def verify_audio_file(audio_path: Path) -> bool:
+    """ตรวจสอบความถูกต้องของไฟล์เสียงว่ามีเสียงจริงและดังพอ (ไม่เงียบ / ไม่ใช่ไฟล์เปล่า)"""
+    if not audio_path or not audio_path.exists():
+        return False
+    if audio_path.stat().st_size < 1000:
+        return False
+    dur = get_audio_duration(audio_path)
+    if dur < 1.0:
+        return False
+    try:
+        ffmpeg_exe = _ffmpeg_exe()
+        cmd = [ffmpeg_exe, "-i", str(audio_path), "-af", "volumedetect", "-f", "null", "-"]
+        res = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+        for line in res.stderr.splitlines():
+            if "max_volume:" in line:
+                m = re.search(r"max_volume:\s*(-?[\d\.]+)\s*dB", line)
+                if m and float(m.group(1)) <= -50.0:
+                    logger.warning(f"ไฟล์เสียงเงียบเกินไป: {m.group(1)} dB")
+                    return False
+        return True
+    except Exception:
+        return audio_path.stat().st_size > 2000
 
 
 def generate_tts_audio(text: str, output_path: Path) -> bool:
-    """สร้างไฟล์เสียงพากย์ผู้หญิง (ป้าเข็ม) ภาษาไทย ให้เสียงเป็นโทนเดียวกัน 100% ทุกคลิป ไม่เปลี่ยนเสียงไปมา"""
+    """สร้างไฟล์เสียงพากย์ผู้หญิง (ป้าเข็ม) ภาษาไทย คมชัด สดใส เสียงดังฟังชัดเจน 100% ทุกคลิป"""
     clean_text = clean_for_tts(text)
+    if not clean_text:
+        return False
     
-    # 1. ใช้ Google Thai Female Voice เป็นโมเดลเสียงหลักประจำตัวป้าเข็ม (คงเส้นคงวา 100% ทุกคลิป)
-    try:
-        from gtts import gTTS
-        raw_tmp = output_path.with_suffix(".raw.mp3")
-        tts = gTTS(text=clean_text, lang="th")
-        tts.save(str(raw_tmp))
-        
+    with _TTS_LOCK:
         ffmpeg_exe = _ffmpeg_exe()
-        # ปรับความเร็ว 1.28x และความดัง 1.3x ให้กระฉับกระเฉง สดใส เสียงเดียวกันเป๊ะทุกคลิป
-        cmd = [ffmpeg_exe, "-y", "-i", str(raw_tmp), "-filter:a", "atempo=1.28,volume=1.3", str(output_path)]
-        subprocess.run(cmd, check=True, capture_output=True)
-        raw_tmp.unlink(missing_ok=True)
         
-        if output_path.exists() and output_path.stat().st_size > 500:
-            return True
-    except Exception as e:
-        logger.warning(f"สร้างเสียงพากย์หลักล้ม: {e}")
+        # 1. ใช้ Microsoft Edge Neural TTS (th-TH-PremwadeeNeural) เป็นหลัก — สปีดธรรมชาติ คมชัด ชัดถ้อยชัดคำ ฟังง่ายระดับสตูดิโอ
+        try:
+            import concurrent.futures
+            raw_edge = output_path.with_suffix(".edge.mp3")
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                pool.submit(asyncio.run, _tts_save(clean_text, str(raw_edge), voice="th-TH-PremwadeeNeural", rate="+0%")).result(timeout=22)
+            
+            if raw_edge.exists() and raw_edge.stat().st_size > 1000:
+                # แปลงเป็น Stereo 44.1kHz คมชัดคงเดิม ไม่เร่งสปีด เพื่อรักษาคุณภาพเสียงพูดระดับสตูดิโอ 100% ไม่เพี้ยน ไม่กระตุก ฟังรู้เรื่อง
+                cmd = [ffmpeg_exe, "-y", "-i", str(raw_edge), "-filter:a", "volume=1.0", "-ar", "44100", "-ac", "2", str(output_path)]
+                subprocess.run(cmd, check=True, capture_output=True, timeout=15)
+                raw_edge.unlink(missing_ok=True)
+                if verify_audio_file(output_path):
+                    return True
+        except Exception as e:
+            logger.warning(f"Edge TTS ล้มเหลว: {e}")
 
-    # 2. สำรองกรณีฉุกเฉินด้วย Edge TTS
-    try:
-        asyncio.run(_tts_save(clean_text, str(output_path), voice="th-TH-PremwadeeNeural"))
-        if output_path.exists() and output_path.stat().st_size > 500:
-            return True
-    except Exception:
-        pass
+        # 2. สำรองด้วย Google Thai Female Voice (gTTS)
+        try:
+            from gtts import gTTS
+            raw_tmp = output_path.with_suffix(".raw.mp3")
+            tts = gTTS(text=clean_text, lang="th")
+            tts.save(str(raw_tmp))
+            
+            cmd = [ffmpeg_exe, "-y", "-i", str(raw_tmp), "-filter:a", "volume=1.0", "-ar", "44100", "-ac", "2", str(output_path)]
+            subprocess.run(cmd, check=True, capture_output=True, timeout=15)
+            raw_tmp.unlink(missing_ok=True)
+            
+            if verify_audio_file(output_path):
+                return True
+        except Exception as e:
+            logger.warning(f"Google TTS ล้มเหลว: {e}")
 
-    return False
+        # 3. สำรองก๊อกสามด้วย Edge TTS เสียงผู้ชาย (th-TH-NiwatNeural) — สปีดธรรมชาติ
+        try:
+            import concurrent.futures
+            raw_edge_m = output_path.with_suffix(".edgem.mp3")
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                pool.submit(asyncio.run, _tts_save(clean_text, str(raw_edge_m), voice="th-TH-NiwatNeural", rate="+0%")).result(timeout=22)
+            if raw_edge_m.exists() and raw_edge_m.stat().st_size > 1000:
+                cmd = [ffmpeg_exe, "-y", "-i", str(raw_edge_m), "-filter:a", "volume=1.0", "-ar", "44100", "-ac", "2", str(output_path)]
+                subprocess.run(cmd, check=True, capture_output=True, timeout=15)
+                raw_edge_m.unlink(missing_ok=True)
+                if verify_audio_file(output_path):
+                    return True
+        except Exception:
+            pass
+
+        return False
 
 
 def get_audio_duration(audio_path: Path) -> float:
@@ -504,12 +634,6 @@ def wrap_thai_lines(text: str, max_chars_per_line: int = 25, max_lines: int = 3)
     return [l for l in lines if l][:max_lines]
 
 
-def create_product_posters_multiphase(product_name: str, price: float, rating: float, sales_count: int, img: Image.Image, seed_id: int = 0) -> List[Image.Image]:
-    """สร้างภาพโปสเตอร์ 3 จังหวะ พร้อมหมุนเวียน 5 ธีมสีและข้อความ ไม่ซ้ำซาก"""
-    W, H = 1080, 1920
-    bot_name = clean_display_text(os.getenv("BOT_NAME", "ป้าเข็ม ขายของ"))
-    clean_pname = sanitize_public_product_text(clean_display_text(product_name))
-
 def create_product_posters_multiphase(
     product_name: str,
     price: float,
@@ -519,33 +643,73 @@ def create_product_posters_multiphase(
     seed_id: int = 0,
     content_mode: str = "PRODUCT_HIGHLIGHT"
 ) -> List[Image.Image]:
-    """สร้างภาพโปสเตอร์ 1080x1920 (9:16) 3 จังหวะ พร้อมหมุนเวียน 4 เสาหลักคอนเทนต์ (สินค้า/ทริค/ข่าว/คนดัง)
-    และ 5 ธีมสี ไม่พูดราคา 100%
-    """
+    """สร้างภาพโปสเตอร์ 1080x1920 (9:16) 3 จังหวะ สำหรับสินค้า Shopee ตาม Golden Master Template 100%"""
+    try:
+        import video_template_engine
+        clean_pname = sanitize_public_product_text(clean_display_text(product_name))
+        takeaways = [
+            f"ของแท้ 100% การันตีคุณภาพ (คะแนน {rating:.1f} ดาว)",
+            f"ยอดขายถล่มทลายกว่า {sales_count:,} ชิ้น รีวิวแน่น",
+            "กดดูพิกัดร้านทางการ Shopee ที่ลิงก์ในแคปชั่น"
+        ]
+        topic_data = {
+            "title": clean_pname,
+            "hook": f"ของดีบอกต่อ! {clean_pname[:30]} แท้ 100%",
+            "phase2_text": "ของแท้ร้านทางการ รีวิวแน่น คุณภาพดี",
+            "phase3_text": "กดดูพิกัดร้านแท้ Shopee ที่ลิงก์ในแคปชั่น",
+            "summary": clean_pname,
+            "source": "Shopee Official",
+        }
+        hero_images = [img, img, img] if img else [None, None, None]
+        return video_template_engine.render_cinematic_template_posters(
+            mode="PRODUCT_PROMO",
+            topic_data=topic_data,
+            hero_images=hero_images,
+            takeaways=takeaways,
+            channel_name="Anda",
+            line_id="@137gsref"
+        )
+    except Exception as e:
+        logger.warning(f"Fallback to legacy poster: {e}")
+
     W, H = 1080, 1920
     clean_pname = sanitize_public_product_text(clean_display_text(product_name))
 
-    # 1. ทำพื้นหลังแบบเบลอ (Blurred Background)
-    bg_img = img.copy()
-    bg_ratio = max(W / bg_img.width, H / bg_img.height)
-    bg_resized = bg_img.resize((int(bg_img.width * bg_ratio), int(bg_img.height * bg_ratio)), Image.Resampling.LANCZOS)
-    left = (bg_resized.width - W) // 2
-    top = (bg_resized.height - H) // 2
-    bg_cropped = bg_resized.crop((left, top, left + W, top + H))
-    bg_blurred = bg_cropped.filter(ImageFilter.GaussianBlur(radius=35))
-    dark_overlay = Image.new("RGBA", (W, H), (0, 0, 0, 140))
-    base_bg = Image.alpha_composite(bg_blurred, dark_overlay)
+    # 1. ทำพื้นหลัง (ภาพเบลอ หรือ Gradient สีพรีเมียมหากไม่มีภาพ)
+    if img is not None:
+        bg_img = img.copy()
+        bg_ratio = max(W / bg_img.width, H / bg_img.height)
+        bg_resized = bg_img.resize((int(bg_img.width * bg_ratio), int(bg_img.height * bg_ratio)), Image.Resampling.LANCZOS)
+        left = (bg_resized.width - W) // 2
+        top = (bg_resized.height - H) // 2
+        bg_cropped = bg_resized.crop((left, top, left + W, top + H))
+        bg_blurred = bg_cropped.filter(ImageFilter.GaussianBlur(radius=35))
+        dark_overlay = Image.new("RGBA", (W, H), (0, 0, 0, 140))
+        base_bg = Image.alpha_composite(bg_blurred, dark_overlay)
 
-    # 2. กรอบรูปสินค้าตรงกลาง
-    target_img_size = 760
-    img_ratio = min(target_img_size / img.width, target_img_size / img.height)
-    prod_w = int(img.width * img_ratio)
-    prod_h = int(img.height * img_ratio)
-    prod_resized = img.resize((prod_w, prod_h), Image.Resampling.LANCZOS)
-    box_x = (W - prod_w) // 2
-    box_y = 280 + (target_img_size - prod_h) // 2
-    card_padding = 20
-    card_box = [box_x - card_padding, box_y - card_padding, box_x + prod_w + card_padding, box_y + prod_h + card_padding]
+        # 2. กรอบรูปสินค้าตรงกลาง
+        target_img_size = 760
+        img_ratio = min(target_img_size / img.width, target_img_size / img.height)
+        prod_w = int(img.width * img_ratio)
+        prod_h = int(img.height * img_ratio)
+        prod_resized = img.resize((prod_w, prod_h), Image.Resampling.LANCZOS)
+        box_x = (W - prod_w) // 2
+        box_y = 280 + (target_img_size - prod_h) // 2
+        card_padding = 20
+        card_box = [box_x - card_padding, box_y - card_padding, box_x + prod_w + card_padding, box_y + prod_h + card_padding]
+    else:
+        # พื้นหลังสี Gradient สำหรับกรณีไม่มีภาพสินค้า
+        base_bg = Image.new("RGBA", (W, H), (15, 23, 42))
+        draw_grad = ImageDraw.Draw(base_bg)
+        for y in range(H):
+            ratio = y / max(1, H - 1)
+            r = int(15 + 20 * ratio)
+            g = int(23 + 25 * ratio)
+            b = int(42 + 35 * ratio)
+            draw_grad.line([(0, y), (W, y)], fill=(r, g, b, 255))
+        prod_resized = None
+        box_x, box_y = 120, 280
+        card_box = [box_x, box_y, W - 120, 1040]
 
     # 5 ธีมสีและข้อความไฮไลท์ หมุนเวียนสร้างความสดใหม่
     theme_idx = seed_id % 5
@@ -647,18 +811,43 @@ def create_product_posters_multiphase(
     ]
 
     posters = []
-    for ph in phases:
+    for idx, ph in enumerate(phases):
         canvas = base_bg.copy()
         draw = ImageDraw.Draw(canvas)
 
-        # แถบ Highlight ด้านบนตัวโตๆ
-        draw.rounded_rectangle([40, 50, W - 40, 220], radius=32, fill=ph["top_bg"], outline=ph["top_border"], width=4)
-        f_top = get_font(FONT_BOLD, 46)
-        draw.text((W // 2, 135), ph["top_text"], font=f_top, fill=ph["top_text_col"], anchor="mm")
+        # 0. ป้าย Sound-Off Badge ด้านบนสุด (คนส่วนใหญ่ปิดเสียงดู สื่อสารทันทีใน 0.1 วิ)
+        badge_w, badge_h = 440, 36
+        bx1 = (W - badge_w) // 2
+        by1 = 10
+        bx2 = bx1 + badge_w
+        by2 = by1 + badge_h
+        draw.rounded_rectangle([bx1, by1, bx2, by2], radius=18, fill=(15, 23, 42, 235), outline=(34, 197, 94), width=2)
+        f_sound_off = get_font(FONT_BOLD, 22)
+        draw.text((W // 2, 27), "🔇 ปิดเสียงอ่านได้ • ชี้เป้าของแท้ 100%", font=f_sound_off, fill=(74, 222, 128), anchor="mm")
 
-        # กรอบรูปสินค้า
+        # แถบ Highlight ด้านบนตัวโตๆ
+        draw.rounded_rectangle([40, 52, W - 40, 226], radius=32, fill=ph["top_bg"], outline=ph["top_border"], width=4)
+        f_top = get_font(FONT_BOLD, 44)
+        top_lines = wrap_thai_lines(ph["top_text"], max_chars_per_line=24, max_lines=2)
+        if len(top_lines) == 1:
+            draw.text((W // 2, 139), top_lines[0], font=f_top, fill=ph["top_text_col"], anchor="mm")
+        else:
+            draw.text((W // 2, 108), top_lines[0], font=f_top, fill=ph["top_text_col"], anchor="mm")
+            draw.text((W // 2, 168), top_lines[1], font=f_top, fill=ph["top_text_col"], anchor="mm")
+
+        # กรอบรูปสินค้า หรือ การ์ด Typography เมื่อไม่มีรูป
         draw.rounded_rectangle(card_box, radius=32, fill=(255, 255, 255, 245), outline=(255, 215, 0, 200), width=4)
-        canvas.paste(prod_resized, (box_x, box_y), prod_resized)
+        if prod_resized is not None:
+            canvas.paste(prod_resized, (box_x, box_y), prod_resized)
+        else:
+            f_center_title = get_font(FONT_BOLD, 44)
+            p_lines = wrap_thai_lines(clean_pname, max_chars_per_line=18, max_lines=4)
+            c_y = 480
+            for pl in p_lines:
+                draw.text((W // 2, c_y), pl, font=f_center_title, fill=(15, 23, 42), anchor="mm")
+                c_y += 65
+            f_star = get_font(FONT_BOLD, 36)
+            draw.text((W // 2, c_y + 40), f"⭐ การันตีของแท้ 100% (คะแนน {rating:.1f})", font=f_star, fill=(234, 88, 12), anchor="mm")
 
         # กล่องข้อมูลสินค้า
         info_top = 1120
@@ -666,11 +855,19 @@ def create_product_posters_multiphase(
         draw_info = ImageDraw.Draw(info_box)
         draw_info.rounded_rectangle([0, 0, W - 120, 520], radius=32, fill=(255, 255, 255), outline=thm["brand_col"], width=4)
 
-        f_badge = get_font(FONT_BOLD, 40)
-        draw_info.text((50, 70), badge_text, font=f_badge, fill=thm["brand_col"], anchor="lm")
+        # ปรับ Badge รายเฟส เพื่อให้คนดูบนจอสแกนเห็นจุดเด่นสินค้าครบ
+        phase_badges = [
+            f"⭐ {badge_text} • ร้านทางการ",
+            f"📦 ยอดขาย {sales_count:,} ชิ้น • รีวิวแน่น",
+            "🛒 พิกัดร้านแท้ Shopee ในแคปชั่น"
+        ]
+        curr_badge = phase_badges[idx] if idx < len(phase_badges) else badge_text
+
+        f_badge = get_font(FONT_BOLD, 36)
+        draw_info.text((50, 70), curr_badge, font=f_badge, fill=thm["brand_col"], anchor="lm")
         
         f_stat = get_font(FONT_BOLD, 30)
-        stat_str = f"คะแนน {rating:.1f}  |  ขายแล้ว {sales_count:,} ชิ้น" if content_mode == "PRODUCT_HIGHLIGHT" else "สาระน่ารู้ • อัปเดตประจำวัน"
+        stat_str = f"คะแนน {rating:.1f} ★" if content_mode == "PRODUCT_HIGHLIGHT" else "สาระน่ารู้ • อัปเดตประจำวัน"
         draw_info.text((W - 170, 70), stat_str, font=f_stat, fill=(60, 60, 60), anchor="rm")
         draw_info.line([(40, 125), (W - 160, 125)], fill=(220, 220, 220), width=2)
 
@@ -681,9 +878,9 @@ def create_product_posters_multiphase(
             draw_info.text((50, title_y), l, font=f_title, fill=(20, 20, 20), anchor="lt")
             title_y += 52
 
-        # ปุ่ม CTA
+        # ปุ่ม CTA ไฮไลท์
         cta_rect = [40, 390, W - 160, 480]
-        draw_info.rounded_rectangle(cta_rect, radius=20, fill=ph["cta_bg"])
+        draw_info.rounded_rectangle(cta_rect, radius=20, fill=ph["cta_bg"], outline=(255, 255, 255), width=3)
         f_cta = get_font(FONT_BOLD, 36)
         draw_info.text(((W - 120) // 2, 435), ph["cta_text"], font=f_cta, fill=(255, 255, 255), anchor="mm")
 
@@ -725,8 +922,8 @@ def multiphase_posters_to_video(poster_paths: List[Path], output_video_path: Pat
         dur_i = p_dur if i < len(poster_paths) - 1 else (duration - p_dur * (len(poster_paths) - 1))
         frames_i = int(dur_i * 30)
         filter_parts.append(
-            f"[{i}:v]trim=duration={dur_i:.2f},setpts=PTS-STARTPTS,"
-            f"zoompan=z='min(zoom+0.0003,1.04)':d={frames_i}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30[v{i}]"
+            f"[{i}:v]zoompan=z='min(zoom+0.0003,1.04)':d={frames_i}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30,"
+            f"trim=duration={dur_i:.2f},setpts=PTS-STARTPTS[v{i}]"
         )
         concat_inputs += f"[v{i}]"
     
@@ -735,40 +932,48 @@ def multiphase_posters_to_video(poster_paths: List[Path], output_video_path: Pat
 
     cmd = [ffmpeg_exe, "-y"]
     for p in poster_paths:
-        cmd.extend(["-loop", "1", "-i", str(p)])
+        cmd.extend(["-i", str(p)])
 
-    if audio_path and audio_path.exists():
-        cmd.extend([
-            "-i", str(audio_path),
-            "-filter_complex", filter_complex,
-            "-map", "[v]",
-            "-map", f"{len(poster_paths)}:a",
-            "-t", str(duration),
-            "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "22",
-            "-c:a", "aac",
-            "-b:a", "192k",
-            "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart",
-            str(output_video_path)
-        ])
-    else:
-        cmd.extend([
-            "-filter_complex", filter_complex,
-            "-map", "[v]",
-            "-t", str(duration),
-            "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "22",
-            "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart",
-            str(output_video_path)
-        ])
+    if not audio_path or not audio_path.exists():
+        logger.error("❌ ไม่พบไฟล์เสียงพากย์ — ยกเลิกการผลิตวิดีโอ 100% ป้องกันคลิปไม่มีเสียง")
+        return False
+
+    cmd.extend([
+        "-i", str(audio_path),
+        "-filter_complex", filter_complex,
+        "-map", "[v]",
+        "-map", f"{len(poster_paths)}:a",
+        "-t", str(duration),
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "22",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-ar", "44100",
+        "-ac", "2",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        str(output_video_path)
+    ])
 
     try:
         subprocess.run(cmd, check=True, capture_output=True, timeout=60)
-        return output_video_path.exists() and output_video_path.stat().st_size > 1000
+        if output_video_path.exists() and output_video_path.stat().st_size > 1000:
+            # ตรวจจับว่าวิดีโอมีเสียงจริง ไม่เป็นใบ้
+            try:
+                chk_cmd = [ffmpeg_exe, "-i", str(output_video_path), "-af", "volumedetect", "-f", "null", "-"]
+                chk_res = subprocess.run(chk_cmd, capture_output=True, text=True, errors="replace")
+                for line in chk_res.stderr.splitlines():
+                    if "max_volume:" in line:
+                        m = re.search(r"max_volume:\s*(-?[\d\.]+)\s*dB", line)
+                        if m and float(m.group(1)) <= -50.0:
+                            logger.error(f"❌ วิดีโอที่เรนเดอร์เสียงเงียบเกินไป ({m.group(1)} dB) — ยกเลิกไฟล์")
+                            output_video_path.unlink(missing_ok=True)
+                            return False
+            except Exception:
+                pass
+            return True
+        return False
     except Exception as e:
         logger.error(f"สร้างวิดีโอ 3 จังหวะล้ม: {e}")
         return False
@@ -1073,12 +1278,12 @@ def generate_product_reels(limit: int = 3, selection: str = "balanced",
                     tmp_poster_paths.append(Path(tmp_p.name))
 
             try:
-                # 4. รวมภาพ 3 จังหวะและเสียงพากย์เป็นวิดีโอ Reels สั้นกระชับ 7-10 วินาทีพอดีเป๊ะ
+                # 4. รวมภาพ 3 จังหวะและเสียงพากย์เป็นวิดีโอ Reels สั้นกระชับ 6-8 วินาทีพอดีเป๊ะ
                 audio_file = tmp_audio_path if tts_ok else None
                 audio_len = get_audio_duration(tmp_audio_path) if tts_ok else 5.0
-                min_duration = max(5.5, float(os.getenv("REELS_MIN_DURATION", "7.5") or 7.5))
-                audio_tail = max(0.5, float(os.getenv("REELS_AUDIO_TAIL_SECONDS", "0.8") or 0.8))
-                target_duration = min(10.0, max(min_duration, audio_len + audio_tail))
+                min_duration = max(5.0, float(os.getenv("REELS_MIN_DURATION", "5.8") or 5.8))
+                audio_tail = max(0.3, float(os.getenv("REELS_AUDIO_TAIL_SECONDS", "0.4") or 0.4))
+                target_duration = min(8.5, max(min_duration, audio_len + audio_tail))
                 if multiphase_posters_to_video(tmp_poster_paths, target_path, audio_path=audio_file, duration=target_duration):
 
                     products_meta[filename] = {
