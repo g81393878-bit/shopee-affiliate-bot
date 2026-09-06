@@ -23,6 +23,6 @@ python tools/exchange_fb_token.py --user-token "YOUR_NEW_TOKEN"
 ```
 4. อัปโหลดไฟล์ `backend/.env` ขึ้น VPS:
 ```powershell
-scp backend/.env root@157.85.111.232:/root/shopee-affiliate-bot/backend/.env
-ssh root@157.85.111.232 "systemctl restart shopee-bot"
+scp backend/.env root@119.10.140.161:/root/shopee-affiliate-bot/backend/.env
+ssh root@119.10.140.161 "systemctl restart shopee-bot"
 ```\n

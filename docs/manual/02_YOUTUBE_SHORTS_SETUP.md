@@ -46,6 +46,6 @@ python tools/youtube_uploader.py --add-channel 7
 
 ### ขั้นตอนที่ 4: ส่ง Token ขึ้น VPS
 ```powershell
-scp tools/youtube_token_7.json root@157.85.111.232:/root/shopee-affiliate-bot/tools/youtube_token_7.json
-ssh root@157.85.111.232 "systemctl restart shopee-bot"
+scp tools/youtube_token_7.json root@119.10.140.161:/root/shopee-affiliate-bot/tools/youtube_token_7.json
+ssh root@119.10.140.161 "systemctl restart shopee-bot"
 ```\n

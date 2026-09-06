@@ -18,7 +18,7 @@
   ① **ระบบอัปโหลด TikTok Multi-Account (`tools/tiktok_studio_uploader.py`):** ใช้ Playwright Headless Chromium อัปโหลดคลิปเข้าช่อง 1 (`@healthgooddeals`) และช่อง 2 (`@cheepao.review`) พร้อมระบบปลดล็อค Pop-up (Escape Hashtag Dropdown, Onboarding Joyride, และ Double Confirmation `Post now`) ทำงานอัตโนมัติ 100%
   ② **สถาปัตยกรรมแยกเธรดเด็ดขาด (Decoupled Engine):** ตัดการเรียก TikTok ออกจาก `uploader.py` เพื่อให้ดูแลเฉพาะ Facebook (3 เพจ) + YouTube Shorts (5 ช่อง) ทุก 30 นาที และให้ `run_tiktok_uploader_loop` ใน `system_runner.py` ดูแล TikTok แต่เพียงผู้เดียวทุก 60 นาที
   ③ **ระบบป้องกันคลิปซ้ำแยกรายช่อง (`tools/posted_tiktok_history.json`):** บันทึกประวัติคลิปที่เคยโพสต์แยกตามบัญชี ป้องกันการโพสต์ซ้ำข้ามช่องหรือซ้ำในช่องเดิม 100%
-  ④ **Deploy & Sync สู่ VPS สำเร็จ 100%:** ดึงโค้ดขึ้น VPS `157.85.111.232` รีสตาร์ท `shopee-bot.service` และบันทึกคู่มือครบใน `docs/TIKTOK_AUTOMATION_GUIDE.md` และ `docs/ROOT_CAUSE_ANALYSIS_2026_08_30.md`
+  ④ **Deploy & Sync สู่ VPS สำเร็จ 100%:** ดึงโค้ดขึ้น VPS `119.10.140.161` (ReadyIDC Ubuntu 22.04 LTS) รีสตาร์ท `shopee-bot.service` และบันทึกคู่มือครบใน `docs/TIKTOK_AUTOMATION_GUIDE.md` และ `docs/ROOT_CAUSE_ANALYSIS_2026_08_30.md`
 
 
 - **ระบบโพสต์ Reels อัตโนมัติ 100% ทุก 30 นาที สำหรับ 3 เพจ (29/08) — [Autonomous Bot Mode]:**

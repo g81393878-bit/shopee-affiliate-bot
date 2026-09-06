@@ -38,9 +38,9 @@
 1. **💻 บนคอมพิวเตอร์ของคุณ (Local Workstation):**
    * **หน้าที่:** ตัดต่อภาพ, สร้างเสียงพากย์ไทย, เรนเดอร์ไฟล์ MP4 9:16 Full HD, และยิงโพสต์ขึ้น Facebook 3 เพจ / YouTube Shorts 6 ช่อง / TikTok 3 ช่อง
    * **การใช้งาน:** ต้องเปิดคอมพิวเตอร์และรันโปรแกรม `START.bat` (เมนูข้อ 1) ทิ้งไว้ ระบบจึงจะผลิตและโพสต์คลิปตามรอบเวลาทุก 30 นาที
-2. **☁️ บนเซิร์ฟเวอร์คลาวด์ VPS (`157.85.111.232`):**
-   * **หน้าที่:** รับ Webhook จาก LINE Official Account (`@137gsref`), ตอบแชทลูกค้า, ค้นหาสินค้าจากคลัง 2,530 รายการ, รับรหัสสินค้าตรงตัว, ตรวจสลิปโอนเงิน, และปิดการขาย
-   * **การใช้งาน:** ทำงานตลอด 24 ชั่วโมง 365 วัน **แม้คุณจะปิดคอมพิวเตอร์ เข้านอน หรือไม่อยู่บ้าน ลูกค้าทัก LINE มา บอทก็ยังตอบและขายของได้ตลอดเวลา 100% ครับ**
+2. **☁️ บนเซิร์ฟเวอร์คลาวด์ VPS (`119.10.140.161`):**
+   * **หน้าที่:** รันครบวงจร 24/7 ทั้งโรงงานผลิตคลิป Reels/Shorts/TikTok, ตัวกระจายโพสต์ 13 แพลตฟอร์ม, รับ Webhook LINE OA (`@137gsref`), ตอบแชทลูกค้า และปิดการขาย
+   * **การใช้งาน:** ทำงานตลอด 24 ชั่วโมง 365 วัน **แม้คุณจะปิดคอมพิวเตอร์ เข้านอน หรือไม่อยู่บ้าน ระบบก็ยังผลิตคลิป โพสต์คลิป และขายของได้ตลอดเวลา 100% ครับ**
 
 ---
 
@@ -289,7 +289,7 @@ python tools/youtube_uploader.py --add-channel 6
 เมื่อเบราว์เซอร์แสดง **"The authentication flow has completed"** แจ้ง AI ได้เลยว่า **"เสร็จแล้ว"**
 
 AI จะดำเนินการต่อทั้งหมดอัตโนมัติ:
-1. `scp youtube_token_6.json` → อัปโหลดขึ้น VPS (`157.85.111.232`)
+1. `scp youtube_token_6.json` → อัปโหลดขึ้น VPS (`119.10.140.161`)
 2. `scp client_secret_6.json` → อัปโหลด Client Secret ขึ้น VPS
 3. `systemctl restart shopee-bot` → รีสตาร์ท Service
 4. ตรวจสอบ Token ทั้งหมดบน VPS ว่าครบถ้วน
@@ -338,12 +338,12 @@ python tools/tiktok_studio_uploader.py --add-account 3
 
 #### ขั้นตอนที่ 3: ส่งไฟล์ Cookie ขึ้นเซิร์ฟเวอร์ VPS
 ```powershell
-scp tools/tiktok_cookies_3.json root@157.85.111.232:/root/shopee-affiliate-bot/tools/tiktok_cookies_3.json
+scp tools/tiktok_cookies_3.json root@119.10.140.161:/root/shopee-affiliate-bot/tools/tiktok_cookies_3.json
 ```
 
 #### ขั้นตอนที่ 4: รีสตาร์ทบริการบน VPS
 ```powershell
-ssh root@157.85.111.232 "systemctl restart shopee-bot"
+ssh root@119.10.140.161 "systemctl restart shopee-bot"
 ```
 
 ✅ **ผลลัพธ์:** บอทจะตรวจจับช่องที่ 3 อัตโนมัติ และนำเข้าสู่ลูปหมุนเวียนโพสต์ทุก 60 นาทีทันที!
@@ -371,8 +371,8 @@ ssh root@157.85.111.232 "systemctl restart shopee-bot"
 | **YouTube ขึ้น `403 YouTube Data API v3 has not been used`** | ยังไม่ได้เปิดใช้งาน (Enable) YouTube Data API v3 ใน Google Cloud Project | ไปที่ Google Cloud Console > APIs & Services > Library > ค้นหา `YouTube Data API v3` แล้วกดปุ่มสีน้ำเงิน `ENABLE` |
 | **Facebook โพสต์ไม่ติด / Token Expired (Error 190)** | Page Access Token ของ Facebook หมดอายุ | ดึง User Token จาก Graph API Explorer แล้วรัน `python tools/exchange_fb_token.py` เพื่อต่ออายุเป็น Long-Lived Token 60 วัน |
 | **TikTok โพสต์ไม่ติด / Session หลุด** | Cookie เซสชันของ TikTok บนหน้าเว็บหมดอายุ | รัน `python tools/tiktok_studio_uploader.py --add-account <N>` บนเครื่องเพื่อล็อกอินใหม่ แล้วส่งไฟล์ `tiktok_cookies_<N>.json` |
-| **บอทเงียบ / ไม่ตอบ LINE Webhook** | IP หรือ URL ของ Cloudflare Tunnel เปลี่ยนแปลง | ระบบมี `tunnel-watchdog.service` บน VPS ตรวจจับและซิงค์ Webhook ให้อัตโนมัติทุก 15 วินาที หรือรันคำสั่ง `ssh root@157.85.111.232 "systemctl restart tunnel-watchdog"` |
-| **ต้องการรีสตาร์ทบริการ Webhook บน VPS** | เซสชันค้างหรืออัปเดตระบบ | รันคำสั่ง `ssh root@157.85.111.232 "systemctl restart shopee-backend tunnel-watchdog cloudflared-tunnel"` |
+| **บอทเงียบ / ไม่ตอบ LINE Webhook** | IP หรือ URL ของ Cloudflare Tunnel เปลี่ยนแปลง | ระบบมี `tunnel-watchdog.service` บน VPS ตรวจจับและซิงค์ Webhook ให้อัตโนมัติทุก 15 วินาที หรือรันคำสั่ง `ssh root@119.10.140.161 "systemctl restart tunnel-watchdog"` |
+| **ต้องการรีสตาร์ทบริการ Webhook บน VPS** | เซสชันค้างหรืออัปเดตระบบ | รันคำสั่ง `ssh root@119.10.140.161 "systemctl restart shopee-backend tunnel-watchdog cloudflared-tunnel"` |
 
 ---
 

@@ -158,3 +158,7 @@ temp_frames/
 *.txt
 !requirements.txt
 !backend/requirements.txt
+tools/create_named_tunnel.py
+tools/setup_cf_worker.py
+tools/update_worker.py
+

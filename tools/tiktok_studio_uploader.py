@@ -119,7 +119,7 @@ def login_flow(account_id: Optional[int] = None):
             print(f"\n🎉 ล็อกอิน TikTok สำเร็จ 100%! บันทึก Cookie ลง {target_cookie_file.name} เรียบร้อยแล้ว")
             log(f"TikTok Session Saved to {target_cookie_file.name} Successfully!")
             print(f"👉 คำสั่งส่งไฟล์ขึ้น VPS:")
-            print(f"   scp tools/{target_cookie_file.name} root@157.85.111.232:/root/shopee-affiliate-bot/tools/{target_cookie_file.name}")
+            print(f"   scp tools/{target_cookie_file.name} root@119.10.140.161:/root/shopee-affiliate-bot/tools/{target_cookie_file.name}")
             page.goto(UPLOAD_URL, timeout=30000)
             time.sleep(3)
         else:

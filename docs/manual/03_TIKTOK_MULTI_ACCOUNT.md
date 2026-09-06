@@ -50,8 +50,8 @@ python tools/tiktok_studio_uploader.py --add-account 4
 
 ### 🚀 การนำขึ้น VPS (กรณีรันระบบบน VPS 24 ชม.):
 ```powershell
-scp tools/tiktok_cookies_4.json root@157.85.111.232:/root/shopee-affiliate-bot/tools/tiktok_cookies_4.json
-ssh root@157.85.111.232 "systemctl restart shopee-bot"
+scp tools/tiktok_cookies_4.json root@119.10.140.161:/root/shopee-affiliate-bot/tools/tiktok_cookies_4.json
+ssh root@119.10.140.161 "systemctl restart shopee-bot"
 ```
 
 ✅ **ผลลัพธ์:** บอทจะตรวจพบไฟล์ `tiktok_cookies_4.json` และนำเข้าคิวหมุนเวียนสลับโพสต์อัตโนมัติ 100% ทันทีครับ!

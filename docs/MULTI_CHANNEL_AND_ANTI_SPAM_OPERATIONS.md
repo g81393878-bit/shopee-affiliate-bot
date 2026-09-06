@@ -1,28 +1,29 @@
 # MULTI_CHANNEL_AND_ANTI_SPAM_OPERATIONS.md
-# คู่มือการจัดการระบบ 4-Channel Multi-Broadcast & Anti-Spam Shield (ป้าเข็ม 24/7)
+# คู่มือการจัดการระบบ Multi-Channel Broadcast & Anti-Spam Shield (ป้าเข็ม 24/7)
 
 ---
 
-## 📌 1. ภาพรวมระบบการเผยแพร่คลิปวิดีโอ 5 ช่องทางพร้อมกัน
+## 📌 1. ภาพรวมระบบการเผยแพร่คลิปวิดีโอ 6 ช่องทางพร้อมกัน
 
-ระบบอัตโนมัติของป้าเข็มถูกออกแบบให้ยิงคอนเทนต์วิดีโอ 9:16 Full HD พร้อมเสียงพากย์ไทย TTS ลง **Facebook 3 เพจ + YouTube Shorts 5 ช่องหมุนเวียน ทุกๆ 30 นาที ตลอด 24 ชม.**
+ระบบอัตโนมัติของป้าเข็มถูกออกแบบให้ยิงคอนเทนต์วิดีโอ 9:16 Full HD พร้อมเสียงพากย์ไทย TTS ลง **Facebook 3 เพจ + YouTube Shorts 6 ช่องหมุนเวียน ทุกๆ 30 นาที ตลอด 24 ชม.**
 
 ```
                                   ┌───► Facebook เพจ 1: ป้าเข็ม ขายของ (ID: 1307380735783361)
                                   ├───► Facebook เพจ 2: ป้าเข็ม ชี้เป้าของดี (ID: 1323469404180656)
 [โรงงานผลิตคลิป Reels/Shorts] ────┼───► Facebook เพจ 3: ป้าเข็ม ของดีบอกต่อ (ID: 1307380735783361)
    (ทุกๆ 30 นาที / 48 คลิปต่อวัน)      │
-                                  └───► YouTube Shorts (Round-Robin หมุนเวียน 5 ช่อง)
+                                  └───► YouTube Shorts (Round-Robin หมุนเวียน 6 ช่อง)
                                           ├─ ช่อง 1: ป้าเข็ม ขายของ (@regency1229)
                                           ├─ ช่อง 2: ของดีติดบ้าน by ป้าเข็ม (@goodthings-w4e)
                                           ├─ ช่อง 3: ชี้เป้า ไอเทมต้องมี (@pakmud.review)
                                           ├─ ช่อง 4: อันดา ป้ายยาของใช้ดี (@anda.review99)
-                                          └─ ช่อง 5: หยิบมารีวิว (@yibmareview-th)
+                                          ├─ ช่อง 5: หยิบมารีวิว (@yibmareview-th)
+                                          └─ ช่อง 6: ป้าเข็มบอกต่อ (@PaaKhem-f7b)
 ```
 
 ---
 
-## 🔴 2. รายละเอียดช่อง YouTube Shorts ที่เชื่อมต่ออยู่ (5 ช่อง)
+## 🔴 2. รายละเอียดช่อง YouTube Shorts ที่เชื่อมต่ออยู่ (6 ช่อง)
 
 | ลำดับ | ชื่อช่อง YouTube | Handle | ไฟล์ OAuth Token | โหมดการทำงาน |
 | :---: | :--- | :--- | :--- | :---: |
@@ -31,6 +32,7 @@
 | 3️⃣ | **🛒 ชี้เป้า ไอเทมต้องมี** | `@pakmud.review` | `tools/youtube_token_3.json` | Round-Robin |
 | 4️⃣ | **🔥 อันดา ป้ายยาของใช้ดี** | `@anda.review99` | `tools/youtube_token_4.json` | Round-Robin |
 | 5️⃣ | **หยิบมารีวิว** | `@yibmareview-th` | `tools/youtube_token_5.json` | Round-Robin |
+| 6️⃣ | **ป้าเข็มบอกต่อ** | `@PaaKhem-f7b` | `tools/youtube_token_6.json` | Round-Robin |
 
 ### 🔄 กลไกการหมุนเวียนและการป้องกันสะดุด (Round-Robin & Auto-Failover):
 1. **การสลับช่องอัตโนมัติ:** เมื่อโพสต์สำเร็จ ระบบจะบันทึกลำดับช่องลง `tools/last_youtube_channel_index.txt` เพื่อให้รอบถัดไปสลับไปช่องต่อไปทันที
@@ -51,7 +53,7 @@
 5. ระบบจะสร้างไฟล์ `tools/youtube_token_5.json` ขึ้นมาให้อัตโนมัติ
 6. ก๊อปปี้ไฟล์ไปยัง VPS หรือใช้คำสั่งซิงค์:
    ```powershell
-   scp tools/youtube_token_5.json root@157.85.111.232:/root/shopee-affiliate-bot/tools/
+   scp tools/youtube_token_5.json root@119.10.140.161:/root/shopee-affiliate-bot/tools/
    ```
 7. ระบบผลิตคลิปจะตรวจพบช่องใหม่และนำเข้าสู่คิวหมุนเวียน 24 ชม. ทันที!
 

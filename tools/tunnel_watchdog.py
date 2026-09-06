@@ -21,7 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger("TunnelWatchdog")
 
 LINE_TOKEN = "4FYHfbu8+iE7CaOo+lCEG6pBZuxiOIPXlgKQ3tQSQIxZZOpX63qY/Xp8W+1GGftkB9VXpmb88HtHVmr8BAv5qKmDYgNnaVi322Jj9Bc2g6o3ePUa/R5mX8a+u8HyE7c8g8hLAi20pgHIrnYTV9u9MgdB04t89/1O/w1cDnyilFU="
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or "8648538339:AAGDjwjHlrYRj-g3XrqZ_nAxfJV0S-d3yfk"
 TELEGRAM_CHAT_ID = "6734965582"
 URL_CACHE_FILE = "/tmp/tunnel_url.txt"
 CHECK_INTERVAL = 15  # วินาที

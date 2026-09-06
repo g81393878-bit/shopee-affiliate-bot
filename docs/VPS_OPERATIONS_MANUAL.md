@@ -7,7 +7,7 @@
 
 | รายการ | รายละเอียด |
 | :--- | :--- |
-| **IP Address** | `157.85.111.232` |
+| **IP Address** | `119.10.140.161` |
 | **SSH User** | `root` (รองรับ SSH Key Authentication โดยตรง) |
 | **โฟลเดอร์โปรเจกต์** | `/root/shopee-affiliate-bot` |
 | **Python Virtualenv** | `/root/shopee-affiliate-bot/.venv` |
@@ -22,13 +22,13 @@
 
 ### 2.1 ส่งคุกกี้ TikTok ล่าสุดขึ้น VPS:
 ```bash
-scp -o StrictHostKeyChecking=no tools/tiktok_cookies.json root@157.85.111.232:/root/shopee-affiliate-bot/tools/
-scp -r -o StrictHostKeyChecking=no tools/tiktok_user_data root@157.85.111.232:/root/shopee-affiliate-bot/tools/
+scp -o StrictHostKeyChecking=no tools/tiktok_cookies.json root@119.10.140.161:/root/shopee-affiliate-bot/tools/
+scp -r -o StrictHostKeyChecking=no tools/tiktok_user_data root@119.10.140.161:/root/shopee-affiliate-bot/tools/
 ```
 
 ### 2.2 สั่ง VPS ดึงโค้ด, ติดตั้ง Dependencies และรีสตาร์ทบอท (คำสั่งเดียวจบ):
 ```bash
-ssh -o StrictHostKeyChecking=no root@157.85.111.232 "cd /root/shopee-affiliate-bot && git pull origin main && source .venv/bin/activate && pip install playwright && playwright install chromium && playwright install-deps && systemctl restart shopee-bot"
+ssh -o StrictHostKeyChecking=no root@119.10.140.161 "cd /root/shopee-affiliate-bot && git pull origin main && source .venv/bin/activate && pip install playwright && playwright install chromium && playwright install-deps && systemctl restart shopee-bot"
 ```
 
 ---

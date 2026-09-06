@@ -154,15 +154,15 @@ for _ in range(15):
 
 ## 6. การรันระบบอัตโนมัติบน VPS 24 ชั่วโมง
 
-* **เซิร์ฟเวอร์ VPS:** `157.85.111.232` (Ubuntu Linux)
+* **เซิร์ฟเวอร์ VPS:** `119.10.140.161` (Ubuntu Linux)
 * **เซอร์วิส Systemd:** `shopee-bot.service`
 * **คำสั่งอัปเดตและรีสตาร์ทบอทบน VPS:**
   ```bash
-  ssh root@157.85.111.232 "cd /root/shopee-affiliate-bot && git pull origin main && systemctl restart shopee-bot"
+  ssh root@119.10.140.161 "cd /root/shopee-affiliate-bot && git pull origin main && systemctl restart shopee-bot"
   ```
 * **คำสั่งตรวจสอบ Live Logs:**
   ```bash
-  ssh root@157.85.111.232 "journalctl -u shopee-bot -f"
+  ssh root@119.10.140.161 "journalctl -u shopee-bot -f"
   ```
 * **ศูนย์สั่งการผ่านมือถือ:** ควบคุมระยะไกลผ่าน Telegram Commander (`@pakhem_commander_bot`) ตลอด 24 ชั่วโมง
 
