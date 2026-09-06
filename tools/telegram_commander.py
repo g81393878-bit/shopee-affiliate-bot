@@ -74,6 +74,10 @@ def get_main_menu_markup() -> dict:
                 {"text": "🚀 สั่งโพสต์คลิปทันที", "callback_data": "cmd_post"}
             ],
             [
+                {"text": "📈 ดูชีทยอดวิว", "callback_data": "cmd_sheet"},
+                {"text": "🔄 ซิงค์ยอดวิวชีท", "callback_data": "cmd_refresh_metrics"}
+            ],
+            [
                 {"text": "🏭 ผลิตคลิปเพิ่ม 3 ตัว", "callback_data": "cmd_produce"},
                 {"text": "📦 ดูคลังวิดีโอ", "callback_data": "cmd_stock"}
             ],
@@ -190,6 +194,35 @@ def execute_stock_command() -> str:
     )
 
 
+def execute_sheet_command() -> str:
+    """ดึงข้อมูลสรุปภาพรวมและสถิติยอดวิวจาก Google Sheets"""
+    try:
+        from update_sheet_metrics import get_sheet_summary
+        return get_sheet_summary()
+    except Exception as e:
+        return (
+            "📈 [รายงานสถิติ Google Sheets]\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            "🔗 ลิงก์ชีท: https://docs.google.com/spreadsheets/d/1cwBMSooT69IBlNrNWwn5FqRV3mi3TA27nQgyyt454dU/edit\n"
+            f"⚠️ เกิดข้อผิดพลาด: {e}"
+        )
+
+
+def execute_refresh_metrics_command():
+    """สั่งอัปเดตสถิติยอดวิวยอดไลก์ลง Google Sheets สดๆ ในเธรดแยก"""
+    def _run():
+        send_tg_message("🔄 [กำลังดึงสถิติยอดวิว & ยอดไลก์สด]\nระบบกำลังคิวรี่ YouTube Data API v3 และ Meta Graph API ทุกคลิป กรุณารอสักครู่...")
+        try:
+            from update_sheet_metrics import update_all_metrics_in_sheet, get_sheet_summary
+            count = update_all_metrics_in_sheet()
+            summary = get_sheet_summary()
+            send_tg_message(f"✅ [อัปเดตสถิติลง Google Sheets เรียบร้อย {count} รายการ]\n\n{summary}", reply_markup=get_main_menu_markup())
+        except Exception as e:
+            send_tg_message(f"❌ ซิงค์สถิติยอดวิวไม่สำเร็จ: {e}")
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
 def execute_line_reply(user_id: str, reply_text: str) -> str:
     """ตอบแชทลูกค้า LINE OA ผ่าน Telegram โดยตรง"""
     try:
@@ -227,6 +260,10 @@ def handle_telegram_update(update: dict):
             send_tg_message(execute_status_command(), reply_markup=get_main_menu_markup())
         elif data == "cmd_post":
             execute_post_command()
+        elif data == "cmd_sheet":
+            send_tg_message(execute_sheet_command(), reply_markup=get_main_menu_markup())
+        elif data == "cmd_refresh_metrics":
+            execute_refresh_metrics_command()
         elif data == "cmd_produce":
             execute_produce_command()
         elif data == "cmd_stock":
@@ -253,7 +290,7 @@ def handle_telegram_update(update: dict):
             welcome = (
                 "👑 [PaKhem Commander — แผงควบคุมบอท 24/7]\n"
                 "━━━━━━━━━━━━━━━━━━\n"
-                "ยินดีต้อนรับครับ! คุณสามารถสั่งการบอท ผลิตคลิป โพสต์ด่วน หรือตอบแชทลูกค้าได้จากเมนูด้านล่างนี้เลยครับ:\n\n"
+                "ยินดีต้อนรับครับ! คุณสามารถสั่งการบอท ผลิตคลิป ดูสถิติชีท หรือตอบแชทลูกค้าได้จากเมนูด้านล่างนี้เลยครับ:\n\n"
                 "💬 การตอบแชทลูกค้า LINE:\n"
                 "พิมพ์: `/reply <userId> <ข้อความ>`\n"
                 "เช่น: `/reply U12345678 ขอบคุณที่สนใจครับ`"
@@ -263,6 +300,12 @@ def handle_telegram_update(update: dict):
         elif lower in ("/status", "สถานะ", "status", "เช็คระบบ"):
             send_tg_message(execute_status_command(), reply_markup=get_main_menu_markup())
             
+        elif lower in ("/sheet", "/stats", "/ชีท", "/สถิติ", "/views", "sheet", "ชีท", "ยอดวิว"):
+            send_tg_message(execute_sheet_command(), reply_markup=get_main_menu_markup())
+            
+        elif lower in ("/refresh_metrics", "/sync_metrics", "ซิงค์ยอดวิว", "อัปเดตยอดวิว"):
+            execute_refresh_metrics_command()
+
         elif lower in ("/post", "โพสต์", "post", "ยิงคลิป"):
             execute_post_command()
             

@@ -673,8 +673,34 @@ def send_system_health_report(title: str = "รายงานสถานะร
         logger.warning(f"⚠️ ไม่สามารถส่งรายงานสถานะระบบได้: {e}")
 
 
+def prune_old_posted_videos(days: int = 14) -> tuple:
+    """ลบไฟล์วิดีโอและไฟล์แคปชั่นในโฟลเดอร์ posted/ ที่มีอายุเก่ากว่าจำนวนวันที่กำหนด เพื่อประหยัดพื้นที่ดิสก์ 100%"""
+    posted_dir = REELS_DIR / "posted"
+    if not posted_dir.exists():
+        return 0, 0.0
+
+    now_ts = time.time()
+    cutoff_ts = now_ts - (days * 86400)
+    deleted_count = 0
+    freed_bytes = 0
+
+    for f in list(posted_dir.glob("*")):
+        if f.is_file() and f.stat().st_mtime < cutoff_ts:
+            try:
+                freed_bytes += f.stat().st_size
+                f.unlink(missing_ok=True)
+                deleted_count += 1
+            except Exception as e:
+                logger.warning(f"⚠️ ไม่สามารถลบไฟล์เก่า {f.name}: {e}")
+
+    freed_mb = freed_bytes / (1024 * 1024)
+    if deleted_count > 0:
+        logger.info(f"🧹 Prune Disk Guard: ลบไฟล์วิดีโอที่โพสต์แล้วเก่ากว่า {days} วัน จำนวน {deleted_count} ไฟล์ (คืนพื้นที่ {freed_mb:.1f} MB)")
+    return deleted_count, freed_mb
+
+
 def run_daily_reporter_loop():
-    """เธรดส่งรายงานสรุปสถานะระบบประจำช่วงเวลา (08:00 น. และ 20:00 น.)"""
+    """เธรดส่งรายงานสรุปสถานะระบบประจำช่วงเวลา (08:00 น. และ 20:00 น.) พร้อมอัปเดตยอดวิวลง Google Sheets และล้างดิสก์อัตโนมัติ"""
     last_reported_slot = ""
     while True:
         try:
@@ -689,7 +715,18 @@ def run_daily_reporter_loop():
                 
             if current_slot and current_slot != last_reported_slot:
                 last_reported_slot = current_slot
+                # 1. ส่งรายงานสถานะระบบเข้า Telegram Commander & LINE
                 send_system_health_report(title=slot_title)
+                
+                # 2. ซิงค์ยอดวิว/ยอดไลก์ล่าสุดลง Google Sheets อัตโนมัติในเธรดเบื้องหลัง
+                try:
+                    from update_sheet_metrics import update_all_metrics_in_sheet
+                    threading.Thread(target=update_all_metrics_in_sheet, daemon=True).start()
+                except Exception as e_sheet:
+                    logger.warning(f"⚠️ Auto-update sheet metrics failed: {e_sheet}")
+
+                # 3. ล้างไฟล์วิดีโอที่โพสต์แล้วใน posted/ ที่เก่ากว่า 14 วัน
+                prune_old_posted_videos(days=14)
         except Exception as e:
             logger.warning(f"⚠️ Daily reporter error: {e}")
         time.sleep(180)  # เช็คทุก 3 นาที

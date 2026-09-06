@@ -256,6 +256,88 @@ def update_all_metrics_in_sheet():
     return len(metrics_rows)
 
 
+def get_sheet_summary() -> str:
+    """ดึงข้อมูลสรุปภาพรวมและคลิปยอดนิยม Top 3 จาก Google Sheets เพื่อรายงานผ่าน Telegram"""
+    try:
+        creds = get_credentials()
+        sheets = build("sheets", "v4", credentials=creds)
+        res = sheets.spreadsheets().values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range="A2:M100"
+        ).execute()
+        rows = res.get("values", [])
+        if not rows:
+            return (
+                "📈 [รายงานสถิติ Google Sheets]\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                "⚠️ ยังไม่มีข้อมูลบันทึกในตาราง\n"
+                f"🔗 ลิงก์: https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit"
+            )
+
+        total_clips = len(rows)
+        parsed = []
+        total_views_all = 0
+        total_likes_all = 0
+
+        for r in rows:
+            title = r[1] if len(r) > 1 else "ไม่มีชื่อ"
+            yt_link = r[6] if len(r) > 6 else ""
+            p1_link = r[4] if len(r) > 4 else ""
+            views = int(r[8]) if len(r) > 8 and str(r[8]).isdigit() else 0
+            likes = int(r[9]) if len(r) > 9 and str(r[9]).isdigit() else 0
+            rating = r[11] if len(r) > 11 else "⚪ กำลังสะสมวิว (C)"
+            
+            total_views_all += views
+            total_likes_all += likes
+            link = yt_link if yt_link and yt_link != "-" else p1_link
+
+            parsed.append({
+                "title": title,
+                "views": views,
+                "likes": likes,
+                "rating": rating,
+                "link": link
+            })
+
+        # เรียงตามยอดวิวสูงสุด
+        parsed.sort(key=lambda x: x["views"], reverse=True)
+        top_clips = parsed[:3]
+
+        top_lines = []
+        for i, c in enumerate(top_clips, start=1):
+            top_lines.append(
+                f"{i}. 🎬 {c['title'][:32]}...\n"
+                f"   • 👁️ {c['views']:,} วิว | ❤️ {c['likes']:,} ไลก์ | {c['rating']}\n"
+                f"   • 🔗 {c['link']}"
+            )
+
+        top_text = "\n".join(top_lines) if top_lines else "ยังไม่มีสถิติวิว"
+
+        msg = (
+            "📈 [รายงานสถิติยอดวิว & สถิติ Google Sheets]\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            f"🔗 ลิงก์ชีท: https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit\n\n"
+            f"📊 ผลงานสะสมในระบบ:\n"
+            f"  • 🎬 คลิปที่บันทึกทั้งหมด: {total_clips} รายการ\n"
+            f"  • 👁️ ยอดวิวรวมสะสม: {total_views_all:,} วิว\n"
+            f"  • ❤️ ยอดไลก์รวมสะสม: {total_likes_all:,} ไลก์\n\n"
+            f"🏆 3 อันดับคลิปยอดวิวสูงสุด:\n"
+            f"{top_text}\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            "✨ ข้อมูลซิงค์สดจาก YouTube Data API v3 & Meta Graph API"
+        )
+        return msg
+    except Exception as e:
+        return (
+            "📈 [รายงานสถิติ Google Sheets]\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            f"🔗 ลิงก์ชีท: https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit\n"
+            f"⚠️ ไม่สามารถดึงสรุปได้: {e}"
+        )
+
+
 if __name__ == "__main__":
     count = update_all_metrics_in_sheet()
     print(f"DONE: Updated stats for {count} videos")
+    print("\n--- SUMMARY ---")
+    print(get_sheet_summary())
