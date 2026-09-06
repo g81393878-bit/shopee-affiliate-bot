@@ -957,7 +957,8 @@ def multiphase_posters_to_video(poster_paths: List[Path], output_video_path: Pat
     ])
 
     try:
-        subprocess.run(cmd, check=True, capture_output=True, timeout=60)
+        ffmpeg_timeout = max(180, int(duration * 6))
+        subprocess.run(cmd, check=True, capture_output=True, timeout=ffmpeg_timeout)
         if output_video_path.exists() and output_video_path.stat().st_size > 1000:
             # ตรวจจับว่าวิดีโอมีเสียงจริง ไม่เป็นใบ้
             try:
