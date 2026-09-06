@@ -75,7 +75,7 @@ def log_broadcast_to_sheet(
         sheets.spreadsheets().values().update(
             spreadsheetId=SPREADSHEET_ID,
             range="A2:H2",
-            valueInputOption="USER_ENTERED",
+            valueInputOption="RAW",
             body={"values": row_values}
         ).execute()
 

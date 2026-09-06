@@ -507,7 +507,8 @@ async def _tts_save(text: str, output_path: str, voice: str = "th-TH-PremwadeeNe
                 return
         except Exception as e:
             last_err = e
-            await asyncio.sleep(0.8)
+            logger.warning(f"Edge TTS attempt {attempt+1}/3 failed for voice {voice}: {e}")
+            await asyncio.sleep(1.0 * (attempt + 1))
     if last_err:
         raise last_err
 
@@ -537,61 +538,49 @@ def verify_audio_file(audio_path: Path) -> bool:
 
 
 def generate_tts_audio(text: str, output_path: Path) -> bool:
-    """สร้างไฟล์เสียงพากย์ผู้หญิง (ป้าเข็ม) ภาษาไทย คมชัด สดใส เสียงดังฟังชัดเจน 100% ทุกคลิป"""
+    """สร้างไฟล์เสียงพากย์ผู้หญิง (ป้าเข็ม) ภาษาไทย คมชัด สดใส เสียงเป็นธรรมชาติระดับสตูดิโอ 100% ทุกคลิป
+    ห้ามใช้ gTTS หรือเร่ง atempo เด็ดขาด เพื่อป้องกันเสียงเพี้ยน / เสียงหุ่นยนต์ / เสียงแตกพร่า
+    """
     clean_text = clean_for_tts(text)
     if not clean_text:
         return False
     
     with _TTS_LOCK:
-        ffmpeg_exe = _ffmpeg_exe()
-        
         # 1. ใช้ Microsoft Edge Neural TTS (th-TH-PremwadeeNeural) เป็นหลัก — สปีดธรรมชาติ คมชัด ชัดถ้อยชัดคำ ฟังง่ายระดับสตูดิโอ
         try:
             import concurrent.futures
-            raw_edge = output_path.with_suffix(".edge.mp3")
+            raw_edge = output_path.with_suffix(".tmp.mp3")
             with concurrent.futures.ThreadPoolExecutor() as pool:
-                pool.submit(asyncio.run, _tts_save(clean_text, str(raw_edge), voice="th-TH-PremwadeeNeural", rate="+0%")).result(timeout=22)
+                pool.submit(asyncio.run, _tts_save(clean_text, str(raw_edge), voice="th-TH-PremwadeeNeural", rate="+0%")).result(timeout=60)
             
             if raw_edge.exists() and raw_edge.stat().st_size > 1000:
-                # แปลงเป็น Stereo 44.1kHz คมชัดคงเดิม ไม่เร่งสปีด เพื่อรักษาคุณภาพเสียงพูดระดับสตูดิโอ 100% ไม่เพี้ยน ไม่กระตุก ฟังรู้เรื่อง
-                cmd = [ffmpeg_exe, "-y", "-i", str(raw_edge), "-filter:a", "volume=1.0", "-ar", "44100", "-ac", "2", str(output_path)]
-                subprocess.run(cmd, check=True, capture_output=True, timeout=15)
-                raw_edge.unlink(missing_ok=True)
+                # บันทึกไฟล์เสียงจาก Edge TTS โดยตรง คมชัด 100% ไม่ผ่านการแปลง MP3 ซ้ำซ้อน เพื่อคงคุณภาพคลื่นเสียงระดับสตูดิโอ
+                if output_path.exists():
+                    output_path.unlink(missing_ok=True)
+                raw_edge.replace(output_path)
                 if verify_audio_file(output_path):
                     return True
         except Exception as e:
-            logger.warning(f"Edge TTS ล้มเหลว: {e}")
+            logger.warning(f"Edge TTS (Premwadee) ล้มเหลว: {e}")
+            if 'raw_edge' in locals() and raw_edge.exists():
+                raw_edge.unlink(missing_ok=True)
 
-        # 2. สำรองด้วย Google Thai Female Voice (gTTS)
-        try:
-            from gtts import gTTS
-            raw_tmp = output_path.with_suffix(".raw.mp3")
-            tts = gTTS(text=clean_text, lang="th")
-            tts.save(str(raw_tmp))
-            
-            cmd = [ffmpeg_exe, "-y", "-i", str(raw_tmp), "-filter:a", "volume=1.0", "-ar", "44100", "-ac", "2", str(output_path)]
-            subprocess.run(cmd, check=True, capture_output=True, timeout=15)
-            raw_tmp.unlink(missing_ok=True)
-            
-            if verify_audio_file(output_path):
-                return True
-        except Exception as e:
-            logger.warning(f"Google TTS ล้มเหลว: {e}")
-
-        # 3. สำรองก๊อกสามด้วย Edge TTS เสียงผู้ชาย (th-TH-NiwatNeural) — สปีดธรรมชาติ
+        # 2. สำรองด้วย Edge Neural TTS เสียงผู้ชาย (th-TH-NiwatNeural) — เสียงสตูดิโอเป็นธรรมชาติ ไม่ใช้ gTTS หุ่นยนต์เด็ดขาด
         try:
             import concurrent.futures
-            raw_edge_m = output_path.with_suffix(".edgem.mp3")
+            raw_edge_m = output_path.with_suffix(".tmpm.mp3")
             with concurrent.futures.ThreadPoolExecutor() as pool:
-                pool.submit(asyncio.run, _tts_save(clean_text, str(raw_edge_m), voice="th-TH-NiwatNeural", rate="+0%")).result(timeout=22)
+                pool.submit(asyncio.run, _tts_save(clean_text, str(raw_edge_m), voice="th-TH-NiwatNeural", rate="+0%")).result(timeout=60)
             if raw_edge_m.exists() and raw_edge_m.stat().st_size > 1000:
-                cmd = [ffmpeg_exe, "-y", "-i", str(raw_edge_m), "-filter:a", "volume=1.0", "-ar", "44100", "-ac", "2", str(output_path)]
-                subprocess.run(cmd, check=True, capture_output=True, timeout=15)
-                raw_edge_m.unlink(missing_ok=True)
+                if output_path.exists():
+                    output_path.unlink(missing_ok=True)
+                raw_edge_m.replace(output_path)
                 if verify_audio_file(output_path):
                     return True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Edge TTS (Niwat fallback) ล้มเหลว: {e}")
+            if 'raw_edge_m' in locals() and raw_edge_m.exists():
+                raw_edge_m.unlink(missing_ok=True)
 
         return False
 
@@ -1284,7 +1273,7 @@ def generate_product_reels(limit: int = 3, selection: str = "balanced",
                 audio_len = get_audio_duration(tmp_audio_path) if tts_ok else 5.0
                 min_duration = max(5.0, float(os.getenv("REELS_MIN_DURATION", "5.8") or 5.8))
                 audio_tail = max(0.3, float(os.getenv("REELS_AUDIO_TAIL_SECONDS", "0.4") or 0.4))
-                target_duration = min(8.5, max(min_duration, audio_len + audio_tail))
+                target_duration = max(min_duration, audio_len + audio_tail)
                 if multiphase_posters_to_video(tmp_poster_paths, target_path, audio_path=audio_file, duration=target_duration):
 
                     products_meta[filename] = {

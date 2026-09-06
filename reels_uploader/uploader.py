@@ -893,8 +893,12 @@ def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True
     # แปลงคลิปให้ตรง spec Reels ก่อนโพสต์ (9:16/1080p/30fps/≤90s) — ถ้าไม่สั่ง --no-normalize
     # ถ้าเป็นคลิปที่สร้างจากระบบอัตโนมัติ (prod_*, content_*, pure_*) จะตรง spec 1080x1920 อยู่แล้ว ไม่ต้องแปลงซ้ำ
     upload_path = str(item)
-    tmp = None
-    is_already_formatted = item.name.startswith("prod_") or item.name.startswith("content_") or item.name.startswith("pure_")
+    KNOWN_FORMATTED_PREFIXES = (
+        "prod_", "content_", "pure_", "celebrity_trend_",
+        "trending_news_", "lucky_fortune_", "life_hack_tip_",
+        "work_productivity_", "reel_", "master_", "intro_"
+    )
+    is_already_formatted = item.name.startswith(KNOWN_FORMATTED_PREFIXES)
     should_normalize = normalize and not is_already_formatted
     if should_normalize:
         fd, tmp_path = tempfile.mkstemp(suffix=".mp4", prefix="reels_norm_")
