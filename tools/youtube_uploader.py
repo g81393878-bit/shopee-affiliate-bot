@@ -136,21 +136,37 @@ def get_authenticated_service(token_path: Optional[pathlib.Path] = None, channel
     return build("youtube", "v3", credentials=creds)
 
 
-def build_shorts_title(product_name: str) -> str:
+def build_shorts_title(product_name: str, is_pure_content: bool = False, hook_override: str = "") -> str:
     """สร้างชื่อคลิป YouTube Shorts พร้อม #Shorts (ความยาวไม่เกิน 85 ตัวอักษร)"""
-    _HOOKS = [
-        "เตือนแล้วนะ! ใครยังไม่มีติดบ้านคือพลาดมาก",
-        "มีตัวนี้แล้วชีวิตง่ายขึ้น 10 เท่า!",
-        "ตัวนี้คนแย่งกันซื้อถล่มทลาย รีวิวแน่นมาก!",
-        "อย่าเพิ่งเลื่อนผ่าน ถ้าไม่อยากพลาดของดี!",
-        "ของหลักสิบแต่ประโยชน์หลักพัน คุ้มจนต้องบอกต่อ!",
-    ]
-    import random
-    hook = random.choice(_HOOKS)
-    clean_name = re.sub(r'^prod_\d+_', '', product_name)
+    clean_name = re.sub(r'^(content_|prod_\d+_|duplicate_\d+_|\d+_)', '', product_name)
+    clean_name = re.sub(r'_\d+$', '', clean_name)
     clean_name = re.sub(r'[_<>]+', ' ', clean_name).strip()
-    
-    title = f"{hook} {clean_name} #Shorts"
+
+    if hook_override:
+        title = f"{hook_override} {clean_name} #Shorts"
+    elif is_pure_content:
+        _PURE_HOOKS = [
+            "💡 ทริคเด็ดป้าเข็ม!",
+            "✨ รู้ไว้ชีวิตง่ายขึ้น 10 เท่า!",
+            "🚨 แชร์ด่วน เรื่องนี้ต้องรู้!",
+            "🔥 สาระน่ารู้ประจำวัน!",
+            "🎯 ป้าเข็มบอกต่อ!",
+        ]
+        import random
+        hook = random.choice(_PURE_HOOKS)
+        title = f"{hook} {clean_name} #Shorts"
+    else:
+        _PRODUCT_HOOKS = [
+            "เตือนแล้วนะ! ใครยังไม่มีติดบ้านคือพลาดมาก",
+            "มีตัวนี้แล้วชีวิตง่ายขึ้น 10 เท่า!",
+            "ตัวนี้คนแย่งกันซื้อถล่มทลาย รีวิวแน่นมาก!",
+            "อย่าเพิ่งเลื่อนผ่าน ถ้าไม่อยากพลาดของดี!",
+            "ของหลักสิบแต่ประโยชน์หลักพัน คุ้มจนต้องบอกต่อ!",
+        ]
+        import random
+        hook = random.choice(_PRODUCT_HOOKS)
+        title = f"{hook} {clean_name} #Shorts"
+
     if len(title) > 80:
         title = title[:75] + "... #Shorts"
     return title
@@ -173,26 +189,49 @@ def get_channel_info(youtube_service) -> dict:
     return {"title": "YouTube Shorts", "handle": ""}
 
 
-def build_shorts_description(product_name: str, link: str, prod_id: Optional[int] = None, channel_handle: str = "") -> str:
-    """สร้าง Description สำหรับ YouTube Shorts พร้อมลิงก์ Shopee และ LINE OA Deep Link"""
-    line_url = os.getenv("LINE_OA_URL", "https://lin.ee/o9Kjp1N")
-    line_id = os.getenv("LINE_OA_ID", "@137gsref")
-    
-    code_prompt = f" แล้วพิมพ์ \"{prod_id}\"" if prod_id else ""
-    deep_link = f"https://line.me/R/oaMessage/{line_id}/?รหัส{prod_id}" if prod_id else line_url
+def build_shorts_description(product_name: str, link: str = "", prod_id: Optional[int] = None, channel_handle: str = "", is_pure_content: bool = False, custom_caption: str = "") -> str:
+    """สร้าง Description สำหรับ YouTube Shorts รองรับทั้งคลิปสินค้า Shopee และคลิปสาระความรู้เน้นยอดวิว/ยอดติดตาม"""
+    if custom_caption:
+        return custom_caption
+
     channel_ref = f" {channel_handle}" if channel_handle else ""
 
-    desc = (
-        f"✨ {product_name}\n\n"
-        f"🛒 พิกัดสั่งซื้อของแท้ / โปรโมชั่น Shopee:\n👉 {link}\n\n"
-        f"💬 ทักแชท LINE ป้าเข็ม รับพิกัดตรงทันที:\n"
-        f"👉 แอด LINE ไอดี: {line_id}{code_prompt}\n"
-        f"👉 ลิงก์เปิดแชทรับพิกัด: {deep_link}\n\n"
-        f"📍 หรือกดที่ชื่อช่อง{channel_ref} เพื่อดูลิงก์พิกัดหน้าโปรไฟล์ได้เลยจ้า!\n"
-        f"----------------------------------------\n"
-        f"#Shorts #ของดีบอกต่อ #ของมันต้องมี #ป้าเข็มป้ายยา #ถ้าไม่คุ้มป้าบอกให้ #ShopeeAffiliate #Shopee"
-    )
-    return desc
+    yt_tags = ""
+    try:
+        from hashtag_intelligence import generate_platform_hashtags
+        dyn = generate_platform_hashtags(product_name, is_product=not is_pure_content)
+        yt_tags = dyn.get("youtube", "")
+    except Exception:
+        pass
+
+    if is_pure_content or not link:
+        fallback_yt = "#Shorts #สาระน่ารู้ #เรื่องเด็ด #เรื่องนี้ต้องรู้ #ไวรัล #ข่าวด่วน #ทริคดีๆ"
+        lines = [
+            f"✨ {product_name}\n",
+            f"💬 คุณคิดเห็นยังไงกับเรื่องนี้? คอมเมนต์คุยกันได้เลยใต้คลิปนี้เลยจ้า 👇",
+            f"🔔 กดติดตามช่อง{channel_ref} เพื่อรับชมเรื่องเด็ด สาระดีๆ และข่าวด่วนทุกวัน!\n",
+            f"----------------------------------------",
+            f"{yt_tags or fallback_yt}"
+        ]
+        return "\n".join(lines)
+
+    line_url = os.getenv("LINE_OA_URL", "https://lin.ee/o9Kjp1N")
+    line_id = os.getenv("LINE_OA_ID", "@137gsref")
+    code_prompt = f" แล้วพิมพ์ \"{prod_id}\"" if prod_id else ""
+    deep_link = f"https://line.me/R/oaMessage/{line_id}/?รหัส{prod_id}" if prod_id else line_url
+
+    fallback_prod_yt = "#Shorts #ของดีบอกต่อ #ของมันต้องมี #ป้าเข็มป้ายยา #ถ้าไม่คุ้มป้าบอกให้ #ShopeeAffiliate #Shopee"
+    lines = [
+        f"✨ {product_name}\n",
+        f"🛒 พิกัดสั่งซื้อของแท้ / โปรโมชั่น Shopee:\n👉 {link}\n",
+        f"💬 ทักแชท LINE ป้าเข็ม รับพิกัดตรงทันที:\n",
+        f"👉 แอด LINE ไอดี: {line_id}{code_prompt}\n",
+        f"👉 ลิงก์เปิดแชท: {deep_link}\n\n",
+        f"📍 หรือกดที่ชื่อช่อง{channel_ref} เพื่อดูรายละเอียดหน้าโปรไฟล์ได้เลยจ้า!\n",
+        f"----------------------------------------",
+        f"{yt_tags or fallback_prod_yt}"
+    ]
+    return "\n".join(lines)
 
 
 def upload_shorts_to_channel(youtube_service, video_path: pathlib.Path, product_meta: Optional[Dict] = None, channel_name: str = "YouTube Shorts") -> Optional[str]:
@@ -202,24 +241,77 @@ def upload_shorts_to_channel(youtube_service, video_path: pathlib.Path, product_
     ch_info = get_channel_info(youtube_service)
     display_name = f"{ch_info['title']} ({ch_info['handle']})" if ch_info['handle'] else ch_info['title']
 
-    name = sanitize_public_product_text(
-        (product_meta or {}).get("product_name") or video_path.stem
+    is_pure_content = (
+        bool((product_meta or {}).get("is_pure_content"))
+        or (product_meta or {}).get("content_mode") not in (None, "PRODUCT_HIGHLIGHT")
+        or video_path.name.startswith(("content_", "pure_", "trend_", "hack_", "news_", "lucky_", "fortune_", "work_"))
+        or not (product_meta or {}).get("affiliate_link")
     )
-    link = (product_meta or {}).get("affiliate_link") or ""
+
+    raw_name = (
+        (product_meta or {}).get("product_name")
+        or ((product_meta or {}).get("topic_data") or {}).get("title")
+        or ""
+    )
+
+    if not raw_name or re.match(r'^(content_|prod_\d+_|duplicate_\d+_|\d+_)', raw_name):
+        clean_stem = re.sub(r'^(content_|prod_\d+_|duplicate_\d+_|\d+_)', '', video_path.stem)
+        clean_stem = re.sub(r'_\d+$', '', clean_stem)
+        mode_titles = {
+            "trending_news": "ข่าวด่วน ประเด็นร้อนวันนี้",
+            "celebrity_trend": "เรื่องเด่น ไวรัลคนดัง",
+            "lucky_fortune": "ดวงวันนี้ เลขเด็ด เสริมเฮง",
+            "life_hack_tip": "ทริคดีๆ เคล็ดลับคู่บ้าน",
+            "work_productivity": "ทริคคนทำงาน พัฒนาตัวเอง",
+        }
+        raw_name = mode_titles.get(clean_stem, "สาระน่ารู้ เรื่องเด็ดประจำวัน")
+
+    name = sanitize_public_product_text(raw_name)
+    link = "" if is_pure_content else ((product_meta or {}).get("affiliate_link") or "")
 
     prod_id = None
     m = re.match(r'^prod_(\d+)_', video_path.name)
     if m:
         prod_id = int(m.group(1))
 
-    title = build_shorts_title(name)
-    description = build_shorts_description(name, link, prod_id=prod_id, channel_handle=ch_info.get("handle", ""))
+    topic_data = (product_meta or {}).get("topic_data") or {}
+    topic_hook = topic_data.get("hook", "")
+    content_mode = (product_meta or {}).get("content_mode", "TRENDING_NEWS")
+
+    # 3-Second Viral Hook integration for Title
+    if topic_hook and is_pure_content:
+        clean_hook = re.sub(r'[\U00010000-\U0010ffff\u2600-\u27ff\u2300-\u23ff\ufe0e\ufe0f]', '', topic_hook).strip()
+        title = f"{clean_hook[:60]} #Shorts"
+    else:
+        title = build_shorts_title(name, is_pure_content=is_pure_content)
+
+    # 3-Second Viral Hook integration for Description
+    custom_caption = ""
+    if is_pure_content and topic_data:
+        try:
+            import standalone_content_generator
+            custom_caption = standalone_content_generator.build_standalone_caption(content_mode, topic_data, platform="youtube")
+        except Exception:
+            custom_caption = ""
+
+    description = build_shorts_description(
+        name, link=link, prod_id=prod_id,
+        channel_handle=ch_info.get("handle", ""),
+        is_pure_content=is_pure_content,
+        custom_caption=custom_caption
+    )
+
+    tags = (
+        ["Shorts", "สาระน่ารู้", "เรื่องเด็ด", "ข่าวด่วน", "ไวรัล", "ทริคดีๆ", "ความรู้"]
+        if is_pure_content
+        else ["Shorts", "ของดีบอกต่อ", "รีวิว", "Shopee", "ShopeeAffiliate", "ป้าเข็ม", "ของใช้ในบ้าน", "ไอที"]
+    )
 
     body = {
         "snippet": {
             "title": title,
             "description": description,
-            "tags": ["Shorts", "ของดีบอกต่อ", "รีวิว", "Shopee", "ShopeeAffiliate", "ป้าเข็ม", "ของใช้ในบ้าน", "ไอที"],
+            "tags": tags,
             "categoryId": "22",
         },
         "status": {
@@ -248,7 +340,36 @@ def upload_shorts_to_channel(youtube_service, video_path: pathlib.Path, product_
     log(f"✅ อัปโหลด {channel_name} สำเร็จ! -> {video_url}")
     notify_telegram(f"✅ YouTube อัปโหลดสำเร็จ\nช่อง: {channel_name}\nคลิป: {video_url}")
 
+    # บันทึกประวัติเพื่อป้องกันการอัปโหลดซ้ำ
+    record_youtube_upload(title, video_url, ch_info.get("id", 1))
+
     return video_url
+
+
+POSTED_YOUTUBE_HISTORY_FILE = TOOLS_DIR / "posted_youtube_history.json"
+
+
+def record_youtube_upload(title: str, video_url: str, channel_id: int = 1):
+    try:
+        hist = []
+        if POSTED_YOUTUBE_HISTORY_FILE.exists():
+            try:
+                hist = json.loads(POSTED_YOUTUBE_HISTORY_FILE.read_text(encoding="utf-8"))
+                if not isinstance(hist, list):
+                    hist = []
+            except Exception:
+                hist = []
+        hist.append({
+            "title": title,
+            "url": video_url,
+            "channel_id": channel_id,
+            "posted_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
+        })
+        if len(hist) > 500:
+            hist = hist[-500:]
+        POSTED_YOUTUBE_HISTORY_FILE.write_text(json.dumps(hist, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        log(f"[WARN] บันทึกประวัติ YouTube ล้ม: {e}")
 
 
 LAST_CHANNEL_INDEX_FILE = TOOLS_DIR / "last_youtube_channel_index.txt"
@@ -409,6 +530,7 @@ def main():
     parser.add_argument("--add-channel", type=int, default=0, help="ล็อกอินเพิ่มช่อง YouTube ลำดับที่ระบุ (เช่น --add-channel 2)")
     parser.add_argument("--list-channels", action="store_true", help="แสดงรายการช่อง YouTube ที่เชื่อมต่อไว้")
     parser.add_argument("--video", type=str, help="อัปโหลดวิดีโอที่ระบุ")
+    parser.add_argument("--broadcast-all", action="store_true", help="สั่งยิงโพสต์ขึ้นครบทุกช่อง YouTube พร้อมกันทันที")
     args = parser.parse_args()
 
     if args.list_channels:
@@ -435,13 +557,24 @@ def main():
         print("✅ ยืนยันสิทธิ์บัญชี YouTube ช่องหลักสำเร็จเรียบร้อยแล้ว!")
         return
 
-    vids = sorted(PENDING_DIR.glob("*.mp4"), key=os.path.getmtime)
-    if not vids:
-        print("ℹ️ ไม่มีคลิปรอโพสต์ใน pending_videos/")
-        return
+    target_vid = None
+    if args.video:
+        raw_p = pathlib.Path(args.video).resolve()
+        if not raw_p.exists():
+            for alt in [pathlib.Path("D:/") / args.video, PENDING_DIR / args.video, pathlib.Path("D:/คลิปป้าเข็ม") / args.video]:
+                if alt.exists():
+                    raw_p = alt.resolve()
+                    break
+        if raw_p.exists():
+            target_vid = raw_p
 
-    target_vid = pathlib.Path(args.video) if args.video else vids[0]
-    
+    if not target_vid:
+        vids = sorted(PENDING_DIR.glob("*.mp4"), key=os.path.getmtime)
+        if not vids:
+            print("ℹ️ ไม่มีคลิปรอโพสต์ใน pending_videos/")
+            return
+        target_vid = vids[0]
+
     meta = {}
     if PRODUCTS_JSON.exists():
         try:
@@ -450,7 +583,16 @@ def main():
         except Exception:
             pass
 
-    urls = upload_shorts(target_vid, meta)
+    if not meta:
+        meta = {
+            "product_name": target_vid.stem,
+            "category": "คลิปพิเศษ",
+            "is_pure_content": True,
+            "content_mode": "LIFE_HACK_TIP",
+            "topic_data": {"title": target_vid.stem, "hook": target_vid.stem, "detail": "คลิปพิเศษ สาระดีๆ จากป้าเข็ม"}
+        }
+
+    urls = upload_shorts(target_vid, meta, broadcast_all=args.broadcast_all)
     if urls:
         print(f"\n🎉 สำเร็จ! เผยแพร่แล้ว {len(urls)} ช่องทาง:")
         for u in urls:

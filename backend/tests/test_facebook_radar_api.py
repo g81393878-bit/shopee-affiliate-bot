@@ -218,7 +218,8 @@ def test_high_demand_lead_ingestion_creates_event_and_alert(client, db_session):
         "raw_data": {"likes": 15, "comments": 4},
     }
 
-    with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "test_fb_page_post_123", "error": None}) as mock_post, \
+    with patch("app.api.facebook_radar.preflight_ready", return_value=(True, [])), \
+         patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "test_fb_page_post_123", "error": None}) as mock_post, \
          patch("app.api.facebook_radar.log_post_async") as mock_sheets:
         resp = client.post("/api/admin/facebook-radar/leads", json=payload)
         assert resp.status_code == 200
@@ -351,7 +352,8 @@ def test_lead_deduplication_idempotency(client, db_session):
         "post_time": datetime.now(timezone.utc).isoformat(),
     }
 
-    with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "test_dedup_pid", "error": None}) as mock_post, \
+    with patch("app.api.facebook_radar.preflight_ready", return_value=(True, [])), \
+         patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "test_dedup_pid", "error": None}) as mock_post, \
          patch("app.api.facebook_radar.log_post_async") as mock_sheets:
         # ครั้งที่ 1
         resp1 = client.post("/api/admin/facebook-radar/leads", json=payload)
@@ -623,7 +625,8 @@ def test_high_demand_lead_category_cooldown_and_rate_limit_api(client, db_sessio
         "post_text": "อยากได้ชุดคลุมท้องใส่สบายๆ ผ้านิ่มๆ งบ 400 บาท",
         "post_url": "https://facebook.com/post/api_cool_1",
     }
-    with patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "fb_api_cool_1", "error": None}) as mock_post, \
+    with patch("app.api.facebook_radar.preflight_ready", return_value=(True, [])), \
+         patch("app.api.facebook_radar.post_feed", return_value={"ok": True, "post_id": "fb_api_cool_1", "error": None}) as mock_post, \
          patch("app.api.facebook_radar.log_post_async") as mock_sheets:
         resp1 = client.post("/api/admin/facebook-radar/leads", json=p1)
         assert resp1.status_code == 200

@@ -36,7 +36,7 @@ VOICE = "th-TH-PremwadeeNeural"   # เสียงผู้หญิงไท�
 
 W, H = 720, 1280                 # 9:16 (720p พอสำหรับ TikTok)
 FPS = 20
-END_CARD_SEC = 3.5               # การ์ดท้าย (วินาที)
+END_CARD_SEC = 2.0               # การ์ดท้าย (วินาที)
 
 
 # ---------- ฟอนต์ ----------
@@ -234,7 +234,7 @@ def make_voice_text(product):
 
 async def tts(text, path):
     import edge_tts
-    tts_obj = edge_tts.Communicate(text, VOICE, rate="-5%")
+    tts_obj = edge_tts.Communicate(text, VOICE, rate="+20%")
     await tts_obj.save(path)
 
 
@@ -261,7 +261,7 @@ def _make_video_inner(product, out_path, tmpdir, VideoClip, AudioFileClip, conca
     audio = AudioFileClip(mp3)
 
     # 2) ความยาว
-    hook_dur = audio.duration + 1.2
+    hook_dur = audio.duration + 0.5
     total = hook_dur + END_CARD_SEC
 
     # 3) เฟรมสไลด์ Hook (ซูม)

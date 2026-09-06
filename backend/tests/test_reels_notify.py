@@ -107,3 +107,20 @@ def test_reels_caption_filters_price_embedded_in_product_name(up):
 
     assert "250 บาท" not in caption
     assert "ดูราคาล่าสุดในลิงก์ Shopee" in caption
+
+
+def test_custom_video_dry_run_success(up, tmp_path):
+    """ทดสอบยิงโพสต์ custom_video ด้วย dry-run ต้องไม่เกิด UnboundLocalError 'pending'"""
+    test_vid = tmp_path / "custom_test.mp4"
+    test_vid.write_bytes(b"dummy video content")
+
+    res = up.post_next(dry_run=True, force=True, normalize=False, custom_video=str(test_vid), custom_caption="แคปชั่นทดสอบพิเศษ")
+    assert res == 0
+
+
+def test_custom_video_not_found(up, tmp_path):
+    """ทดสอบกรณีไม่พบไฟล์ custom_video ต้องส่งคืน 1 โดยไม่ crash"""
+    non_existent = tmp_path / "ghost_video.mp4"
+    res = up.post_next(dry_run=True, force=True, normalize=False, custom_video=str(non_existent))
+    assert res == 1
+

@@ -1,602 +1,574 @@
 {
-  "keychain_demo.mp4": {
-    "product_name": "ที่แขวนกุญแจไม้แม่เหล็กสไตล์มินิมอล ติดผนังไม่ต้องเจาะรู",
-    "price": "159",
-    "category": "ของใช้ในบ้าน",
-    "affiliate_link": "https://s.shopee.co.th/xxxxxxxxxx"
-  },
-  "prod_6_2L_ESKIMO_กระติกน้ำ_กระติกน้ำเก็บความเย็.mp4": {
-    "product_name": "2L ESKIMO กระติกน้ำ กระติกน้ำเก็บความเย็น กระติกพกพา 2 ลิตร ลายน่ารัก มีช่องใส่หลอด หูหิ้ว เก็บเย็นนาน 8 ชม. KC215SQ",
-    "price": "88",
-    "category": "แก้วน้ำ",
-    "affiliate_link": "https://s.shopee.co.th/20uaPq43fp"
-  },
-  "prod_8_A892_โคมไฟตั้งโต๊ะ_LED_โคมไฟอ่านหนังสือ_.mp4": {
-    "product_name": "A892 โคมไฟตั้งโต๊ะ LED โคมไฟอ่านหนังสือ แถมสายชาร์จ ขายดีที่ญี่ปุ่น พร้อมกบเหลาดินสอ สำหรับห้องนอน หอพัก",
-    "price": "35",
-    "category": "อุปกรณ์เสริม",
-    "affiliate_link": "https://s.shopee.co.th/2LXQoS2mzv"
-  },
-  "prod_7_YTL_โคมไฟตั้งโต๊ะ_LED_โคมไฟตั้งโต๊ะที่ขา.mp4": {
-    "product_name": "YTL โคมไฟตั้งโต๊ะ LED โคมไฟตั้งโต๊ะที่ขายดีที่สุด โคมไฟข้างเตียง โคมไฟอ่านหนังสือ โคมไฟไตรรงค์",
-    "price": "75",
-    "category": "โคมไฟ",
-    "affiliate_link": "https://s.shopee.co.th/2Vqr0l29ew"
-  },
-  "prod_6_2L_ESKIMO_กระติกน้ำ_กระติกน้ำเก็บคว.mp4": {
-    "product_name": "2L ESKIMO กระติกน้ำ กระติกน้ำเก็บความเย็น กระติกพกพา 2 ลิตร ลายน่ารัก มีช่องใส่หลอด หูหิ้ว เก็บเย็นนาน 8 ชม. KC215SQ",
-    "price": "88",
-    "category": "แก้วน้ำ",
-    "affiliate_link": "https://s.shopee.co.th/20uaPq43fp"
-  },
-  "intro_showcase_bot_features.mp4": {
-    "product_name": "แนะนำตัว ป้าเข็ม ผู้ช่วยช้อปปิ้ง AI ตัวจริงใน LINE OA",
+  "content_work_productivity_1788658533.mp4": {
+    "product_name": "ลูกน้องเก่งกว่าหัวหน้า ทำยังไงดี",
     "price": "",
-    "category": "แนะนำตัวบอท",
-    "affiliate_link": "https://lin.ee/o9Kjp1N"
+    "category": "สาระความรู้ & คอนเทนต์เพียว",
+    "affiliate_link": "",
+    "is_pure_content": true,
+    "content_mode": "WORK_PRODUCTIVITY",
+    "topic_data": {
+      "title": "ลูกน้องเก่งกว่าหัวหน้า ทำยังไงดี",
+      "hook": "หยุด! อย่าไล่ลูกน้องที่เก่งกว่าคุณ",
+      "detail": "ลูกน้องที่เก่งกว่า เป็นเรื่องปรกติครับ หัวหน้าเองต่างหากที่ต้องทิ้งอีโก้ไป ลูกน้องประเภทนี้จะคิดว่าตัวเองเก่งกว่าคุณอยู่แล้วครับ วิธีจัดการก",
+      "summary": "ลูกน้องที่เก่งกว่า เป็นเรื่องปรกติครับ หัวหน้าเองต่างหากที่ต้องทิ้งอีโก้ไป ลูกน้องประเภทนี้จะคิดว่าตัวเองเก่งกว่าคุณอยู่แล้วครับ วิธีจัดการก",
+      "step1": "กำจัดอีโก้ตัวเองเพื่อเปิดใจรับฟัง",
+      "step2": "ให้งานท้าทายและขอคำแนะนำจากเขา",
+      "step3": "ชื่นชมผลงานต่อหน้าเพื่อนร่วมงาน",
+      "follower_score": 92,
+      "phase1_text": "ทิ้งอีโก้หัวหน้าลง แล้วเริ่มสังเกต",
+      "phase2_text": "มอบหมายงานยากพร้อมขอความเห็น",
+      "phase3_text": "กดติดตามเพื่อเทคนิคบริหารทีมขั้นสูง",
+      "voiceover_script": "ป้าเข็มบอกเลยว่า ถ้าลูกน้องเก่งกว่าเรา อย่าเพิ่งหวั่นไหว แค่ทิ้งอีโก้ลง แล้วลองไปปรึกษาเขาดูสิคะ",
+      "hashtags": "#หัวหน้างาน #บริหารทีม #WorkProductivity #เคล็ดลับการทำงาน #พัฒนาตัวเอง",
+      "image_url": "",
+      "image_urls": [],
+      "source": "tavily_pantip_web"
+    }
   },
-  "intro_ep1_who_is_ป้าเข็ม.mp4": {
-    "product_name": "🛍️ รู้จักกับ ป้าเข็ม",
+  "content_celebrity_trend_1788658536.mp4": {
+    "product_name": "4 เจอผู้พันคำตัดสิน AM Star Season 2",
     "price": "",
-    "category": "ซีรีส์แนะนำตัวบอท",
-    "affiliate_link": "https://lin.ee/o9Kjp1N"
+    "category": "สาระความรู้ & คอนเทนต์เพียว",
+    "affiliate_link": "",
+    "is_pure_content": true,
+    "content_mode": "CELEBRITY_TREND",
+    "topic_data": {
+      "title": "4 เจอผู้พันคำตัดสิน AM Star Season 2",
+      "hook": "อย่าเพิ่งเลื่อนไป! ชมรมประกวดร้องเพลงใหญ่ที่สุด",
+      "detail": "Abandoned Mansion เปิดเวทีประชันพลังเสียงสุดยิ่งใหญ่ AM Star Singing Contest Season 2 รอบรองชนะเลิศ คว้า \"เก่ง ธชย – จีน กษิดิศ – ต๋อง อภิชา",
+      "summary": "Abandoned Mansion เปิดเวทีประชันพลังเสียงสุดยิ่งใหญ่ AM Star Singing Contest Season 2 รอบรองชนะเลิศ คว้า \"เก่ง ธชย – จีน กษิดิศ – ต๋อง อภิชา",
+      "step1": "ติดตามช่องเพื่อแจ้งเตือนเมื่อมีการ",
+      "step2": "แชร์คลิปนี้ไปถามเพื่อนว่าชอบนักร้อง",
+      "step3": "คอมเมนต์บอกเหตุผลที่คิดว่าใคร",
+      "follower_score": 85,
+      "phase1_text": "Abandoned Mansion จัดศึก AM Star Season",
+      "phase2_text": "กรรมการชุดนี้จัดเต็มทั้ง เก่ง จีน ต๋อง",
+      "phase3_text": "กดติดตามเพื่อไม่พลาดรอบชิงชนะเลิศ",
+      "voiceover_script": "ป้าเข็มมาบอกข่าวดีแล้วนะจ๊ะ! ศึก AM Star Season 2 ขนทัพกรรมการระดับตำนานมาพร้อมกันทั้ง เก่ง จีน ต๋อง และ สวย เสียงพากย์ของป้าบอกเลยว่าห้ามพลาดเด็ดขาด กดติดตามไว้เลยนะจ๊ะ",
+      "hashtags": "#AMStarSingingContest #เก่งธชย #จีนกษิดิศ #ต๋องอภิชา #สวยสโรชา",
+      "image_url": "https://s.isanook.com/ns/0/ud/1981/9905771/new-thumbnail1200x720-v2(7).jpg",
+      "image_urls": [
+        "https://s.isanook.com/ns/0/ud/1981/9905771/new-thumbnail1200x720-v2(7).jpg",
+        "https://s.isanook.com/ns/0/ud/1981/9905771/new-thumbnail1200x720-v2(7).jpg",
+        "https://s.isanook.com/ns/0/ud/1981/9905771/new-thumbnail1200x720-v2(7).jpg"
+      ],
+      "source": "authentic_news_rss"
+    }
   },
-  "intro_ep2_budget_search.mp4": {
-    "product_name": "🔍 ฟีเจอร์เด็ด: หาสินค้าตามงบ",
+  "content_trending_news_1788663461.mp4": {
+    "product_name": "เลขเด็ด 1 ก.ย. 69 มาแล้ว ตามดูกัน",
     "price": "",
-    "category": "ซีรีส์แนะนำตัวบอท",
-    "affiliate_link": "https://lin.ee/o9Kjp1N"
+    "category": "สาระความรู้ & คอนเทนต์เพียว",
+    "affiliate_link": "",
+    "is_pure_content": true,
+    "content_mode": "TRENDING_NEWS",
+    "topic_data": {
+      "title": "เลขเด็ด 1 ก.ย. 69 มาแล้ว ตามดูกัน",
+      "hook": "หยุดก่อน! เลขนี้มักวนออกซ้ำ",
+      "detail": "เลขเด็ดงวด 1 ก.ย. 69 “สเตฟาน” เปิด 3 ตัวน่าตาม เผยเลขวันเกิดวนออกช่วง 3 เดือนนี้",
+      "summary": "เลขเด็ดงวด 1 ก.ย. 69 “สเตฟาน” เปิด 3 ตัวน่าตาม เผยเลขวันเกิดวนออกช่วง 3 เดือนนี้",
+      "step1": "จดจำเลข 3 ตัวหลักที่ 'สเตฟาน'",
+      "step2": "ตรวจสอบความสอดคล้องกับเลขวันเกิดใน",
+      "step3": "เตรียมพร้อมรับข่าวเลขใหม่ก่อนใครทุก",
+      "follower_score": 92,
+      "phase1_text": "เลข 3 ตัวน่าตาม งวดวันที่ 1 ก.ย. 69",
+      "phase2_text": "เทคนิคดูเลขวันเกิด วนออกช่วง 3 เดือนนี้",
+      "phase3_text": "กดติดตามเพื่อไม่พลาดเลขเด็ดรายสัปดาห์",
+      "voiceover_script": "ป้าเข็มบอกเลยนะจ๊ะ เลขชุดนี้ของ 'สเตฟาน' งวด 1 ก.ย. 69 มันชัดมาก 3 ตัวนี้มักวนออกช่วง 3 เดือนนี้จริงๆ อย่าลืมกดติดตามไว้ดูตอนต่อไปเลยนะคะ",
+      "hashtags": "#เลขเด็ด1กย69 #สเตฟาน #หวยงวดนี้ #เลข3ตัว #ป้าเข็ม",
+      "image_url": "https://s.isanook.com/ns/0/ud/1981/9905442/new-thumbnail1200x720_v2(1).jpg",
+      "image_urls": [
+        "https://s.isanook.com/ns/0/ud/1981/9905442/new-thumbnail1200x720_v2(1).jpg",
+        "https://s.isanook.com/ns/0/ud/1981/9905442/new-thumbnail1200x720_v2(1).jpg",
+        "https://s.isanook.com/ns/0/ud/1981/9905442/new-thumbnail1200x720_v2(1).jpg"
+      ],
+      "source": "authentic_news_rss"
+    }
   },
-  "intro_ep3_authentic_check.mp4": {
-    "product_name": "🛡️ เตือนภัย: คัดเฉพาะของแท้ 100%",
+  "content_trending_news_1788663681.mp4": {
+    "product_name": "สูตรแกงหน่อไม้ลับของเวียร์ ศุกลวัฒน์",
     "price": "",
-    "category": "ซีรีส์แนะนำตัวบอท",
-    "affiliate_link": "https://lin.ee/o9Kjp1N"
+    "category": "สาระความรู้ & คอนเทนต์เพียว",
+    "affiliate_link": "",
+    "is_pure_content": true,
+    "content_mode": "TRENDING_NEWS",
+    "topic_data": {
+      "title": "สูตรแกงหน่อไม้ลับของเวียร์ ศุกลวัฒน์",
+      "hook": "อย่าเพิ่งเลื่อนผ่าน! เมนูวัยเด็กของเวียร์",
+      "detail": "“เวียร์ ศุกลวัฒน์” ยกครอบครัวกลับบ้านเยี่ยมย่าทวด เผยเมนูวัยเด็ก “แกงหน่อไม้-ข้าวเหนียว” เรียบง่ายแต่เต็มไปด้วยความทรงจำ",
+      "summary": "“เวียร์ ศุกลวัฒน์” ยกครอบครัวกลับบ้านเยี่ยมย่าทวด เผยเมนูวัยเด็ก “แกงหน่อไม้-ข้าวเหนียว” เรียบง่ายแต่เต็มไปด้วยความทรงจำ",
+      "step1": "เลือกหน่อไม้สดเพื่อลดกลิ่น",
+      "step2": "เคี่ยวแกงจนน้ำซุปใสและซึมเข้าเนื้อ",
+      "step3": "เสิร์ฟคู่ข้าวเหนียวใหม่เพื่อความหอม",
+      "follower_score": 92,
+      "phase1_text": "เมนูเรียบง่ายแต่รสชาติเข้มข้น",
+      "phase2_text": "สูตรแกงหน่อไม้พร้อมข้าวเหนียวร้อนๆ",
+      "phase3_text": "กดติดตามเพื่อรับสูตรอาหารบ้านๆ",
+      "voiceover_script": "ด่วน! สูตรแกงหน่อไม้ที่เวียร์คิดถึงมาก ทำง่ายแต่หอมสุด ๆ ตามสูตรนี้เลยนะคะ",
+      "hashtags": "#เวียร์ศุกลวัฒน์ #แกงหน่อไม้ #อาหารบ้านๆ #สูตรอาหาร #TrendingNews",
+      "image_url": "https://s.isanook.com/ns/0/ud/1981/9905859/new-thumbnail1200x720-v2(9).jpg",
+      "image_urls": [
+        "https://s.isanook.com/ns/0/ud/1981/9905859/new-thumbnail1200x720-v2(9).jpg",
+        "https://s.isanook.com/ns/0/ud/1981/9905859/new-thumbnail1200x720-v2(9).jpg",
+        "https://s.isanook.com/ns/0/ud/1981/9905859/new-thumbnail1200x720-v2(9).jpg"
+      ],
+      "source": "authentic_news_rss"
+    }
   },
-  "intro_ep4_price_drop_alerts.mp4": {
-    "product_name": "🔻 จำความชอบ & แจ้งราคาลด!",
+  "content_trending_news_1788664056.mp4": {
+    "product_name": "4 กูรูดังนั่งแท่นตัดสิน AM Star S2",
     "price": "",
-    "category": "ซีรีส์แนะนำตัวบอท",
-    "affiliate_link": "https://lin.ee/o9Kjp1N"
-  },
-  "prod_8_A892_โคมไฟตั้งโต๊ะ_LED_โคมไฟอ่านหนั.mp4": {
-    "product_name": "A892 โคมไฟตั้งโต๊ะ LED โคมไฟอ่านหนังสือ แถมสายชาร์จ ขายดีที่ญี่ปุ่น พร้อมกบเหลาดินสอ สำหรับห้องนอน หอพัก",
-    "price": "35",
-    "category": "อุปกรณ์เสริม",
-    "affiliate_link": "https://s.shopee.co.th/2LXQoS2mzv"
-  },
-  "prod_7_YTL_โคมไฟตั้งโต๊ะ_LED_โคมไฟตั้งโต๊ะ.mp4": {
-    "product_name": "YTL โคมไฟตั้งโต๊ะ LED โคมไฟตั้งโต๊ะที่ขายดีที่สุด โคมไฟข้างเตียง โคมไฟอ่านหนังสือ โคมไฟไตรรงค์",
-    "price": "75",
-    "category": "โคมไฟ",
-    "affiliate_link": "https://s.shopee.co.th/2Vqr0l29ew"
-  },
-  "prod_990_เซราวี_CERAVE_Facial_Moisturising_L.mp4": {
-    "product_name": "เซราวี CERAVE Facial Moisturising Lotion เฟเชี่ยล มอยเจอร์ไรซิ่ง โลชั่น โลชั่นบำรุงผิวหน้าสำหรับผิวธรรมดา 52ml.",
-    "price": "640",
-    "category": "ความงาม",
-    "affiliate_link": "https://s.shopee.co.th/gPFYUPJ84"
-  },
-  "prod_647_ลา_โรช-โพเซย์_La_Roche-Posay_CICAPL.mp4": {
-    "product_name": "ลา โรช-โพเซย์ La Roche-Posay CICAPLAST BAUME B5+ บาล์มฟื้นบำรุงผิว ช่วยปลอบประโลม ฟื้นบำรุงผิว 100 ml.",
-    "price": "1100",
-    "category": "ความงาม",
-    "affiliate_link": "https://s.shopee.co.th/2gAJvweBwL"
-  },
-  "prod_997_เซราวี_CERAVE_Moisturising_Lotion_ม.mp4": {
-    "product_name": "เซราวี CERAVE Moisturising Lotion มอยเจอร์ไรซิ่ง โลชั่นบำรุงผิวให้ความชุ่มชื้นตลอดวัน เนื้อสัมผัสบางเบา 473ml",
-    "price": "670",
-    "category": "ความงาม",
-    "affiliate_link": "https://s.shopee.co.th/LmP9sQZo6"
-  },
-  "prod_536_Downy_ดาวน์นี่_น้ำยาปรับผ้านุ่มสูตร.mp4": {
-    "product_name": "Downy ดาวน์นี่ น้ำยาปรับผ้านุ่มสูตรเข้มข้น ถุงเติม สูตรน้ำหอมพรีเมี่ยม 950ml x 6 แพ็ค",
-    "price": "574",
-    "category": "ของใช้บ้าน",
-    "affiliate_link": "https://s.shopee.co.th/19YkjJacP"
-  },
-  "prod_375_ลอรีอัล_ปารีส_LOral_Paris_UV_Defend.mp4": {
-    "product_name": "ลอรีอัล ปารีส LOral Paris UV Defender Invisible Resist SPF50+ PA++++ 50ml กันแดดล่องหน บางเบา ไม่เหนอะหนะ",
-    "price": "1200",
-    "category": "ความงาม",
-    "affiliate_link": "https://s.shopee.co.th/4qEmDnWufr"
-  },
-  "prod_598_ลา_โรช-โพเซย์_La_Roche-Posay_CICAPL.mp4": {
-    "product_name": "ลา โรช-โพเซย์ La Roche-Posay CICAPLAST BAUME B5+ บาล์ม บาล์มบำรุงผิวช่วยปลอบประโลมและฟื้นบำรุง บำรุงผิว 40ml.",
-    "price": "549",
-    "category": "ความงาม",
-    "affiliate_link": "https://s.shopee.co.th/6L3cIYucQy"
-  },
-  "prod_700_SKINPRO_Rx_Sensitive_Skin_Moisturiz.mp4": {
-    "product_name": "SKINPRO Rx Sensitive Skin Moisturizing Cream มอยซ์เจอร์ไรเซอร์บำรุงผิว สำหรับผิวบอบบางแพ้ง่าย ชุ่มชื้น ผิวแข็งแรง 50ml.",
-    "price": "389",
-    "category": "ความงาม",
-    "affiliate_link": "https://s.shopee.co.th/5LB56qU2Xd"
-  },
-  "prod_600_The_Ordinary_Glycolic_Acid_7%_Exfol.mp4": {
-    "product_name": "The Ordinary Glycolic Acid 7% Exfoliating Toner โทนเนอร์ผลัดเซลล์ผิว ผิวเรียบเนียน สีผิวแลดูสม่ำเสมอ",
-    "price": "770",
-    "category": "ความงาม",
-    "affiliate_link": "https://s.shopee.co.th/5fnvVKx9mu"
-  },
-  "prod_2238_ทวีรส_กะทิเข้มข้นแท้_100%_บรรจุถุง_.mp4": {
-    "product_name": "ทวีรส กะทิเข้มข้นแท้ 100% บรรจุถุง 1,000 มล. ขายดีจัดๆ ถูกที่สุดใน Shopee",
-    "price": "809",
-    "category": "อาหาร",
-    "affiliate_link": "https://s.shopee.co.th/8KouRP6pMP"
-  },
-  "prod_52_Orsen_by_Eloop_EW35_CCC_EW54_EW55_E.mp4": {
-    "product_name": "Orsen by Eloop EW35 CCC/ EW54 EW55 E43 E53 E59 แบตสำรอง 10000-25000mAh ชาร์จเร็ว PD 20W/45W ชาร์จไร้สาย มอก.",
-    "price": "637",
-    "category": "อุปกรณ์เสริม",
-    "affiliate_link": "https://s.shopee.co.th/8V84Vcexrk"
-  },
-  "prod_36_CIVAGO26oz780ml_แก้วกาแฟสแตนเลสซับเ.mp4": {
-    "product_name": "CIVAGO26oz/780ml แก้วกาแฟสแตนเลสซับเซรามิกพร้อมฝาปิดขวดสูญญากาศสามารถเก็บความร้อนและความเย็น",
-    "price": "364",
-    "category": "แก้วน้ำ",
-    "affiliate_link": "https://s.shopee.co.th/4fvLwZtYdj"
-  },
-  "prod_363_Sinocare_เครื่องวัดความดันต้นแขน_เส.mp4": {
-    "product_name": "Sinocare เครื่องวัดความดันต้นแขน เสียงพูดไทย ยี่ห้อSinocareใช้งานง่ายหน้าจอใหญ่ มีไฟมองเห็นชัดเจน พร้อมส่ง",
-    "price": "609",
-    "category": "สุขภาพ",
-    "affiliate_link": "https://s.shopee.co.th/1Leu3MkEly"
-  },
-  "prod_998_เซราวี_CERAVE_Oil_Control_Moisturis.mp4": {
-    "product_name": "เซราวี CERAVE Oil Control Moisturising Gel Cream มอยซ์ เจลครีม ปรับสมดุลผิวมัน 52ml.",
-    "price": "620",
-    "category": "ความงาม",
-    "affiliate_link": "https://s.shopee.co.th/AKZl4FoVW6"
-  },
-  "prod_1054_Hatari_พัดลมสไลด์_18_นิ้ว_รับประกัน.mp4": {
-    "product_name": "Hatari พัดลมสไลด์ 18 นิ้ว รับประกันมอเตอร์ 3 ปี",
-    "price": "1200",
-    "category": "พัดลม",
-    "affiliate_link": "https://s.shopee.co.th/2gAJzy9bGv"
-  },
-  "prod_815_HUAWEI_Band_11_Series_สมาร์ทวอทช์_ห.mp4": {
-    "product_name": "HUAWEI Band 11 Series สมาร์ทวอทช์ หน้าจอสว่างคมชัดขนาดใหญ่ 1.62 นิ้ว",
-    "price": "1500",
-    "category": "แฟชั่น",
-    "affiliate_link": "https://s.shopee.co.th/9pdUTBsfgc"
-  },
-  "prod_1002_เซราวี_CERAVE_Moisturising_Lotion_โ.mp4": {
-    "product_name": "เซราวี CERAVE Moisturising Lotion โลชั่นบำรุงผิว ชุ่มชื้น เนื้อสัมผัสบางเบา 473ml",
-    "price": "585",
-    "category": "ความงาม",
-    "affiliate_link": "https://s.shopee.co.th/9fK4H1r2s2"
-  },
-  "prod_8_A892_โคมไฟตั้งโต๊ะ_LED_โคมไฟอ่านหนังสือ.mp4": {
-    "product_name": "A892 โคมไฟตั้งโต๊ะ LED โคมไฟอ่านหนังสือ แถมสายชาร์จ ขายดีที่ญี่ปุ่น พร้อมกบเหลาดินสอ สำหรับห้องนอน หอพัก",
-    "price": "35",
-    "category": "อุปกรณ์เสริม",
-    "affiliate_link": "https://s.shopee.co.th/2LXQoS2mzv"
-  },
-  "prod_990_เซราวี_CERAVE_Facial_Moisturising_Lotion.mp4": {
-    "product_name": "เซราวี CERAVE Facial Moisturising Lotion เฟเชี่ยล มอยเจอร์ไรซิ่ง โลชั่น โลชั่นบำรุงผิวหน้าสำหรับผิวธรรมดา 52ml.",
-    "price": "640",
-    "category": "ความงาม",
-    "affiliate_link": "https://s.shopee.co.th/gPFYUPJ84"
-  },
-  "prod_536_Downy_ดาวน์นี่_น้ำยาปรับผ้านุ่มสูตรเข้มข.mp4": {
-    "product_name": "Downy ดาวน์นี่ น้ำยาปรับผ้านุ่มสูตรเข้มข้น ถุงเติม สูตรน้ำหอมพรีเมี่ยม 950ml x 6 แพ็ค",
-    "price": "574",
-    "category": "ของใช้บ้าน",
-    "affiliate_link": "https://s.shopee.co.th/19YkjJacP"
-  },
-  "prod_2238_ทวีรส_กะทิเข้มข้นแท้_100%_บรรจุถุง_1,000.mp4": {
-    "product_name": "ทวีรส กะทิเข้มข้นแท้ 100% บรรจุถุง 1,000 มล. ขายดีจัดๆ ถูกที่สุดใน Shopee",
-    "price": "809",
-    "category": "อาหาร",
-    "affiliate_link": "https://s.shopee.co.th/8KouRP6pMP"
-  },
-  "prod_1380_แม่เหล็ก_เคสใสกันกระแทก_เคสสำหรับไอโฟน11.mp4": {
-    "product_name": "แม่เหล็ก เคสใสกันกระแทก เคสสำหรับไอโฟน11 เคสชาร์ได้ สำหรับ IPhone 17 16 13 15 7Plus 14 12 11 Pro MAX 8 6 7 6S Plus",
-    "price": "21",
-    "category": "อุปกรณ์เสริม",
-    "affiliate_link": "https://s.shopee.co.th/8V86zjGDhk"
-  },
-  "prod_2127_MAX_FIRE_แก๊สกระป๋อง_แก๊สปิคนิค_พร้อมด้ว.mp4": {
-    "product_name": "MAX FIRE แก๊สกระป๋อง แก๊สปิคนิค พร้อมด้วยระบบป้องกันการระเบิด ปริมาณ 250g. ประเทศเกาหลี 1 แพ็ค",
-    "price": "103",
-    "category": "กีฬา",
-    "affiliate_link": "https://s.shopee.co.th/3Vjeg8p4sA"
-  },
-  "prod_1234_yoyopet_ที่ลับเล็บแมว+แคทนิป_อ่างลับเล็บ.mp4": {
-    "product_name": "yoyopet ที่ลับเล็บแมว+แคทนิป อ่างลับเล็บของเล่นแมว ที่นอนแมว 2in1 แผ่นลับเล็บ ที่ฝนเล็บสัตว์เลี้ยง",
-    "price": "1",
-    "category": "สัตว์เลี้ยง",
-    "affiliate_link": "https://s.shopee.co.th/AUtBNAopCp"
-  },
-  "prod_1385_Manis_Lemon_Crystal_Magnetic_Case_for_iP.mp4": {
-    "product_name": "Manis Lemon Crystal Magnetic Case for iPhone 17 16 15 14 13 12 Pro Max Plus Air แม่เหล็ก ซองใส่โทรศัพท์ เคส สำหรับ ไอโฟน",
-    "price": "289",
-    "category": "อุปกรณ์เสริม",
-    "affiliate_link": "https://s.shopee.co.th/1VyMergruT"
-  },
-  "prod_1048_Hatari_พัดลมติดผนัง_16_นิ้ว_พร้อมรีโมทคอ.mp4": {
-    "product_name": "Hatari พัดลมติดผนัง 16 นิ้ว พร้อมรีโมทคอนโทรล รับประกันมอเตอร์ 3 ปี",
-    "price": "1300",
-    "category": "พัดลม",
-    "affiliate_link": "https://s.shopee.co.th/70JJ9vt6Te"
-  },
-  "prod_2266_น้ำมันรำข้าวคิง_เซทคู่หูคู่ครัวสุดคุ้ม_D.mp4": {
-    "product_name": "น้ำมันรำข้าวคิง เซทคู่หูคู่ครัวสุดคุ้ม Duo Set",
-    "price": "220",
-    "category": "อื่นๆ",
-    "affiliate_link": "https://s.shopee.co.th/3LQEUDPrW2"
-  },
-  "prod_2076_1.5L_1500ml_กระติกน้ำยักต์_สแตนเลส_SUS_3.mp4": {
-    "product_name": "1.5L 1500ml กระติกน้ำยักต์ สแตนเลส SUS 304 เก็บอุณหภูมิ ได้ทั้งร้อน และเย็น สามารถใช้งานได้ 2 หัวดื่มไม่ใช่หลอดกระเด้ง",
-    "price": "240",
-    "category": "แก้วน้ำ",
-    "affiliate_link": "https://s.shopee.co.th/1gI0Ulw3ZY"
-  },
-  "prod_930_การ์ดแต่งงาน_การ์ดงานแต่ง_รับพิมพ์การ์ดด.mp4": {
-    "product_name": "การ์ดแต่งงาน การ์ดงานแต่ง รับพิมพ์การ์ดด่วน สีพิเศษ 5 สี ขนาด 4x6, 5x7 กระดาษอาร์ตโดยเครื่องพิมพ์ดิจิตอลคุณภาพสูง",
-    "price": "2",
-    "category": "เครื่องเขียน",
-    "affiliate_link": "https://s.shopee.co.th/1VyMXwn2ae"
-  },
-  "prod_921_ส่งจากไทยหลายสีให้เลือก_สร้อยข้อมือยาง_ส.mp4": {
-    "product_name": "ส่งจากไทยหลายสีให้เลือก สร้อยข้อมือยาง สร้อยข้อมือคู่ กำไลข้อมือซิลิโคน สไตล์กีฬา กำไลข้อมือยาง สำหรับผู้ชายและผู้หญิง",
-    "price": "3",
-    "category": "เครื่องประดับ",
-    "affiliate_link": "https://s.shopee.co.th/AKZl4BFPfD"
-  },
-  "prod_1466_Dodowo_MEMORIES_OF_AUTUMN_V4_BLINDBOX_โม.mp4": {
-    "product_name": "Dodowo MEMORIES OF AUTUMN V4 BLINDBOX โมเดล Figure Toy ART TOYS",
-    "price": "200",
-    "category": "ของสะสม",
-    "affiliate_link": "https://s.shopee.co.th/19Yxu4ttO"
-  },
-  "prod_748_Featured_1_ชิ้น_จุกลมเช็คแรงดัน_จุกลม_มี.mp4": {
-    "product_name": "Featured 1 ชิ้น จุกลมเช็คแรงดัน จุกลม มีที่วัดความดันลม จุกปิดลมยาง แจ้งเตืนเมื่อยางลมอ่อน",
-    "price": "10",
-    "category": "เครื่องมือช่าง",
-    "affiliate_link": "https://s.shopee.co.th/5LB56v9nnY"
-  },
-  "prod_613_CARPTAH_ที่วางแก้วที่เบาะหลังรถยนต์_ที่ว.mp4": {
-    "product_name": "CARPTAH ที่วางแก้วที่เบาะหลังรถยนต์ ที่วางแก้วที่ประตู กล่องถ้วยน้ำ รถยนต์ ทนทาน กันน้ำ ทนแดด หนังคุณภาพสูง",
-    "price": "39",
-    "category": "แก้วน้ำ",
-    "affiliate_link": "https://s.shopee.co.th/6pzstTsiQJ"
-  },
-  "prod_1461_THE_ANCIENT_GUMIHO_SERIES_3_BLINDBOXโมเด.mp4": {
-    "product_name": "THE ANCIENT GUMIHO SERIES 3 BLINDBOXโมเดล ของเล่นเด็กเล่น ของขวัญพิเศษ ART TOYS",
-    "price": "280",
-    "category": "ของสะสม",
-    "affiliate_link": "https://s.shopee.co.th/qifxR1jCV"
-  },
-  "prod_1096_อะไหล่หม้อในของแท้_หม้อในหุงข้าว_เคลือบเ.mp4": {
-    "product_name": "อะไหล่หม้อในของแท้ หม้อในหุงข้าว เคลือบเทฟล่อนหุงแล้วข้าวไม่ติดหม้อ เหมาะสำหรับทุกชนิด",
-    "price": "296",
-    "category": "เครื่องครัว",
-    "affiliate_link": "https://s.shopee.co.th/W5pQH7LXj"
-  },
-  "prod_1183_รับประกัน_5_ปีหม้อหุง_5L_นึ่งทำอาหารทำอา.mp4": {
-    "product_name": "รับประกัน 5 ปีหม้อหุง 5L นึ่ง/ทำอาหาร/ทำอาหาร/อบ 24 ชั่วโมง Make Appointment One-Button Quick ข้าวหม้อหุงข้าวหม้อหุงข้าว",
-    "price": "969",
-    "category": "เครื่องใช้ไฟฟ้า",
-    "affiliate_link": "https://s.shopee.co.th/8AVGYMeA0U"
-  },
-  "prod_1352_SUNฟิล์มกระจกสำหรับ_IPhone_เต็มจอแบบเคส.mp4": {
-    "product_name": "SUNฟิล์มกระจกสำหรับ IPhone เต็มจอแบบเคส HD รุ่นใหม่17 16 11 Pro Max 15 12 13 14 XR 15Plus 11 Pro Max XS 7 8 6 PlusD5",
-    "price": "1",
-    "category": "อุปกรณ์เสริม",
-    "affiliate_link": "https://s.shopee.co.th/2gAK30cQX9"
-  },
-  "prod_1671_ห้องน้ำแมว_60CM_กะบะทรายแมว_ถาดทรายแมว_ท.mp4": {
-    "product_name": "ห้องน้ำแมว 60CM กะบะทรายแมว ถาดทรายแมว ทรายแมว กระบะทรายแบบจัมโบ้ ขนาด กระบะทรายแมว ห้องน้ำแมวขนาดใหญ่ กระบะทราย",
-    "price": "84",
-    "category": "สัตว์เลี้ยง",
-    "affiliate_link": "https://s.shopee.co.th/5LB5KnN2xu"
-  },
-  "prod_2272_กางเกงในน่ารัก_เป้า_2ชั้น_มีลายรังผึ้งช่.mp4": {
-    "product_name": "กางเกงในน่ารัก เป้า 2ชั้น มีลายรังผึ้งช่วยต่อต้านแบคทีเรีย ยืดหยุ่นตามตัว ใส่สบาย A006",
-    "price": "6",
-    "category": "แฟชั่น",
-    "affiliate_link": "https://s.shopee.co.th/5fo9GVGyme"
-  },
-  "prod_1019_พัดลมตั้งพื้น_18_นิ้ว_KASHIWA_FS-1812_พั.mp4": {
-    "product_name": "พัดลมตั้งพื้น 18 นิ้ว KASHIWA FS-1812 พัดลมอุตสาหกรรม ลมแรง ทนทาน มอก. ประหยัดไฟ ประกัน 1 ปี",
-    "price": "759",
-    "category": "พัดลม",
-    "affiliate_link": "https://s.shopee.co.th/1VyMbpE2d3"
-  },
-  "prod_1929_Heaccessories.mp4": {
-    "product_name": "Heaccessories",
-    "price": "0",
-    "category": "อื่นๆ",
-    "affiliate_link": "https://s.shopee.co.th/30nO4QBrjh"
-  },
-  "prod_1681_แผ่นรองฉี่สุนัข_ซึมซับไดีดี_ต่อต้านแบคที.mp4": {
-    "product_name": "แผ่นรองฉี่สุนัข ซึมซับไดีดี ต่อต้านแบคทีเรีย แผ่นรองฉี่ ผ้ารองฉี่สุนัข แผ่นรองฉี่แมว แผ่นรองซับ ทรายแมวCOD",
-    "price": "1",
-    "category": "สัตว์เลี้ยง",
-    "affiliate_link": "https://s.shopee.co.th/7fZ075EAEW"
-  },
-  "prod_594_ขนมปังกรอบส่งของทุกวัน_เก็บโค้ดส่งฟรีด้ว.mp4": {
-    "product_name": "ขนมปังกรอบส่งของทุกวัน เก็บโค้ดส่งฟรีด้วยนะค่ะมี5รสชาติ กรอบ หอม อร่อย สามารถเก็บไว้ได้นานค่ะ",
-    "price": "1",
-    "category": "อาหาร",
-    "affiliate_link": "https://s.shopee.co.th/4LIXut2EUX"
-  },
-  "prod_2229_แปรงขวด_แปรงถ้วย_อเนกประสงค์_5_ใน_1_ล้าง.mp4": {
-    "product_name": "แปรงขวด แปรงถ้วย อเนกประสงค์ 5 ใน 1 ล้างถ้วย คอมโบ ทำความสะอาด กำจัดคราบ แปรงถ้วย",
-    "price": "33",
-    "category": "ของใช้บ้าน",
-    "affiliate_link": "https://s.shopee.co.th/7VFnRsA02w"
-  },
-  "prod_1692_yoyopet_ผงดับกลิ่นทรายแมว_odor_powder_ดู.mp4": {
-    "product_name": "yoyopet ผงดับกลิ่นทรายแมว odor powder ดูดซับความชื้น ลดกลิ่นอับ หอมสดชื่นยาวนาน 500g",
-    "price": "14",
-    "category": "สัตว์เลี้ยง",
-    "affiliate_link": "https://s.shopee.co.th/8pkxVE9irv"
-  },
-  "prod_2366_morfunz_1_ลัง_8_ห่อ_ทิชชู่_แขวน_CHEEPFUL.mp4": {
-    "product_name": "morfunz 1 ลัง 8 ห่อ ทิชชู่ แขวน CHEEPFUL GB/T 20808 ทิชชู่แบบดึงแขวนได้ กระดาษทิชชู่ ทิชชู่ ทิชชู่ยกแพ็ค tissue",
-    "price": "189",
-    "category": "กระดาษทิชชู่",
-    "affiliate_link": "https://s.shopee.co.th/W637Q7vas"
-  },
-  "prod_850_ทองจีนโบราณก้อนทองเต่าทองลูกคิดเม็ดข้าวส.mp4": {
-    "product_name": "ทองจีนโบราณ/ก้อนทอง/เต่าทอง/ลูกคิด/เม็ดข้าวสาร/เงินจีน สีทองเครื่องประดับพิธีขึ้นบ้านใหม่ โลหะ โมเดลทองส่งจากไทย",
-    "price": "1",
-    "category": "เครื่องประดับ",
-    "affiliate_link": "https://s.shopee.co.th/6VN2V8U0QJ"
-  },
-  "prod_337_หลอดไฟไล่ยุงและแมลง_หลอดสีแดง_1500550065.mp4": {
-    "product_name": "หลอดไฟไล่ยุงและแมลง หลอดสีแดง 1500/5500/6500 วัตต์ ชาร์จพลังงานแสงอาทิตย์ หลอดโซล่าเซลล์ พร้อมส่ง",
-    "price": "298",
-    "category": "โคมไฟ",
-    "affiliate_link": "https://s.shopee.co.th/5q7JPdT6dR"
-  },
-  "prod_805_กล่องจัดเก็บเครื่องประดับกรอบลอยตัว_3D_ฟ.mp4": {
-    "product_name": "กล่องจัดเก็บเครื่องประดับกรอบลอยตัว 3D ฟิล์ม PE ต้านอนุมูลอิสระ ระบบแขวนป้องกันรอยขีดข่วน กล่องโชว์เพชร",
-    "price": "2",
-    "category": "เครื่องประดับ",
-    "affiliate_link": "https://s.shopee.co.th/6AkC6S6d7g"
-  },
-  "prod_2270_PALA_สำลี_เช็ดเครื่องสำอาง_เช็ดหน้า_รีดข.mp4": {
-    "product_name": "PALA สำลี เช็ดเครื่องสำอาง เช็ดหน้า รีดขอบ Double-Faced Cosmetic Cotton Pads ฝ้ายธรรมชาติ นุ่ม",
-    "price": "29",
-    "category": "ความงาม",
-    "affiliate_link": "https://s.shopee.co.th/70JWqxBu4m"
-  },
-  "prod_738_100_เส้นแพ็ค_พร้อมโปรโมชั่น_ลวดดัดขน_100.mp4": {
-    "product_name": "100 เส้น/แพ็ค พร้อมโปรโมชั่น ลวดดัดขน 100 เส้น วัสดุทำดอกไม้ วันแม่ DIY ดอกไม้สื่อรักแม่ คุณภาพดี ไม่เป็นขน",
-    "price": "17",
-    "category": "ของใช้บ้าน",
-    "affiliate_link": "https://s.shopee.co.th/904NTaG572"
-  },
-  "prod_1587_Tuya_App_สำหรับตกแต่ง_ไฟเส้น_เปลี่ยนสีได.mp4": {
-    "product_name": "Tuya App สำหรับตกแต่ง ไฟเส้น เปลี่ยนสีได้ ควบคุมผ่าน Tuya Smart WIFI RGB Flex 220V ไฟเส้น rgb 5050",
-    "price": "583",
-    "category": "เครื่องใช้ไฟฟ้า",
-    "affiliate_link": "https://s.shopee.co.th/AUtBTurHyD"
-  },
-  "prod_1435_ปืนนวด_Massage_gun_เครื่องนวดไฟฟ้า_เครื่.mp4": {
-    "product_name": "ปืนนวด Massage gun เครื่องนวดไฟฟ้า เครื่องนวด นวดเท้า แก้ปวดหรือออฟฟิศซินโดรม พร้อมหัวนวด 4 หัว สำหรับนวดกล้ามเนื้อ",
-    "price": "88",
-    "category": "สุขภาพ",
-    "affiliate_link": "https://s.shopee.co.th/1qbD7vnrd4"
-  },
-  "prod_642_Suk_Skin_สบู่_สบู่สมุนไพร_สบู่ผิวขาว_สบู.mp4": {
-    "product_name": "Suk Skin สบู่ สบู่สมุนไพร สบู่ผิวขาว สบู่สมุนไพรแก้คัน สบู่ลดสิว สบู่สมุนไพรเย็น สบู่สมุนไพรสุขสกิน",
-    "price": "1",
-    "category": "ความงาม",
-    "affiliate_link": "https://s.shopee.co.th/1LewLNDeak"
-  },
-  "prod_1646_EGG_รุ่นใหม่_แผ่นรองฉี่สุนัขและแมว_สัตว์.mp4": {
-    "product_name": "EGG รุ่นใหม่ แผ่นรองฉี่สุนัขและแมว สัตว์เลี้ยง มีแผ่นกาว ดูดซับเร็ว ซึมซับดี กำจัดกลิ่น มี 3 ไซส์",
-    "price": "116",
-    "category": "สัตว์เลี้ยง",
-    "affiliate_link": "https://s.shopee.co.th/2VqtxaXpi1"
-  },
-  "prod_810_ช้อปครบรับฟรี_Dr.PONG20%ACV_APPLE_CIDER.mp4": {
-    "product_name": "ช้อปครบรับฟรี Dr.PONG20%ACV APPLE CIDER VINEGAR 750 mg แอปเปิ้ลไซเดอร์ แบบเม็ด ทานง่าย ดูแลสุขภาพโดยรวม อ่อนโยน",
-    "price": "379",
-    "category": "สุขภาพ",
-    "affiliate_link": "https://s.shopee.co.th/5fnvVX8X8h"
-  },
-  "prod_1749_4k_กล้องวงจร_ไร้สาย_กล้องแอบ_wifi_mini_c.mp4": {
-    "product_name": "4k กล้องวงจร ไร้สาย กล้องแอบ wifi mini camera กล้องรูเข็ม ก้องวงจรปิด วงจรปิด กล้อง 4k",
-    "price": "125",
-    "category": "กล้อง",
-    "affiliate_link": "https://s.shopee.co.th/3VjUAOGK8Q"
-  },
-  "prod_1713_แผ่นรองฉี่สุนัข_รุ่นชาโคล_แผ่นรองฉี่ชาโค.mp4": {
-    "product_name": "แผ่นรองฉี่สุนัข รุ่นชาโคล แผ่นรองฉี่ชาโคล แผ่นรองฉี่แมว ช่วยฝึกขับถ่าย การดูดซับน้ำ6ชั้น ระงับกลิ่นได้ดี Pee Pad",
-    "price": "83",
-    "category": "สัตว์เลี้ยง",
-    "affiliate_link": "https://s.shopee.co.th/2VqtxaXpj2"
-  },
-  "prod_2274_แท้_สาหร่ายวากาเมะอบแห้งเกรดA+_ยำสาหร่าย.mp4": {
-    "product_name": "แท้ สาหร่ายวากาเมะอบแห้งเกรดA+ ยำสาหร่าย โรยข้าว Dried Wakame Seaweed",
-    "price": "26",
-    "category": "อาหาร",
-    "affiliate_link": "https://s.shopee.co.th/7VFnRsA03z"
-  },
-  "prod_1651_ถุงเก็บมูลสัตว์_ถุงเก็บอึหมา_ถุงเก็บอึแม.mp4": {
-    "product_name": "ถุงเก็บมูลสัตว์ ถุงเก็บอึหมา ถุงเก็บอึแมว/สุนัข",
-    "price": "1",
-    "category": "สัตว์เลี้ยง",
-    "affiliate_link": "https://s.shopee.co.th/2BE3YyZ6Nz"
-  },
-  "prod_573_หน้ากากอนามัย_Welcare_3D_V-Shape_ทางการแ.mp4": {
-    "product_name": "หน้ากากอนามัย Welcare 3D V-Shape ทางการแพทย์ 3 ชั้น ระดับ 2 ช่วยป้องกันฝุ่น PM2.5 รุ่น V95 30 ชิ้น/กล่อง",
-    "price": "1",
-    "category": "สุขภาพ",
-    "affiliate_link": "https://s.shopee.co.th/gPFY9GBvP"
-  },
-  "prod_1628_SL_LIGHTING_SKY-REMOTE-TY_Tuya_Smart_Rem.mp4": {
-    "product_name": "SL LIGHTING SKY-REMOTE-TY Tuya Smart Remote Control รีโมทคอนโทรลอัจฉริยะรองรับระบบ Tuya WiFi",
-    "price": "400",
-    "category": "เครื่องใช้ไฟฟ้า",
-    "affiliate_link": "https://s.shopee.co.th/3qMHXfGfVZ"
-  },
-  "prod_1675_FS_Kasty_แคสตี้_ทรายแมวเต้าหู้ธรรมชาติ_ข.mp4": {
-    "product_name": "FS Kasty แคสตี้ ทรายแมวเต้าหู้ธรรมชาติ ขนาด 20ลิตร ปราศจากฝุ่น ดับกลิ่นดีเยี่ยม ทิ้งชักโครกได้",
-    "price": "384",
-    "category": "สัตว์เลี้ยง",
-    "affiliate_link": "https://s.shopee.co.th/6AkCKKJsH9"
-  },
-  "prod_757_3บาท_3D_Mask_หน้ากากหน้าเรียวลิส_10ชิ้น.mp4": {
-    "product_name": "3บาท 3D Mask หน้ากากหน้าเรียวลิส 10ชิ้น ต่อแพ็ค หน้ากากอนามัยสำหรับผู้ใหญ่",
-    "price": "1",
-    "category": "สุขภาพ",
-    "affiliate_link": "https://s.shopee.co.th/8pkxHLwThR"
-  },
-  "prod_79_ทิชชู่_POP_เล็ก_แบบเหนียวนุ่ม_ทิชชู่อเนก.mp4": {
-    "product_name": "ทิชชู่ POP เล็ก แบบเหนียวนุ่ม ทิชชู่อเนกประสงค์ หนา4ชั้น ราคาสบายกระเป๋า พกพาสะดวก มียกลัง",
-    "price": "1",
-    "category": "แฟชั่น",
-    "affiliate_link": "https://s.shopee.co.th/1VyKAl5c4p"
-  },
-  "prod_407_PPหญ้าพุ่ม_แผ่นลับเล็บแมว_พรมแมว_หวายทอเ.mp4": {
-    "product_name": "PPหญ้าพุ่ม แผ่นลับเล็บแมว พรมแมว หวายทอเสื่อนอนแมว กรงเล็บแมวบด พรมวงกลม รังแมวพรมวงกลมทอสำหรับ หญ้าพุ่ม และแผ่นลับเล็บ วัสดุธรรมชาติ",
-    "price": "31",
-    "category": "สัตว์เลี้ยง",
-    "affiliate_link": "https://s.shopee.co.th/4qEmVMXOlT"
-  },
-  "prod_2003_Madaminterrice.mp4": {
-    "product_name": "Madaminterrice",
-    "price": "0",
-    "category": "อื่นๆ",
-    "affiliate_link": "https://s.shopee.co.th/1LfA5MID8Y"
-  },
-  "prod_1168_OXYGEN_หม้อหุงข้าวไฟฟ้า_1.5_ลิตร_รุ่น_RC.mp4": {
-    "product_name": "OXYGEN หม้อหุงข้าวไฟฟ้า 1.5 ลิตร รุ่น RC-152 หม้อข้าว หม้อหุง หุงข้าว หม้อเคลือบ",
-    "price": "505",
-    "category": "เครื่องใช้ไฟฟ้า",
-    "affiliate_link": "https://s.shopee.co.th/2BE3PL10B8"
-  },
-  "prod_1309_Frolina_Grace_Collection_ผ้าขนหนูโรงแรม.mp4": {
-    "product_name": "Frolina Grace Collection ผ้าขนหนูโรงแรม ผ้าเช็ดตัว ผ้าขนหนูเกรดโรงแรม 5 ดาว ขนาดใหญ่ 30x 60 นิ้ว",
-    "price": "326",
-    "category": "ของใช้บ้าน",
-    "affiliate_link": "https://s.shopee.co.th/9fK4NsBmJo"
-  },
-  "prod_2057_กางเกงประจำเดือน_ผ้าอนามัยแบบกางเกง_ผ้าอ.mp4": {
-    "product_name": "กางเกงประจำเดือน ผ้าอนามัยแบบกางเกง ผ้าอนามัยกางเกง อัปเกรดผ้าอนามัยระบายอากาศได้ 360 ระบายอากาศได้ดี",
-    "price": "229",
-    "category": "ความงาม",
-    "affiliate_link": "https://s.shopee.co.th/gPTIhffeH"
-  },
-  "prod_2404_เก้าอี้แคมป์ปิ้ง_เก้าอี้สนามที่พับได้_ขา.mp4": {
-    "product_name": "เก้าอี้แคมป์ปิ้ง เก้าอี้สนามที่พับได้ ขาตั้งอลูมิเนียม รับน้ำหนักได้ 500กก เหล็กคาร์บอนสูง",
-    "price": "245",
-    "category": "กีฬา",
-    "affiliate_link": "https://s.shopee.co.th/3VjegvwVWH"
-  },
-  "prod_1988_LetMeBake.mp4": {
-    "product_name": "LetMeBake",
-    "price": "0",
-    "category": "อื่นๆ",
-    "affiliate_link": "https://s.shopee.co.th/3LQET2Ab4k"
-  },
-  "prod_1712_Petcho_ทรายแมวเต้าหู้_Plant-based_ดูดซับ.mp4": {
-    "product_name": "Petcho ทรายแมวเต้าหู้ Plant-based ดูดซับของเหลวภายใน 2 วินาที จับตัวเป็นก้อนแน่น ฝุ่นน้อย",
-    "price": "24",
-    "category": "สัตว์เลี้ยง",
-    "affiliate_link": "https://s.shopee.co.th/1LewZRcH5n"
-  },
-  "prod_1208_ถุงเท้าสีดำ_ถุงเท้าผู้ชาย_ผู้หญิง_ขายยกแ.mp4": {
-    "product_name": "ถุงเท้าสีดำ ถุงเท้าผู้ชาย ผู้หญิง ขายยกแพ็ค ไว้ใส่ทำงาน ข้อยาวคลุมตาตุ่ม ถุงเท้าฟรีไซส์ หนานุ่ม ออกกำลังกาย",
-    "price": "80",
-    "category": "กีฬา",
-    "affiliate_link": "https://s.shopee.co.th/2gAK2mIe5p"
-  },
-  "prod_25_REMAX_TWS-19_หูฟังบลูทูธ_Marshmallow_ser.mp4": {
-    "product_name": "REMAX TWS-19 หูฟังบลูทูธ Marshmallow series หูฟังบลูทูธไร้สาย Bluetooth V5.3 เสียงสนทนาชัดเจน",
-    "price": "379",
-    "category": "หูฟัง",
-    "affiliate_link": "https://s.shopee.co.th/7AcgqxX5gs"
-  },
-  "prod_1240_Greenforst_เก้าอี้แคมป์ปิ้ง_เก้าอี้พับได.mp4": {
-    "product_name": "Greenforst เก้าอี้แคมป์ปิ้ง เก้าอี้พับได้เบาะนุ่ม เก้าอี้ตกปลา ปรับนอนได้4ระดับ พับได้พกพาสะดวก รุ่น 2079/2009/2031",
-    "price": "199",
-    "category": "กีฬา",
-    "affiliate_link": "https://s.shopee.co.th/904NaPuXFe"
-  },
-  "prod_2264_Dr.PONG_Dietary_supplement_product_รวมผล.mp4": {
-    "product_name": "Dr.PONG Dietary supplement product รวมผลิตภัณฑ์อาหารเสริมขายดี ดอกเตอร์พงศ์",
-    "price": "299",
-    "category": "สุขภาพ",
-    "affiliate_link": "https://s.shopee.co.th/3g34spOaq4"
-  },
-  "prod_1115_หม้อหุงข้าวอัจฉริยะในครัวเรือน_1.8_ลิตรม.mp4": {
-    "product_name": "หม้อหุงข้าวอัจฉริยะในครัวเรือน 1.8 ลิตรมัลติฟังก์ชั่นเครื่องทำอาหารหม้อร้อนไฟฟ้าแบบบูรณาการหม้อนักเรียนหม้อหุงไฟฟ้ากันน้ำ",
-    "price": "2200",
-    "category": "เครื่องใช้ไฟฟ้า",
-    "affiliate_link": "https://s.shopee.co.th/80BqM3enKO"
-  },
-  "prod_1290_RARAEITEM_ชุดเต็นท์พร้อมเตียงแคมป์ปิ้ง_เ.mp4": {
-    "product_name": "RARAEITEM ชุดเต็นท์พร้อมเตียงแคมป์ปิ้ง เต็นท์ผ้ามุ้ง เตียงขายกสูง ครบชุด พับเก็บได้ พร้อมส่งจากไทย",
-    "price": "1000",
-    "category": "กีฬา",
-    "affiliate_link": "https://s.shopee.co.th/7AcjPHLIO5"
-  },
-  "prod_104_BEGD_หูฟังไร้สาย_R6_หูฟัง_Bluetooth_หูฟั.mp4": {
-    "product_name": "BEGD หูฟังไร้สาย R6 หูฟัง Bluetooth หูฟังบลูทูธ 5.3 พร้อมไมโครโฟนในตัว เสียงดี ลดเสียงรบกวน",
-    "price": "169",
-    "category": "หูฟัง",
-    "affiliate_link": "https://s.shopee.co.th/6VN07wmZwD"
-  },
-  "prod_611_กาแฟแคปซูล_ซันชอท_SUNSHOT_COFFEE_CAPSULE.mp4": {
-    "product_name": "กาแฟแคปซูล ซันชอท SUNSHOT COFFEE CAPSULE",
-    "price": "15",
-    "category": "อาหาร",
-    "affiliate_link": "https://s.shopee.co.th/6fgShAtLlG"
-  },
-  "prod_86_สินค้าเข้าใหม่_ลำโพงบลูทูธ_MX302_ลำโพงบล.mp4": {
-    "product_name": "สินค้าเข้าใหม่ ลำโพงบลูทูธ MX302 ลำโพงบลูทูธเบสหนัก ลำโพงปราตี้",
-    "price": "225",
-    "category": "อุปกรณ์เสริม",
-    "affiliate_link": "https://s.shopee.co.th/2gAHYu1AiA"
-  },
-  "prod_2504_SCE_Plus_เตาปิ้งย่างอเนกประสงค์+หม้อสุกี.mp4": {
-    "product_name": "SCE Plus เตาปิ้งย่างอเนกประสงค์+หม้อสุกี้ ความจุ 1.3ลิตร รุ่นG20 - ประกัน 2 ปี",
-    "price": "759",
-    "category": "เครื่องครัว",
-    "affiliate_link": "https://s.shopee.co.th/gPTJu25uW"
-  },
-  "prod_1122_ญี่ปุ่น_อันบอนซู_หม้อหุงน้ำตาลต่ำครัวเรื.mp4": {
-    "product_name": "ญี่ปุ่น อันบอนซู หม้อหุงน้ำตาลต่ำครัวเรือนมินิข้าวซุปแยกข้าวท่อระบายน้ำหม้อหุงข้าวอัจฉริยะขนาดเล็ก 3 ลิตร",
-    "price": "1900",
-    "category": "เครื่องใช้ไฟฟ้า",
-    "affiliate_link": "https://s.shopee.co.th/AUtBKeVHFz"
-  },
-  "prod_814_Dr.PONG_CoQ10_30_mg_Coenzyme_Q10_plus_vi.mp4": {
-    "product_name": "Dr.PONG CoQ10 30 mg Coenzyme Q10 plus vitamin E โคคิวเท็น เพิ่มพลังงาน ผิวเรียบเนียน ร่างกายสดชื่น",
-    "price": "189",
-    "category": "สุขภาพ",
-    "affiliate_link": "https://s.shopee.co.th/AKZl46qlff"
-  },
-  "prod_149_GOOJODOQ_คีย์บอร์ด_คีย์บอร์ดภาษาไทย_เข้า.mp4": {
-    "product_name": "GOOJODOQ คีย์บอร์ด คีย์บอร์ดภาษาไทย เข้ากันได้กับโทรศัพท์มือถือ แท็บเล็ต คอมพิวเตอร์ Keyboard",
-    "price": "84",
-    "category": "อุปกรณ์เสริม",
-    "affiliate_link": "https://s.shopee.co.th/8pkuyIKbNJ"
-  },
-  "prod_1017_GOOJODOQ_Gfs008_พัดลมไร้เสียงความเร็วสูง.mp4": {
-    "product_name": "GOOJODOQ Gfs008 พัดลมไร้เสียงความเร็วสูง 2in1 ติดผนังและตั้งโต๊ะ จอแสดงผล Led 100 สปีด มุมปรับ 90",
-    "price": "424",
-    "category": "พัดลม",
-    "affiliate_link": "https://s.shopee.co.th/1LewPWEfy0"
-  },
-  "prod_547_688กางเกงขาสั้นยางยืดใหม่ล่าสุด_ผ้าคอตตอ.mp4": {
-    "product_name": "688กางเกงขาสั้นยางยืดใหม่ล่าสุด ผ้าคอตตอน 100% สีไม่ตก",
-    "price": "112",
-    "category": "แฟชั่น",
-    "affiliate_link": "https://s.shopee.co.th/8pkxGxlxhI"
-  },
-  "prod_208_สายชาร์จ_ชาร์จไว_PD_30W_รองรับ_ซีรีส์ทั้.mp4": {
-    "product_name": "สายชาร์จ ชาร์จไว PD 30W รองรับ ซีรีส์ทั้งหมด รองรับ ip514 Pro Max",
-    "price": "150",
-    "category": "อุปกรณ์เสริม",
-    "affiliate_link": "https://s.shopee.co.th/7psNn1MmYb"
+    "category": "สาระความรู้ & คอนเทนต์เพียว",
+    "affiliate_link": "",
+    "is_pure_content": true,
+    "content_mode": "TRENDING_NEWS",
+    "topic_data": {
+      "title": "4 กูรูดังนั่งแท่นตัดสิน AM Star S2",
+      "hook": "อย่าเพิ่งกดผ่าน! เวทีนี้ไม่ธรรมดา",
+      "detail": "Abandoned Mansion เปิดเวทีประชันพลังเสียงสุดยิ่งใหญ่ AM Star Singing Contest Season 2 รอบรองชนะเลิศ คว้า \"เก่ง ธชย – จีน กษิดิศ – ต๋อง อภิชา",
+      "summary": "Abandoned Mansion เปิดเวทีประชันพลังเสียงสุดยิ่งใหญ่ AM Star Singing Contest Season 2 รอบรองชนะเลิศ คว้า \"เก่ง ธชย – จีน กษิดิศ – ต๋อง อภิชา",
+      "step1": "สังเกตเกณฑ์การให้คะแนนที่กรรมการ",
+      "step2": "วิเคราะห์เทคนิคการร้องของคู่แข่งใน",
+      "step3": "ติดตามคลิปถัดไปเพื่อรู้ผลผู้เข้ารอบ",
+      "follower_score": 85,
+      "phase1_text": "เก่ง จีน ต๋อง สวย พร้อมพิจารณาเสียงจริง",
+      "phase2_text": "มาตรฐานการตัดสินระดับโปรแห่งวงการ",
+      "phase3_text": "กดติดตามเพื่อจับตารอบชิงชนะเลิศ",
+      "voiceover_script": "ศึก AM Star 2 ร้อนแรง! เจอกรรมการระดับตำนานทั้ง 4 คน ใครจะผ่าน? กดติดตามไว้เลยนะจ๊ะ",
+      "hashtags": "#AMStarS2 #เก่งธชย #จีนกษิดิศ #ต๋องอภิชา #สวยสโรชา",
+      "image_url": "https://s.isanook.com/ns/0/ud/1981/9905771/new-thumbnail1200x720-v2(7).jpg",
+      "image_urls": [
+        "https://s.isanook.com/ns/0/ud/1981/9905771/new-thumbnail1200x720-v2(7).jpg",
+        "https://s.isanook.com/ns/0/ud/1981/9905771/new-thumbnail1200x720-v2(7).jpg",
+        "https://s.isanook.com/ns/0/ud/1981/9905771/new-thumbnail1200x720-v2(7).jpg"
+      ],
+      "source": "authentic_news_rss"
+    }
+  },
+  "content_trending_news_1788664909.mp4": {
+    "product_name": "แซ่บยิ่งกว่าละคร! แม่ผัวเปิดประตูรถจับชู้ เจอแจ็กพอตเป็น \"",
+    "price": "",
+    "category": "สาระความรู้ & คอนเทนต์เพียว",
+    "affiliate_link": "",
+    "is_pure_content": true,
+    "content_mode": "TRENDING_NEWS",
+    "topic_data": {
+      "title": "แซ่บยิ่งกว่าละคร! แม่ผัวเปิดประตูรถจับชู้ เจอแจ็กพอตเป็น \"",
+      "detail": "สะเทือนสังคม! ลูกสะใภ้ลักลอบมีความสัมพันธ์กับพ่อผัว แม่ผัวบุกจับได้คาหนังคาเขาขณะพลอดรักในรถ",
+      "summary": "สะเทือนสังคม! ลูกสะใภ้ลักลอบมีความสัมพันธ์กับพ่อผัว แม่ผัวบุกจับได้คาหนังคาเขาขณะพลอดรักในรถ",
+      "hook": "🚨 เรื่องเด็ดวันนี้! แซ่บยิ่งกว่าละคร! แม่ผัวเปิดประตูรถ",
+      "image_url": "https://s.isanook.com/ns/0/ud/1981/9906018/new-thumbnail1200x720_v2.jpg",
+      "image_urls": [
+        "https://s.isanook.com/ns/0/ud/1981/9906018/new-thumbnail1200x720_v2.jpg",
+        "https://s.isanook.com/ns/0/ud/1981/9906018/new-thumbnail1200x720_v2.jpg?ip/crop/w1200h700/q80/jpg",
+        "https://s.isanook.com/sr/0/images/qrcode-app.png"
+      ],
+      "link": "https://www.sanook.com/news/9906018/"
+    }
+  },
+  "content_life_hack_tip_1788669191.mp4": {
+    "product_name": "ทริคใช้ AI วาดภาพฟรี ได้งานปังเกินคาด",
+    "price": "",
+    "category": "สาระความรู้ & คอนเทนต์เพียว",
+    "affiliate_link": "",
+    "is_pure_content": true,
+    "content_mode": "LIFE_HACK_TIP",
+    "topic_data": {
+      "title": "ทริคใช้ AI วาดภาพฟรี ได้งานปังเกินคาด",
+      "hook": "หยุด! อย่าเพิ่งเสียเงินจ้างกราฟิก",
+      "detail": "ลองใช้ AI Video ฟรีตัวหนึ่งมา ชื่อ Dora AI ใช้โมเดล Seedance 2.0 สร้างคลิป Action ได้ดีเกินคาด สวัสดีครับเพื่อนๆ ชาวพันทิป ช่วงนี้ผมทดลองเคร",
+      "summary": "ลองใช้ AI Video ฟรีตัวหนึ่งมา ชื่อ Dora AI ใช้โมเดล Seedance 2.0 สร้างคลิป Action ได้ดีเกินคาด สวัสดีครับเพื่อนๆ ชาวพันทิป ช่วงนี้ผมทดลองเคร",
+      "step1": "เลือกเครื่องมือ Dora AI ที่เปิดให้",
+      "step2": "ตั้งค่าโมเดล Seedance 2.0 สำหรับฉาก",
+      "step3": "เทสต์ผลแล้วบันทึกสูตรนี้ไว้ใช้ต่อ",
+      "follower_score": 92,
+      "phase1_text": "ลองใช้ Dora AI ตัวฟรี สร้างวิดีโอแอคชัน",
+      "phase2_text": "โมเดล Seedance 2.0 ให้ผลลัพธ์ยอดเยี่ยม",
+      "phase3_text": "กดติดตาม เพื่อไม่พลาดเครื่องมือใหม่",
+      "voiceover_script": "ป้าเข็มบอกแล้วว่า AI ตัวนี้ฟรีแต่ปังมาก ลองใช้ Dora AI พร้อมโมเดล Seedance 2.0 แล้วได้คลิปแอคชันสวยเกินคาดจริงๆ นะคะ อย่าลืมกดติดตามไว้ดูทริคอื่นต่อด้วยนะจ๊ะ",
+      "hashtags": "#AIVideo #DoraAI #LifeHack #ฟรี #เทคนิคการตลาด",
+      "image_url": "",
+      "image_urls": [],
+      "url": "https://pantip.com/topic/42304732",
+      "source": "tavily_pantip_web"
+    }
+  },
+  "life_hack_tip_AI_วาดรูปฟรีตัวนี้เทพมาก_ลองแล้ว_1788672425.mp4": {
+    "product_name": "AI วาดรูปฟรีตัวนี้เทพมาก ลองแล้วอึ้ง",
+    "price": "",
+    "category": "สาระความรู้ & คอนเทนต์เพียว",
+    "affiliate_link": "",
+    "is_pure_content": true,
+    "content_mode": "LIFE_HACK_TIP",
+    "topic_data": {
+      "title": "AI วาดรูปฟรีตัวนี้เทพมาก ลองแล้วอึ้ง",
+      "hook": "หยุดดู! AI ฟรีตัวนี้วาดรูปสวยเกินคาด",
+      "detail": "ลองใช้ AI Video ฟรีตัวหนึ่งมา ชื่อ Dora AI ใช้โมเดล Seedance 2.0 สร้างคลิป Action ได้ดีเกินคาด สวัสดีครับเพื่อนๆ ชาวพันทิป ช่วงนี้ผมทดลองเคร",
+      "summary": "ลองใช้ AI Video ฟรีตัวหนึ่งมา ชื่อ Dora AI ใช้โมเดล Seedance 2.0 สร้างคลิป Action ได้ดีเกินคาด สวัสดีครับเพื่อนๆ ชาวพันทิป ช่วงนี้ผมทดลองเคร",
+      "step1": "เปิดแอป Dora AI เลือกโมเดล Seedance 2.0",
+      "step2": "พิมพ์คำอธิบายฉาก Action ที่ต้องการให้ชัด",
+      "step3": "กดสร้างและรอรับคลิปวิดีโอคุณภาพสูง",
+      "follower_score": 92,
+      "phase1_text": "ใช้ Dora AI สร้างคลิป Action ได้จริง",
+      "phase2_text": "โมเดล Seedance 2.0 ให้ผลลัพธ์ละเอียดมาก",
+      "phase3_text": "กดติดตามเพื่อรับเทคนิค AI ฟรีตัวใหม่ๆ",
+      "voiceover_script": "ลองใช้ Dora AI ฟรีตัวนี้สร้างคลิป Action ให้ดูนะจ๊ะ ผลออกมาดีเกินคาดจริงๆ ลองดูได้เลยนะคะ",
+      "hashtags": "#AIวาดรูป #DoraAI #เทคนิคAIฟรี #Lifhack #คลิปสั้น",
+      "image_url": "",
+      "image_urls": [],
+      "url": "https://pantip.com/topic/42304732",
+      "source": "tavily_pantip_web"
+    }
+  },
+  "life_hack_tip_AI_วาดรูปฟรีตัวนี้เทพมาก_ลองแล้ว_fixed.mp4": {
+    "product_name": "AI วาดรูปฟรีตัวนี้เทพมาก ลองแล้ว",
+    "price": "",
+    "category": "สาระความรู้ & คอนเทนต์เพียว",
+    "affiliate_link": "",
+    "is_pure_content": true,
+    "content_mode": "LIFE_HACK_TIP",
+    "topic_data": {
+      "title": "AI วาดรูปฟรีตัวนี้เทพมาก ลองแล้ว",
+      "hook": "งบจำกัดจะซ่อมบ้านยังไงดี",
+      "detail": "ราคาถูกๆ ว่างั้นเถอะ!! ใช่มั้ย??? ถ้าใช่!! ก็คงต้องคิดหนัก!! เช่น.. 1. ควรไปขออาศัยอยู่กับ ญาติๆ ก่อน หรือไปเช่า \"หอพัก\". ชั่วคราวก่อน ระหว่",
+      "summary": "ราคาถูกๆ ว่างั้นเถอะ!! ใช่มั้ย??? ถ้าใช่!! ก็คงต้องคิดหนัก!! เช่น.. 1. ควรไปขออาศัยอยู่กับ ญาติๆ ก่อน หรือไปเช่า \"หอพัก\". ชั่วคราวก่อน ระหว่",
+      "step1": "เริ่มซ่อมจุดที่เสียหายหนักก่อน",
+      "step2": "ใช้คลิปหนีบแทนสกรูชั่วคราว",
+      "step3": "แบ่งงานซ่อมทีละส่วนให้น้อย",
+      "follower_score": 92,
+      "phase1_text": "เตรียมพื้นที่ทำงานให้สะอาด",
+      "phase2_text": "หาซื้ออุปกรณ์มือสองราคาถูก",
+      "phase3_text": "กดติดตามดูทริคประหยัดเพิ่ม",
+      "voiceover_script": "งบน้อยอย่าเพิ่งท้อใจ ลองซ่อมบ้านเองด้วยทริคประหยัดที่ป้าแนะนำดูนะคะ",
+      "hashtags": "#ซ่อมบ้านเอง #ประหยัดเงิน #ทริคชีวิต #บ้านมือสอง #DIY",
+      "image_url": "",
+      "image_urls": [],
+      "url": "https://pantip.com/topic/37590440",
+      "source": "tavily_pantip_web"
+    }
+  },
+  "trending_news_เปเล่เผยความลับ_2_ข้อที่เรไม่เคย_1788673805.mp4": {
+    "product_name": "เปเล่เผยความลับ 2 ข้อที่เรไม่เคยบอกใคร",
+    "price": "",
+    "category": "สาระความรู้ & คอนเทนต์เพียว",
+    "affiliate_link": "",
+    "is_pure_content": true,
+    "content_mode": "TRENDING_NEWS",
+    "topic_data": {
+      "title": "เปเล่เผยความลับ 2 ข้อที่เรไม่เคยบอกใคร",
+      "hook": "น้ำตาไหล! เปเล่เปิดใจเรื่องเร",
+      "detail": "เปิดโพสต์อาลัยสุดซึ้งจาก \"เปเล่ คริสโตเฟอร์\" เพื่อนรัก \"เร แม๊คโดแนลด์\" เผยความลับสองข้อที่เพื่อนไม่เคยรู้ พร้อมคำมั่นสัญญาจากลูกผู้ชาย",
+      "summary": "เปิดโพสต์อาลัยสุดซึ้งจาก \"เปเล่ คริสโตเฟอร์\" เพื่อนรัก \"เร แม๊คโดแนลด์\" เผยความลับสองข้อที่เพื่อนไม่เคยรู้ พร้อมคำมั่นสัญญาจากลูกผู้ชาย",
+      "step1": "ฟังบทอาลัยสุดซึ้งจากเปเล่",
+      "step2": "ทำความรู้จักความสัมพันธ์แน่นแฟ้น",
+      "step3": "ติดตามช่องเพื่อรอเนื้อหาใหม่",
+      "follower_score": 92,
+      "phase1_text": "เปเล่โพสต์อาลัยเพื่อนรักเร",
+      "phase2_text": "เผยความลับ 2 ข้อที่เพื่อนไม่รู้",
+      "phase3_text": "กดติดตามดูคำมั่นสัญญาต่อไป",
+      "voiceover_script": "ป้าเข็มเล่าให้ฟังนะคะ เปเล่โพสต์อาลัยเร บอกความลับ 2 ข้อที่เพื่อนไม่เคยรู้ น้ำตาไหลเลยนะจ๊ะ",
+      "hashtags": "#เรแมคโดนัลด์ #เปเล่คริštoเฟอร์ #ข่าวบันเทิง #ตำนานวงการ #อาลัย",
+      "image_url": "https://s.isanook.com/ns/0/ud/1981/9905503/555292992(45).jpg",
+      "image_urls": [
+        "https://s.isanook.com/ns/0/ud/1981/9905503/555292992(45).jpg",
+        "https://i.ytimg.com/vi/3KQBPK2O3eI/oar2.jpg?sqp=-oaymwEYCJUDENAFSFqQAgHyq4qpAwcIARUAAIhC&rs=AOn4CLB1efq-q02559tOM8oAqH7F2O4wUA&usqp=CCk",
+        "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=1080&auto=format&fit=crop"
+      ],
+      "url": "",
+      "source": "authentic_news_rss"
+    }
+  },
+  "trending_news_Abandoned_Mansion_เปิดเวที_AM_St_1788674579.mp4": {
+    "product_name": "Abandoned Mansion เปิดเวที AM Star Singing 2",
+    "price": "",
+    "category": "สาระความรู้ & คอนเทนต์เพียว",
+    "affiliate_link": "",
+    "is_pure_content": true,
+    "content_mode": "TRENDING_NEWS",
+    "topic_data": {
+      "title": "Abandoned Mansion เปิดเวที AM Star Singing 2",
+      "hook": "4 นักร้องดังนั่งแท่นกรรมการตัดสิน AM Star 2",
+      "detail": "Abandoned Mansion เปิดเวทีประชันพลังเสียงสุดยิ่งใหญ่ AM Star Singing Contest Season 2 รอบรองชนะเลิศ คว้า \"เก่ง ธชย – จีน กษิดิศ – ต๋อง อภิชา",
+      "summary": "Abandoned Mansion เปิดเวทีประชันพลังเสียงสุดยิ่งใหญ่ AM Star Singing Contest Season 2 รอบรองชนะเลิศ คว้า \"เก่ง ธชย – จีน กษิดิศ – ต๋อง อภิชา",
+      "step1": "Abandoned Mansion จัดประกวด AM Star Singing 2",
+      "step2": "ได้เก่ง จีน ต๋อง และสวย ร่วมเป็นกรรมการตัดสิน",
+      "step3": "การแข่งขันรอบรองชนะเลิศกำลังเข้มข้นสุดๆ",
+      "follower_score": 88,
+      "phase1_text": "4 นักร้องดังนั่งแท่นกรรมการตัดสิน AM Star 2",
+      "phase2_text": "Abandoned Mansion เปิดเวที AM Star Singing 2",
+      "phase3_text": "กดติดตามเพื่อไม่พลาดทริคดีๆ",
+      "voiceover_script": "ป้าเข็มสรุปให้เลยนะคะ การประกวด AM Star Season 2 รอบรองชนะเลิศ เปิดฉากแล้ว กับ 4 คณะกรรมการระดับตำนานอย่าง เก่ง ธชย จีน กษิดิศ ต๋อง อภิชา และสวย สโรชา ที่พร้อมตัดสินหาสุดยอดนักร้องเสียงทองมาครอง เรียกได้ว่าเวทีนี้สุดมันส์แน่นอนค่ะ",
+      "hashtags": "#ข่าวด่วน #สรุปข่าว #ประเด็นร้อน",
+      "image_url": "https://s.isanook.com/ns/0/ud/1981/9905771/new-thumbnail1200x720-v2(7).jpg",
+      "image_urls": [
+        "https://s.isanook.com/ns/0/ud/1981/9905771/new-thumbnail1200x720-v2(7).jpg",
+        "https://s.isanook.com/ns/0/ud/1981/9905771/new-thumbnail1200x720-v2(7).jpg?ip/resize/w850/q80/jpg",
+        "https://s.isanook.com/ns/0/ud/1981/9905771/img_5174_0.jpg?ip/resize/w728/q80/jpg"
+      ],
+      "url": "",
+      "source": "authentic_news_rss"
+    }
+  },
+  "pele_ray_news_fixed.mp4": {
+    "product_name": "เปเล่โพสต์อาลัยเพื่อนรัก เร แม๊คโดแนลด์",
+    "price": "",
+    "category": "ข่าวด่วนกระแสสังคม",
+    "affiliate_link": "",
+    "is_pure_content": true,
+    "content_mode": "TRENDING_NEWS",
+    "topic_data": {
+      "title": "เปเล่โพสต์อาลัยเพื่อนรัก เร แม๊คโดแนลด์",
+      "hook": "สุดซึ้ง! เปเล่เปิดใจถึง เร แม๊คโดแนลด์",
+      "summary": "เปิดโพสต์อาลัยจากใจ เปเล่ คริสโตเฟอร์ เผยความลับและคำสัญญาเพื่อนแท้ลูกผู้ชาย มิตรภาพอบอุ่นที่แฟนคลับต่างร่วมส่งใจ",
+      "source": "Master Template Creator"
+    }
+  },
+  "celebrity_trend_เก่ง_จีน_ต๋อง_สวย_นั่งกรรมการตัด_1788675507.mp4": {
+    "product_name": "เก่ง จีน ต๋อง สวย นั่งกรรมการตัดสิน AM Star ซีซั่น 2",
+    "price": "",
+    "category": "สาระความรู้ & คอนเทนต์เพียว",
+    "affiliate_link": "",
+    "is_pure_content": true,
+    "content_mode": "CELEBRITY_TREND",
+    "topic_data": {
+      "title": "เก่ง จีน ต๋อง สวย นั่งกรรมการตัดสิน AM Star ซีซั่น 2",
+      "hook": "สี่ดาวดังร่วมตัดสินเวทีประกวด AM Star ฤดูร้อนนี้",
+      "detail": "Abandoned Mansion เปิดเวทีประชันพลังเสียงสุดยิ่งใหญ่ AM Star Singing Contest Season 2 รอบรองชนะเลิศ คว้า \"เก่ง ธชย – จีน กษิดิศ – ต๋อง อภิชา",
+      "summary": "Abandoned Mansion เปิดเวทีประชันพลังเสียงสุดยิ่งใหญ่ AM Star Singing Contest Season 2 รอบรองชนะเลิศ คว้า \"เก่ง ธชย – จีน กษิดิศ – ต๋อง อภิชา",
+      "step1": "Abandoned Mansion จัดประกวด AM Star Singing",
+      "step2": "เก่ง จีน ต๋อง สวย รับหน้าที่กรรมการตัดสินรอบรองฯ",
+      "step3": "ศิลปินได้ประชันพลังเสียงอย่างเข้มข้นในเวทีนี้",
+      "follower_score": 88,
+      "phase1_text": "สี่ดาวดังร่วมตัดสินเวทีประกวด AM Star ฤดูร้อนนี้",
+      "phase2_text": "เก่ง จีน ต๋อง สวย นั่งกรรมการตัดสิน AM Star ซีซั่น 2",
+      "phase3_text": "กดติดตามเพื่อไม่พลาดทริคดีๆ",
+      "voiceover_script": "ป้าเข็มสรุปให้ฟังนะคะ เก่ง จีน ต๋อง และสวย นั่งแท่นกรรมการตัดสินเวที AM Star ซีซั่น 2 รอบรองชนะเลิศ ใครจะชนะต้องดูกันนะจ๊ะ",
+      "hashtags": "#ข่าวด่วน #สรุปข่าว #ประเด็นร้อน",
+      "image_url": "https://s.isanook.com/ns/0/ud/1981/9905771/new-thumbnail1200x720-v2(7).jpg",
+      "image_urls": [
+        "https://s.isanook.com/ns/0/ud/1981/9905771/new-thumbnail1200x720-v2(7).jpg",
+        "https://s.isanook.com/ns/0/ud/1981/9905771/new-thumbnail1200x720-v2(7).jpg?ip/resize/w850/q80/jpg",
+        "https://s.isanook.com/ns/0/ud/1981/9905771/img_5174_0.jpg?ip/resize/w728/q80/jpg"
+      ],
+      "url": "",
+      "source": "authentic_news_rss"
+    }
+  },
+  "celebrity_trend_กิ๊บซี่อวดหุ่นแซ่บที่ซานโตรินี่_1788675979.mp4": {
+    "product_name": "กิ๊บซี่อวดหุ่นแซ่บที่ซานโตรินี่",
+    "price": "",
+    "category": "สาระความรู้ & คอนเทนต์เพียว",
+    "affiliate_link": "",
+    "is_pure_content": true,
+    "content_mode": "CELEBRITY_TREND",
+    "topic_data": {
+      "title": "กิ๊บซี่อวดหุ่นแซ่บที่ซานโตรินี่",
+      "hook": "กิ๊บซี่หุ่นปังย้อนวัย sexy line สดใส",
+      "detail": "ตัวแม่มาแล้ว กิ๊บซี่ Girly Berry อวดหุ่นแซ่บระดับตำนาน นุ่งบิกินี่ลูกไม้ อวดฝรั่งที่ซานโตรินี่ Sexy Line สุดเป๊ะ หุ่นปังกว่าตอนอายุ 18",
+      "summary": "ตัวแม่มาแล้ว กิ๊บซี่ Girly Berry อวดหุ่นแซ่บระดับตำนาน นุ่งบิกินี่ลูกไม้ อวดฝรั่งที่ซานโตรินี่ Sexy Line สุดเป๊ะ หุ่นปังกว่าตอนอายุ 18",
+      "step1": "กิ๊บซี่อวดหุ่นแซ่บระดับตำนานในชุดบิกินี่ลูกไม้",
+      "step2": "เธอโพสต์รูปโชว์ Sexy Line ที่เกาะซานโตรินี่อย่าง",
+      "step3": "ร่างกายฟิตเป๊ะจนแฟนคลับทึ่งว่ายังเหมือนสาวอายุ",
+      "follower_score": 88,
+      "phase1_text": "กิ๊บซี่หุ่นปังย้อนวัย sexy line สดใส",
+      "phase2_text": "กิ๊บซี่อวดหุ่นแซ่บที่ซานโตรินี่",
+      "phase3_text": "กดติดตามเพื่อไม่พลาดทริคดีๆ",
+      "voiceover_script": "แม่กิ๊บซี่หุ่นแซ่บมากค่ะ ใส่บิกินี่ที่ซานโตรินี่ Sexy Line เป๊ะปังเหมือนสาว 18 เลยนะคะ",
+      "hashtags": "#ข่าวด่วน #สรุปข่าว #ประเด็นร้อน",
+      "image_url": "https://s.isanook.com/ns/0/ud/1981/9905522/new-thumbnail1200x720-v2(6).jpg",
+      "image_urls": [
+        "https://s.isanook.com/ns/0/ud/1981/9905522/new-thumbnail1200x720-v2(6).jpg",
+        "https://www.dailynews.co.th/wp-content/uploads/2026/08/26-10.jpg",
+        "https://s.isanook.com/ns/0/ud/1981/9905522/new-thumbnail1200x720-v2(6).jpg?ip/crop/w1200h700/q80/jpg"
+      ],
+      "url": "",
+      "source": "authentic_news_rss"
+    }
+  },
+  "celebrity_trend_ภีม_BUS_ร่วมเปิดตัวน้ำหอม_Le_Sel_1788677542.mp4": {
+    "product_name": "ภีม BUS ร่วมเปิดตัวน้ำหอม Le Sel d’Issey",
+    "price": "",
+    "category": "สาระความรู้ & คอนเทนต์เพียว",
+    "affiliate_link": "",
+    "is_pure_content": true,
+    "content_mode": "CELEBRITY_TREND",
+    "topic_data": {
+      "title": "ภีม BUS ร่วมเปิดตัวน้ำหอม Le Sel d’Issey",
+      "hook": "ภีม BUS หล่อเท่ ร่วมเปิดตัวน้ำหอมระดับโลก",
+      "detail": "“ภีม BUS” หล่อเท่ ร่วมเปิดตัวน้ำหอม Le Sel d’Issey Parfum กลิ่นใหม่ นิยามความหอมแห่งความสมดุล",
+      "summary": "“ภีม BUS” หล่อเท่ ร่วมเปิดตัวน้ำหอม Le Sel d’Issey Parfum กลิ่นใหม่ นิยามความหอมแห่งความสมดุล",
+      "step1": "นักแสดงหนุ่ม ภีม BUS เข้าร่วมงานเปิดตัวน้ำหอมใหม่",
+      "step2": "เขาปรากฏตัวในลุคหล่อเท่ เพื่อโปรโมตกลิ่นหอมแห่ง",
+      "step3": "การร่วมงานครั้งนี้ช่วยสร้างความสนใจให้กับสินค้า",
+      "follower_score": 88,
+      "phase1_text": "ภีม BUS หล่อเท่ ร่วมเปิดตัวน้ำหอมระดับโลก",
+      "phase2_text": "ภีม BUS ร่วมเปิดตัวน้ำหอม Le Sel d’Issey",
+      "phase3_text": "กดติดตามเพื่อไม่พลาดทริคดีๆ",
+      "voiceover_script": "วันนี้ป้าเข็มมีข่าวมาเล่าให้ฟังค่ะ นักแสดงหนุ่ม ภีม BUS ได้เข้าร่วมงานเปิดตัวน้ำหอม Le Sel d’Issey Parfum กลิ่นใหม่ล่าสุด โดยเขาปรากฏตัวในลุคหล่อเท่ ซึ่งเข้ากับธีมความหอมแห่งความสมดุลของแบรนด์ได้เป็นอย่างดี การปรากฏตัวของเขาในครั้งนี้ช่วยดึงดูดความสนใจจากแฟนคลับและสื่อมวลชนอย่างมาก จนกลายเป็นประเด็นร้อนบนโซเชียลมีเดียในช่วงหลายชั่วโมงที่ผ่านมา ใครที่เห็นรูปแล้วชอบลุคนี้ของภีม BUS ช่วยคอมเมนต์บอกกันหน่อยนะจ๊ะ",
+      "hashtags": "#ข่าวด่วน #สรุปข่าว #ประเด็นร้อน",
+      "image_url": "https://s.isanook.com/ns/0/ud/1981/9905523/new-thumbnail1200x720-v2(4).jpg",
+      "image_urls": [
+        "https://s.isanook.com/ns/0/ud/1981/9905523/new-thumbnail1200x720-v2(4).jpg",
+        "https://s.isanook.com/ns/0/ud/1981/9905523/new-thumbnail1200x720-v2(4).jpg?ip/resize/w850/q80/jpg",
+        "https://storage-wp.naewna.com/2026/09/1-34.jpg"
+      ],
+      "url": "",
+      "source": "authentic_news_rss"
+    }
+  },
+  "celebrity_trend_ไบร์ท_นรภัทร_ประกาศเลิกบุหรี่สำเ_1788678410.mp4": {
+    "product_name": "ไบร์ท นรภัทร ประกาศเลิกบุหรี่สำเร็จ ไม่คิดหวนกลับ",
+    "price": "",
+    "category": "สาระความรู้ & คอนเทนต์เพียว",
+    "affiliate_link": "",
+    "is_pure_content": true,
+    "content_mode": "CELEBRITY_TREND",
+    "topic_data": {
+      "title": "ไบร์ท นรภัทร ประกาศเลิกบุหรี่สำเร็จ ไม่คิดหวนกลับ",
+      "hook": "พระเอกหนุ่มหักดิบเลิกบุหรี่ ระบุจุดเปลี่ยน",
+      "detail": "ตัดสินใจหักดิบ! “ไบร์ท นรภัทร” ลั่นวาจาเลิกบุหรี่สำเร็จ ไม่คิดหวนกลับ ชี้จุดเปลี่ยนรักตัวเอง -โฟกัสงาน ยันโสดสนิท เติบโตขึ้นอีกขั้น และเปลี่",
+      "summary": "ตัดสินใจหักดิบ! “ไบร์ท นรภัทร” ลั่นวาจาเลิกบุหรี่สำเร็จ ไม่คิดหวนกลับ ชี้จุดเปลี่ยนรักตัวเอง -โฟกัสงาน ยันโสดสนิท เติบโตขึ้นอีกขั้น และเปลี่",
+      "step1": "ไบร์ท นรภัทร ประกาศเลิกบุหรี่สำเร็จอย่างเด็ดขาด",
+      "step2": "พระเอกหนุ่มชี้จุดเปลี่ยนสำคัญคือความรักตัวเอง",
+      "step3": "ปัจจุบันเขาโฟกัสงานเต็มที่ ยืนยันโสดสนิท",
+      "follower_score": 88,
+      "phase1_text": "พระเอกหนุ่มหักดิบเลิกบุหรี่ ระบุจุดเปลี่ยน",
+      "phase2_text": "ไบร์ท นรภัทร ประกาศเลิกบุหรี่สำเร็จ ไม่คิดหวนกลับ",
+      "phase3_text": "กดติดตามเพื่อไม่พลาดทริคดีๆ",
+      "voiceover_script": "ใครตามดูละคะ พระเอกหนุ่ม ไบร์ท นรภัทร เปิดใจว่าตัดสินใจหักดิบเลิกบุหรี่เรียบร้อยแล้วค่ะ จุดเปลี่ยนสำคัญคือเขาเริ่มรักตัวเองมากขึ้นและต้องการสุขภาพที่ดีขึ้น ตอนนี้ไบร์ทโฟกัสงานเต็มที่ ยืนยันโสดสนิทและเติบโตขึ้นอีกขั้น ใครเป็นแฟนคลับคอมเมนต์ให้กำลังใจเขาหน่อยนะคะ",
+      "hashtags": "#ข่าวด่วน #สรุปข่าว #ประเด็นร้อน",
+      "image_url": "https://www.khaosod.co.th/wpapp/uploads/2026/09/bright1.jpg",
+      "image_urls": [
+        "https://www.khaosod.co.th/wpapp/uploads/2026/09/bright1.jpg",
+        "https://static.thairath.co.th/media/HCtHFA7ele6Q2dUMzIHIilKnZWAHdvdufs15UNciOrkkh2YhH5FLffoDBUBICUtQqo.jpg",
+        "https://www.news.in.th/uploads/content/2026/09/03-34735-xy4rkc.png"
+      ],
+      "url": "",
+      "source": "authentic_news_rss"
+    }
+  },
+  "celebrity_trend_แบงค์_พชร_โพสต์ภาพ_โบว์_เบญจวรรณ_1788679046.mp4": {
+    "product_name": "แบงค์ พชร โพสต์ภาพ โบว์ เบญจวรรณ สวยออร่า",
+    "price": "",
+    "category": "สาระความรู้ & คอนเทนต์เพียว",
+    "affiliate_link": "",
+    "is_pure_content": true,
+    "content_mode": "CELEBRITY_TREND",
+    "topic_data": {
+      "title": "แบงค์ พชร โพสต์ภาพ โบว์ เบญจวรรณ สวยออร่า",
+      "hook": "สวยจนตะลึง! โบว์ เบญจวรรณ สวมชุดเจ้าสาวออร่าพุ่ง",
+      "detail": "สวยออร่ามาเต็มเลย! แบงค์ พชร เปิดภาพ โบว์ เบญจวรรณ สวมเวลเจ้าสาว เพื่อนคนบันเทิงแห่ยินดีขอดูตอนต่อไป ญาญ่า ก็มากดไลก์ เรียกว่าออร่ามาเต็มสวย",
+      "summary": "สวยออร่ามาเต็มเลย! แบงค์ พชร เปิดภาพ โบว์ เบญจวรรณ สวมเวลเจ้าสาว เพื่อนคนบันเทิงแห่ยินดีขอดูตอนต่อไป ญาญ่า ก็มากดไลก์ เรียกว่าออร่ามาเต็มสวย",
+      "step1": "แบงค์ พชร โพสต์ภาพแฟนสาว โบว์ เบญจวรรณ",
+      "step2": "เพื่อนคนบันเทิงจำนวนมากแห่กดไลก์และแสดงความยินดี",
+      "step3": "ญาญ่า อุรัสยา ก็ร่วมกดไลก์ชื่นชมความสวยสมฐานะ",
+      "follower_score": 88,
+      "phase1_text": "สวยจนตะลึง! โบว์ เบญจวรรณ สวมชุดเจ้าสาวออร่าพุ่ง",
+      "phase2_text": "แบงค์ พชร โพสต์ภาพ โบว์ เบญจวรรณ สวยออร่า",
+      "phase3_text": "กดติดตามเพื่อไม่พลาดทริคดีๆ",
+      "voiceover_script": "สาวๆ คนไหนกำลังรอภาพสวยๆ ต้องรีบตามมาดูกันเลยนะคะ เพราะ แบงค์ พชร เพิ่งโพสต์ภาพ โบว์ เบญจวรรณ แฟนสาวสุดที่รัก ในชุดเจ้าสาวที่สวยจนตะลึงจนออร่าพุ่งปรี๊ด เพื่อนๆ ในวงการอย่าง ญาญ่า อุรัสยา ก็ไม่น้อยหน้ารีบพุ่งเข้ามากดไลก์พร้อมคอมเมนต์ชื่นชมความงามกันอย่างล้นหลาม บอกเลยว่าสวยสมกับตำแหน่งเจ้าสาวจริงๆ ใครที่รอติดตามข่าวดีเรื่องงานแต่ง ห้ามพลาดเด็ดขาดนะคะ",
+      "hashtags": "#ข่าวด่วน #สรุปข่าว #ประเด็นร้อน",
+      "image_url": "https://www.khaosod.co.th/wpapp/uploads/2026/09/mjbankbowveil69691.jpg",
+      "image_urls": [
+        "https://www.khaosod.co.th/wpapp/uploads/2026/09/mjbankbowveil69691.jpg",
+        "https://mpics.mgronline.com/pics/Images/569000008847401.JPEG",
+        "https://mpics2.mgronline.com/pics/Images/569000008847402.JPEG"
+      ],
+      "url": "",
+      "source": "authentic_news_rss"
+    }
+  },
+  "celebrity_trend_ณเดชน์_เผยสาเหตุรับงานรัว_กลัวคน_1788679315.mp4": {
+    "product_name": "ณเดชน์ เผยสาเหตุรับงานรัว กลัวคนดูเบื่อหน้า",
+    "price": "",
+    "category": "สาระความรู้ & คอนเทนต์เพียว",
+    "affiliate_link": "",
+    "is_pure_content": true,
+    "content_mode": "CELEBRITY_TREND",
+    "topic_data": {
+      "title": "ณเดชน์ เผยสาเหตุรับงานรัว กลัวคนดูเบื่อหน้า",
+      "hook": "ณเดชน์ รับงานพร้อมกัน 3 เรื่อง เพราะต้องใช้เงินก้อน",
+      "detail": "ณเดชน์ บ่นเสียดาย ทำงานนาน ผลงานออกรวดเดียว 3 เรื่อง กลัวคนดูเบื่อหน้า เผยสาเหตุรับงานเยอะ ต้องการใช้เงินก้อนใหญ่ เพิ่งผ่านพ้นงานวิวาห์ไปไม่",
+      "summary": "ณเดชน์ บ่นเสียดาย ทำงานนาน ผลงานออกรวดเดียว 3 เรื่อง กลัวคนดูเบื่อหน้า เผยสาเหตุรับงานเยอะ ต้องการใช้เงินก้อนใหญ่ เพิ่งผ่านพ้นงานวิวาห์ไปไม่",
+      "step1": "ณเดชน์ เปิดใจว่าผลงานใหม่กำลังพร้อมออกอากาศ",
+      "step2": "พระเอกหนุ่มเผยกลัวคนดูเบื่อหน้า แต่ต้องรับงาน",
+      "step3": "เขาจึงลุยงานหนักหลังเพิ่งผ่านงานวิวาห์มาไม่นาน",
+      "follower_score": 88,
+      "phase1_text": "ณเดชน์ รับงานพร้อมกัน 3 เรื่อง เพราะต้องใช้เงินก้อน",
+      "phase2_text": "ณเดชน์ เผยสาเหตุรับงานรัว กลัวคนดูเบื่อหน้า",
+      "phase3_text": "กดติดตามเพื่อไม่พลาดทริคดีๆ",
+      "voiceover_script": "ณเดชน์ คูกิมิยะ เผยว่าตอนนี้มีผลงานพร้อมออกอากาศถึง 3 เรื่องพร้อมกัน ทำให้เขากังวลว่าคนดูจะเบื่อหน้าหรือเปล่า แต่เขาต้องรับงานเยอะเพราะต้องใช้เงินก้อนใหญ่ หลังเพิ่งผ่านงานวิวาห์มาก็ต้องลุยงานหนักแบบนี้เลย ทุกคนว่ายังไงกันบ้างคะ",
+      "hashtags": "#ข่าวด่วน #สรุปข่าว #ประเด็นร้อน",
+      "image_url": "https://www.khaosod.co.th/wpapp/uploads/2026/09/539585_0.jpg",
+      "image_urls": [
+        "https://www.khaosod.co.th/wpapp/uploads/2026/09/539585_0.jpg",
+        "https://www.dailynews.co.th/wp-content/uploads/2025/09/22-3.jpg",
+        "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=1080&auto=format&fit=crop"
+      ],
+      "url": "",
+      "source": "authentic_news_rss"
+    }
+  },
+  "celebrity_trend_ดีเจแมนโต้ใบเตยรับรักใหม่_ลั่นกล_1788679342.mp4": {
+    "product_name": "ดีเจแมนโต้ใบเตยรับรักใหม่ ลั่นกล้าก็ลองดู",
+    "price": "",
+    "category": "สาระความรู้ & คอนเทนต์เพียว",
+    "affiliate_link": "",
+    "is_pure_content": true,
+    "content_mode": "CELEBRITY_TREND",
+    "topic_data": {
+      "title": "ดีเจแมนโต้ใบเตยรับรักใหม่ ลั่นกล้าก็ลองดู",
+      "hook": "ดราม่าร้อน! ดีเจแมนตอบโต้ใบเตยรับรักใหม่",
+      "detail": "ดราม่าเลย ดีเจแมน พูดแล้วหลัง ใบเตย รับมีรักครั้งใหม่ ลั่นกล้าก็ลองดู คอมเมนต์มีทั้งชื่นชอบเชียร์- แต่อีกมุมตั้งคำถามใช้คำพูดเชิงข่มขู่มั้ย ",
+      "summary": "ดราม่าเลย ดีเจแมน พูดแล้วหลัง ใบเตย รับมีรักครั้งใหม่ ลั่นกล้าก็ลองดู คอมเมนต์มีทั้งชื่นชอบเชียร์- แต่อีกมุมตั้งคำถามใช้คำพูดเชิงข่มขู่มั้ย ",
+      "step1": "ใบเตยลงภาพจับมือปริศนาจนสื่อว่าเธอมองหาความรัก",
+      "step2": "ดีเจแมนโพสต์ข้อความท้าทายว่าใครกล้าก็ลองดูได้เลย",
+      "step3": "ชาวเน็ตวิจารณ์อย่างหนักว่าคำพูดของดีเจแมนดูคล้าย",
+      "follower_score": 88,
+      "phase1_text": "ดราม่าร้อน! ดีเจแมนตอบโต้ใบเตยรับรักใหม่",
+      "phase2_text": "ดีเจแมนโต้ใบเตยรับรักใหม่ ลั่นกล้าก็ลองดู",
+      "phase3_text": "กดติดตามเพื่อไม่พลาดทริคดีๆ",
+      "voiceover_script": "เรื่องราวดราม่าร้อนแรงของคู่รักเก่า ดาราสาวใบเตยเพิ่งลงภาพจับมือปริศนาจนทำเอาแฟนๆ จับตาว่าเธออาจมีรักครั้งใหม่ พอข่าวออกมา ดีเจแมนก็โพสต์ข้อความตอบโต้ทันทีว่าใครกล้าก็ลองดูได้เลย ซึ่งท่าทีแบบนี้ทำเอาชาวเน็ตแตกออกเป็นสองฝ่าย บางคนก็เชียร์ให้ไปต่อ แต่อีกกลุ่มก็ตั้งคำถามว่าคำพูดแบบนี้มันดูน่ากลัวและเหมือนการข่มขู่หรือเปล่า ถ้าเป็นผู้หญิงก็คงรู้สึกไม่สบายใจไม่น้อยเลยนะจ๊ะ",
+      "hashtags": "#ข่าวด่วน #สรุปข่าว #ประเด็นร้อน",
+      "image_url": "https://www.khaosod.co.th/wpapp/uploads/2026/09/djmantoeynewlove69692.jpg",
+      "image_urls": [
+        "https://www.khaosod.co.th/wpapp/uploads/2026/09/djmantoeynewlove69692.jpg",
+        "https://static.naewna.com/uploads/news/source/952377.jpg",
+        "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=1080&auto=format&fit=crop"
+      ],
+      "url": "",
+      "source": "authentic_news_rss"
+    }
+  },
+  "celebrity_trend_ซอคังจุนและอันอึนจินบินมาไทยพบแฟ_1788679374.mp4": {
+    "product_name": "ซอคังจุนและอันอึนจินบินมาไทยพบแฟนคลับในงานเอแฟร์",
+    "price": "",
+    "category": "สาระความรู้ & คอนเทนต์เพียว",
+    "affiliate_link": "",
+    "is_pure_content": true,
+    "content_mode": "CELEBRITY_TREND",
+    "topic_data": {
+      "title": "ซอคังจุนและอันอึนจินบินมาไทยพบแฟนคลับในงานเอแฟร์",
+      "hook": "ซุปตาร์เกาหลีบินลัดฟ้ามาไทย เจอณเดชน์ในงานเอแฟร์",
+      "detail": "ฮัลโหลดารา – ซอคังจุน-อันอึนจิน บินมาเจอแฟนๆ ชาวไทยกับกิจกรรม “A Love Other Than Yours Fan Event” – เที่ยวงาน เอแฟร์ซุปตาร์ พบกับ ณเดชน์ คูก",
+      "summary": "ฮัลโหลดารา – ซอคังจุน-อันอึนจิน บินมาเจอแฟนๆ ชาวไทยกับกิจกรรม “A Love Other Than Yours Fan Event” – เที่ยวงาน เอแฟร์ซุปตาร์ พบกับ ณเดชน์ คูก",
+      "step1": "ซอคังจุนและอันอึนจินบินมาไทยจัดแฟนมีตต้อนรับ",
+      "step2": "ทั้งคู่เข้าเที่ยวงานเอแฟร์ซุปตาร์และได้พบปะณ",
+      "step3": "กิจกรรมนี้เป็นการโปรโมทซีรีส์เรื่องเมื่อหัวใจมี",
+      "follower_score": 88,
+      "phase1_text": "ซุปตาร์เกาหลีบินลัดฟ้ามาไทย เจอณเดชน์ในงานเอแฟร์",
+      "phase2_text": "ซอคังจุนและอันอึนจินบินมาไทยพบแฟนคลับในงานเอแฟร์",
+      "phase3_text": "กดติดตามเพื่อไม่พลาดทริคดีๆ",
+      "voiceover_script": "ป้าเข็มขอพาไปอัปเดตข่าวบันเทิงสุดฮอตเลยค่ะ วันนี้สองหนุ่มหล่อจากเกาหลีอย่างซอคังจุนและอันอึนจินบินลัดฟ้ามาพบแฟนๆ ชาวไทยในงานแฟนมีตติ้งที่จัดขึ้นเป็นพิเศษ โดยระหว่างร่วมงานเอแฟร์ซุปตาร์ ทั้งคู่ยังได้มีโอกาสพบปะพูดคุยกับพระเอกหนุ่มณเดชน์คูกิมิยะอย่างใกล้ชิด ซึ่งถือเป็นโมเมนต์น่ารักๆ ที่แฟนคลับจับตามองกันอย่างมาก สำหรับใครที่อยากรู้ว่าบรรยากาศงานเป็นอย่างไรและมีการพูดคุยกันเรื่องอะไรบ้าง ลองไปติดตามชมคลิปเต็มๆ กันได้เลยนะคะ",
+      "hashtags": "#ข่าวด่วน #สรุปข่าว #ประเด็นร้อน",
+      "image_url": "https://www.khaosod.co.th/wpapp/uploads/2026/09/hello050926-2.jpg",
+      "image_urls": [
+        "https://www.khaosod.co.th/wpapp/uploads/2026/09/hello050926-2.jpg",
+        "https://www.thebangkokinsight.com/wp-content/uploads/2026/09/sojun.png",
+        "https://www.thebangkokinsight.com/wp-content/uploads/2026/09/%E0%B8%8B%E0%B8%AD%E0%B8%84%E0%B8%B1%E0%B8%87%E0%B8%88%E0%B8%B8%E0%B8%99gal-189570-20260902014258-d4fd21e.jpg"
+      ],
+      "url": "",
+      "source": "authentic_news_rss"
+    }
   }
 }
