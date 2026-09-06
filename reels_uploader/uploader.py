@@ -171,13 +171,16 @@ def normalize_video(src: Path, dst: Path, ffmpeg: str | None = None) -> bool:
 
 def load_products() -> dict:
     """video filename → {product_name, price, category, affiliate_link}"""
-    if not PRODUCTS_JSON.exists():
-        return {}
-    try:
-        return json.loads(PRODUCTS_JSON.read_text(encoding="utf-8"))
-    except Exception as e:
-        log(f"[WARN] products.json อ่านไม่ได้ ({e}) — ใช้แคปชั่น generic")
-        return {}
+    paths = [PRODUCTS_JSON, ROOT / "reels_uploader" / "products.json"]
+    for p in paths:
+        if p.exists():
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+                if data:
+                    return data
+            except Exception as e:
+                log(f"[WARN] {p.name} อ่านไม่ได้ ({e})")
+    return {}
 
 
 def is_image(path: Path) -> bool:

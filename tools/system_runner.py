@@ -104,19 +104,16 @@ def run_prebuffer_producer_loop():
             pending = uploader.list_pending()
             if len(pending) < 4:
                 needed = 4 - len(pending)
-                logger.info(f"📦 คิวคลิปพร้อมโพสต์เหลือ {len(pending)} คลิป — กำลังผลิตเติมคลัง {needed} คลิป (90% ไวรัล / 10% สินค้า)...")
+                logger.info(f"📦 คิวคลิปพร้อมโพสต์เหลือ {len(pending)} คลิป — กำลังผลิตเติมคลัง {needed} คลิป (คนดัง 70% / ข่าวเรียลไทม์ 30%)...")
                 for _ in range(needed):
-                    # 90% คอนเทนต์หยุดดู 3 วิ (เน้นข่าวดาราคนดัง 70% + ข่าวดังบนโซเชียล 30%) / 10% สินค้า Shopee
-                    if random.random() < 0.90:
-                        cat = random.choices(
-                            ["CELEBRITY_TREND", "TRENDING_NEWS"],
-                            weights=[70, 30]
-                        )[0]
-                        res = standalone_content_generator.generate_standalone_reel(cat)
-                        if res:
-                            logger.info(f"✨ ผลิตคลิปไวรัล 3 วิสำเร็จ [{cat}]: {res.get('title')}")
-                    else:
-                        generate_product_reels(limit=1, selection=product_selection_mode())
+                    # ล็อค 100% คอนเทนต์คนดัง 70% + ข่าวเรียลไทม์ 30% (ปิดสินค้า Shopee / หมวดอื่น 0%)
+                    cat = random.choices(
+                        ["CELEBRITY_TREND", "TRENDING_NEWS"],
+                        weights=[70, 30]
+                    )[0]
+                    res = standalone_content_generator.generate_standalone_reel(cat)
+                    if res:
+                        logger.info(f"✨ ผลิตคลิปสำเร็จ [{cat}]: {res.get('title')}")
         except Exception as e:
             logger.warning(f"⚠️ Pre-buffer producer warning: {e}")
         time.sleep(90)  # ตรวจสอบทุก 90 วินาที
@@ -149,13 +146,13 @@ def generate_smart_caption_for_user_video(video_title: str) -> str:
             from openai import OpenAI
             client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=k)
             resp = client.chat.completions.create(
-                model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+                model=os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
                 messages=[
                     {"role": "system", "content": "คุณคือผู้เชี่ยวชาญการเขียนแคปชั่นโซเชียลมีเดียภาษาไทย เขียนกระชับ โดนใจ ตรงเนื้อหา"},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,
-                max_tokens=250,
+                max_tokens=350,
                 timeout=20
             )
             out = (resp.choices[0].message.content or "").strip()
@@ -324,13 +321,10 @@ def execute_unified_broadcast(
             try:
                 import standalone_content_generator
                 import random
-                cat = random.choice([
-                    "TRENDING_NEWS",
+                cat = random.choices([
                     "CELEBRITY_TREND",
-                    "LIFE_HACK_TIP",
-                    "WORK_PRODUCTIVITY",
-                    "LUCKY_FORTUNE",
-                ])
+                    "TRENDING_NEWS",
+                ], weights=[70, 30])[0]
                 res_gen = standalone_content_generator.generate_standalone_reel(cat)
                 if res_gen and res_gen.get("video_path"):
                     candidate = Path(res_gen["video_path"])

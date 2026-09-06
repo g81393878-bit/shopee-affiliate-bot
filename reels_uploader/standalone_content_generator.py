@@ -1499,25 +1499,41 @@ def generate_standalone_reel(
         logger.error(f"❌ ผลิตคลิปคอนเทนต์ล้มเหลว: {filename}")
         return None
 
-    # บันทึก metadata ลง products.json เพื่อให้ uploader โพสต์ได้ถูกต้อง
-    products_json_path = REELS_DIR / "products.json"
+    # บันทึก metadata ลง products.json ทั้ง 2 จุด เพื่อให้ uploader ทุกตัวอ่านได้ตรงกัน
     products_meta = {}
-    if products_json_path.exists():
-        try:
-            products_meta = json.loads(products_json_path.read_text(encoding="utf-8"))
-        except Exception:
-            products_meta = {}
+    for p_path in [REELS_DIR / "products.json", ROOT_DIR / "products.json"]:
+        if p_path.exists():
+            try:
+                loaded = json.loads(p_path.read_text(encoding="utf-8"))
+                if loaded:
+                    products_meta.update(loaded)
+            except Exception:
+                pass
 
     products_meta[filename] = {
         "product_name": topic_data.get("title", "สาระน่ารู้ เรื่องเด็ดประจำวัน"),
         "price": "",
-        "category": "สาระความรู้ & คอนเทนต์เพียว",
+        "category": "ดารา & ข่าวเรียลไทม์" if selected_mode == "CELEBRITY_TREND" else "ข่าวด่วนเรียลไทม์",
         "affiliate_link": "",
         "is_pure_content": True,
         "content_mode": selected_mode,
         "topic_data": topic_data
     }
-    products_json_path.write_text(json.dumps(products_meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    for p_path in [REELS_DIR / "products.json", ROOT_DIR / "products.json"]:
+        try:
+            p_path.write_text(json.dumps(products_meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
+    # บันทึกไฟล์แคปชั่นคู่ (.txt sidecar) เคียงข้างไฟล์วิดีโอเสมอ
+    try:
+        sidecar_txt = target_path.with_suffix(".txt")
+        sidecar_caption = build_standalone_caption(selected_mode, topic_data, platform="facebook")
+        sidecar_txt.write_text(sidecar_caption, encoding="utf-8")
+        logger.info(f"📄 บันทึกไฟล์แคปชั่นคู่ (.txt sidecar) สำเร็จ: {sidecar_txt.name}")
+    except Exception as e_sidecar:
+        logger.warning(f"⚠️ บันทึกไฟล์แคปชั่นคู่ (.txt sidecar) ล้มเหลว: {e_sidecar}")
+
     logger.info(f"✅ ผลิตคลิปคอนเทนต์เพียวสำเร็จพร้อม Hero Visual Image -> {filename}")
 
     return {
