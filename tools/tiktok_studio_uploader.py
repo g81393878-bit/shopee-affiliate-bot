@@ -304,7 +304,7 @@ def upload_video_via_web(
             log("🎉 อัปโหลดและสั่งโพสต์คลิปขึ้น TikTok สำเร็จ 100%!")
 
             browser.close()
-            cookie_fname = cookie_path.name if cookie_path else "tiktok_cookies.json"
+            cookie_fname = target_cookie.name if target_cookie else "tiktok_cookies.json"
             direct_channel_url = TIKTOK_CHANNEL_PROFILES.get(cookie_fname, "https://www.tiktok.com/@cheepao.review")
             return {
                 "success": True,
