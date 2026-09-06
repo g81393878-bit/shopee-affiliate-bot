@@ -25,6 +25,8 @@ tools/render_env.local.json
 tools/render2_env_export.txt
 tools/client_secret*.json
 client_secret*.json
+tools/google_workspace_token*.json
+google_workspace_token*.json
 tools/youtube_token*.json
 youtube_token*.json
 tools/tiktok_token*.json
