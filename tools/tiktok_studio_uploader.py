@@ -36,6 +36,13 @@ UPLOAD_URL = "https://www.tiktok.com/tiktokstudio/upload"
 LOGIN_URL = "https://www.tiktok.com/login"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
+TIKTOK_CHANNEL_PROFILES = {
+    "tiktok_cookies.json": "https://www.tiktok.com/@healthgooddeals",
+    "tiktok_cookies_2.json": "https://www.tiktok.com/@cheepao.review",
+    "tiktok_cookies_3.json": "https://www.tiktok.com/@pakhem.review99",
+    "tiktok_cookies_4.json": "https://www.tiktok.com/@khonyangmefan",
+}
+
 
 def get_available_tiktok_accounts():
     """ค้นหาไฟล์คุกกี้ของทุกบัญชี TikTok ที่มีในระบบ (tiktok_cookies.json, tiktok_cookies_2.json, ...)"""
@@ -297,10 +304,12 @@ def upload_video_via_web(
             log("🎉 อัปโหลดและสั่งโพสต์คลิปขึ้น TikTok สำเร็จ 100%!")
 
             browser.close()
+            cookie_fname = cookie_path.name if cookie_path else "tiktok_cookies.json"
+            direct_channel_url = TIKTOK_CHANNEL_PROFILES.get(cookie_fname, "https://www.tiktok.com/@cheepao.review")
             return {
                 "success": True,
                 "message": "Video published to TikTok successfully via Web Studio",
-                "video_url": "https://www.tiktok.com/@me"
+                "video_url": direct_channel_url
             }
 
         except Exception as e:

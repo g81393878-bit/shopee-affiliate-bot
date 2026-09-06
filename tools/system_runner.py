@@ -467,18 +467,24 @@ def execute_unified_broadcast(
         "tiktok_cookies_3": "https://www.tiktok.com/@pakhem.review99",
         "tiktok_cookies_4": "https://www.tiktok.com/@khonyangmefan",
     }
-    tt_url = res_tt.get("video_url") or TT_HANDLE_MAP.get(account_key, "")
+    raw_tt = res_tt.get("video_url") or ""
+    if not raw_tt or "/@me" in raw_tt:
+        tt_url = TT_HANDLE_MAP.get(account_key, "https://www.tiktok.com/@cheepao.review")
+    else:
+        tt_url = raw_tt
 
     fb_urls = []
     yt_urls = []
-    urls_file = ROOT_DIR / "last_broadcast_urls.json"
-    if urls_file.exists():
-        try:
-            u_data = json.loads(urls_file.read_text(encoding="utf-8"))
-            fb_urls = u_data.get("fb", [])
-            yt_urls = u_data.get("yt", [])
-        except Exception:
-            pass
+    for candidate_urls_file in [ROOT_DIR / "last_broadcast_urls.json", ROOT_DIR / "reels_uploader" / "last_broadcast_urls.json"]:
+        if candidate_urls_file.exists():
+            try:
+                u_data = json.loads(candidate_urls_file.read_text(encoding="utf-8"))
+                if u_data.get("fb") or u_data.get("yt"):
+                    fb_urls = u_data.get("fb", [])
+                    yt_urls = u_data.get("yt", [])
+                    break
+            except Exception:
+                pass
 
     # จัดรูปแบบแสดงผลลิงก์ของแต่ละช่องทาง
     channels_lines = []

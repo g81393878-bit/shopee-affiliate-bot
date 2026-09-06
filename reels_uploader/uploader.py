@@ -1036,6 +1036,7 @@ def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True
                     "yt": [y.get("url") for y in yt_results if y.get("url")]
                 }
                 (ROOT / "last_broadcast_urls.json").write_text(json.dumps(latest_urls, ensure_ascii=False, indent=2), encoding="utf-8")
+                (ROOT.parent / "last_broadcast_urls.json").write_text(json.dumps(latest_urls, ensure_ascii=False, indent=2), encoding="utf-8")
             except Exception:
                 pass
             
