@@ -460,7 +460,50 @@ def execute_unified_broadcast(
         except Exception as e_mv:
             logger.warning(f"⚠️ ย้ายคลิปเข้า posted/ ล้มเหลว: {e_mv}")
 
-    # 8. ส่งแจ้งเตือนสรุปครบทุกแพลตฟอร์มเข้า Telegram Commander
+    # 8. ดึง URL ตรงจากทุกช่องทางที่เผยแพร่สำเร็จ
+    TT_HANDLE_MAP = {
+        "tiktok_cookies": "https://www.tiktok.com/@healthgooddeals",
+        "tiktok_cookies_2": "https://www.tiktok.com/@cheepao.review",
+        "tiktok_cookies_3": "https://www.tiktok.com/@pakhem.review99",
+        "tiktok_cookies_4": "https://www.tiktok.com/@khonyangmefan",
+    }
+    tt_url = res_tt.get("video_url") or TT_HANDLE_MAP.get(account_key, "")
+
+    fb_urls = []
+    yt_urls = []
+    urls_file = ROOT_DIR / "last_broadcast_urls.json"
+    if urls_file.exists():
+        try:
+            u_data = json.loads(urls_file.read_text(encoding="utf-8"))
+            fb_urls = u_data.get("fb", [])
+            yt_urls = u_data.get("yt", [])
+        except Exception:
+            pass
+
+    # จัดรูปแบบแสดงผลลิงก์ของแต่ละช่องทาง
+    channels_lines = []
+    if tt_success:
+        channels_lines.append(f"  • ⚫ TikTok: ✅ โพสต์สำเร็จ ({display_channel})\n    👉 {tt_url}")
+    else:
+        channels_lines.append(f"  • ⚫ TikTok: ⚠️ {res_tt.get('error', 'ไม่สำเร็จ')} ({display_channel})")
+
+    if fb_urls:
+        fb_sub = "\n".join([f"    👉 {u}" for u in fb_urls])
+        channels_lines.append(f"  • 🔵 Facebook Reels ({len(fb_urls)} เพจ):\n{fb_sub}")
+    else:
+        fb_yt_badge = "✅ โพสต์สำเร็จ 100%" if res_fb_yt == 0 else "⚠️ ตรวจสอบผลลัพธ์"
+        channels_lines.append(f"  • 🔵 Facebook Reels: {fb_yt_badge}")
+
+    if yt_urls:
+        yt_sub = "\n".join([f"    👉 {u}" for u in yt_urls])
+        channels_lines.append(f"  • 🔴 YouTube Shorts:\n{yt_sub}")
+    else:
+        fb_yt_badge = "✅ โพสต์สำเร็จ 100%" if res_fb_yt == 0 else "⚠️ ตรวจสอบผลลัพธ์"
+        channels_lines.append(f"  • 🔴 YouTube Shorts: {fb_yt_badge}")
+
+    channels_text = "\n".join(channels_lines)
+
+    # 9. ส่งแจ้งเตือนสรุปครบทุกแพลตฟอร์มเข้า Telegram Commander
     try:
         from telegram_notifier import send_telegram_notification
         counts_list = []
@@ -468,20 +511,14 @@ def execute_unified_broadcast(
             c_val = daily_data["counts"].get(acc_file.stem, 0)
             counts_list.append(f"ช่อง {idx}={c_val}/{daily_target}")
         counts_summary = " | ".join(counts_list)
-
-        tt_badge = "✅ โพสต์สำเร็จ 100%" if tt_success else f"⚠️ ไม่สำเร็จ ({res_tt.get('error', 'ข้าม')})"
-        fb_yt_badge = "✅ โพสต์สำเร็จ 100%" if res_fb_yt == 0 else "⚠️ ตรวจสอบผลลัพธ์"
         remaining_pending = len(uploader.list_pending())
 
         msg_tg = (
             f"🚀 [TikTok-Led Unified Broadcast สำเร็จ]\n"
             f"━━━━━━━━━━━━━━━━━━\n"
-            f"🎬 คลิป: {v_title[:45]}\n\n"
-            f"🌐 สถานะการกระจายช่องทาง:\n"
-            f"  • ⚫ TikTok: {tt_badge}\n"
-            f"    👉 ช่อง: {display_channel} (ยอดวันนี้: {cur_ch_count}/{daily_target})\n"
-            f"  • 🔵 Facebook Reels (2 เพจ): {fb_yt_badge}\n"
-            f"  • 🔴 YouTube Shorts (6 ช่องหมุนเวียน): {fb_yt_badge}\n\n"
+            f"🎬 คลิป: {v_title[:50]}\n\n"
+            f"🌐 ลิงก์ที่เผยแพร่ตามช่องทางต่างๆ:\n"
+            f"{channels_text}\n\n"
             f"📊 สรุปยอดโพสต์ TikTok วันนี้:\n"
             f"  • {counts_summary}\n"
             f"  • 📦 คลิปในคลังคงเหลือ: {remaining_pending} คลิป\n"
@@ -496,7 +533,12 @@ def execute_unified_broadcast(
         "success": tt_success or (res_fb_yt == 0),
         "video": candidate.name,
         "tiktok": res_tt,
-        "fb_yt_code": res_fb_yt
+        "fb_yt_code": res_fb_yt,
+        "urls": {
+            "tiktok": tt_url if tt_success else None,
+            "facebook": fb_urls,
+            "youtube": yt_urls
+        }
     }
 
 

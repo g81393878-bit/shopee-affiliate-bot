@@ -1029,14 +1029,24 @@ def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True
             pending_count = len(list_pending())
             today_count = get_today_post_count()
             
+            # บันทึกลิงก์สดลง last_broadcast_urls.json เพื่อให้ระบบรายงาน Telegram มีลิงก์ครบทุกช่องทาง
+            try:
+                latest_urls = {
+                    "fb": [f"https://www.facebook.com/reel/{r['video_id']}" for r in page_results if r.get("ok") and r.get("video_id")],
+                    "yt": [y.get("url") for y in yt_results if y.get("url")]
+                }
+                (ROOT / "last_broadcast_urls.json").write_text(json.dumps(latest_urls, ensure_ascii=False, indent=2), encoding="utf-8")
+            except Exception:
+                pass
+            
+            shopee_section = f"🛒 ลิงก์ร้านค้า Shopee:\n  • 👉 {aff_link}\n\n" if aff_link else ""
             notify_msg = (
                 f"🚀 [รายงานการโพสต์วิดีโอ 4 แพลตฟอร์ม]\n"
                 f"━━━━━━━━━━━━━━━━━━\n"
                 f"📦 สินค้า: {pname[:60]}\n\n"
                 f"🌐 ช่องทางที่เผยแพร่สำเร็จ:\n"
                 f"{channels_text}\n\n"
-                f"🛒 ลิงก์ร้านค้า Shopee:\n"
-                f"  • 👉 {aff_link}\n\n"
+                f"{shopee_section}"
                 f"📊 สรุปผลงานวันนี้ & รอบถัดไป:\n"
                 f"  • 🎯 ยอดโพสต์วันนี้: {today_count} / 48 คลิป (อัตราสำเร็จ 100%)\n"
                 f"  • 📦 คลิปในคลังพร้อมโพสต์: {pending_count} คลิป\n"
