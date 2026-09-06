@@ -535,6 +535,26 @@ def execute_unified_broadcast(
     except Exception as e_tg:
         logger.warning(f"⚠️ ส่งแจ้งเตือน Telegram ไม่สำเร็จ: {e_tg}")
 
+    # 10. บันทึกผลการเผยแพร่ลง Google Sheets อัตโนมัติ (แทรกที่แถว 2 บนสุด)
+    try:
+        from google_sheets_logger import log_broadcast_async
+        p1_link = fb_urls[0] if len(fb_urls) > 0 else "-"
+        p2_link = fb_urls[1] if len(fb_urls) > 1 else "-"
+        yt_link = yt_urls[0] if yt_urls else "-"
+        cat_label = "คนดัง (CELEBRITY_TREND)" if "celebrity" in candidate.name.lower() else "ข่าวเรียลไทม์ (TRENDING_NEWS)" if "trending" in candidate.name.lower() else "ทั่วไป"
+
+        log_broadcast_async(
+            title=v_title,
+            category=cat_label,
+            tiktok_url=tt_url if tt_success else "-",
+            fb_reel_1=p1_link,
+            fb_reel_2=p2_link,
+            yt_shorts_url=yt_link,
+            status="✅ เผยแพร่สำเร็จ 100%"
+        )
+    except Exception as e_sheet:
+        logger.warning(f"⚠️ เรียกบันทึก Google Sheets ไม่สำเร็จ: {e_sheet}")
+
     return {
         "success": tt_success or (res_fb_yt == 0),
         "video": candidate.name,
