@@ -215,9 +215,9 @@ def execute_post_command():
             from system_runner import execute_unified_broadcast
             res = execute_unified_broadcast(force=True)
             if res.get("success"):
-                send_tg_message(f"✅ [คำสั่งโพสต์ด่วนเสร็จสิ้น 100%]\n• 🎬 คลิป: {res.get('video')}\n• กระจายครบ TikTok, Facebook Reels, YouTube Shorts เรียบร้อยแล้วครับ", reply_markup=get_main_menu_markup())
+                send_tg_message(f"✅ [คำสั่งโพสต์ด่วนเสร็จสิ้น 100%]\n• 🎬 คลิป: {res.get('video')}\n• กระจายครบ TikTok, Facebook Reels, YouTube Shorts เรียบร้อยแล้วครับ")
             else:
-                send_tg_message(f"⚠️ [ผลการโพสต์ด่วน]\n• {res.get('error', 'ไม่สามารถโพสต์ได้ในรอบนี้')}", reply_markup=get_main_menu_markup())
+                send_tg_message(f"⚠️ [ผลการโพสต์ด่วน]\n• {res.get('error', 'ไม่สามารถโพสต์ได้ในรอบนี้')}")
         except Exception as e:
             send_tg_message(f"❌ โพสต์ด่วนเกิดข้อผิดพลาด: {e}")
 
@@ -246,7 +246,7 @@ def execute_refresh_metrics_command():
             from update_sheet_metrics import update_all_metrics_in_sheet, get_sheet_summary
             count = update_all_metrics_in_sheet()
             summary = get_sheet_summary()
-            send_tg_message(f"✅ [อัปเดตสถิติลง Google Sheets เรียบร้อย {count} รายการ]\n\n{summary}", reply_markup=get_main_menu_markup())
+            send_tg_message(f"✅ [อัปเดตสถิติลง Google Sheets เรียบร้อย {count} รายการ]\n\n{summary}")
         except Exception as e:
             send_tg_message(f"❌ ซิงค์สถิติยอดวิวไม่สำเร็จ: {e}")
 
@@ -262,7 +262,7 @@ def execute_produce_command():
             generate_product_reels(limit=3)
             import uploader
             pending = uploader.list_pending()
-            send_tg_message(f"🎉 [ผลิตคลิปเสร็จสมบูรณ์ 100%!]\nขณะนี้ในคลังมีคลิปพร้อมโพสต์ทั้งหมด: {len(pending)} คลิปจ้า", reply_markup=get_main_menu_markup())
+            send_tg_message(f"🎉 [ผลิตคลิปเสร็จสมบูรณ์ 100%!]\nขณะนี้ในคลังมีคลิปพร้อมโพสต์ทั้งหมด: {len(pending)} คลิปจ้า")
         except Exception as e:
             send_tg_message(f"❌ โรงงานผลิตคลิปเกิดข้อผิดพลาด: {e}")
 
@@ -335,17 +335,17 @@ def handle_telegram_update(update: dict):
             return
             
         if data == "cmd_status":
-            send_tg_message(execute_status_command(), reply_markup=get_main_menu_markup(), target_chat_id=chat_id)
+            send_tg_message(execute_status_command(), target_chat_id=chat_id)
         elif data == "cmd_post":
             execute_post_command()
         elif data == "cmd_sheet":
-            send_tg_message(execute_sheet_command(), reply_markup=get_main_menu_markup(), target_chat_id=chat_id)
+            send_tg_message(execute_sheet_command(), target_chat_id=chat_id)
         elif data == "cmd_refresh_metrics":
             execute_refresh_metrics_command()
         elif data == "cmd_produce":
             execute_produce_command()
         elif data == "cmd_stock":
-            send_tg_message(execute_stock_command(), reply_markup=get_main_menu_markup(), target_chat_id=chat_id)
+            send_tg_message(execute_stock_command(), target_chat_id=chat_id)
         elif data == "cmd_restart":
             send_tg_message("🔄 กำลังสั่งรีสตาร์ทบอทบน VPS...", target_chat_id=chat_id)
             def _restart():
@@ -375,26 +375,21 @@ def handle_telegram_update(update: dict):
             welcome = (
                 "👑 [PaKhem Commander — แผงควบคุมบอท 24/7]\n"
                 "━━━━━━━━━━━━━━━━━━\n"
-                "ยินดีต้อนรับครับ! คุณสามารถกดสั่งการบอทได้ 3 ทาง:\n"
-                "1. 📱 แผงปุ่มกดที่ตรึงอยู่ด้านล่างหน้าจอ\n"
-                "2. 🔘 ปุ่มกดเมนูด้านล่างข้อความนี้\n"
-                "3. 📋 เมนูลัดสีฟ้ามุมซ้ายล่าง [/]\n\n"
+                "แผงสั่งการพร้อมทำงานแล้วครับ! แตะปุ่มที่ตรึงอยู่ด้านล่างหน้าจอเพื่อสั่งการได้ทันทีเลยครับ\n\n"
                 "💬 การตอบแชทลูกค้า LINE:\n"
                 "พิมพ์: `/reply <userId> <ข้อความ>`\n"
-                "เช่น: `/reply U12345678 ขอบคุณที่สนใจครับ`"
+                "เช่น: `/reply สวัสดีครับ ยินดีให้บริการครับ`"
             )
-            # ส่งทั้งแผงปุ่มล่างจอและ Inline เมนู
             send_tg_message(welcome, reply_markup=get_persistent_keyboard_markup(), target_chat_id=chat_id)
-            send_tg_message("👇 หรือเลือกสั่งการจากปุ่มด่วนตรงนี้ได้ทันทีครับ:", reply_markup=get_main_menu_markup(), target_chat_id=chat_id)
             
         elif lower in ("/status", "สถานะ", "status", "เช็คระบบ", "📊 เช็คสถานะสด") or "เช็คสถานะ" in lower:
-            send_tg_message(execute_status_command(), reply_markup=get_main_menu_markup(), target_chat_id=chat_id)
+            send_tg_message(execute_status_command(), target_chat_id=chat_id)
 
         elif lower in ("/post", "โพสต์", "post", "ยิงคลิป", "🚀 สั่งโพสต์คลิปทันที") or "สั่งโพสต์" in lower:
             execute_post_command()
 
         elif lower in ("/sheet", "/stats", "/ชีท", "/สถิติ", "/views", "sheet", "ชีท", "ยอดวิว", "📈 ดูชีทยอดวิว") or "ดูชีท" in lower:
-            send_tg_message(execute_sheet_command(), reply_markup=get_main_menu_markup(), target_chat_id=chat_id)
+            send_tg_message(execute_sheet_command(), target_chat_id=chat_id)
 
         elif lower in ("/sync", "/refresh_metrics", "/sync_metrics", "sync", "ซิงค์", "ซิงค์ยอดวิว", "อัปเดตยอดวิว", "🔄 ซิงค์ยอดวิวชีท") or "ซิงค์" in lower:
             execute_refresh_metrics_command()
@@ -403,7 +398,7 @@ def handle_telegram_update(update: dict):
             execute_produce_command()
 
         elif lower in ("/stock", "สต็อก", "คลัง", "stock", "📦 ดูคลังวิดีโอ") or "คลัง" in lower:
-            send_tg_message(execute_stock_command(), reply_markup=get_main_menu_markup(), target_chat_id=chat_id)
+            send_tg_message(execute_stock_command(), target_chat_id=chat_id)
 
         elif lower in ("/restart", "รีสตาร์ท", "🔄 รีสตาร์ทบอท VPS") or "รีสตาร์ท" in lower:
             send_tg_message("🔄 กำลังสั่งรีสตาร์ทบอทบน VPS...", target_chat_id=chat_id)
@@ -447,14 +442,13 @@ def handle_telegram_update(update: dict):
 
             if target_uid and reply_content:
                 res = execute_line_reply(target_uid, reply_content)
-                send_tg_message(res, reply_markup=get_main_menu_markup(), target_chat_id=chat_id)
+                send_tg_message(res, target_chat_id=chat_id)
             else:
                 send_tg_message("⚠️ กรุณาพิมพ์ข้อความที่ต้องการตอบ เช่น:\n`/reply สวัสดีครับ`", target_chat_id=chat_id)
         else:
-            # หากพิมพ์ข้อความอื่น ให้เปิดเมนูช่วยเหลือ
+            # หากพิมพ์ข้อความอื่น ให้แนะนำแตะแผงปุ่ม
             send_tg_message(
-                f"🤖 รับคำสั่ง: “{text}”\nกรุณาเลือกคำสั่งจากแผงปุ่มด้านล่างได้เลยครับ:",
-                reply_markup=get_main_menu_markup(),
+                f"🤖 รับคำสั่ง: “{text}”\nกรุณาแตะสั่งการจากแผงปุ่มด้านล่างหน้าจอได้เลยครับ",
                 target_chat_id=chat_id
             )
 
@@ -476,10 +470,9 @@ def run_telegram_commander_loop():
         welcome_msg = (
             "👑 [PaKhem Commander — เปิดใช้งานแผงควบคุม 24/7]\n"
             "━━━━━━━━━━━━━━━━━━\n"
-            "แผงสั่งการพร้อมทำงานแล้วครับ! สามารถกดปุ่มที่ตรึงไว้ด้านล่างหน้าจอ หรือเลือกจากเมนูด้านล่างนี้ได้ทันที:"
+            "แผงสั่งการพร้อมทำงานแล้วครับ! สามารถแตะปุ่มที่ตรึงไว้ด้านล่างหน้าจอเพื่อสั่งการได้ทันทีเลยครับ"
         )
         send_tg_message(welcome_msg, reply_markup=get_persistent_keyboard_markup())
-        send_tg_message("👇 แผงปุ่มด่วน:", reply_markup=get_main_menu_markup())
     except Exception as e:
         logger.warning(f"⚠️ Startup welcome send error: {e}")
 
