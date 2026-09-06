@@ -1534,6 +1534,14 @@ def generate_standalone_reel(
     except Exception as e_sidecar:
         logger.warning(f"⚠️ บันทึกไฟล์แคปชั่นคู่ (.txt sidecar) ล้มเหลว: {e_sidecar}")
 
+    # ส่งไฟล์วิดีโอตัวเต็มเข้า Telegram แอดมินทันที เพื่อให้กดดูบนมือถือได้
+    try:
+        from telegram_notifier import send_telegram_video
+        caption_preview = f"🎬 [ผลิตคลิปใหม่ตามแม่แบบมาตรฐาน]\n📌 {topic_data.get('title')}\n\n👉 ส่งเข้าคลังพร้อมโพสต์อัตโนมัติ"
+        send_telegram_video(target_path, caption=caption_preview)
+    except Exception as e_tg_v:
+        logger.warning(f"⚠️ ส่งวิดีโอเข้า Telegram ล้มเหลว: {e_tg_v}")
+
     logger.info(f"✅ ผลิตคลิปคอนเทนต์เพียวสำเร็จพร้อม Hero Visual Image -> {filename}")
 
     return {

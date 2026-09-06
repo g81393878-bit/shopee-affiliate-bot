@@ -196,6 +196,12 @@ def create_master_reel_custom(
             "topic_data": topic_data
         }
         products_json_path.write_text(json.dumps(products_meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        try:
+            from telegram_notifier import send_telegram_video
+            caption_preview = f"🎬 [คลิปใหม่สร้างด้วย Master Creator]\n📌 {title or clean_hook}\n\n👉 ขนาด 1080x1920 (9:16 Full HD) พร้อมในคลังรอโพสต์"
+            send_telegram_video(output_path, caption=caption_preview)
+        except Exception:
+            pass
         return output_path
     return None
 

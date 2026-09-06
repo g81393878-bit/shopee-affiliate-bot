@@ -63,6 +63,33 @@ def send_telegram_alert(text: str, parse_mode: str = None) -> bool:
 send_telegram_notification = send_telegram_alert
 
 
+def send_telegram_video(video_path: str | Path, caption: str = "") -> bool:
+    """ส่งไฟล์วิดีโอ .mp4 เข้า Telegram แอดมิน เพื่อให้กดดูบนมือถือได้ทันที"""
+    v_p = Path(video_path)
+    if not v_p.exists() or v_p.stat().st_size == 0:
+        return False
+    token = (os.getenv("TELEGRAM_BOT_TOKEN") or TELEGRAM_BOT_TOKEN or DEFAULT_BOT_TOKEN).strip()
+    chat_id = str(os.getenv("TELEGRAM_CHAT_ID") or TELEGRAM_CHAT_ID or DEFAULT_CHAT_ID).strip()
+    if not token or not chat_id or "mock" in token.lower():
+        return False
+    url = f"https://api.telegram.org/bot{token}/sendVideo"
+    try:
+        import httpx
+        with open(v_p, "rb") as f:
+            files = {"video": (v_p.name, f, "video/mp4")}
+            data = {"chat_id": chat_id, "caption": caption[:1024]}
+            r = httpx.post(url, data=data, files=files, timeout=60.0)
+            if r.status_code == 200:
+                logger.info(f"[TELEGRAM] ส่งวิดีโอสำเร็จ: {v_p.name}")
+                return True
+            else:
+                logger.warning(f"[TELEGRAM] ส่งวิดีโอล้มเหลว HTTP {r.status_code}: {r.text[:200]}")
+    except Exception as e:
+        logger.warning(f"[TELEGRAM] ส่งวิดีโอล้มเหลว: {e}")
+    return False
+
+
+
 if __name__ == "__main__":
     test_msg = (
         "🚀 [PaKhem Commander — ทดสอบระบบแจ้งเตือน]\n"
