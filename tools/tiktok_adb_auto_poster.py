@@ -241,9 +241,8 @@ def post_via_u2(d, video_path: pathlib.Path, caption: str = "") -> bool:
     time.sleep(5)
 
 def build_tiktok_caption(video_path: pathlib.Path) -> str:
-    """สร้างแคปชั่นภาษาไทยและแฮชแท็กไวรัลตรงตามหมวดหมู่อัตโนมัติ"""
+    """สร้างแคปชั่นภาษาไทยและชุดแฮชแท็กระดับท็อป (TikTok Creative Center + Official SEO) อัตโนมัติ"""
     name = video_path.stem
-    # ตัด timestamp ตัวเลขท้ายไฟล์
     clean_title = re.sub(r"_\d{9,12}$", "", name)
     
     category = "general"
@@ -259,14 +258,15 @@ def build_tiktok_caption(video_path: pathlib.Path) -> str:
 
     clean_title = clean_title.replace("_", " ").strip()
 
+    # ชุดแฮชแท็กคัดสรรตามร่องรอยดิจิทัล TikTok Thailand (SEO 2026)
     if category == "celebrity":
-        hashtags = "#ข่าวดารา #ดาราดัง #เรื่องนี้ต้องดู #ข่าวด่วน #tiktokคนบันเทิง #fyp"
+        hashtags = "#เทรนด์วันนี้ #เรื่องนี้ต้องดู #ข่าวดารา #tiktokคนบันเทิง #ข่าวtiktok #fyp"
     elif category == "news":
-        hashtags = "#ข่าวด่วน #ข่าวtiktok #เรื่องเด่นวันนี้ #tiktoknews #เทรนด์วันนี้ #fyp"
+        hashtags = "#เทรนด์วันนี้ #เรื่องนี้ต้องดู #ข่าวtiktok #ข่าวด่วน #tiktoknews #fyp"
     elif category == "product":
-        hashtags = "#ของดีบอกต่อ #รีวิวของดี #ของใช้ในบ้าน #พิกัดshopee #ป้าเข็มรีวิว #fyp"
+        hashtags = "#ของดีบอกต่อ #TikTokป้ายยา #ของใช้ในบ้าน #พิกัดshopee #ขายดี #ป้าเข็มรีวิว"
     else:
-        hashtags = "#เทรนด์วันนี้ #เรื่องนี้ต้องดู #สาระน่ารู้ #viralthailand #fyp"
+        hashtags = "#เทรนด์วันนี้ #เรื่องนี้ต้องดู #TikTokUni #สาระน่ารู้ #ทริคดีๆ #fyp"
 
     return f"{clean_title} 📌 {hashtags}"
 
