@@ -535,8 +535,12 @@ def build_caption(product: dict) -> str:
         lines.append(f"🛒 สั่งซื้อของแท้ / ดูโปรโมชั่น Shopee 👉 {link}")
     lines.append(f"💬 หรือทักแชทถามป้าเข็มได้ที่ LINE: {line_id} 👉 {line_url}\n")
     
-    fb_tags = "#ของดีบอกต่อ #ของมันต้องมี #ป้าเข็มป้ายยา #ถ้าไม่คุ้มป้าบอกให้ #Shopee"
+    fb_tags = "#FBReels #ของดีบอกต่อ #รีวิวของใช้ #ป้าเข็มป้ายยา #Shopee"
     try:
+        import sys as _sys
+        _tools_dir = str(pathlib.Path(__file__).resolve().parent.parent / "tools")
+        if _tools_dir not in _sys.path:
+            _sys.path.insert(0, _tools_dir)
         from hashtag_intelligence import generate_platform_hashtags
         dyn = generate_platform_hashtags(name, category=cat_key, is_product=True)
         if dyn.get("facebook"):
@@ -546,6 +550,7 @@ def build_caption(product: dict) -> str:
     lines.append(fb_tags)
 
     return "\n".join(lines)
+
 
 
 
