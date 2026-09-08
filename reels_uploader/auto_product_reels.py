@@ -230,12 +230,13 @@ def generate_ai_voice_script(product_name: str, category: str = "", content_mode
             f"- ประโยคที่ 3 (8-10 วิ): CTA เชิญซื้อ เช่น 'เปลี่ยนชีวิตได้ กดดูรายละเอียดที่ลิงก์ในแคปชั่นเลยจ้า!'"
         )
     else:
-        # PRODUCT_HIGHLIGHT (30% ขายสินค้าตรงๆ)
+        # PRODUCT_HIGHLIGHT — ทุกคลิปสินค้าใช้ format Before/After ครบทั้ง 3 จังหวะ:
+        # จังหวะ 1: Hook ปัญหาก่อนใช้ (0-3 วิ) | จังหวะ 2: ผลลัพธ์หลังใช้ (4-7 วิ) | จังหวะ 3: CTA กดลิงก์ (8-10 วิ)
         mode_instruction = (
-            "สไตล์: '🛍️ รีวิวและป้ายยาของแท้ Shopee ยอดขายดี (ขายสินค้าตรงจุด)'\n"
-            "- ประโยคที่ 1 (0-3 วิ): Hook หยุดดูด้วย Pain Point หรือจุดเด่นของสินค้าชิ้นนี้จริงๆ เช่น 'เตือนแล้วนะ! ใครยังไม่มีตัวนี้ติดบ้านคือพลาดมาก'\n"
-            "- ประโยคที่ 2 (4-7 วิ): บอกจุดเด่น ความคุ้มค่า น่าใช้\n"
-            "- ประโยคที่ 3 (8-10 วิ): จบด้วย Call-To-Action เช่น 'กดดูรายละเอียดหรือสั่งซื้อของแท้ที่ลิงก์ในแคปชั่นได้เลยนะจ๊ะ'"
+            f"สไตล์: '🛍️ Before/After + ป้ายยาของแท้ Shopee — ขายสินค้าผ่านการเล่าปัญหาก่อน-ผลลัพธ์หลัง (Storytelling Sell)'\n"
+            f"- ประโยคที่ 1 (0-3 วิ) [HOOK ก่อนใช้]: ระบุปัญหาจริงที่คนเจอก่อนมีสินค้าชิ้นนี้ เช่น '😩 ก่อนจะรู้จัก{product_name[:15]}... ชีวิตยากมาก!' หรือ 'ใครเจอปัญหา [ปัญหาตรงตัวสินค้า] แบบนี้บ้าง?'\n"
+            f"- ประโยคที่ 2 (4-7 วิ) [หลังใช้]: เล่าผลลัพธ์ที่เปลี่ยนไปอย่างตื่นเต้น ชัดเจน น่าเชื่อ เช่น 'แต่พอใช้{product_name[:15]} ชีวิตเปลี่ยนเลย! [จุดเด่น 1-2 ข้อ]'\n"
+            f"- ประโยคที่ 3 (8-10 วิ) [CTA]: ปิดด้วยการชวนกดซื้อ เช่น 'ของแท้ 100% กดดูรายละเอียดที่ลิงก์ในแคปชั่นได้เลยนะจ๊ะ!'"
         )
 
     prompt = (
@@ -700,16 +701,17 @@ def create_product_posters_multiphase(
     try:
         import video_template_engine
         clean_pname = sanitize_public_product_text(clean_display_text(product_name))
+        actual_pid = product_id or seed_id or 0
         takeaways = [
-            f"ของแท้ 100% การันตีคุณภาพ (คะแนน {rating:.1f} ดาว)",
-            f"ยอดขายถล่มทลายกว่า {sales_count:,} ชิ้น รีวิวแน่น",
-            "กดดูพิกัดร้านทางการ Shopee ที่ลิงก์ในแคปชั่น"
+            "ก่อนใช้: เจอปัญหาจุกจิก กวนใจ เสียเวลา",
+            f"หลังใช้: {clean_pname[:18]} แก้ตรงจุด ชีวิตดีขึ้น",
+            f"ของแท้ 100%: ดูพิกัด Shopee ในแคปชั่น หรือทัก LINE พิมพ์ '{actual_pid}'"
         ]
         topic_data = {
             "title": clean_pname,
-            "hook": f"ของดีบอกต่อ! {clean_pname[:30]} แท้ 100%",
+            "hook": f"😩 ก่อนใช้ vs หลังใช้! {clean_pname[:22]}",
             "phase2_text": "ของแท้ร้านทางการ รีวิวแน่น คุณภาพดี",
-            "phase3_text": "กดดูพิกัดร้านแท้ Shopee ที่ลิงก์ในแคปชั่น",
+            "phase3_text": f"กดดูพิกัดร้านแท้ Shopee ในแคปชั่น (รหัส #{actual_pid})",
             "summary": clean_pname,
             "source": "Shopee Official",
         }
@@ -720,7 +722,8 @@ def create_product_posters_multiphase(
             hero_images=hero_images,
             takeaways=takeaways,
             channel_name="Anda",
-            line_id="@137gsref"
+            line_id="@137gsref",
+            product_id=actual_pid
         )
     except Exception as e:
         logger.warning(f"Fallback to legacy poster: {e}")

@@ -274,7 +274,8 @@ def render_cinematic_template_posters(
     hero_images: List[Optional[Image.Image]],
     takeaways: List[str],
     channel_name: str = "Anda",
-    line_id: str = "@137gsref"
+    line_id: str = "@137gsref",
+    product_id: int = 0
 ) -> List[Image.Image]:
     """สร้างโปสเตอร์ 3 จังหวะ 1080x1920 (9:16) ตามเทมเพลตมาตรฐานสตูดิโอ (100% Mute-First)
     
@@ -475,7 +476,28 @@ def render_cinematic_template_posters(
         # 5. Safe Action Bar Footer (y=1515..1605 เว้นพื้นที่ปลอดภัยล่าง 315px ปลอดภัยจากปุ่ม TikTok/Shorts 100%)
         draw.rounded_rectangle([mtc.FOOTER_CONFIG["x1"], mtc.FOOTER_CONFIG["y1"], mtc.FOOTER_CONFIG["x2"], mtc.FOOTER_CONFIG["y2"]], radius=mtc.FOOTER_CONFIG["radius"], fill=mtc.FOOTER_CONFIG["bg_color"], outline=mtc.FOOTER_CONFIG["border_color"], width=mtc.FOOTER_CONFIG["border_w"])
         f_foot = get_font(FONT_BOLD, mtc.FOOTER_CONFIG["font_size"])
-        draw.text((W // 2, (mtc.FOOTER_CONFIG["y1"] + mtc.FOOTER_CONFIG["y2"]) // 2), f"• กดติดตามช่อง {channel_name} • ทัก LINE: {line_id} •", font=f_foot, fill=mtc.FOOTER_CONFIG["text_color"], anchor="mm")
+        if product_id and product_id > 0:
+            foot_msg = f"• พิกัดร้าน Shopee ในแคปชั่น • ทัก LINE {line_id} พิมพ์ '{product_id}' •"
+        else:
+            foot_msg = f"• กดติดตามช่อง {channel_name} • ทัก LINE: {line_id} •"
+        draw.text((W // 2, (mtc.FOOTER_CONFIG["y1"] + mtc.FOOTER_CONFIG["y2"]) // 2), foot_msg, font=f_foot, fill=mtc.FOOTER_CONFIG["text_color"], anchor="mm")
+
+        # ป้ายพิกัดสินค้า 📍 #ID มุมขวาล่างของกรอบรูป (Hero Frame) เด่นชัด สวยงาม ทันสมัย
+        if product_id and product_id > 0:
+            badge_str = f"📍 #{product_id}"
+            f_pid = get_font(FONT_BOLD, 36)
+            try:
+                bbox = draw.textbbox((0, 0), badge_str, font=f_pid)
+                bw = (bbox[2] - bbox[0]) + 36
+                bh = (bbox[3] - bbox[1]) + 20
+            except AttributeError:
+                bw, bh = 140, 48
+            bx2 = hero_x + hero_w - 16
+            by2 = hero_y + hero_h - 16
+            bx1 = bx2 - bw
+            by1 = by2 - bh
+            draw.rounded_rectangle([bx1, by1, bx2, by2], radius=16, fill=(238, 77, 45, 240), outline=(255, 255, 255, 220), width=2)
+            draw.text(((bx1 + bx2) // 2, (by1 + by2) // 2), badge_str, font=f_pid, fill=(255, 255, 255), anchor="mm")
 
         posters.append(canvas.convert("RGB"))
 
