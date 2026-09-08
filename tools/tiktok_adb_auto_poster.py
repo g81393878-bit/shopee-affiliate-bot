@@ -170,7 +170,20 @@ def post_via_u2(d, video_path: pathlib.Path, caption: str = "") -> bool:
     
     log("📱 เปิดแอป TikTok Foreground...")
     d.app_start("com.ss.android.ugc.trill", stop=True)
-    time.sleep(6)
+    d.app_wait("com.ss.android.ugc.trill", timeout=12)
+    time.sleep(4)
+
+    # ตรวจสอบความปลอดภัย 100%: ต้องเป็นแอป TikTok เท่านั้น ห้ามแตะหน้าจอโฮมเด็ดขาด
+    current_pkg = d.app_current().get("package", "")
+    if current_pkg != "com.ss.android.ugc.trill":
+        log(f"⚠️ ตรวจพบว่าแอปปัจจุบันไม่ใช่ TikTok ({current_pkg}) พยายามเปิดใหม่...")
+        d.app_start("com.ss.android.ugc.trill", stop=False)
+        d.app_wait("com.ss.android.ugc.trill", timeout=8)
+        time.sleep(3)
+        current_pkg = d.app_current().get("package", "")
+        if current_pkg != "com.ss.android.ugc.trill":
+            log("❌ ไม่สามารถเปิด TikTok ได้อย่างสมบูรณ์ ข้ามรอบนี้เพื่อความปลอดภัย ไม่แตะหน้าจอโฮมเด็ดขาด")
+            return False
 
     # 3. ค้นหาและกดปุ่ม '+' (สร้าง)
     log("👉 กำลังกดปุ่มสร้าง (+) บน TikTok...")
@@ -190,8 +203,7 @@ def post_via_u2(d, video_path: pathlib.Path, caption: str = "") -> bool:
             break
         time.sleep(2)
 
-    if not clicked_plus:
-        # Fallback พิกัดกึ่งกลางล่าง
+    if not clicked_plus and d.app_current().get("package") == "com.ss.android.ugc.trill":
         w, h = d.window_size()
         d.click(int(w * 0.5), int(h * 0.927))
     
@@ -199,10 +211,11 @@ def post_via_u2(d, video_path: pathlib.Path, caption: str = "") -> bool:
 
     # 4. ตรวจสอบว่าเข้าหน้ากล้องถ่ายรูปสำเร็จ
     if not (d(resourceIdMatches=".*upload.*").exists or d(textContains="อัปโหลด").exists):
-        log("⚠️ ไม่พบปุ่มอัปโหลด (อาจไม่ได้อยู่หน้ากล้อง) ลองกดปุ่มสร้างซ้ำอีกครั้ง...")
-        w, h = d.window_size()
-        d.click(int(w * 0.5), int(h * 0.927))
-        time.sleep(4)
+        if d.app_current().get("package") == "com.ss.android.ugc.trill":
+            log("⚠️ กำลังเข้าสู่หน้ากล้องถ่ายรูป...")
+            w, h = d.window_size()
+            d.click(int(w * 0.5), int(h * 0.927))
+            time.sleep(4)
 
     # 5. กดปุ่ม 'อัปโหลด' คลังภาพ
     log("👉 กำลังเลือกปุ่ม 'อัปโหลด' คลังภาพ...")
