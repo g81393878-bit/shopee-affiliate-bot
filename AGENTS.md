@@ -174,6 +174,10 @@
              - **สเต็ป 3**: เรนเดอร์ 3 โปสเตอร์ตามแม่แบบ (`video_template_engine.render_cinematic_template_posters` ล็อกหัวเรื่องบนสุด)
              - **สเต็ป 4**: ผลิตเสียงพากย์และประกอบวิดีโอ (Edge TTS `rate="+0%"` + FFmpeg 1080x1920 30fps)
              - **สเต็ป 5**: บันทึกประวัติและส่งเข้าคิวรอโพสต์ (`posted_content_history.json` + `products.json` + `pending_videos/` + Dispatch 13 ช่องทาง)
+    32. **ระบบซิงค์วิดีโอเข้ามือถือผ่าน ADB และการแยกอิสระของ TikTok (Strict TikTok ADB Mobile Station & Decoupled Architecture)**:
+        - **ห้ามให้ Error ของ TikTok กระทบระบบหลักเด็ดขาด**: ใน `system_runner.py` การโพสต์ TikTok ต้องถูกห่อหุ้มด้วย `try/except` ป้องกันไม่ให้ส่งผลต่อการบรอดแคสต์ Facebook Reels (3 เพจ) และ YouTube Shorts (6 ช่อง)
+        - **การซิงค์วิดีโอลงมือถือผ่าน ADB**: ใช้โมดูล `tools/tiktok_mobile_sync.py` ในการดาวน์โหลดคลิป 9:16 HD จาก VPS (`reels_uploader/pending_videos`) เข้าสู่อุปกรณ์มือถือ Android จริงผ่าน ADB (`/sdcard/Movies/`) พร้อมยิง Intent `MEDIA_SCANNER_SCAN_FILE` เพื่อให้ไฟล์ขึ้น Gallery บนมือถือเตรียมพร้อมสำหรับโพสต์ผ่านแอป TikTok แท้ 100% หมดปัญหายอดวิวเป็น 0 (Shadowban)
+        - **การบันทึกอีเมลบัญชี YouTube ทั้ง 6 ช่อง**: ต้องรักษารายชื่ออีเมลเจ้าของช่องทั้ง 6 ช่องในคู่มือ `docs/manual/02_YOUTUBE_SHORTS_SETUP.md` ให้เป็นปัจจุบันเสมอเพื่อป้องกันปัญหา Token หมดอายุแล้วไม่ทราบอีเมลล็อกอิน
 
 **API/Admin:** `products-and-links` (สินค้า API + link policy) · `admin-dashboard` (/admin + cookie) · `cron-jobs` (ทุก cron + CRON_TOKEN)
 
