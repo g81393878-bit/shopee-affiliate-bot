@@ -99,32 +99,40 @@ def sync_next_video_from_vps() -> Optional[pathlib.Path]:
         if vid.name not in history:
             return vid
     
-    return downloaded[0] if downloaded else None
+    log("ℹ️ วิดีโอทั้งหมดในคลังถูกโพสต์ไปแล้ว 100% (ไม่มีคลิปใหม่) รอรอบถัดไป...")
+    return None
 
 
 def push_video_to_mobile(device_id: str, video_path: pathlib.Path) -> str:
-    """ลบไฟล์วิดีโอเก่าในโทรศัพท์เพื่อป้องกันคลิปซ้ำ ➔ คัดลอกวิดีโอใหม่เข้า ➔ สั่ง Media Scanner"""
-    target_path = f"/sdcard/Movies/{video_path.name}"
-    log("🧹 กำลังลบวิดีโอเก่าออกจากคลังมือถือเพื่อไม่ให้ค้างคลิปซ้ำ...")
-    run_adb(["shell", "rm", "-f", "/sdcard/Movies/*.mp4"], device_id=device_id)
+    """ลบไฟล์วิดีโอเก่าทั้งหมดทุกโฟลเดอร์ในโทรศัพท์ (DCIM/Camera, Movies, Download) เพื่อให้คลังภาพมีแค่คลิปใหม่คลิปเดียวเท่านั้น"""
+    timestamp = int(time.time())
+    safe_name = f"tiktok_video_{timestamp}.mp4"
+    target_path = f"/sdcard/Movies/{safe_name}"
+    
+    log("🧹 กำลังลบวิดีโอเก่าออกจากทุกโฟลเดอร์มือถือ (/sdcard/Movies, /sdcard/DCIM/Camera, /sdcard/Download)...")
+    run_adb(["shell", "rm", "-f", "/sdcard/Movies/*.mp4", "/sdcard/DCIM/Camera/*.mp4", "/sdcard/Download/*.mp4"], device_id=device_id)
     time.sleep(1)
 
-    log(f"📲 กำลังส่งวิดีโอใหม่ {video_path.name} เข้าสู่มือถือ...")
+    log(f"📲 กำลังส่งวิดีโอใหม่ {video_path.name} -> {safe_name} เข้าสู่มือถือ...")
     run_adb(["push", str(video_path), target_path], device_id=device_id, timeout=60)
     
-    log("🔄 สั่งกระตุ้น Media Scanner สแกนวิดีโอใหม่เข้า Gallery...")
+    log("🔄 สั่งกระตุ้น Media Scanner & Content Provider สแกนวิดีโอใหม่เข้า Gallery...")
     run_adb(["shell", "am", "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE", "-d", f"file://{target_path}"], device_id=device_id)
+    run_adb(["shell", "content", "insert", "--uri", "content://media/external/video/media", "--bind", f"_data:s:{target_path}"], device_id=device_id)
     time.sleep(4)
     return target_path
 
 
 def find_first_gallery_item_pos(root: Optional[ET.Element], w: int, h: int) -> Tuple[int, int]:
-    """ค้นหาพิกัดวิดีโอแรกในแกลเลอรี (Row 1 Col 2: Square 2 ถัดจากช่องกล้องถ่ายรูป)"""
-    # ใน TikTok Gallery ช่องแรกสุด (Row 1 Col 1) คือไอคอนปุ่มกล้อง (+)
-    # คลิปวิดีโอแรกสุดที่เพิ่งอัปโหลดเข้ามาจะอยู่ที่ช่องที่ 2 (Row 1 Col 2: X ~ 500, Y ~ 310)
-    target_x = int(w * 0.625) if w > 0 else 500
+    """ค้นหาพิกัดวิดีโอแรกสุดในแกลเลอรี TikTok (Row 1 Col 1: ช่องบนซ้ายสุด x~133, y~310)"""
+    # ใน TikTok Gallery ช่องแรกสุด (Row 1 Col 1) คือคลิปวิดีโอล่าสุดที่เพิ่งซิงค์เข้ามา
+    # ในหน้าจอขนาด 800x1340 grid 3 คอลัมน์:
+    # Col 1: 0..266 -> Center = 133
+    # Col 2: 266..533 -> Center = 400
+    # Col 3: 533..800 -> Center = 666
+    target_x = int(w * 0.166) if w > 0 else 133
     target_y = int(h * 0.231) if h > 0 else 310
-    log(f"🎯 เลือกคลิปวิดีโอชิ้นแรกสุดในคลังภาพ (Row 1 Col 2): ({target_x}, {target_y})")
+    log(f"🎯 เลือกคลิปวิดีโอชิ้นแรกสุดในคลังภาพ (Row 1 Col 1 - Top Left): ({target_x}, {target_y})")
     return target_x, target_y
 
 
@@ -201,8 +209,22 @@ def warmup_fyp(device_id: str, minutes: float = 1.0):
         time.sleep(random.uniform(1.5, 2.5))
 
 
+def dismiss_popups_if_any(root: Optional[ET.Element], device_id: str):
+    """ปิดป๊อปอัปแจ้งเตือนที่ขึ้นบังหน้าจออัตโนมัติ"""
+    if root is None:
+        return
+    popup_texts = ["ไม่ใช่ตอนนี้", "ยกเลิก", "อนุญาต", "ปิด", "ตกลง", "ข้าม", "ไม่"]
+    for txt in popup_texts:
+        pos = find_node_bounds(root, text_contains=txt)
+        if pos:
+            log(f"🛡️ ตรวจพบป๊อปอัป '{txt}' กำลังสั่งปิดที่พิกัด {pos}...")
+            run_adb(["shell", "input", "tap", str(pos[0]), str(pos[1])], device_id=device_id)
+            time.sleep(1)
+            break
+
+
 def auto_post_video_on_tiktok_app(device_id: str, video_path: pathlib.Path, caption: str = "", do_warmup: bool = False) -> bool:
-    """โพสต์วิดีโอขึ้น TikTok บนมือถือโดยอัตโนมัติ 100% ผ่าน ADB UI Automation"""
+    """โพสต์วิดีโอขึ้น TikTok บนมือถือโดยอัตโนมัติ 100% ผ่าน ADB UI Automation (มีระบบการันตี State ป้องกันการกดมั่วบนฟีด)"""
     log(f"🤖 เริ่มต้นกระบวนการ Zero-Touch Auto-Post สำหรับ: {video_path.name}")
     w, h = get_screen_resolution(device_id)
     log(f"📐 ความละเอียดหน้าจอมือถือปัจจุบัน: {w}x{h}")
@@ -224,24 +246,49 @@ def auto_post_video_on_tiktok_app(device_id: str, video_path: pathlib.Path, capt
     if do_warmup:
         warmup_fyp(device_id, minutes=1.5)
 
-    # 5. กดปุ่ม '+' (สร้าง) ที่ตรงกลางล่างสุด
+    # 5. กดปุ่ม '+' (สร้าง) และการันตีว่าเข้าหน้ากล้องถ่ายรูปจริง
     log("👉 กำลังกดปุ่มสร้าง (+) บน TikTok...")
-    root = dump_ui_hierarchy(device_id)
-    plus_pos = find_node_bounds(root, text_contains="สร้าง") or find_node_bounds(root, resource_id="create_item") or (int(w * 0.5), int(h * 0.927))
-    run_adb(["shell", "input", "tap", str(plus_pos[0]), str(plus_pos[1])], device_id=device_id)
-    time.sleep(4)
+    in_camera = False
+    for attempt in range(4):
+        root = dump_ui_hierarchy(device_id)
+        dismiss_popups_if_any(root, device_id)
+        
+        # ตรวจสอบว่าอยู่หน้ากล้องถ่ายรูปแล้วหรือไม่
+        if find_node_bounds(root, resource_id="upload_hot_area") or find_node_bounds(root, text_contains="อัปโหลด"):
+            in_camera = True
+            log("✅ เข้าสู่หน้ากล้องถ่ายรูปสำเร็จ!")
+            break
+            
+        plus_pos = find_node_bounds(root, text_contains="สร้าง") or find_node_bounds(root, resource_id="create_item") or (int(w * 0.5), int(h * 0.927))
+        run_adb(["shell", "input", "tap", str(plus_pos[0]), str(plus_pos[1])], device_id=device_id)
+        time.sleep(3)
+
+    if not in_camera:
+        log("⚠️ ไม่สามารถเข้าสู่หน้ากล้องถ่ายรูปได้ ยกเลิกการโพสต์รอบนี้เพื่อป้องกันการกดมั่วบนฟีด")
+        run_adb(["shell", "am", "force-stop", "com.ss.android.ugc.trill"], device_id=device_id)
+        return False
 
     # 6. กดเลือกอัปโหลดจากคลังภาพ
     log("👉 กำลังเลือกอัปโหลดวิดีโอจากคลังภาพ...")
-    # 6. กดเลือกอัปโหลดจากคลังภาพ (upload_hot_area: 53, 1232)
-    log("👉 กำลังเลือกอัปโหลดวิดีโอจากคลังภาพ...")
-    root = dump_ui_hierarchy(device_id)
-    upload_pos = find_node_bounds(root, resource_id="upload_hot_area") or find_node_bounds(root, text_contains="อัปโหลด") or (int(w * 0.066), int(h * 0.919))
-    log(f"📍 พิกัดปุ่มอัปโหลดคลังภาพ: {upload_pos}")
-    run_adb(["shell", "input", "tap", str(upload_pos[0]), str(upload_pos[1])], device_id=device_id)
-    time.sleep(4)
+    in_gallery = False
+    for attempt in range(3):
+        root = dump_ui_hierarchy(device_id)
+        upload_pos = find_node_bounds(root, resource_id="upload_hot_area") or find_node_bounds(root, text_contains="อัปโหลด") or (int(w * 0.066), int(h * 0.919))
+        run_adb(["shell", "input", "tap", str(upload_pos[0]), str(upload_pos[1])], device_id=device_id)
+        time.sleep(3)
+        
+        root = dump_ui_hierarchy(device_id)
+        if find_node_bounds(root, resource_id="viewpager_choose_media") or find_node_bounds(root, text_contains="วิดีโอ") or find_node_bounds(root, text_contains="ถัดไป"):
+            in_gallery = True
+            log("✅ เข้าสู่คลังภาพสำเร็จ!")
+            break
 
-    # 7. เลือกคลิปล่าสุด (แถว 1 คอลัมน์ 1) ผ่าน Layout Node หรือ Dynamic Relative Coordinates
+    if not in_gallery:
+        log("⚠️ ไม่สามารถเข้าสู่คลังภาพได้ ยกเลิกการโพสต์รอบนี้เพื่อป้องกันการกดมั่ว")
+        run_adb(["shell", "am", "force-stop", "com.ss.android.ugc.trill"], device_id=device_id)
+        return False
+
+    # 7. เลือกคลิปล่าสุด (แถว 1 คอลัมน์ 1)
     log("👉 กำลังเลือกคลิปวิดีโอล่าสุดที่เพิ่งซิงค์เข้ามา (แถว 1 คอลัมน์ 1)...")
     root = dump_ui_hierarchy(device_id)
     first_item_pos = find_first_gallery_item_pos(root, w, h)
@@ -262,18 +309,22 @@ def auto_post_video_on_tiktok_app(device_id: str, video_path: pathlib.Path, capt
     run_adb(["shell", "input", "tap", str(next2_pos[0]), str(next2_pos[1])], device_id=device_id)
     time.sleep(4)
 
-    # 10. ใส่ Caption & Hashtags
-    if caption:
-        log("✍️ กำลังกรอกแคปชั่นและแฮชแท็ก...")
-        root = dump_ui_hierarchy(device_id)
+    # 10. ใส่ Caption & Hashtags (ตรวจสอบก่อนว่าอยู่หน้าโพสต์จริงเท่านั้น!)
+    root = dump_ui_hierarchy(device_id)
+    on_post_screen = find_node_bounds(root, text_contains="โพสต์") or find_node_bounds(root, resource_id="t6b") or find_node_bounds(root, resource_id="h3a")
+    
+    if caption and on_post_screen:
+        log("✍️ ยืนยันอยู่หน้าโพสต์! กำลังกรอกแคปชั่นและแฮชแท็ก...")
         cap_pos = find_node_bounds(root, resource_id="h3a") or (int(w * 0.25), int(h * 0.15))
         run_adb(["shell", "input", "tap", str(cap_pos[0]), str(cap_pos[1])], device_id=device_id)
         time.sleep(1)
         clean_cap = caption.replace("\n", " ").replace("'", "")
         run_adb(["shell", "input", "text", clean_cap[:100]], device_id=device_id)
         time.sleep(2)
+    elif caption and not on_post_screen:
+        log("⚠️ ไม่ได้อยู่หน้ากรอกแคปชั่น/โพสต์ ข้ามการพิมพ์ข้อความเพื่อป้องกันการพิมพ์ลงในช่องคอมเมนต์ฟีด!")
 
-    # 11. กดปุ่ม 'โพสต์' (Post) Center: (594, 1228 -> 74.25%, 91.64%)
+    # 11. กดปุ่ม 'โพสต์' (Post)
     log("🚀 กำลังกดปุ่ม 'โพสต์' ขึ้น TikTok...")
     root = dump_ui_hierarchy(device_id)
     post_pos = find_node_bounds(root, resource_id="t6b") or find_node_bounds(root, text_contains="โพสต์") or (int(w * 0.7425), int(h * 0.9164))
@@ -288,15 +339,34 @@ def auto_post_video_on_tiktok_app(device_id: str, video_path: pathlib.Path, capt
         log("Dismissing shortcut prompt...")
         run_adb(["shell", "input", "tap", str(cancel_pos[0]), str(cancel_pos[1])], device_id=device_id)
 
-    # บันทึกประวัติ
+    # บันทึกประวัติ + ย้ายไฟล์ลงคลังที่โพสต์แล้ว + ลบออกจาก VPS ป้องกันคลิปซ้ำ 100%
     history = []
     if HISTORY_FILE.exists():
         try:
             history = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
         except Exception:
             history = []
-    history.append(video_path.name)
-    HISTORY_FILE.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
+    if video_path.name not in history:
+        history.append(video_path.name)
+        HISTORY_FILE.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # ย้ายไปโฟลเดอร์ posted_videos
+    archive_dir = PROJECT_ROOT / "posted_videos"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        archive_target = archive_dir / video_path.name
+        if video_path.exists():
+            video_path.rename(archive_target)
+            log(f"📦 ย้ายไฟล์คลิปเข้าคลังประวัติ: {archive_target.name}")
+    except Exception as e:
+        log(f"⚠️ Archive warning: {e}")
+
+    # ลบไฟล์ออกจาก VPS เพื่อไม่ให้ scp ดึงมาซ้ำ
+    try:
+        subprocess.run(["ssh", VPS_HOST, f"rm -f '{VPS_PENDING_DIR}/{video_path.name}'"], capture_output=True, timeout=15)
+        log("🧹 ลบไฟล์คลิปออกจาก VPS pending_videos เรียบร้อย")
+    except Exception as e:
+        log(f"⚠️ VPS cleanup warning: {e}")
 
     log(f"🎉 สำเร็จ 100%! วิดีโอ {video_path.name} ถูกอัปโหลดขึ้น TikTok ผ่านมือถืออัตโนมัติเรียบร้อยครับ")
     return True
