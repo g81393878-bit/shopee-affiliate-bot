@@ -41,7 +41,7 @@ TELEGRAM_CHAT_ID = "6734965582"
 def log(msg: str):
     ts = time.strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}] [TikTok Zero-Touch Bot] {msg}"
-    print(line)
+    print(line, flush=True)
 
 
 def run_adb(args: List[str], device_id: Optional[str] = None, timeout: int = 30) -> str:
@@ -188,9 +188,9 @@ def auto_post_video_on_tiktok_app(device_id: str, video_path: pathlib.Path, capt
     run_adb(["shell", "input", "tap", str(upload_pos[0]), str(upload_pos[1])], device_id=device_id)
     time.sleep(4)
 
-    # 6. เลือกคลิปล่าสุด (500, 300)
-    log("👉 กำลังเลือกคลิปวิดีโอล่าสุด...")
-    run_adb(["shell", "input", "tap", "500", "300"], device_id=device_id)
+    # 6. เลือกคลิปล่าสุด (มุมซ้ายบนสุด แถว 1 คอลัมน์ 1: X=140, Y=280)
+    log("👉 กำลังเลือกคลิปวิดีโอล่าสุดที่เพิ่งซิงค์เข้ามา (แถว 1 คอลัมน์ 1)...")
+    run_adb(["shell", "input", "tap", "140", "280"], device_id=device_id)
     time.sleep(2)
 
     # 7. กดปุ่ม 'ถัดไป (1)' ในหน้าคลังรูป
