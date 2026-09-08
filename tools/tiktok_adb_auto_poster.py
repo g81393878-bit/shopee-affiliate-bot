@@ -19,6 +19,12 @@ import subprocess
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Optional, Tuple
 
+try:
+    from tools.tiktok_opencv_finder import capture_adb_screen, find_color_button_center, find_template_on_screen
+    HAS_OPENCV = True
+except Exception:
+    HAS_OPENCV = False
+
 # บังคับ UTF-8
 if hasattr(sys.stdout, "reconfigure"):
     try:
