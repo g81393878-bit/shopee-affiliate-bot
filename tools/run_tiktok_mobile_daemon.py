@@ -11,12 +11,20 @@ import time
 import pathlib
 import subprocess
 
+# บังคับ encoding UTF-8 สำหรับ Windows Terminal
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 PYTHON_EXE = sys.executable
 
 def log(msg: str):
     ts = time.strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{ts}] [TikTok ADB Daemon] {msg}")
+    print(f"[{ts}] [TikTok ADB Daemon] {msg}", flush=True)
 
 def main():
     log("🚀 เริ่มต้นระบบเฝ้าระวัง TikTok Mobile ADB Auto-Poster 24/7...")
