@@ -51,7 +51,7 @@ def run_adb(args: List[str], device_id: Optional[str] = None, timeout: int = 30)
         cmd.extend(["-s", device_id])
     cmd.extend(args)
     try:
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        res = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", timeout=timeout)
         return res.stdout.strip()
     except Exception as e:
         log(f"⚠️ ADB Error ({cmd}): {e}")
@@ -72,7 +72,7 @@ def sync_next_video_from_vps() -> Optional[pathlib.Path]:
     """ดึงวิดีโอถัดไปจาก VPS"""
     log("🌐 กำลังตรวจสอบคลังวิดีโอบน Cloud VPS...")
     try:
-        subprocess.run(["scp", f"{VPS_HOST}:{VPS_PENDING_DIR}/*.mp4", str(LOCAL_PENDING_DIR)], capture_output=True, text=True, timeout=30)
+        subprocess.run(["scp", f"{VPS_HOST}:{VPS_PENDING_DIR}/*.mp4", str(LOCAL_PENDING_DIR)], capture_output=True, encoding="utf-8", errors="replace", timeout=30)
     except Exception as e:
         log(f"⚠️ Sync warning: {e}")
 
