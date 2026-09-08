@@ -317,7 +317,7 @@ def main():
         return
 
     caption = f"{video.stem.replace('_', ' ')} #เทรนด์วันนี้ #เรื่องนี้ต้องดู #fyp"
-    auto_post_video_on_tiktok_app(device_id, video, caption=caption, do_warmup=True)
+    auto_post_video_on_tiktok_app(device_id, video, caption=caption, do_warmup=False)
 
 
 if __name__ == "__main__":
