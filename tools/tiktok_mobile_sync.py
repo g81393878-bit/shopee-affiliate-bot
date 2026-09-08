@@ -31,8 +31,8 @@ LOCAL_PENDING_DIR.mkdir(parents=True, exist_ok=True)
 HISTORY_FILE = PROJECT_ROOT / "tools" / "posted_tiktok_mobile_history.json"
 
 VPS_HOST = "root@119.10.140.161"
-VPS_REELS_DIR = "/root/shopee-affiliate-bot/reels_output"
-VPS_PENDING_DIR = "/root/shopee-affiliate-bot/pending_videos"
+VPS_REELS_DIR = "/root/shopee-affiliate-bot/reels_uploader/pending_videos"
+VPS_PENDING_DIR = "/root/shopee-affiliate-bot/reels_uploader/pending_videos"
 
 
 def log(msg: str):
