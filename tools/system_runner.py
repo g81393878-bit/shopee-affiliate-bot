@@ -33,20 +33,7 @@ if hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
-# VPS is the primary runtime. Render env sync is opt-in so it cannot silently
-# overwrite VPS values (especially per-page Facebook tokens).
-if os.getenv("USE_RENDER_ENV", "false").lower() in ("1", "true", "yes"):
-    try:
-        import render_set_env
-        render_set_env.API_KEY = render_set_env.get_api_key()
-        items = render_set_env.fetch_env_vars()
-        for it in items:
-            k, v = render_set_env.decode_env_var(it.get("envVar"))
-            if k:
-                os.environ[k] = v
-    except Exception as e:
-        print(f"[WARN] Render env sync skipped: {e}")
-
+# VPS is the primary runtime. Using local/VPS environment directly.
 from dotenv import load_dotenv
 load_dotenv(BACKEND_DIR / ".env")
 
@@ -268,11 +255,16 @@ def execute_unified_broadcast(
                 history = json.loads(history_file.read_text(encoding="utf-8"))
             except Exception:
                 history = {}
-        channel_posted = set(history.get(account_key, []))
+        
+        # รวบรวมประวัติการโพสต์จากทุกบัญชีและทุกแพลตฟอร์ม (Global Deduplication Pool)
+        global_posted_files = set()
+        for k, v in history.items():
+            if isinstance(v, list):
+                global_posted_files.update(v)
 
         posted_titles = uploader.get_posted_titles()
         posted_title_signatures = set()
-        for item_name in channel_posted:
+        for item_name in global_posted_files:
             clean_sig = re.sub(r'^\d+_', '', item_name)
             clean_sig = re.sub(r'_\d+\.mp4$', '', clean_sig)
             clean_sig = re.sub(r'[^\u0E00-\u0E7Fa-zA-Z0-9]', '', clean_sig).lower()
@@ -293,7 +285,7 @@ def execute_unified_broadcast(
                             pending_videos.append(f)
 
         for v in pending_videos:
-            if v.name in channel_posted:
+            if v.name in global_posted_files:
                 continue
             v_info = products_meta.get(v.name, {})
             v_title = v_info.get("product_name") or v.stem
@@ -404,12 +396,33 @@ def execute_unified_broadcast(
     except Exception:
         tt_caption = clean_caption
 
-    # 5. โพสต์ขึ้น TikTok (Lead Platform)
-    cur_ch_count = daily_data["counts"].get(account_key, 0) + 1
-    logger.info(f"⚫ [TikTok: {display_channel}] กำลังโพสต์คลิปที่ {cur_ch_count}/{daily_target} ของวันนี้: {candidate.name}")
+    # 5. ตรวจสอบคุณภาพเสียงวิดีโอก่อนโพสต์ (ป้องกันวิดีโอไม่มีเสียงหรือไฟล์เสีย 100%)
+    try:
+        from auto_product_reels import verify_video_has_audio
+        has_audio, audio_reason = verify_video_has_audio(candidate)
+        if not has_audio:
+            logger.warning(f"🚨 [AUDIO GUARD] วิดีโอเสียงไม่สมบูรณ์ ({audio_reason}): {candidate.name} — กักกันไฟล์ทันที")
+            corrupt_dir = REELS_DIR / "corrupted"
+            corrupt_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.move(str(candidate), str(corrupt_dir / candidate.name))
+            except Exception:
+                pass
+            return {"success": False, "error": f"Audio verification failed: {audio_reason}"}
+    except Exception as e_vfy:
+        logger.warning(f"⚠️ ตรวจสอบเสียงล้มเหลว ({e_vfy}) — ดำเนินการต่อ")
 
-    res_tt = tiktok_studio_uploader.upload_video_via_web(candidate, caption=tt_caption, cookie_file=active_cookie)
-    tt_success = res_tt.get("success", False)
+    # โพสต์ขึ้น TikTok (Lead Platform / Multi-Node Ready)
+    cur_ch_count = daily_data["counts"].get(account_key, 0) + 1
+    logger.info(f"⚫ [TikTok: {display_channel}] กำลังประมวลผลโพสต์คลิปที่ {cur_ch_count}/{daily_target} ของวันนี้: {candidate.name}")
+
+    # หากเปิดใช้งาน TikTok Web Automation
+    try:
+        res_tt = tiktok_studio_uploader.upload_video_via_web(candidate, caption=tt_caption, cookie_file=active_cookie)
+        tt_success = res_tt.get("success", False)
+    except Exception as e_tt_err:
+        logger.warning(f"⚠️ [TikTok: {display_channel}] Web Upload Error ({e_tt_err}) — ปลอดภัยสำหรับ FB/YT")
+        tt_success = False
 
     history = {}
     if history_file.exists():
@@ -438,18 +451,28 @@ def execute_unified_broadcast(
         tt_account_index += 1
 
     # 6. ซิงค์วิดีโอตัวเดียวกันขึ้น Facebook Reels (2 เพจ) และ YouTube Shorts (หมุนเวียน 6 ช่อง)
-    logger.info(f"🚀 [Unified Broadcast] ซิงค์คลิป {candidate.name} ไปยัง Facebook Reels & YouTube Shorts...")
-    res_fb_yt = uploader.post_next(
-        dry_run=False,
-        custom_video=str(candidate),
-        custom_caption=clean_caption,
-        force=True,
-        normalize=True,
-        broadcast_all_yt=False
-    )
+    # ตรวจสอบก่อนว่าหัวข้อนี้เคยขึ้น FB/YT ไปแล้วหรือไม่ เพื่อป้องกันการโพสต์ซ้ำ 4-5 ครั้ง
+    clean_fby_sig = re.sub(r'[^\u0E00-\u0E7Fa-zA-Z0-9]', '', v_title).lower() if v_title else ""
+    posted_fb_yt_titles = uploader.get_posted_titles()
+    already_on_fb_yt = bool(clean_fby_sig and clean_fby_sig in posted_fb_yt_titles)
 
-    # 7. ย้ายไฟล์ออกจาก pending_videos/ ไปยัง posted/ เพื่อป้องกันการหยิบซ้ำ
-    if candidate.exists() and candidate.parent.resolve() == (REELS_DIR / "pending_videos").resolve():
+    if already_on_fb_yt and not force:
+        logger.info(f"⏭️ [Unified Broadcast] คลิป {candidate.name} ({v_title[:30]}) เคยโพสต์บน FB/YT แล้ว — ข้ามการซิงค์ซ้ำ")
+        res_fb_yt = 0
+    else:
+        logger.info(f"🚀 [Unified Broadcast] ซิงค์คลิป {candidate.name} ไปยัง Facebook Reels & YouTube Shorts...")
+        res_fb_yt = uploader.post_next(
+            dry_run=False,
+            custom_video=str(candidate),
+            custom_caption=clean_caption,
+            force=force,
+            normalize=True,
+            broadcast_all_yt=False,
+            notify=False
+        )
+
+    # 7. ย้ายไฟล์ไปยัง posted/ เพื่อป้องกันการหยิบซ้ำ 100%
+    if candidate.exists():
         POSTED_DIR = REELS_DIR / "posted"
         POSTED_DIR.mkdir(parents=True, exist_ok=True)
         posted_dst = POSTED_DIR / candidate.name
@@ -457,6 +480,7 @@ def execute_unified_broadcast(
             posted_dst = POSTED_DIR / f"{int(time.time())}_{candidate.name}"
         try:
             shutil.move(str(candidate), str(posted_dst))
+            logger.info(f"📦 [Cleanup] ย้ายคลิปที่เผยแพร่แล้วไป posted/: {posted_dst.name}")
         except Exception as e_mv:
             logger.warning(f"⚠️ ย้ายคลิปเข้า posted/ ล้มเหลว: {e_mv}")
 
