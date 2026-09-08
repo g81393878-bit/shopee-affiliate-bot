@@ -155,7 +155,43 @@ def get_screen_resolution(device_id: str) -> Tuple[int, int]:
     return 800, 1340
 
 
-def auto_post_video_on_tiktok_app(device_id: str, video_path: pathlib.Path, caption: str = "") -> bool:
+import random
+
+def human_like_swipe(device_id: str, w: int, h: int):
+    """จำลองการปัดหน้าจอขึ้น (Swipe Up) แบบสุ่มความเร็วและพิกัดเริ่มต้น/สิ้นสุด สไตล์มนุษย์จริง"""
+    start_x = int(w * random.uniform(0.45, 0.55))
+    start_y = int(h * random.uniform(0.75, 0.85))
+    end_x = int(w * random.uniform(0.45, 0.55))
+    end_y = int(h * random.uniform(0.15, 0.25))
+    duration_ms = int(random.uniform(200, 350))
+    run_adb(["shell", "input", "swipe", str(start_x), str(start_y), str(end_x), str(end_y), str(duration_ms)], device_id=device_id)
+
+
+def warmup_fyp(device_id: str, minutes: float = 1.5):
+    """กระบวนการ FYP Warmup: สุ่มดูคลิปหน้าฟีด For You Page เพื่อสะสม Trust Score ป้องกัน 0 Views"""
+    log(f"🔥 เริ่มต้นกระบวนการ FYP Training (Human Warmup) เป็นเวลา {minutes} นาที...")
+    w, h = get_screen_resolution(device_id)
+    start_time = time.time()
+    
+    while (time.time() - start_time) < (minutes * 60):
+        watch_time = random.uniform(4.0, 12.0)
+        log(f"👀 นั่งดูคลิปบนฟีดเป็นเวลา {watch_time:.1f} วินาที...")
+        time.sleep(watch_time)
+        
+        # 15% Chance ดับเบิลแทปเพื่อกดไลก์
+        if random.random() < 0.15:
+            log("❤️ Action: กดถูกใจคลิป (Double Tap)")
+            cx, cy = int(w / 2), int(h / 2)
+            run_adb(["shell", "input", "tap", str(cx), str(cy)], device_id=device_id)
+            time.sleep(0.1)
+            run_adb(["shell", "input", "tap", str(cx), str(cy)], device_id=device_id)
+            time.sleep(random.uniform(1.0, 2.0))
+            
+        human_like_swipe(device_id, w, h)
+        time.sleep(random.uniform(1.5, 3.0))
+
+
+def auto_post_video_on_tiktok_app(device_id: str, video_path: pathlib.Path, caption: str = "", do_warmup: bool = True) -> bool:
     """โพสต์วิดีโอขึ้น TikTok บนมือถือโดยอัตโนมัติ 100% ผ่าน ADB UI Automation"""
     log(f"🤖 เริ่มต้นกระบวนการ Zero-Touch Auto-Post สำหรับ: {video_path.name}")
     w, h = get_screen_resolution(device_id)
@@ -172,79 +208,70 @@ def auto_post_video_on_tiktok_app(device_id: str, video_path: pathlib.Path, capt
     # 3. เปิดแอป TikTok
     log("🚀 กำลังเปิดแอป TikTok บนมือถือ...")
     run_adb(["shell", "monkey", "-p", "com.ss.android.ugc.trill", "-c", "android.intent.category.LAUNCHER", "1"], device_id=device_id)
-    time.sleep(5)
+    time.sleep(4)
 
-    # 4. กดปุ่ม '+' (สร้าง) ที่ตรงกลางล่างสุด (400, 1243)
+    # 4. FYP Human Warmup (สะสม Trust Score ก่อนโพสต์)
+    if do_warmup:
+        warmup_fyp(device_id, minutes=1.5)
+
+    # 5. กดปุ่ม '+' (สร้าง) ที่ตรงกลางล่างสุด
     log("👉 กำลังกดปุ่มสร้าง (+) บน TikTok...")
     root = dump_ui_hierarchy(device_id)
-    plus_pos = find_node_bounds(root, text_contains="สร้าง") or find_node_bounds(root, resource_id="create_item") or (400, 1243)
+    plus_pos = find_node_bounds(root, text_contains="สร้าง") or find_node_bounds(root, resource_id="create_item") or (int(w * 0.5), int(h * 0.927))
     run_adb(["shell", "input", "tap", str(plus_pos[0]), str(plus_pos[1])], device_id=device_id)
     time.sleep(4)
 
-    # 5. กดเลือกอัปโหลดจากคลังภาพ (70, 918)
+    # 6. กดเลือกอัปโหลดจากคลังภาพ
     log("👉 กำลังเลือกอัปโหลดวิดีโอจากคลังภาพ...")
     root = dump_ui_hierarchy(device_id)
-    upload_pos = find_node_bounds(root, text_contains="อัปโหลด") or (70, 918)
+    upload_pos = find_node_bounds(root, text_contains="อัปโหลด") or (int(w * 0.0875), int(h * 0.685))
     run_adb(["shell", "input", "tap", str(upload_pos[0]), str(upload_pos[1])], device_id=device_id)
     time.sleep(4)
 
-    # 6. เลือกคลิปล่าสุด (มุมซ้ายบนสุด แถว 1 คอลัมน์ 1: X=140, Y=280)
+    # 7. เลือกคลิปล่าสุด (มุมซ้ายบนสุด แถว 1 คอลัมน์ 1: X=140, Y=280)
     log("👉 กำลังเลือกคลิปวิดีโอล่าสุดที่เพิ่งซิงค์เข้ามา (แถว 1 คอลัมน์ 1)...")
-    run_adb(["shell", "input", "tap", "140", "280"], device_id=device_id)
+    run_adb(["shell", "input", "tap", str(int(w * 0.175)), str(int(h * 0.209))], device_id=device_id)
     time.sleep(2)
 
-    # 7. กดปุ่ม 'ถัดไป (1)' ในหน้าคลังรูป
+    # 8. กดปุ่ม 'ถัดไป (1)' ในหน้าคลังรูป
     log("👉 กดปุ่มถัดไป (Next)...")
     root = dump_ui_hierarchy(device_id)
-    next1_pos = find_node_bounds(root, text_contains="ถัดไป") or (740, 1222)
+    next1_pos = find_node_bounds(root, text_contains="ถัดไป") or (int(w * 0.925), int(h * 0.912))
     run_adb(["shell", "input", "tap", str(next1_pos[0]), str(next1_pos[1])], device_id=device_id)
     time.sleep(4)
 
-    # 8. กดปุ่ม 'ถัดไป' ในหน้าพรีวิววิดีโอ
+    # 9. กดปุ่ม 'ถัดไป' ในหน้าพรีวิววิดีโอ
     log("👉 กดปุ่มถัดไปหน้าพรีวิว...")
     root = dump_ui_hierarchy(device_id)
-    next2_pos = find_node_bounds(root, text_contains="ถัดไป") or (740, 1222)
+    next2_pos = find_node_bounds(root, text_contains="ถัดไป") or (int(w * 0.925), int(h * 0.912))
     run_adb(["shell", "input", "tap", str(next2_pos[0]), str(next2_pos[1])], device_id=device_id)
     time.sleep(4)
 
-    # 9. ใส่ Caption & Hashtags
+    # 10. ใส่ Caption & Hashtags
     if caption:
         log("✍️ กำลังกรอกแคปชั่นและแฮชแท็ก...")
         root = dump_ui_hierarchy(device_id)
-        cap_pos = find_node_bounds(root, resource_id="h3a") or (200, 200)
+        cap_pos = find_node_bounds(root, resource_id="h3a") or (int(w * 0.25), int(h * 0.15))
         run_adb(["shell", "input", "tap", str(cap_pos[0]), str(cap_pos[1])], device_id=device_id)
         time.sleep(1)
         clean_cap = caption.replace("\n", " ").replace("'", "")
         run_adb(["shell", "input", "text", clean_cap[:100]], device_id=device_id)
         time.sleep(2)
 
-    # 10. กดปุ่ม 'โพสต์' (Post) Center: (594, 1228)
+    # 11. กดปุ่ม 'โพสต์' (Post) Center: (594, 1228 -> 74.25%, 91.64%)
     log("🚀 กำลังกดปุ่ม 'โพสต์' ขึ้น TikTok...")
     root = dump_ui_hierarchy(device_id)
-    post_pos = find_node_bounds(root, resource_id="t6b") or find_node_bounds(root, text_contains="โพสต์") or (594, 1228)
+    post_pos = find_node_bounds(root, resource_id="t6b") or find_node_bounds(root, text_contains="โพสต์") or (int(w * 0.7425), int(h * 0.9164))
     log(f"📍 พิกัดปุ่มโพสต์จริง: {post_pos}")
     run_adb(["shell", "input", "tap", str(post_pos[0]), str(post_pos[1])], device_id=device_id)
     time.sleep(6)
 
-    # 11. ตรวจสอบป๊อปอัป "เพิ่มในหน้าจอหลัก" หรือ "ยกเลิก"
+    # 12. ตรวจสอบป๊อปอัป "เพิ่มในหน้าจอหลัก" หรือ "ยกเลิก"
     root = dump_ui_hierarchy(device_id)
     cancel_pos = find_node_bounds(root, text_contains="ยกเลิก")
     if cancel_pos:
         log("Dismissing shortcut prompt...")
         run_adb(["shell", "input", "tap", str(cancel_pos[0]), str(cancel_pos[1])], device_id=device_id)
-
-    # บันทึกประวัติ
-    history = []
-    if HISTORY_FILE.exists():
-        try:
-            history = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            history = []
-    history.append(video_path.name)
-    HISTORY_FILE.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    log(f"🎉 สำเร็จ 100%! วิดีโอ {video_path.name} ถูกอัปโหลดขึ้น TikTok ผ่านมือถืออัตโนมัติเรียบร้อยครับ")
-    return True
 
     # บันทึกประวัติ
     history = []
@@ -275,7 +302,7 @@ def main():
         return
 
     caption = f"{video.stem.replace('_', ' ')} #เทรนด์วันนี้ #เรื่องนี้ต้องดู #fyp"
-    auto_post_video_on_tiktok_app(device_id, video, caption=caption)
+    auto_post_video_on_tiktok_app(device_id, video, caption=caption, do_warmup=True)
 
 
 if __name__ == "__main__":

@@ -58,13 +58,28 @@ ssh root@119.10.140.161 "systemctl restart shopee-bot"
 
 ---
 
-## 🚀 3. แผนพัฒนายกระดับสถาปัตยกรรม TikTok 2026 (Anti-Shadowban Roadmap)
+## 🚀 3. แผนพัฒนายกระดับสถาปัตยกรรม TikTok 2026 (Anti-Shadowban & Device-Native Master Architecture)
 
-เพื่อแก้ปัญหายอดวิวเป็น 0 (Shadowban) ในระยะยาว ระบบมีแผนยกระดับตามมาตรฐานปี 2026 ดังนี้:
+เพื่อแก้ปัญหายอดวิวเป็น 0 (Shadowban) อย่างเด็ดขาดในระดับวิศวกรรม ระบบได้เปลี่ยนผ่านเข้าสู่มาตรฐาน **Device-Native ADB Automation (2026 Best Practices)** ดังนี้:
 
-1. **Browser-Level C++ Stealth (Patchright / Camoufox):** ย้ายการคุมเบราว์เซอร์จาก Playwright Stealth ทั่วไป มาใช้ Patchright / Camoufox เพื่อซ่อนร่องรอย CDP Protocol ในระดับ C++
-2. **4G/5G Mobile Proxies (CGNAT):** เส้นทางการเชื่อมต่อของแต่ละช่องจะถูกแยกผ่าน 1:1 Sticky Mobile Proxy เพื่อไม่ให้โดนบล็อก Data Center IP จาก VPS
-3. **Android Device Automation (ADB & uiautomator2):** ย้ายการอัปโหลดเข้าสู่แอป TikTok บนอุปกรณ์มือถือ Android จริงเพื่อใช้ Device Telemetry ฮาร์ดแวร์แท้ 100%
-4. **Account Warmup Strategy (14-21 วัน):** กระบวนการสะสมคะแนน Account Trust Score ด้วยการรัน Persistent Context (`user_data_dir`) และสุ่มพฤติกรรมมนุษย์ก่อนเปิดอัปโหลดอัตโนมัติ
+### 1. **หลีกเลี่ยง Appium & Dynamic Resource IDs**:
+   - ระบบความปลอดภัยยุคใหม่ของ TikTok สามารถตรวจจับ Process ของ Appium ที่รันอยู่เบื้องหลังระบบ Android ได้ รวมถึงปุ่มบนหน้าจอใช้ Dynamic Resource IDs ที่เปลี่ยนใหม่ทุกครั้งที่เปิดแอป
+   - **ทางออก Best Practice**: ใช้ภาษา Python + Native ADB Shell + `uiautomator2` สั่งการผ่านพิกัดสัมพัทธ์เปอร์เซ็นต์หน้าจอ (`Normalized Relative Coordinates`) ผสมผสานกับ UIAutomator Dump สดเพื่อค้นหาองค์ประกอบหน้าจอจริง
+
+### 2. **FYP Human Warmup (Trust Score Training)**:
+   - ก่อนอัปโหลดวิดีโอ ระบบจะรัน `warmup_fyp()` สุ่มปัดหน้าจอ For You Page เป็นเวลา 1.5 - 3 นาที
+   - จำลองการดูคลิป 4-12 วินาที สุ่มกดไลก์ (Double Tap) 15% และสุ่มความเร็วการปัดหน้าจอ (`human_like_swipe`) เพื่อสะสมคะแนน Behavioral Fingerprint เสมือนคนเล่นจริง
+
+### 3. **พิกัดสัมพัทธ์เปอร์เซ็นต์หน้าจอ (Normalized Percentages)**:
+   - แปลงพิกัดจากพิกเซลคงที่ เป็นเปอร์เซ็นต์ตามสัดส่วนความกว้าง/ความสูงของหน้าจอมือถือแต่ละรุ่น (`Screen W x H`):
+     - **ปุ่มสร้าง (+)**: `(50% W, 92.7% H)`
+     - **ปุ่มอัปโหลด (Upload)**: `(8.75% W, 68.5% H)`
+     - **คลิปใหม่ล่าสุด (Row 1 Col 1)**: `(17.5% W, 20.9% H)`
+     - **ปุ่มถัดไป (Next)**: `(92.5% W, 91.2% H)`
+     - **ปุ่มโพสต์ (Post)**: `(74.25% W, 91.64% H)`
+
+### 4. **4G/5G CGNAT Mobile IP & Content Randomization**:
+   - มือถือ Android ที่เชื่อมต่อบอทควรใช้ซิมอินเทอร์เน็ตมือถือ 4G/5G จริง (CGNAT IP) เพื่อให้ทราฟิกเสมือนผู้ใช้งานมือถือทั่วไป ไม่โดนแบน Data Center ASN IP จาก VPS
+   - สุ่มเวลาโพสต์และสุ่ม Metadata ก่อนส่งเข้าแกลเลอรีมือถือด้วย `am broadcast MEDIA_SCANNER_SCAN_FILE`
 
 📖 **อ่านกรณีศึกษาฉบับเต็ม:** [CASE_STUDY_TIKTOK_AUTOMATION.md](file:///d:/Shopee_Web_Scraping/docs/manual/CASE_STUDY_TIKTOK_AUTOMATION.md) — เจาะลึกสถาปัตยกรรมทางวิศวกรรม, กลไกโพสต์อัตโนมัติ, การคำนวณรอบเวลา 45 นาที และวิธีแก้ปัญหาจริง 5 กรณี
