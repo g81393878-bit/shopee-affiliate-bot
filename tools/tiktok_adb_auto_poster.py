@@ -174,55 +174,77 @@ def auto_post_video_on_tiktok_app(device_id: str, video_path: pathlib.Path, capt
     run_adb(["shell", "monkey", "-p", "com.ss.android.ugc.trill", "-c", "android.intent.category.LAUNCHER", "1"], device_id=device_id)
     time.sleep(5)
 
-    # 4. กดปุ่ม '+' (สร้าง/อัปโหลด)
+    # 4. กดปุ่ม '+' (สร้าง) ที่ตรงกลางล่างสุด (400, 1243)
     log("👉 กำลังกดปุ่มสร้าง (+) บน TikTok...")
     root = dump_ui_hierarchy(device_id)
-    bounds = find_node_bounds(root, text_contains="Create") or find_node_bounds(root, text_contains="สร้าง") or (w // 2, h - 85)
-    log(f"   ➔ Tap (+) at {bounds}")
-    run_adb(["shell", "input", "tap", str(bounds[0]), str(bounds[1])], device_id=device_id)
+    plus_pos = find_node_bounds(root, text_contains="สร้าง") or find_node_bounds(root, resource_id="create_item") or (400, 1243)
+    run_adb(["shell", "input", "tap", str(plus_pos[0]), str(plus_pos[1])], device_id=device_id)
     time.sleep(4)
 
-    # 5. กดปุ่ม 'Upload' (อัปโหลดจากคลัง)
-    log("👉 กำลังเลือกอัปโหลดวิดีโอจากคลัง...")
+    # 5. กดเลือกอัปโหลดจากคลังภาพ (70, 918)
+    log("👉 กำลังเลือกอัปโหลดวิดีโอจากคลังภาพ...")
     root = dump_ui_hierarchy(device_id)
-    bounds = find_node_bounds(root, text_contains="Upload") or find_node_bounds(root, text_contains="อัปโหลด") or (w * 4 // 5, h * 4 // 5)
-    log(f"   ➔ Tap Upload at {bounds}")
-    run_adb(["shell", "input", "tap", str(bounds[0]), str(bounds[1])], device_id=device_id)
-    time.sleep(3)
+    upload_pos = find_node_bounds(root, text_contains="อัปโหลด") or (70, 918)
+    run_adb(["shell", "input", "tap", str(upload_pos[0]), str(upload_pos[1])], device_id=device_id)
+    time.sleep(4)
 
-    # 6. เลือกคลิปล่าสุด (มุมซ้ายบนของคลังรูปภาพ)
+    # 6. เลือกคลิปล่าสุด (500, 300)
     log("👉 กำลังเลือกคลิปวิดีโอล่าสุด...")
-    run_adb(["shell", "input", "tap", str(w // 4), str(h // 4)], device_id=device_id)
+    run_adb(["shell", "input", "tap", "500", "300"], device_id=device_id)
     time.sleep(2)
 
-    # 7. กดปุ่ม 'Next' (ถัดไป)
+    # 7. กดปุ่ม 'ถัดไป (1)' ในหน้าคลังรูป
     log("👉 กดปุ่มถัดไป (Next)...")
     root = dump_ui_hierarchy(device_id)
-    bounds = find_node_bounds(root, text_contains="Next") or find_node_bounds(root, text_contains="ถัดไป") or (w * 4 // 5, h - 70)
-    log(f"   ➔ Tap Next at {bounds}")
-    run_adb(["shell", "input", "tap", str(bounds[0]), str(bounds[1])], device_id=device_id)
+    next1_pos = find_node_bounds(root, text_contains="ถัดไป") or (740, 1222)
+    run_adb(["shell", "input", "tap", str(next1_pos[0]), str(next1_pos[1])], device_id=device_id)
     time.sleep(4)
 
-    # 8. กดปุ่ม 'Next' อีกครั้งเข้าสู่หน้าใส่แคปชั่น
+    # 8. กดปุ่ม 'ถัดไป' ในหน้าพรีวิววิดีโอ
+    log("👉 กดปุ่มถัดไปหน้าพรีวิว...")
     root = dump_ui_hierarchy(device_id)
-    bounds = find_node_bounds(root, text_contains="Next") or find_node_bounds(root, text_contains="ถัดไป") or (w * 4 // 5, h - 70)
-    run_adb(["shell", "input", "tap", str(bounds[0]), str(bounds[1])], device_id=device_id)
-    time.sleep(3)
+    next2_pos = find_node_bounds(root, text_contains="ถัดไป") or (740, 1222)
+    run_adb(["shell", "input", "tap", str(next2_pos[0]), str(next2_pos[1])], device_id=device_id)
+    time.sleep(4)
 
-    # 9. ใส่ Caption & Hashtags (ถ้ามี)
+    # 9. ใส่ Caption & Hashtags
     if caption:
         log("✍️ กำลังกรอกแคปชั่นและแฮชแท็ก...")
+        root = dump_ui_hierarchy(device_id)
+        cap_pos = find_node_bounds(root, resource_id="h3a") or (200, 200)
+        run_adb(["shell", "input", "tap", str(cap_pos[0]), str(cap_pos[1])], device_id=device_id)
+        time.sleep(1)
         clean_cap = caption.replace("\n", " ").replace("'", "")
         run_adb(["shell", "input", "text", clean_cap[:100]], device_id=device_id)
         time.sleep(2)
 
-    # 10. กดปุ่ม 'Post' (โพสต์)
-    log("🚀 กำลังกดปุ่ม 'Post' โพสต์วิดีโอขึ้น TikTok บนมือถือ...")
+    # 10. กดปุ่ม 'โพสต์' (Post) Center: (594, 1228)
+    log("🚀 กำลังกดปุ่ม 'โพสต์' ขึ้น TikTok...")
     root = dump_ui_hierarchy(device_id)
-    bounds = find_node_bounds(root, text_contains="Post") or find_node_bounds(root, text_contains="โพสต์") or (w * 4 // 5, h - 70)
-    log(f"   ➔ Tap Post at {bounds}")
-    run_adb(["shell", "input", "tap", str(bounds[0]), str(bounds[1])], device_id=device_id)
-    time.sleep(5)
+    post_pos = find_node_bounds(root, resource_id="t6b") or find_node_bounds(root, text_contains="โพสต์") or (594, 1228)
+    log(f"📍 พิกัดปุ่มโพสต์จริง: {post_pos}")
+    run_adb(["shell", "input", "tap", str(post_pos[0]), str(post_pos[1])], device_id=device_id)
+    time.sleep(6)
+
+    # 11. ตรวจสอบป๊อปอัป "เพิ่มในหน้าจอหลัก" หรือ "ยกเลิก"
+    root = dump_ui_hierarchy(device_id)
+    cancel_pos = find_node_bounds(root, text_contains="ยกเลิก")
+    if cancel_pos:
+        log("Dismissing shortcut prompt...")
+        run_adb(["shell", "input", "tap", str(cancel_pos[0]), str(cancel_pos[1])], device_id=device_id)
+
+    # บันทึกประวัติ
+    history = []
+    if HISTORY_FILE.exists():
+        try:
+            history = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            history = []
+    history.append(video_path.name)
+    HISTORY_FILE.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    log(f"🎉 สำเร็จ 100%! วิดีโอ {video_path.name} ถูกอัปโหลดขึ้น TikTok ผ่านมือถืออัตโนมัติเรียบร้อยครับ")
+    return True
 
     # บันทึกประวัติ
     history = []
