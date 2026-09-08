@@ -135,14 +135,13 @@ def login_flow(account_id: Optional[int] = None):
         browser.close()
 
 
-def sanitize_caption(caption: str, max_chars: int = 150) -> str:
+def sanitize_caption(caption: str, max_chars: int = 500) -> str:
     caption = (caption or "").strip()
     caption = re.sub(r"\b\d+([.,]\d+)?\s*(บาท|฿|baht)\b", "", caption, flags=re.IGNORECASE)
-    if "#ป้าเข็ม" not in caption and "#" in caption:
-        caption += " #ป้าเข็มรีวิว"
     if len(caption) > max_chars:
         caption = caption[:max_chars - 3] + "..."
     return caption
+
 
 
 def upload_video_via_web(
@@ -404,9 +403,8 @@ def post_single_tiktok_video(target_account_id: Optional[int] = None, visible: b
         candidate = c_path
     else:
         pending_videos = sorted((reels_dir / "pending_videos").glob("*.mp4"))
-        posted_videos = sorted((reels_dir / "posted").glob("*.mp4"), key=lambda f: f.stat().st_mtime, reverse=True)
 
-        for v in pending_videos + posted_videos:
+        for v in pending_videos:
             if v.name in channel_posted:
                 continue
             v_info = products_meta.get(v.name, {})
@@ -431,6 +429,23 @@ def post_single_tiktok_video(target_account_id: Optional[int] = None, visible: b
     if not candidate:
         log(f"⚠️ [TikTok: {display_channel}] ไม่พบคลิปใหม่ที่ยังไม่เคยโพสต์ในช่องนี้")
         return {"success": False, "error": f"No unposted video found for {display_channel}"}
+
+    # ตรวจสอบคุณภาพเสียงวิดีโอก่อนโพสต์
+    try:
+        sys.path.insert(0, str(reels_dir))
+        from auto_product_reels import verify_video_has_audio
+        has_audio, audio_reason = verify_video_has_audio(candidate)
+        if not has_audio:
+            log(f"🚨 [AUDIO GUARD] คลิปเสียงไม่ผ่านเกณฑ์ ({audio_reason}): {candidate.name}")
+            corrupt_dir = reels_dir / "corrupted"
+            corrupt_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.move(str(candidate), str(corrupt_dir / candidate.name))
+            except Exception:
+                pass
+            return {"success": False, "error": f"Audio verification failed: {audio_reason}"}
+    except Exception as e_vfy:
+        log(f"[WARN] ตรวจสอบเสียงล้มเหลว ({e_vfy}) — ดำเนินการต่อ")
 
     log(f"⚡ [TikTok ด่วน: {display_channel}] กำลังยิงโพสต์คลิป: {candidate.name}")
 
@@ -510,6 +525,19 @@ def post_single_tiktok_video(target_account_id: Optional[int] = None, visible: b
             index_file.write_text(str(tt_account_index), encoding="utf-8")
         except Exception:
             pass
+
+        # ย้ายคลิปที่โพสต์สำเร็จไปยัง posted/ เพื่อป้องกันการหยิบซ้ำ
+        if candidate.exists() and not custom_video:
+            POSTED_DIR = reels_dir / "posted"
+            POSTED_DIR.mkdir(parents=True, exist_ok=True)
+            posted_dst = POSTED_DIR / candidate.name
+            if posted_dst.exists():
+                posted_dst = POSTED_DIR / f"{int(time.time())}_{candidate.name}"
+            try:
+                shutil.move(str(candidate), str(posted_dst))
+                log(f"📦 [Cleanup] ย้ายคลิปที่เผยแพร่แล้วไป posted/: {posted_dst.name}")
+            except Exception as e_mv:
+                log(f"⚠️ ย้ายคลิปเข้า posted/ ล้มเหลว: {e_mv}")
 
         # ส่งแจ้งเตือน Telegram
         try:
