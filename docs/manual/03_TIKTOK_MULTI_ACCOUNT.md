@@ -58,4 +58,13 @@ ssh root@119.10.140.161 "systemctl restart shopee-bot"
 
 ---
 
+## 🚀 3. แผนพัฒนายกระดับสถาปัตยกรรม TikTok 2026 (Anti-Shadowban Roadmap)
+
+เพื่อแก้ปัญหายอดวิวเป็น 0 (Shadowban) ในระยะยาว ระบบมีแผนยกระดับตามมาตรฐานปี 2026 ดังนี้:
+
+1. **Browser-Level C++ Stealth (Patchright / Camoufox):** ย้ายการคุมเบราว์เซอร์จาก Playwright Stealth ทั่วไป มาใช้ Patchright / Camoufox เพื่อซ่อนร่องรอย CDP Protocol ในระดับ C++
+2. **4G/5G Mobile Proxies (CGNAT):** เส้นทางการเชื่อมต่อของแต่ละช่องจะถูกแยกผ่าน 1:1 Sticky Mobile Proxy เพื่อไม่ให้โดนบล็อก Data Center IP จาก VPS
+3. **Android Device Automation (ADB & uiautomator2):** ย้ายการอัปโหลดเข้าสู่แอป TikTok บนอุปกรณ์มือถือ Android จริงเพื่อใช้ Device Telemetry ฮาร์ดแวร์แท้ 100%
+4. **Account Warmup Strategy (14-21 วัน):** กระบวนการสะสมคะแนน Account Trust Score ด้วยการรัน Persistent Context (`user_data_dir`) และสุ่มพฤติกรรมมนุษย์ก่อนเปิดอัปโหลดอัตโนมัติ
+
 📖 **อ่านกรณีศึกษาฉบับเต็ม:** [CASE_STUDY_TIKTOK_AUTOMATION.md](file:///d:/Shopee_Web_Scraping/docs/manual/CASE_STUDY_TIKTOK_AUTOMATION.md) — เจาะลึกสถาปัตยกรรมทางวิศวกรรม, กลไกโพสต์อัตโนมัติ, การคำนวณรอบเวลา 45 นาที และวิธีแก้ปัญหาจริง 5 กรณี
