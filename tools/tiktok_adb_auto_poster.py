@@ -74,20 +74,53 @@ def get_connected_device() -> Optional[str]:
     return None
 
 
+ARCHIVE_DIR = PROJECT_ROOT / "posted_videos"
+ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def clean_and_archive_old_pending_videos():
+    """ย้ายไฟล์ใน pending_videos ที่โพสต์แล้วทั้งหมดไปเก็บไว้ใน posted_videos ทันที ไม่ให้ค้างใน pending_videos เด็ดขาด"""
+    history = set()
+    if HISTORY_FILE.exists():
+        try:
+            history = set(json.loads(HISTORY_FILE.read_text(encoding="utf-8")))
+        except Exception:
+            history = set()
+            
+    for vid in list(LOCAL_PENDING_DIR.glob("*.mp4")):
+        if vid.name in history:
+            target = ARCHIVE_DIR / vid.name
+            try:
+                if vid.exists():
+                    vid.rename(target)
+                    log(f"📦 ย้ายคลิปที่เคยโพสต์แล้วออกจาก pending: {vid.name} -> posted_videos/")
+            except Exception as e:
+                try:
+                    vid.unlink(missing_ok=True)
+                except Exception:
+                    pass
+
+
 def sync_next_video_from_vps() -> Optional[pathlib.Path]:
-    """ดึงวิดีโอถัดไปจาก VPS"""
+    """ดึงวิดีโอถัดไปจาก VPS และย้ายคลิปเก่าเข้าคลังทันที"""
+    # 1. ย้ายคลิปเก่าที่เคยโพสต์แล้วออกจาก pending_videos ทันที
+    clean_and_archive_old_pending_videos()
+
     log("🌐 กำลังตรวจสอบคลังวิดีโอบน Cloud VPS...")
     try:
         subprocess.run(["scp", f"{VPS_HOST}:{VPS_PENDING_DIR}/*.mp4", str(LOCAL_PENDING_DIR)], capture_output=True, encoding="utf-8", errors="replace", timeout=30)
     except Exception as e:
         log(f"⚠️ Sync warning: {e}")
 
+    # ย้ายไฟล์ซ้ำอีกรอบหลังจากดาวน์โหลด
+    clean_and_archive_old_pending_videos()
+
     downloaded = sorted(list(LOCAL_PENDING_DIR.glob("*.mp4")), key=lambda x: x.stat().st_mtime, reverse=True)
     if not downloaded:
         log("ℹ️ ไม่มีวิดีโอรอโพสต์ในคลังขณะนี้")
         return None
 
-    # กรองวิดีโอที่เคยโพสต์แล้ว
+    # กรองวิดีโอที่ยังไม่เคยโพสต์
     history = set()
     if HISTORY_FILE.exists():
         try:
@@ -233,14 +266,16 @@ def auto_post_video_on_tiktok_app(device_id: str, video_path: pathlib.Path, capt
     push_video_to_mobile(device_id, video_path)
 
     # 2. ปลุกหน้าจอ + สไลด์ปลดล็อก (ถ้ามี)
-    run_adb(["shell", "input", "keyevent", "KEYWORDS_WAKEUP"], device_id=device_id)
-    run_adb(["shell", "input", "keyevent", "82"], device_id=device_id)
+    run_adb(["shell", "input", "keyevent", "224"], device_id=device_id) # WAKEUP
+    run_adb(["shell", "input", "keyevent", "82"], device_id=device_id)  # UNLOCK
     time.sleep(1)
 
-    # 3. เปิดแอป TikTok
+    # 3. เปิดแอป TikTok ให้ขึ้นมาบนหน้าจอหลัก (Foreground) 100%
     log("🚀 กำลังเปิดแอป TikTok บนมือถือ...")
-    run_adb(["shell", "monkey", "-p", "com.ss.android.ugc.trill", "-c", "android.intent.category.LAUNCHER", "1"], device_id=device_id)
-    time.sleep(4)
+    run_adb(["shell", "am", "force-stop", "com.ss.android.ugc.trill"], device_id=device_id)
+    time.sleep(1)
+    run_adb(["shell", "am", "start", "-a", "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER", "-p", "com.ss.android.ugc.trill"], device_id=device_id)
+    time.sleep(6)
 
     # 4. FYP Human Warmup (สะสม Trust Score ก่อนโพสต์)
     if do_warmup:
