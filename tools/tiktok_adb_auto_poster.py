@@ -240,18 +240,61 @@ def post_via_u2(d, video_path: pathlib.Path, caption: str = "") -> bool:
         d.click(int(w * 0.925), int(h * 0.912))
     time.sleep(5)
 
+def build_tiktok_caption(video_path: pathlib.Path) -> str:
+    """สร้างแคปชั่นภาษาไทยและแฮชแท็กไวรัลตรงตามหมวดหมู่อัตโนมัติ"""
+    name = video_path.stem
+    # ตัด timestamp ตัวเลขท้ายไฟล์
+    clean_title = re.sub(r"_\d{9,12}$", "", name)
+    
+    category = "general"
+    if clean_title.startswith("celebrity_trend_"):
+        clean_title = clean_title.replace("celebrity_trend_", "")
+        category = "celebrity"
+    elif clean_title.startswith("trending_news_"):
+        clean_title = clean_title.replace("trending_news_", "")
+        category = "news"
+    elif clean_title.startswith("shopee_") or clean_title.startswith("product_"):
+        clean_title = clean_title.replace("shopee_", "").replace("product_", "")
+        category = "product"
+
+    clean_title = clean_title.replace("_", " ").strip()
+
+    if category == "celebrity":
+        hashtags = "#ข่าวดารา #ดาราดัง #เรื่องนี้ต้องดู #ข่าวด่วน #tiktokคนบันเทิง #fyp"
+    elif category == "news":
+        hashtags = "#ข่าวด่วน #ข่าวtiktok #เรื่องเด่นวันนี้ #tiktoknews #เทรนด์วันนี้ #fyp"
+    elif category == "product":
+        hashtags = "#ของดีบอกต่อ #รีวิวของดี #ของใช้ในบ้าน #พิกัดshopee #ป้าเข็มรีวิว #fyp"
+    else:
+        hashtags = "#เทรนด์วันนี้ #เรื่องนี้ต้องดู #สาระน่ารู้ #viralthailand #fyp"
+
+    return f"{clean_title} 📌 {hashtags}"
+
+
     # 9. ใส่แคปชั่น & แฮชแท็ก (ตรวจสอบก่อนว่าอยู่หน้าโพสต์จริง!)
     on_post_screen = d(textMatches="(?i)โพสต์|Post").exists or d(resourceIdMatches=".*t6b.*").exists or d(resourceIdMatches=".*h3a.*").exists
     if caption and on_post_screen:
-        log("✍️ ยืนยันอยู่หน้าโพสต์! กำลังกรอกแคปชั่น...")
+        log(f"✍️ ยืนยันอยู่หน้าโพสต์! กำลังกรอกแคปชั่นและแฮชแท็ก: {caption}")
+        try:
+            d.set_fastinput_ime(True)
+        except Exception:
+            pass
+            
         if d(resourceIdMatches=".*h3a.*").exists:
             d(resourceIdMatches=".*h3a.*").click()
+        elif d(textContains="อธิบาย").exists:
+            d(textContains="อธิบาย").click()
         else:
             d.click(int(w * 0.25), int(h * 0.15))
         time.sleep(1)
-        clean_cap = caption.replace("\n", " ").replace("'", "")
-        d.send_keys(clean_cap[:100])
+        
+        d.send_keys(caption)
         time.sleep(2)
+        
+        try:
+            d.set_fastinput_ime(False)
+        except Exception:
+            pass
 
     # 10. กดปุ่ม 'โพสต์' (Post)
     log("🚀 กำลังกดปุ่ม 'โพสต์' ขึ้น TikTok...")
@@ -374,7 +417,7 @@ def main():
         log("✅ ไม่มีวิดีโอใหม่ในคลัง ระบบพร้อมทำงานในรอบถัดไป")
         return
 
-    caption = f"{video.stem.replace('_', ' ')} #เทรนด์วันนี้ #เรื่องนี้ต้องดู #fyp"
+    caption = build_tiktok_caption(video)
     auto_post_video_on_tiktok_app(device_id, video, caption=caption)
 
 
