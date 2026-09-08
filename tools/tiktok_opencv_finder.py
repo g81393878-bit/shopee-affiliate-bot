@@ -40,33 +40,41 @@ def capture_adb_screen(device_id: Optional[str] = None) -> Optional[np.ndarray]:
     return None
 
 
+import random
+
 def find_template_on_screen(
     screen_img: np.ndarray,
     template_path: pathlib.Path,
-    threshold: float = 0.75
+    threshold: float = 0.82,
+    randomize_offset: bool = True
 ) -> Optional[Tuple[int, int]]:
-    """ค้นหาตำแหน่งพิกัดกึ่งกลาง (Center X, Center Y) ของปุ่มภาพต้นแบบบนหน้าจอ"""
+    """ค้นหาตำแหน่งพิกัดกึ่งกลาง (Center X, Center Y) ของปุ่มภาพต้นแบบด้วย OpenCV Grayscale + Coordinate Randomization"""
     if not template_path.exists():
-        print(f"⚠️ ไม่พบไฟล์ภาพต้นแบบ: {template_path}")
         return None
 
-    template = cv2.imread(str(template_path), cv2.IMREAD_COLOR)
-    if template is None or screen_img is None:
+    img_gray = cv2.cvtColor(screen_img, cv2.COLOR_BGR2GRAY)
+    template_gray = cv2.imread(str(template_path), cv2.IMREAD_GRAYSCALE)
+    if template_gray is None or img_gray is None:
         return None
 
-    th, tw = template.shape[:2]
+    th, tw = template_gray.shape[:2]
 
-    # ทำ Template Matching
-    res = cv2.matchTemplate(screen_img, template, cv2.TM_CCOEFF_NORMED)
+    # ทำ Grayscale Template Matching
+    res = cv2.matchTemplate(img_gray, template_gray, cv2.TM_CCOEFF_NORMED)
     min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
 
     if max_val >= threshold:
         center_x = max_loc[0] + (tw // 2)
         center_y = max_loc[1] + (th // 2)
-        print(f"🎯 [OpenCV] พบปุ่ม {template_path.name} ที่พิกัด ({center_x}, {center_y}) | Confidence: {max_val:.2%}")
+
+        # สุ่มพิกัดเบี่ยงเบนจากจุดศูนย์กลางเล็กน้อย (-8 ถึง +8 พิกเซล) เพื่อจำลองลายนิ้วมือมนุษย์จริง
+        if randomize_offset:
+            center_x += random.randint(-8, 8)
+            center_y += random.randint(-8, 8)
+
+        print(f"🎯 [OpenCV Match] พบปุ่ม {template_path.name} ที่พิกัด ({center_x}, {center_y}) | Match Score: {max_val:.4f}")
         return center_x, center_y
 
-    print(f"🔍 [OpenCV] ไม่พบปุ่ม {template_path.name} (Max Score: {max_val:.2%} < {threshold:.2%})")
     return None
 
 
@@ -74,9 +82,10 @@ def find_color_button_center(
     screen_img: np.ndarray,
     lower_bgr: Tuple[int, int, int],
     upper_bgr: Tuple[int, int, int],
-    min_area: int = 500
+    min_area: int = 500,
+    randomize_offset: bool = True
 ) -> Optional[Tuple[int, int]]:
-    """ค้นหาพิกัดปุ่มจากช่วงสีเฉพาะ (เช่น สีแดงของปุ่มโพสต์ หรือสีชมพูของปุ่มถัดไป)"""
+    """ค้นหาพิกัดปุ่มจากช่วงสีเฉพาะ (เช่น ปุ่มโพสต์สีแดง หรือปุ่มถัดไป) พร้อมสุ่มพิกัดนิ้วมือ"""
     if screen_img is None:
         return None
 
@@ -90,11 +99,39 @@ def find_color_button_center(
         area = cv2.contourArea(cnt)
         if area > min_area and area > max_area:
             x, y, w, h = cv2.boundingRect(cnt)
-            # ปุ่มโพสต์มักจะอยู่โซนล่างของหน้าจอ (Y > 50% ของความสูง)
+            # ปุ่มมักจะอยู่โซนครึ่งล่างของหน้าจอ
             if y > screen_img.shape[0] * 0.5:
                 max_area = area
-                best_center = (x + w // 2, y + h // 2)
+                cx = x + w // 2
+                cy = y + h // 2
+                if randomize_offset:
+                    cx += random.randint(-6, 6)
+                    cy += random.randint(-6, 6)
+                best_center = (cx, cy)
 
     if best_center:
-        print(f"🔴 [OpenCV Color Detection] พบปุ่มสีที่พิกัด {best_center}")
+        print(f"🔴 [OpenCV Color Match] พบปุ่มสีที่พิกัด {best_center}")
     return best_center
+
+
+def detect_and_dismiss_popups_opencv(device_id: Optional[str] = None) -> bool:
+    """ตรวจจับและกดข้ามหน้าต่างป๊อปอัปสุ่มต่าง ๆ ของ TikTok (เช่น ปุ่มยกเลิก / อนุญาต / ปิด)"""
+    screen_img = capture_adb_screen(device_id)
+    if screen_img is None:
+        return False
+
+    # 1. ลองค้นหาภาพต้นแบบปุ่ม Cancel / Dismiss / Close
+    popups = ["cancel_btn.png", "dismiss_btn.png", "close_btn.png", "allow_btn.png"]
+    for popup_file in popups:
+        tpl_path = TEMPLATES_DIR / popup_file
+        if tpl_path.exists():
+            coords = find_template_on_screen(screen_img, tpl_path, threshold=0.80)
+            if coords:
+                print(f"🛑 [OpenCV PopUp Shield] ตรวจพบป๊อปอัป {popup_file} สั่งกดข้ามที่พิกัด {coords}...")
+                cmd = ["adb"]
+                if device_id:
+                    cmd.extend(["-s", device_id])
+                cmd.extend(["shell", "input", "tap", str(coords[0]), str(coords[1])])
+                subprocess.run(cmd, timeout=5)
+                return True
+    return False
