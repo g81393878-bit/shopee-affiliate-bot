@@ -52,20 +52,7 @@ TOOLS = ROOT.parent / "tools"
 sys.path.insert(0, str(BACKEND))
 sys.path.insert(0, str(TOOLS))
 
-# VPS is the primary runtime. Render env sync is opt-in so it cannot silently
-# overwrite VPS values (especially per-page Facebook tokens).
-if os.getenv("USE_RENDER_ENV", "false").lower() in ("1", "true", "yes"):
-    try:
-        import render_set_env
-        render_set_env.API_KEY = render_set_env.get_api_key()
-        items = render_set_env.fetch_env_vars()
-        for it in items:
-            k, v = render_set_env.decode_env_var(it.get("envVar"))
-            if k:
-                os.environ[k] = v
-    except Exception as e:
-        print(f"[WARN] Render env sync skipped: {e}")
-
+# VPS is the primary runtime. Using local/VPS environment directly.
 from dotenv import load_dotenv  # noqa: E402
 load_dotenv(BACKEND / ".env")
 
@@ -599,10 +586,13 @@ def get_posted_titles() -> set:
 
 
 def record_posted_title(title: str) -> None:
-    """บันทึกหัวข้อคลิปที่เพิ่งโพสต์สำเร็จลงประวัติ"""
+    """บันทึกหัวข้อคลิปที่เพิ่งโพสต์สำเร็จลงประวัติ (ตัดให้สั้นกระชับ บรรทัดแรก <= 80 ตัวอักษร)"""
     if not title:
         return
     try:
+        clean_title = re.sub(r'[\r\n].*', '', str(title)).strip()[:80]
+        if not clean_title:
+            clean_title = str(title).strip()[:80]
         records = []
         if POSTED_HISTORY_TITLES_FILE.exists():
             try:
@@ -612,7 +602,7 @@ def record_posted_title(title: str) -> None:
             except Exception:
                 records = []
         records.append({
-            "title": title,
+            "title": clean_title,
             "posted_at": datetime.now(timezone.utc).isoformat()
         })
         if len(records) > 500:
@@ -622,7 +612,7 @@ def record_posted_title(title: str) -> None:
         log(f"[WARN] บันทึกประวัติโพสต์ Reels ล้ม: {e}")
 
 
-def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True, custom_video: Optional[str] = None, custom_caption: Optional[str] = None, broadcast_all_yt: bool = False) -> int:
+def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True, custom_video: Optional[str] = None, custom_caption: Optional[str] = None, broadcast_all_yt: bool = False, notify: bool = True) -> int:
     item = None
     product = {}
     pending: list[Path] = []
@@ -713,17 +703,18 @@ def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True
 
         if cand_product:
             product = cand_product
-            if custom_caption:
-                product["product_name"] = custom_caption
+            if custom_caption and not product.get("product_name"):
+                product["product_name"] = re.sub(r'[\r\n].*', '', custom_caption).strip()[:80]
         else:
+            short_title = re.sub(r'[\r\n].*', '', custom_caption).strip()[:80] if custom_caption else c_path.stem
             product = {
-                "product_name": custom_caption or c_path.stem,
+                "product_name": short_title,
                 "category": "คลิปพิเศษ",
                 "is_pure_content": True,
                 "content_mode": "LIFE_HACK_TIP",
                 "topic_data": {
-                    "title": custom_caption or c_path.stem,
-                    "hook": custom_caption or c_path.stem,
+                    "title": short_title,
+                    "hook": short_title,
                     "detail": "คลิปพิเศษ สาระดีๆ จากป้าเข็ม"
                 }
             }
@@ -861,6 +852,23 @@ def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True
         log("ไม่มีคลิปใหม่ที่ไม่ซ้ำใน pending_videos/ — พักรอคลิปใหม่")
         return 0
 
+    # ตรวจสอบคุณภาพเสียงวิดีโอก่อนอัปโหลด (ห้ามคลิปไม่มีเสียงหรือไฟล์พังเด็ดขาด)
+    if item.suffix.lower() == ".mp4" and not is_image(item):
+        try:
+            from auto_product_reels import verify_video_has_audio
+            has_audio, audio_reason = verify_video_has_audio(item)
+            if not has_audio:
+                log(f"🚨 [AUDIO GUARD] คลิปเสียงไม่ผ่านเกณฑ์ ({audio_reason}): {item.name} — ย้ายไปโฟลเดอร์เสีย (corrupted/) ทันที!")
+                corrupted_dir = ROOT / "corrupted"
+                corrupted_dir.mkdir(parents=True, exist_ok=True)
+                try:
+                    shutil.move(str(item), str(corrupted_dir / item.name))
+                except Exception as e_mv_corrupt:
+                    log(f"⚠️ ย้ายคลิปเสียล้มเหลว: {e_mv_corrupt}")
+                return 1
+        except Exception as e_vfy:
+            log(f"[WARN] ตรวจสอบเสียงล้มเหลว ({e_vfy}) — ดำเนินการต่อ")
+
     if custom_caption:
         caption = custom_caption
     else:
@@ -900,6 +908,7 @@ def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True
     )
     is_already_formatted = item.name.startswith(KNOWN_FORMATTED_PREFIXES)
     should_normalize = normalize and not is_already_formatted
+    tmp = None
     if should_normalize:
         fd, tmp_path = tempfile.mkstemp(suffix=".mp4", prefix="reels_norm_")
         os.close(fd)
@@ -1058,7 +1067,8 @@ def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True
                 f"  • ⏱️ รอบถัดไป: อีก 30 นาที ระบบจะโพสต์ให้อัตโนมัติ\n"
                 f"━━━━━━━━━━━━━━━━━━"
             )
-            _notify_owner(notify_msg)
+            if notify:
+                _notify_owner(notify_msg)
         except Exception as e:
             log(f"[NOTIFY] ส่งแจ้งเตือน LINE ล้ม: {e}")
 
@@ -1075,14 +1085,9 @@ def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True
 
     err_msg = res.get("error", "ไม่ทราบสาเหตุ")
     log(f"[FAIL] โพสต์ไม่สำเร็จ: {err_msg}")
-    _notify_owner(
-        f"🚨 [แจ้งเตือนระบบการโพสต์ Reels]\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"• ❌ สถานะ: การโพสต์รอบนี้ไม่สำเร็จ\n"
-        f"• 📌 สาเหตุ: {err_msg[:200]}\n"
-        f"• ⏱️ การทำงาน: ระบบจะตรวจสอบและลองใหม่อัตโนมัติในรอบถัดไป\n"
-        f"━━━━━━━━━━━━━━━━━━"
-    )
+    if notify:
+        # ใช้ระบบ notify_reels_issues ที่มี streak >= 2 และกันสแปม แทนการยิงเตือนรัวทุกรอบ
+        notify_reels_issues(1, dry_run=dry_run)
     # ลบ temp file ที่แปลงจากภาพ (โพสต์ล้ม)
     if img_video_tmp is not None:
         try:
