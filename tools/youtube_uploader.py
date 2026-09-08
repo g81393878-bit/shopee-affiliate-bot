@@ -16,6 +16,7 @@ import pathlib
 import re
 import sys
 import time
+import threading
 from typing import Dict, Optional, Union
 
 # บังคับ UTF-8
@@ -83,57 +84,75 @@ def get_token_files() -> list:
     return tokens
 
 
-def get_authenticated_service(token_path: Optional[pathlib.Path] = None, channel_id: int = 1):
-    """สร้างหรือโหลดเซสชัน YouTube API จาก OAuth token ของช่องที่ระบุ"""
+class ReauthorizationRequired(RuntimeError):
+    """The owner must explicitly reconnect this channel."""
+
+
+def atomic_write(path, text):
+    import tempfile
+    path = pathlib.Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(name, path)
+    finally:
+        pathlib.Path(name).unlink(missing_ok=True)
+
+
+def get_authenticated_service(token_path=None, channel_id=1, *, interactive=False, expected_handle=None):
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
     from google.auth.transport.requests import Request
+    from google.auth.exceptions import RefreshError, TransportError
     from googleapiclient.discovery import build
 
-    target_token_file = token_path or (TOOLS_DIR / f"youtube_token_{channel_id}.json" if channel_id > 1 else TOKEN_FILE)
+    target = pathlib.Path(token_path) if token_path else (TOOLS_DIR / f"youtube_token_{channel_id}.json" if channel_id > 1 else TOKEN_FILE)
     creds = None
-    if target_token_file.exists():
+    changed = False
+    if target.exists() and not interactive:
         try:
-            creds = Credentials.from_authorized_user_file(str(target_token_file), SCOPES)
-            granted_scopes = set(getattr(creds, "scopes", None) or [])
-            if not set(SCOPES).issubset(granted_scopes):
-                # อย่าบังคับเปิดเบราว์เซอร์บน VPS: token เดิมยังอัปโหลดได้
-                # ส่วนคอมเมนต์จะข้าม/แจ้งเตือนจนกว่าจะ reauthorize ผ่าน CLI
-                log(f"[WARN] {target_token_file.name} ขาด OAuth scope สำหรับคอมเมนต์ — อัปโหลดได้ แต่คอมเมนต์ต้องยืนยัน OAuth ใหม่")
-        except Exception as e:
-            log(f"[WARN] โหลด token เก่าล้มเหลว ({e}) — จะขอใหม่อีกครั้ง")
-
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
+            # Preserve the granted scopes; don't request broader scopes on refresh.
+            creds = Credentials.from_authorized_user_file(str(target))
+        except (ValueError, KeyError) as exc:
+            raise ReauthorizationRequired(f"ช่อง {channel_id}: ไฟล์ Token ไม่สมบูรณ์ ต้องเชื่อมต่อใหม่") from exc
+    if creds and not creds.valid and creds.refresh_token:
+        for attempt in range(3):
             try:
                 creds.refresh(Request())
-            except Exception as e:
-                log(f"[WARN] Refresh token ล้มเหลว ({e}) — เริ่ม Flow ล็อคอินใหม่")
-                creds = None
-
-        if not creds:
-            # ช่องหลักใช้ OAuth client ชื่อ Shopee Shorts โดยตรง
-            # ห้าม fallback ไปใช้ client ของช่องอื่น/โปรเจกต์อื่น เพราะจะทำให้
-            # Test users และ OAuth consent ตรวจคนละโปรเจกต์
-            secret_file = CLIENT_SECRET_FILE if channel_id == 1 else TOOLS_DIR / f"client_secret_{channel_id}.json"
-            if not secret_file.exists():
-                for sf in [TOOLS_DIR / "client_secret_3.json", TOOLS_DIR / "client_secret_2.json"]:
-                    if sf.exists():
-                        secret_file = sf
-                        break
-            if not secret_file.exists():
-                raise FileNotFoundError(
-                    f"ไม่พบไฟล์ OAuth Client Secret ({secret_file.name} หรือ {CLIENT_SECRET_FILE.name})\n"
-                    f"กรุณาวางไฟล์ที่: {TOOLS_DIR}"
-                )
-            flow = InstalledAppFlow.from_client_secrets_file(str(secret_file), SCOPES)
-            log(f"🔑 กำลังเปิดเบราว์เซอร์เพื่อขอสิทธิ์อัปโหลด YouTube Shorts ช่องที่ {channel_id}...")
-            creds = flow.run_local_server(port=0, open_browser=True, prompt='consent', access_type='offline')
-        
-        target_token_file.write_text(creds.to_json(), encoding="utf-8")
-        log(f"[OK] บันทึก YouTube OAuth Token ช่องที่ {channel_id} สำเร็จ: {target_token_file.name}")
-
-    return build("youtube", "v3", credentials=creds)
+                changed = True
+                break
+            except RefreshError as exc:
+                if "invalid_grant" in str(exc):
+                    raise ReauthorizationRequired(f"ช่อง {channel_id}: invalid_grant — Token หมดอายุหรือถูกเพิกถอน ต้องเชื่อมต่อใหม่") from exc
+                if not getattr(exc, "retryable", False) or attempt == 2:
+                    raise RuntimeError("ต่ออายุ Token ไม่สำเร็จ (RefreshError)") from exc
+            except TransportError as exc:
+                if attempt == 2:
+                    raise RuntimeError("เครือข่ายขัดข้องขณะต่ออายุ Token") from exc
+            time.sleep(2 ** attempt)
+    if interactive:
+        secret = CLIENT_SECRET_FILE if channel_id == 1 else TOOLS_DIR / f"client_secret_{channel_id}.json"
+        if not secret.exists():
+            raise FileNotFoundError(f"ไม่พบ OAuth Client Secret ของช่อง {channel_id}: {secret.name}")
+        flow = InstalledAppFlow.from_client_secrets_file(str(secret), SCOPES)
+        creds = flow.run_local_server(port=0, open_browser=True, prompt="consent", access_type="offline", timeout_seconds=300)
+        changed = True
+    if not creds or not creds.valid:
+        raise ReauthorizationRequired(f"ช่อง {channel_id}: ต้องเชื่อมต่อใหม่ด้วย --add-channel {channel_id}")
+    service = build("youtube", "v3", credentials=creds)
+    if expected_handle:
+        rows = service.channels().list(part="snippet", mine=True).execute().get("items", [])
+        handles = [r["snippet"].get("customUrl", "").lower() for r in rows]
+        if expected_handle.lower() not in handles:
+            raise ReauthorizationRequired("บัญชีที่เลือกไม่ตรงกับช่องที่ต้องการ — ไม่เขียนทับ Token เดิม")
+    if changed:
+        atomic_write(target, creds.to_json())
+        log(f"[OK] บันทึก Token ช่อง {channel_id} สำเร็จ")
+    return service
 
 
 def build_shorts_title(product_name: str, is_pure_content: bool = False, hook_override: str = "") -> str:
@@ -336,6 +355,8 @@ def upload_shorts_to_channel(youtube_service, video_path: pathlib.Path, product_
             log(f"   [{channel_name}] อัปโหลดแล้ว {int(status.progress() * 100)}%")
 
     video_id = response.get("id")
+    if not video_id:
+        raise RuntimeError("YouTube response missing video ID")
     video_url = f"https://youtube.com/shorts/{video_id}"
     log(f"✅ อัปโหลด {channel_name} สำเร็จ! -> {video_url}")
     notify_telegram(f"✅ YouTube อัปโหลดสำเร็จ\nช่อง: {channel_name}\nคลิป: {video_url}")
@@ -442,84 +463,98 @@ def set_last_successful_channel(token_id: int, tokens: list):
         pass
 
 
-def notify_line_admin(message: str):
-    """ส่งแจ้งเตือนด่วนเข้า LINE เจ้าของร้านเมื่อติดลิมิตหรือมีระบบไม่ทำงาน"""
+HEALTH_FILE = TOOLS_DIR / "youtube_health_state.json"
+_UPLOAD_LOCK = threading.Lock()
+
+
+def _read_health():
     try:
-        from linebot import LineBotApi
-        from linebot.models import TextSendMessage
-        token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN") or ""
-        if not token or "mock" in token.lower():
-            return
-        admin_uid = (os.getenv("ADMIN_LINE_USER_ID") or "Uc88eb3896b0e4bcc5fbaa9b78ac1294e").strip()
-        LineBotApi(token).push_message(admin_uid, TextSendMessage(text=message[:1500]))
-        log(f"[LINE-ALERT] ส่งแจ้งเตือนปัญหาเข้า LINE แอดมินแล้ว: {message[:50]}...")
-    except Exception as e:
-        log(f"[LINE-ALERT] ส่งแจ้งเตือนปัญหาล้ม: {e}")
+        state = json.loads(HEALTH_FILE.read_text(encoding="utf-8"))
+        return state if isinstance(state, dict) else {}
+    except (OSError, ValueError):
+        return {}
 
 
-def upload_shorts(video_path: Union[pathlib.Path, str], product_meta: Optional[Dict] = None, broadcast_all: bool = False):
-    """อัปโหลดขึ้น YouTube Shorts:
-    - โหมดหมุนเวียน (Default): สลับช่องวนรอบ (Round-Robin) เพื่อเฉลี่ยโควต้า 24 ชม. + สลับช่องอัตโนมัติหากช่องในคิวโควต้าเต็ม (Auto-Failover)
-    - โหมด Broadcast All: ยิงทุกช่องพร้อมกัน
-    """
+def _token_version(path):
+    try:
+        return pathlib.Path(path).stat().st_mtime_ns
+    except OSError:
+        return 0
+
+
+def _failure(exc):
+    # Only report known categories, never raw responses containing credentials.
+    raw = str(exc)
+    if isinstance(exc, ReauthorizationRequired) or "invalid_grant" in raw:
+        return "auth", "Token ใช้ไม่ได้ ต้องเชื่อมต่อ Google ใหม่", 6 * 3600
+    if "uploadLimitExceeded" in raw:
+        return "upload_limit", "ช่องถึงลิมิตอัปโหลด พัก 6 ชั่วโมงก่อนลองใหม่", 6 * 3600
+    if "quotaExceeded" in raw:
+        return "api_quota", "โควต้า API หมด พัก 6 ชั่วโมงก่อนลองใหม่", 6 * 3600
+    return "temporary", "เชื่อมต่อหรืออัปโหลดไม่สำเร็จ พัก 5 นาที", 300
+
+
+def notify_line_admin(message):
+    """Compatibility alias: operational alerts go to Telegram only."""
+    notify_telegram(message)
+
+
+def upload_shorts(video_path, product_meta=None, broadcast_all=False):
+    # Scheduled and manual calls share the same cooldown state in this process.
+    with _UPLOAD_LOCK:
+        return _upload_shorts_locked(video_path, product_meta, broadcast_all)
+
+
+def _upload_shorts_locked(video_path, product_meta=None, broadcast_all=False):
+    """Try eligible channels; retain input on failure and persist alert cooldowns."""
     video_path = pathlib.Path(video_path)
+    if not video_path.is_file():
+        raise FileNotFoundError("ไม่พบไฟล์วิดีโอที่ต้องการอัปโหลด")
     tokens = get_token_files()
+    state = _read_health()
+    now = time.time()
+    results, changes = [], []
     if not tokens:
-        log("[WARN] ไม่พบไฟล์ YouTube Token ใดๆ ใน tools/")
-        notify_line_admin("⚠️ [แจ้งเตือนระบบ YouTube]\n\nไม่พบไฟล์ Token สำหรับเชื่อมต่อ YouTube ในระบบ กรุณาตรวจสอบการล็อกอินจ้า")
-        return None
-
-    if broadcast_all:
-        results = []
-        for t in tokens:
-            try:
-                yt_service = get_authenticated_service(token_path=t["path"], channel_id=t["id"])
-                ch_info = get_channel_info(yt_service)
-                ch_display = f"{ch_info['title']} ({ch_info['handle']})" if ch_info.get("handle") else ch_info.get("title", t["name"])
-                url = upload_shorts_to_channel(yt_service, video_path, product_meta, channel_name=ch_display)
-                if url:
-                    results.append({"channel": ch_display, "url": url, "id": t["id"]})
-            except Exception as e:
-                log(f"[WARN] อัปโหลดขึ้น {t['name']} ล้มเหลว: {e}")
-        return results
-
-    # โหมด Round-Robin Rotation + Auto-Failover (เฉลี่ยโควต้าและกันสะดุด)
-    ordered_tokens, target_idx = get_next_channel_rotation(tokens)
-    results = []
-
-    for t in ordered_tokens:
+        if now >= state.get("no_tokens_alert", 0):
+            changes.append("ไม่พบ Token ของช่อง YouTube")
+            state["no_tokens_alert"] = now + 21600
+    ordered = tokens if broadcast_all or not tokens else get_next_channel_rotation(tokens)[0]
+    for t in ordered:
+        key = str(t["id"])
+        previous = state.get(key, {})
+        version = _token_version(t["path"])
+        if previous.get("version") == version and previous.get("retry_at", 0) > now:
+            continue
         try:
-            yt_service = get_authenticated_service(token_path=t["path"], channel_id=t["id"])
-            ch_info = get_channel_info(yt_service)
-            ch_display = f"{ch_info['title']} ({ch_info['handle']})" if ch_info.get("handle") else ch_info.get("title", t["name"])
-            url = upload_shorts_to_channel(yt_service, video_path, product_meta, channel_name=ch_display)
-            if url:
-                set_last_successful_channel(t["id"], tokens)
-                increment_channel_counter(t["id"], ch_display)
-                results.append({"channel": ch_display, "url": url, "id": t["id"]})
-                stats = get_channel_stats()
-                stats_text = format_channel_stats(stats, tokens)
-                log(f"🎯 [Rotation] โพสต์ YouTube Shorts สำเร็จด้วย {ch_display} ({stats_text})")
-                break  # โพสต์สำเร็จ 1 ช่องในรอบนี้เรียบร้อย (เฉลี่ยโควต้า)
-        except Exception as e:
-            err_str = str(e)
-            if "uploadLimitExceeded" in err_str:
-                reason = "ติดลิมิตการอัปโหลดรายวันของ Google (Daily Quota Exceeded)"
-            elif "invalid_grant" in err_str:
-                reason = "เซสชันล็อกอินหมดอายุ กรุณากดเชื่อมต่อใหม่"
-            elif "quotaExceeded" in err_str:
-                reason = "API Quota ประจำวันหมดชั่วคราว"
+            service = get_authenticated_service(token_path=t["path"], channel_id=t["id"])
+            info = get_channel_info(service)
+            display = info.get("title") or t["name"]
+            url = upload_shorts_to_channel(service, video_path, product_meta, channel_name=display)
+            if not url:
+                raise RuntimeError("YouTube ไม่ยืนยันผลอัปโหลด")
+            results.append({"channel": display, "url": url, "id": t["id"]})
+            state.pop(key, None)
+            atomic_write(HEALTH_FILE, json.dumps(state, ensure_ascii=False))
+            if previous:
+                changes.append(f"ช่อง {t['id']}: กลับมาอัปโหลดสำเร็จแล้ว")
+            set_last_successful_channel(t["id"], tokens)
+            increment_channel_counter(t["id"], display)
+            if not broadcast_all:
+                break
+        except Exception as exc:
+            code, reason, delay = _failure(exc)
+            if previous.get("code") != code or now >= previous.get("alert_at", 0):
+                changes.append(f"ช่อง {t['id']}: {reason}")
+                alert_at = now + 21600
             else:
-                reason = f"เกิดข้อผิดพลาด ({err_str[:80]})"
-
-            log(f"[WARN] ช่อง {t['name']} ไม่พร้อม ({reason}) ➔ สลับไปช่องสำรองถัดไปอัตโนมัติ (Auto-Failover)...")
-            notify_line_admin(
-                f"⚠️ [แจ้งเตือนสถานะ YouTube]\n\n"
-                f"🔴 ช่อง: {t['name']}\n"
-                f"📌 สถานะ: {reason}\n\n"
-                f"🔄 ระบบ Auto-Failover สลับไปโพสต์ช่องสำรองถัดไปให้อัตโนมัติเรียบร้อยจ้า"
-            )
-
+                alert_at = previous["alert_at"]
+            state[key] = {"code": code, "retry_at": now + delay, "alert_at": alert_at,
+                          "version": _token_version(t["path"])}
+            log(f"[WARN] ช่อง {t['id']}: {reason}")
+    atomic_write(HEALTH_FILE, json.dumps(state, ensure_ascii=False))
+    if changes:
+        outcome = "รอบนี้ YouTube อัปโหลดสำเร็จ" if results else "รอบนี้ยังไม่มีการอัปโหลด YouTube สำเร็จ"
+        notify_telegram("สถานะ YouTube\n" + "\n".join(changes) + "\n" + outcome)
     return results
 
 
@@ -531,6 +566,7 @@ def main():
     parser.add_argument("--list-channels", action="store_true", help="แสดงรายการช่อง YouTube ที่เชื่อมต่อไว้")
     parser.add_argument("--video", type=str, help="อัปโหลดวิดีโอที่ระบุ")
     parser.add_argument("--broadcast-all", action="store_true", help="สั่งยิงโพสต์ขึ้นครบทุกช่อง YouTube พร้อมกันทันที")
+    parser.add_argument("--expected-handle", help="ตรวจ handle ก่อนบันทึก Token ใหม่")
     args = parser.parse_args()
 
     if args.list_channels:
@@ -548,12 +584,12 @@ def main():
         return
 
     if args.add_channel > 0:
-        get_authenticated_service(channel_id=args.add_channel)
+        get_authenticated_service(channel_id=args.add_channel, interactive=True, expected_handle=args.expected_handle)
         print(f"🎉 สำเร็จ! เชื่อมต่อช่อง YouTube ช่องที่ {args.add_channel} เรียบร้อยแล้ว!")
         return
 
     if args.auth_only:
-        get_authenticated_service(channel_id=1)
+        get_authenticated_service(channel_id=1, interactive=True, expected_handle=args.expected_handle)
         print("✅ ยืนยันสิทธิ์บัญชี YouTube ช่องหลักสำเร็จเรียบร้อยแล้ว!")
         return
 
