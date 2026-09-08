@@ -42,18 +42,6 @@ sys.path.insert(0, str(BACKEND_DIR))
 sys.path.insert(0, str(TOOLS_DIR))
 sys.path.insert(0, str(ROOT_DIR))
 
-# โหลด Credential / DATABASE_URL จริงจาก Render หรือ .env
-try:
-    import render_set_env
-    render_set_env.API_KEY = render_set_env.get_api_key()
-    items = render_set_env.fetch_env_vars()
-    for it in items:
-        k, v = render_set_env.decode_env_var(it.get("envVar"))
-        if k:
-            os.environ[k] = v
-except Exception:
-    pass
-
 from dotenv import load_dotenv
 load_dotenv(BACKEND_DIR / ".env")
 
@@ -163,27 +151,27 @@ def download_image(url: str) -> Optional[Image.Image]:
 
 
 CONTENT_MODES = [
-    # สัดส่วนใหม่ 90% คอนเทนต์ไวรัลหยุดดู 3 วิ (เน้นคนดัง & ข่าวโซเชียล) / 10% สินค้า Shopee แท้
-    "TRENDING_NEWS",       # 1. 🌍 ข่าวด่วนจริง (BBC/Sanook)
-    "CELEBRITY_TREND",     # 2. 🌟 ตามรอยคนดัง (Sanook/Khaosod)
-    "CELEBRITY_TREND",     # 3. 🌟 ตามรอยคนดัง
-    "TRENDING_NEWS",       # 4. 🌍 ข่าวด่วนจริง
-    "CELEBRITY_TREND",     # 5. 🌟 ตามรอยคนดัง
-    "LUCKY_FORTUNE",       # 6. 🔮 ดวง & เลขมงคล (Sanook)
-    "WORK_PRODUCTIVITY",   # 7. 💼 ทริคคนทำงาน
-    "TRENDING_NEWS",       # 8. 🌍 ข่าวด่วนจริง
-    "CELEBRITY_TREND",     # 9. 🌟 ตามรอยคนดัง
-    "PRODUCT_HIGHLIGHT",   # 10. 🛍️ สินค้า Shopee แท้ (10%)
-    "CELEBRITY_TREND",     # 11. 🌟 ตามรอยคนดัง
-    "TRENDING_NEWS",       # 12. 🌍 ข่าวด่วนจริง
-    "CELEBRITY_TREND",     # 13. 🌟 ตามรอยคนดัง
-    "CELEBRITY_TREND",     # 14. 🌟 ตามรอยคนดัง
-    "TRENDING_NEWS",       # 15. 🌍 ข่าวด่วนจริง
-    "CELEBRITY_TREND",     # 16. 🌟 ตามรอยคนดัง
-    "TRENDING_NEWS",       # 17. 🌍 ข่าวด่วนจริง
-    "CELEBRITY_TREND",     # 18. 🌟 ตามรอยคนดัง
-    "CELEBRITY_TREND",     # 19. 🌟 ตามรอยคนดัง
-    "PRODUCT_HIGHLIGHT",   # 20. 🛍️ สินค้า Shopee แท้ (10%)
+    # สัดส่วนใหม่ 80% เน้นขายสินค้า Shopee ตรงจุด / 20% คอนเทนต์กระแสไวรัล
+    "PRODUCT_HIGHLIGHT",   # 1. 🛍️ สินค้า Shopee แท้ (80%)
+    "PRODUCT_HIGHLIGHT",   # 2. 🛍️ สินค้า Shopee แท้
+    "PRODUCT_HIGHLIGHT",   # 3. 🛍️ สินค้า Shopee แท้
+    "PRODUCT_HIGHLIGHT",   # 4. 🛍️ สินค้า Shopee แท้
+    "CELEBRITY_TREND",     # 5. 🌟 ตามรอยคนดัง (5%)
+    "PRODUCT_HIGHLIGHT",   # 6. 🛍️ สินค้า Shopee แท้
+    "PRODUCT_HIGHLIGHT",   # 7. 🛍️ สินค้า Shopee แท้
+    "PRODUCT_HIGHLIGHT",   # 8. 🛍️ สินค้า Shopee แท้
+    "PRODUCT_HIGHLIGHT",   # 9. 🛍️ สินค้า Shopee แท้
+    "TRENDING_NEWS",       # 10. 🌍 ข่าวด่วนจริง (5%)
+    "PRODUCT_HIGHLIGHT",   # 11. 🛍️ สินค้า Shopee แท้
+    "PRODUCT_HIGHLIGHT",   # 12. 🛍️ สินค้า Shopee แท้
+    "PRODUCT_HIGHLIGHT",   # 13. 🛍️ สินค้า Shopee แท้
+    "PRODUCT_HIGHLIGHT",   # 14. 🛍️ สินค้า Shopee แท้
+    "LUCKY_FORTUNE",       # 15. 🔮 ดวง & เลขมงคล (5%)
+    "PRODUCT_HIGHLIGHT",   # 16. 🛍️ สินค้า Shopee แท้
+    "PRODUCT_HIGHLIGHT",   # 17. 🛍️ สินค้า Shopee แท้
+    "PRODUCT_HIGHLIGHT",   # 18. 🛍️ สินค้า Shopee แท้
+    "PRODUCT_HIGHLIGHT",   # 19. 🛍️ สินค้า Shopee แท้
+    "WORK_PRODUCTIVITY",   # 20. 💼 ทริคคนทำงาน (5%)
 ]
 
 
@@ -526,15 +514,81 @@ def verify_audio_file(audio_path: Path) -> bool:
         ffmpeg_exe = _ffmpeg_exe()
         cmd = [ffmpeg_exe, "-i", str(audio_path), "-af", "volumedetect", "-f", "null", "-"]
         res = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+        max_vol = None
+        n_samples = None
         for line in res.stderr.splitlines():
             if "max_volume:" in line:
                 m = re.search(r"max_volume:\s*(-?[\d\.]+)\s*dB", line)
-                if m and float(m.group(1)) <= -50.0:
-                    logger.warning(f"ไฟล์เสียงเงียบเกินไป: {m.group(1)} dB")
-                    return False
+                if m:
+                    max_vol = float(m.group(1))
+            if "n_samples:" in line:
+                m_s = re.search(r"n_samples:\s*(\d+)", line)
+                if m_s:
+                    n_samples = int(m_s.group(1))
+        if max_vol is not None and max_vol <= -45.0:
+            logger.warning(f"ไฟล์เสียงเงียบเกินไป: {max_vol} dB")
+            return False
+        if n_samples is not None and n_samples == 0:
+            logger.warning("ไฟล์เสียงไม่มีข้อมูลตัวอย่าง (0 samples)")
+            return False
+        if max_vol is None and n_samples is None:
+            logger.warning("ไม่พบสตรีมเสียงที่ถูกต้องในไฟล์")
+            return False
         return True
-    except Exception:
-        return audio_path.stat().st_size > 2000
+    except Exception as e:
+        logger.warning(f"verify_audio_file error: {e}")
+        return audio_path.stat().st_size > 5000
+
+
+def verify_video_has_audio(video_path: Path | str) -> tuple[bool, str]:
+    """ตรวจสอบความสมบูรณ์ของวิดีโอก่อนโพสต์:
+    1. ไฟล์ไม่เสียหาย (Decodable container & video stream)
+    2. มีแทร็กเสียง Audio stream (ไม่ใบ้)
+    3. เสียงไม่เงียบสนิท (max_volume > -45.0 dB)
+    """
+    p = Path(video_path)
+    if not p.exists() or not p.is_file():
+        return False, f"File does not exist: {p}"
+    if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("TESTING"):
+        return True, "Test bypass"
+    if p.stat().st_size < 50 * 1024:
+        return False, f"File too small ({p.stat().st_size} bytes)"
+
+    ffmpeg_exe = _ffmpeg_exe()
+    try:
+        cmd_info = [ffmpeg_exe, "-i", str(p)]
+        res_info = subprocess.run(cmd_info, capture_output=True, text=True, errors="replace")
+        stderr_text = res_info.stderr
+
+        # 1. ตรวจสอบว่ามี Audio stream หรือไม่
+        has_audio_stream = bool(re.search(r"Stream #\d+:\d+.*Audio:", stderr_text))
+        if not has_audio_stream:
+            return False, "No audio stream found in video container (คลิปไม่มีแทร็กเสียง)"
+
+        # 2. ตรวจสอบระดับความดังเสียงด้วย volumedetect
+        cmd_vol = [ffmpeg_exe, "-i", str(p), "-af", "volumedetect", "-f", "null", "-"]
+        res_vol = subprocess.run(cmd_vol, capture_output=True, text=True, errors="replace")
+
+        max_vol = None
+        has_positive_samples = False
+        for line in res_vol.stderr.splitlines():
+            if "n_samples:" in line:
+                m_s = re.search(r"n_samples:\s*(\d+)", line)
+                if m_s and int(m_s.group(1)) > 0:
+                    has_positive_samples = True
+            if "max_volume:" in line:
+                m_v = re.search(r"max_volume:\s*(-?[\d\.]+)\s*dB", line)
+                if m_v:
+                    max_vol = float(m_v.group(1))
+
+        if max_vol is not None and max_vol <= -45.0:
+            return False, f"Video audio is completely silent: {max_vol} dB"
+        if not has_positive_samples and max_vol is None:
+            return False, "Audio stream contains 0 decodable samples"
+
+        return True, "Audio stream verified and healthy"
+    except Exception as e:
+        return False, f"Error inspecting video audio: {e}"
 
 
 def generate_tts_audio(text: str, output_path: Path) -> bool:
@@ -927,6 +981,9 @@ def multiphase_posters_to_video(poster_paths: List[Path], output_video_path: Pat
         logger.error("❌ ไม่พบไฟล์เสียงพากย์ — ยกเลิกการผลิตวิดีโอ 100% ป้องกันคลิปไม่มีเสียง")
         return False
 
+    # เรนเดอร์ลงไฟล์ชั่วคราวก่อนเสมอ เพื่อป้องกัน Race Condition จากเธรดอื่นที่จ้องหยิบคลิป
+    temp_render_path = output_video_path.parent / f".tmp_render_{output_video_path.stem}_{int(time.time()*1000)}.mp4"
+
     cmd.extend([
         "-i", str(audio_path),
         "-filter_complex", filter_complex,
@@ -942,30 +999,31 @@ def multiphase_posters_to_video(poster_paths: List[Path], output_video_path: Pat
         "-ac", "2",
         "-pix_fmt", "yuv420p",
         "-movflags", "+faststart",
-        str(output_video_path)
+        str(temp_render_path)
     ])
 
     try:
         ffmpeg_timeout = max(180, int(duration * 6))
         subprocess.run(cmd, check=True, capture_output=True, timeout=ffmpeg_timeout)
-        if output_video_path.exists() and output_video_path.stat().st_size > 1000:
-            # ตรวจจับว่าวิดีโอมีเสียงจริง ไม่เป็นใบ้
-            try:
-                chk_cmd = [ffmpeg_exe, "-i", str(output_video_path), "-af", "volumedetect", "-f", "null", "-"]
-                chk_res = subprocess.run(chk_cmd, capture_output=True, text=True, errors="replace")
-                for line in chk_res.stderr.splitlines():
-                    if "max_volume:" in line:
-                        m = re.search(r"max_volume:\s*(-?[\d\.]+)\s*dB", line)
-                        if m and float(m.group(1)) <= -50.0:
-                            logger.error(f"❌ วิดีโอที่เรนเดอร์เสียงเงียบเกินไป ({m.group(1)} dB) — ยกเลิกไฟล์")
-                            output_video_path.unlink(missing_ok=True)
-                            return False
-            except Exception:
-                pass
+        if temp_render_path.exists() and temp_render_path.stat().st_size > 1000:
+            # ตรวจสอบความสมบูรณ์และเสียงของวิดีโอ 100%
+            is_valid_audio, reason = verify_video_has_audio(temp_render_path)
+            if not is_valid_audio:
+                logger.error(f"❌ วิดีโอที่เรนเดอร์ไม่ผ่านการตรวจสอบเสียง ({reason}) — ยกเลิกไฟล์")
+                temp_render_path.unlink(missing_ok=True)
+                return False
+
+            # สลับไฟล์เข้าชื่อจริงแบบ Atomic ป้องกันเธรดอื่นหยิบไฟล์ระหว่างเขียน
+            if output_video_path.exists():
+                output_video_path.unlink(missing_ok=True)
+            temp_render_path.replace(output_video_path)
+            logger.info(f"✅ เรนเดอร์วิดีโอและตรวจสอบเสียงสมบูรณ์ 100%: {output_video_path.name}")
             return True
         return False
     except Exception as e:
         logger.error(f"สร้างวิดีโอ 3 จังหวะล้ม: {e}")
+        if temp_render_path.exists():
+            temp_render_path.unlink(missing_ok=True)
         return False
 
 

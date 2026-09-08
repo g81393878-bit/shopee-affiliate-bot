@@ -91,16 +91,22 @@ def run_prebuffer_producer_loop():
             pending = uploader.list_pending()
             if len(pending) < 4:
                 needed = 4 - len(pending)
-                logger.info(f"📦 คิวคลิปพร้อมโพสต์เหลือ {len(pending)} คลิป — กำลังผลิตเติมคลัง {needed} คลิป (คนดัง 70% / ข่าวเรียลไทม์ 30%)...")
+                logger.info(f"📦 คิวคลิปพร้อมโพสต์เหลือ {len(pending)} คลิป — กำลังผลิตเติมคลัง {needed} คลิป (สินค้า Shopee 80% / ไวรัล 20%)...")
                 for _ in range(needed):
-                    # ล็อค 100% คอนเทนต์คนดัง 70% + ข่าวเรียลไทม์ 30% (ปิดสินค้า Shopee / หมวดอื่น 0%)
-                    cat = random.choices(
-                        ["CELEBRITY_TREND", "TRENDING_NEWS"],
-                        weights=[70, 30]
-                    )[0]
-                    res = standalone_content_generator.generate_standalone_reel(cat)
-                    if res:
-                        logger.info(f"✨ ผลิตคลิปสำเร็จ [{cat}]: {res.get('title')}")
+                    # สัดส่วน 80% ขายสินค้า Shopee ตรงจุด / 20% ข่าวและไวรัล
+                    mode = random.choices(["PRODUCT", "STANDALONE"], weights=[80, 20])[0]
+                    if mode == "PRODUCT":
+                        try:
+                            prods = generate_product_reels(limit=1)
+                            if prods:
+                                logger.info(f"✨ ผลิตคลิปสินค้า Shopee สำเร็จ: {prods[0].get('name', '')[:40]}")
+                        except Exception as pe:
+                            logger.warning(f"⚠️ Product reel gen warning: {pe}")
+                    else:
+                        cat = random.choices(["CELEBRITY_TREND", "TRENDING_NEWS", "LUCKY_FORTUNE", "WORK_PRODUCTIVITY"], weights=[35, 35, 15, 15])[0]
+                        res = standalone_content_generator.generate_standalone_reel(cat)
+                        if res:
+                            logger.info(f"✨ ผลิตคลิปไวรัลสำเร็จ [{cat}]: {res.get('title')}")
         except Exception as e:
             logger.warning(f"⚠️ Pre-buffer producer warning: {e}")
         time.sleep(90)  # ตรวจสอบทุก 90 วินาที
