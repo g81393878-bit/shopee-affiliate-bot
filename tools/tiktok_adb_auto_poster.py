@@ -97,40 +97,28 @@ def sync_next_video_from_vps() -> Optional[pathlib.Path]:
 
 
 def push_video_to_mobile(device_id: str, video_path: pathlib.Path) -> str:
-    """คัดลอกไฟล์วิดีโอเข้าสู่ Gallery มือถือ พร้อมระบบหน่วงเวลา Media Scanner ป้องกัน Race Condition"""
+    """ลบไฟล์วิดีโอเก่าในโทรศัพท์เพื่อป้องกันคลิปซ้ำ ➔ คัดลอกวิดีโอใหม่เข้า ➔ สั่ง Media Scanner"""
     target_path = f"/sdcard/Movies/{video_path.name}"
-    log(f"📲 กำลังส่งวิดีโอ {video_path.name} เข้าสู่มือถือ...")
+    log("🧹 กำลังลบวิดีโอเก่าออกจากคลังมือถือเพื่อไม่ให้ค้างคลิปซ้ำ...")
+    run_adb(["shell", "rm", "-f", "/sdcard/Movies/*.mp4"], device_id=device_id)
+    time.sleep(1)
+
+    log(f"📲 กำลังส่งวิดีโอใหม่ {video_path.name} เข้าสู่มือถือ...")
     run_adb(["push", str(video_path), target_path], device_id=device_id, timeout=60)
     
-    # Broadcast ให้ MediaScanner ทำการลงทะเบียนไฟล์มีเดียใหม่ลงฐานข้อมูล Android ทันที
-    log("🔄 สั่งกระตุ้น Media Scanner สแกนไฟล์วิดีโอใหม่เข้า Gallery...")
+    log("🔄 สั่งกระตุ้น Media Scanner สแกนวิดีโอใหม่เข้า Gallery...")
     run_adb(["shell", "am", "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE", "-d", f"file://{target_path}"], device_id=device_id)
-    # หน่วงเวลารอ 4 วินาทีเพื่อป้องกันปัญหา Race Condition (ให้ MediaStore สร้าง Thumbnail ทันก่อนเปิดแอป)
     time.sleep(4)
     return target_path
 
 
 def find_first_gallery_item_pos(root: Optional[ET.Element], w: int, h: int) -> Tuple[int, int]:
-    """ค้นหาพิกัดวิดีโอแรกสุดในแกลเลอรี (ImageView Instance 0 / Upper-Left Grid Cell) พร้อม Fallback เปอร์เซ็นต์"""
-    if root is not None:
-        for elem in root.iter("node"):
-            cls = elem.attrib.get("class", "")
-            bounds = elem.attrib.get("bounds", "")
-            if "ImageView" in cls or "CheckBox" in cls or "FrameLayout" in cls:
-                if bounds:
-                    m = re.findall(r"\d+", bounds)
-                    if len(m) >= 4:
-                        x1, y1, x2, y2 = map(int, m[:4])
-                        cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
-                        # ตรวจว่าเป็นองค์ประกอบที่มุมซ้ายบนของคลังรูปภาพหรือไม่ (X < 40% W และ 10% H < Y < 45% H)
-                        if (0.05 * w) < cx < (0.35 * w) and (0.10 * h) < cy < (0.45 * h):
-                            log(f"🎯 พบบอกซ์วิดีโอแรกใน Gallery จาก Layout Class ({cls}): ({cx}, {cy})")
-                            return cx, cy
-
-    # Fallback: พิกัดเปอร์เซ็นต์สัมพัทธ์ (Relative Percentage Coordinates 17.5% W, 20.9% H)
-    target_x = int(w * 0.175)
-    target_y = int(h * 0.209)
-    log(f"📍 คำนวณพิกัดเป้าหมายเปอร์เซ็นต์สัมพัทธ์ (Row 1 Col 1): ({target_x}, {target_y})")
+    """ค้นหาพิกัดวิดีโอแรกในแกลเลอรี (Row 1 Col 2: Square 2 ถัดจากช่องกล้องถ่ายรูป)"""
+    # ใน TikTok Gallery ช่องแรกสุด (Row 1 Col 1) คือไอคอนปุ่มกล้อง (+)
+    # คลิปวิดีโอแรกสุดที่เพิ่งอัปโหลดเข้ามาจะอยู่ที่ช่องที่ 2 (Row 1 Col 2: X ~ 500, Y ~ 310)
+    target_x = int(w * 0.625) if w > 0 else 500
+    target_y = int(h * 0.231) if h > 0 else 310
+    log(f"🎯 เลือกคลิปวิดีโอชิ้นแรกสุดในคลังภาพ (Row 1 Col 2): ({target_x}, {target_y})")
     return target_x, target_y
 
 
@@ -249,8 +237,11 @@ def auto_post_video_on_tiktok_app(device_id: str, video_path: pathlib.Path, capt
 
     # 6. กดเลือกอัปโหลดจากคลังภาพ
     log("👉 กำลังเลือกอัปโหลดวิดีโอจากคลังภาพ...")
+    # 6. กดเลือกอัปโหลดจากคลังภาพ (upload_hot_area: 53, 1232)
+    log("👉 กำลังเลือกอัปโหลดวิดีโอจากคลังภาพ...")
     root = dump_ui_hierarchy(device_id)
-    upload_pos = find_node_bounds(root, text_contains="อัปโหลด") or (int(w * 0.0875), int(h * 0.685))
+    upload_pos = find_node_bounds(root, resource_id="upload_hot_area") or find_node_bounds(root, text_contains="อัปโหลด") or (int(w * 0.066), int(h * 0.919))
+    log(f"📍 พิกัดปุ่มอัปโหลดคลังภาพ: {upload_pos}")
     run_adb(["shell", "input", "tap", str(upload_pos[0]), str(upload_pos[1])], device_id=device_id)
     time.sleep(4)
 
