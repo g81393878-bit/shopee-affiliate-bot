@@ -187,31 +187,21 @@ def human_like_swipe(device_id: str, w: int, h: int):
     run_adb(["shell", "input", "swipe", str(start_x), str(start_y), str(end_x), str(end_y), str(duration_ms)], device_id=device_id)
 
 
-def warmup_fyp(device_id: str, minutes: float = 1.5):
-    """กระบวนการ FYP Warmup: สุ่มดูคลิปหน้าฟีด For You Page เพื่อสะสม Trust Score ป้องกัน 0 Views"""
+def warmup_fyp(device_id: str, minutes: float = 1.0):
+    """กระบวนการ FYP Warmup: สุ่มดูคลิปหน้าฟีด For You Page เพื่อสะสม Trust Score (ปัดสไลด์ดูอย่างเดียว ไม่กดถูกใจ)"""
     log(f"🔥 เริ่มต้นกระบวนการ FYP Training (Human Warmup) เป็นเวลา {minutes} นาที...")
     w, h = get_screen_resolution(device_id)
     start_time = time.time()
     
     while (time.time() - start_time) < (minutes * 60):
-        watch_time = random.uniform(4.0, 12.0)
+        watch_time = random.uniform(4.0, 8.0)
         log(f"👀 นั่งดูคลิปบนฟีดเป็นเวลา {watch_time:.1f} วินาที...")
         time.sleep(watch_time)
-        
-        # 15% Chance ดับเบิลแทปเพื่อกดไลก์
-        if random.random() < 0.15:
-            log("❤️ Action: กดถูกใจคลิป (Double Tap)")
-            cx, cy = int(w / 2), int(h / 2)
-            run_adb(["shell", "input", "tap", str(cx), str(cy)], device_id=device_id)
-            time.sleep(0.1)
-            run_adb(["shell", "input", "tap", str(cx), str(cy)], device_id=device_id)
-            time.sleep(random.uniform(1.0, 2.0))
-            
         human_like_swipe(device_id, w, h)
-        time.sleep(random.uniform(1.5, 3.0))
+        time.sleep(random.uniform(1.5, 2.5))
 
 
-def auto_post_video_on_tiktok_app(device_id: str, video_path: pathlib.Path, caption: str = "", do_warmup: bool = True) -> bool:
+def auto_post_video_on_tiktok_app(device_id: str, video_path: pathlib.Path, caption: str = "", do_warmup: bool = False) -> bool:
     """โพสต์วิดีโอขึ้น TikTok บนมือถือโดยอัตโนมัติ 100% ผ่าน ADB UI Automation"""
     log(f"🤖 เริ่มต้นกระบวนการ Zero-Touch Auto-Post สำหรับ: {video_path.name}")
     w, h = get_screen_resolution(device_id)
