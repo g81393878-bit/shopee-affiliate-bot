@@ -116,7 +116,10 @@ def main():
     if args.sync or not sys.argv[1:]:
         videos = sync_videos_from_vps(limit=5)
         if videos and devices and args.push_device:
-            push_video_to_android(videos[0], device_id=devices[0])
+            log(f"🚀 กำลังส่งวิดีโอทั้ง {len(videos)} ไฟล์เข้าสู่มือถือ...")
+            for idx, vid in enumerate(videos, 1):
+                log(f"[{idx}/{len(videos)}] ส่งวิดีโอ: {vid.name}")
+                push_video_to_android(vid, device_id=devices[0])
 
 
 if __name__ == "__main__":
