@@ -1015,7 +1015,30 @@ def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True
         if yt_results: vids.append(f"YT:{len(yt_results)}ch")
         vid_summary = ", ".join(vids)
         log(f"[OK] วิดีโอโพสต์สำเร็จ ({vid_summary}) → {dst.name}")
-        
+
+        # 📊 บันทึก Analytics แยก Platform สำหรับวิเคราะห์รายสัปดาห์
+        try:
+            import sys as _sys_ul
+            _td_ul = str(pathlib.Path(__file__).resolve().parent.parent / "tools")
+            if _td_ul not in _sys_ul.path:
+                _sys_ul.path.insert(0, _td_ul)
+            from video_analytics import log_video_posted as _log_posted
+            _cat = (product or {}).get("category", "") or ""
+            _mode = (product or {}).get("content_mode", "PRODUCT_HIGHLIGHT") or "PRODUCT_HIGHLIGHT"
+            _pid_match = re.match(r'^prod_(\d+)_', original.name)
+            _pid = int(_pid_match.group(1)) if _pid_match else None
+            for _pr in page_results:
+                if _pr.get("ok"):
+                    _log_posted(product_id=_pid, category=_cat, platform=f"facebook_p{_pr.get('page_index', 1)}",
+                                video_path=original.name, content_mode=_mode,
+                                extra={"reel_id": _pr.get("video_id", "")})
+            for _yr in yt_results:
+                _log_posted(product_id=_pid, category=_cat, platform=f"youtube_{_yr.get('channel', 'ch')}",
+                            video_path=original.name, content_mode=_mode,
+                            extra={"yt_url": _yr.get("url", "")})
+        except Exception:
+            pass
+
         # ส่งแจ้งเตือนตรงเข้า LINE แอดมินทันทีทุกครั้งที่โพสต์สำเร็จ (ไม่ต้องกดเช็คเอง)
         try:
             pname = sanitize_public_product_text(

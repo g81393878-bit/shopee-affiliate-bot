@@ -151,27 +151,27 @@ def download_image(url: str) -> Optional[Image.Image]:
 
 
 CONTENT_MODES = [
-    # สัดส่วนใหม่ 80% เน้นขายสินค้า Shopee ตรงจุด / 20% คอนเทนต์กระแสไวรัล
-    "PRODUCT_HIGHLIGHT",   # 1. 🛍️ สินค้า Shopee แท้ (80%)
-    "PRODUCT_HIGHLIGHT",   # 2. 🛍️ สินค้า Shopee แท้
-    "PRODUCT_HIGHLIGHT",   # 3. 🛍️ สินค้า Shopee แท้
-    "PRODUCT_HIGHLIGHT",   # 4. 🛍️ สินค้า Shopee แท้
-    "CELEBRITY_TREND",     # 5. 🌟 ตามรอยคนดัง (5%)
-    "PRODUCT_HIGHLIGHT",   # 6. 🛍️ สินค้า Shopee แท้
-    "PRODUCT_HIGHLIGHT",   # 7. 🛍️ สินค้า Shopee แท้
-    "PRODUCT_HIGHLIGHT",   # 8. 🛍️ สินค้า Shopee แท้
-    "PRODUCT_HIGHLIGHT",   # 9. 🛍️ สินค้า Shopee แท้
-    "TRENDING_NEWS",       # 10. 🌍 ข่าวด่วนจริง (5%)
+    # สัดส่วน 80% เน้นขายสินค้า Shopee / 20% คอนเทนต์ไวรัล (รวม BEFORE_AFTER ใหม่)
+    "PRODUCT_HIGHLIGHT",   # 1.  🛍️ สินค้า Shopee แท้ (80%)
+    "PRODUCT_HIGHLIGHT",   # 2.  🛍️ สินค้า Shopee แท้
+    "PRODUCT_HIGHLIGHT",   # 3.  🛍️ สินค้า Shopee แท้
+    "PRODUCT_HIGHLIGHT",   # 4.  🛍️ สินค้า Shopee แท้
+    "BEFORE_AFTER",        # 5.  🔄 Before/After ก่อน-หลังใช้สินค้า (5% ใหม่!)
+    "PRODUCT_HIGHLIGHT",   # 6.  🛍️ สินค้า Shopee แท้
+    "PRODUCT_HIGHLIGHT",   # 7.  🛍️ สินค้า Shopee แท้
+    "PRODUCT_HIGHLIGHT",   # 8.  🛍️ สินค้า Shopee แท้
+    "PRODUCT_HIGHLIGHT",   # 9.  🛍️ สินค้า Shopee แท้
+    "CELEBRITY_TREND",     # 10. 🌟 ตามรอยคนดัง (5%)
     "PRODUCT_HIGHLIGHT",   # 11. 🛍️ สินค้า Shopee แท้
     "PRODUCT_HIGHLIGHT",   # 12. 🛍️ สินค้า Shopee แท้
     "PRODUCT_HIGHLIGHT",   # 13. 🛍️ สินค้า Shopee แท้
     "PRODUCT_HIGHLIGHT",   # 14. 🛍️ สินค้า Shopee แท้
-    "LUCKY_FORTUNE",       # 15. 🔮 ดวง & เลขมงคล (5%)
+    "TRENDING_NEWS",       # 15. 🌍 ข่าวด่วนจริง (5%)
     "PRODUCT_HIGHLIGHT",   # 16. 🛍️ สินค้า Shopee แท้
     "PRODUCT_HIGHLIGHT",   # 17. 🛍️ สินค้า Shopee แท้
     "PRODUCT_HIGHLIGHT",   # 18. 🛍️ สินค้า Shopee แท้
     "PRODUCT_HIGHLIGHT",   # 19. 🛍️ สินค้า Shopee แท้
-    "WORK_PRODUCTIVITY",   # 20. 💼 ทริคคนทำงาน (5%)
+    "LUCKY_FORTUNE",       # 20. 🔮 ดวง & เลขมงคล (5%)
 ]
 
 
@@ -221,6 +221,13 @@ def generate_ai_voice_script(product_name: str, category: str = "", content_mode
             "- ประโยคที่ 1 (0-3 วิ): Hook หยุดดูด้วยเรื่องงาน เช่น '💼 ทริคคนทำงาน! เลิกงานตรงเวลา ชีวิตง่ายขึ้น 10 เท่า' หรือ 'วิธีคุยกับหัวหน้าให้ราบรื่นใน 10 วิ!'\n"
             "- ประโยคที่ 2 (4-7 วิ): แนะนำเทคนิคการจัดเวลา/การทำงานให้มีประสิทธิภาพ\n"
             "- ประโยคที่ 3 (8-10 วิ): จบด้วยการให้กำลังใจ เช่น 'ลองปรับใช้ดูนะจ๊ะ ทักมาคุยกับป้าเข็มใน LINE @137gsref ได้เลย'"
+        )
+    elif content_mode == "BEFORE_AFTER":
+        mode_instruction = (
+            f"สไตล์: '🔄 Before/After เปิดเผยผลลัพธ์ก่อน-หลังใช้สินค้าตัวนี้ (ขายสินค้าผ่านการเปรียบเทียบผลลัพธ์จริง)'\n"
+            f"- ประโยคที่ 1 (0-3 วิ): Hook ด้วยปัญหาก่อนใช้ เช่น '😩 ก่อนใช้ {product_name[:20]}... แย่มาก!' หรือ 'ใครยังเจอปัญหาแบบนี้อยู่ไหม?'\n"
+            f"- ประโยคที่ 2 (4-7 วิ): เล่าผลลัพธ์หลังใช้ {product_name[:20]} แบบตื่นเต้น ชัดเจน จูงใจ\n"
+            f"- ประโยคที่ 3 (8-10 วิ): CTA เชิญซื้อ เช่น 'เปลี่ยนชีวิตได้ กดดูรายละเอียดที่ลิงก์ในแคปชั่นเลยจ้า!'"
         )
     else:
         # PRODUCT_HIGHLIGHT (30% ขายสินค้าตรงๆ)
@@ -684,9 +691,12 @@ def create_product_posters_multiphase(
     sales_count: int,
     img: Image.Image,
     seed_id: int = 0,
-    content_mode: str = "PRODUCT_HIGHLIGHT"
+    content_mode: str = "PRODUCT_HIGHLIGHT",
+    product_id: int = 0
 ) -> List[Image.Image]:
-    """สร้างภาพโปสเตอร์ 1080x1920 (9:16) 3 จังหวะ สำหรับสินค้า Shopee ตาม Golden Master Template 100%"""
+    """สร้างภาพโปสเตอร์ 1080x1920 (9:16) 3 จังหวะ สำหรับสินค้า Shopee ตาม Golden Master Template 100%
+    - product_id: ถ้า > 0 จะแสดงป้าย 📍 #ID มุมล่างขวา เพื่อให้คนดูส่ง ID มาทาง LINE ได้ทันที
+    """
     try:
         import video_template_engine
         clean_pname = sanitize_public_product_text(clean_display_text(product_name))
@@ -818,6 +828,9 @@ def create_product_posters_multiphase(
     elif content_mode == "WORK_PRODUCTIVITY":
         p1_hook_text = "💼 ทริคคนทำงาน • ชีวิตง่ายขึ้น 10 เท่า!"
         badge_text = "💼 ทริคคนทำงาน"
+    elif content_mode == "BEFORE_AFTER":
+        p1_hook_text = f"😩 ก่อนใช้: ปัญหาหนักมาก! → ✅ หลังใช้: เปลี่ยนชีวิต!"
+        badge_text = "🔄 ก่อน vs หลังใช้"
 
     # ปรับปุ่ม CTA ตาม Content Mode
     cta_p1_text = "กดดูรายละเอียด / สั่งซื้อ ที่ลิงก์ในแคปชั่น" if content_mode == "PRODUCT_HIGHLIGHT" else "ติดตามสาระดีๆ แอด LINE @137gsref"
@@ -933,15 +946,38 @@ def create_product_posters_multiphase(
         draw.rounded_rectangle([40, 1705, W - 40, 1860], radius=24, fill=(15, 23, 42, 245), outline=(34, 197, 94), width=4)
         f_foot1 = get_font(FONT_BOLD, 33)
         f_foot2 = get_font(FONT_BOLD, 27)
-        if content_mode == "PRODUCT_HIGHLIGHT":
+        if content_mode in ("PRODUCT_HIGHLIGHT", "BEFORE_AFTER"):
             draw.text((W // 2, 1750), f"พิกัดของแท้: แอด LINE @137gsref พิมพ์ \"{seed_id}\"", font=f_foot1, fill=(255, 255, 255), anchor="mm")
             draw.text((W // 2, 1810), f"รับลิงก์ตรงตัวทันที! (หรือกดดูที่หน้าช่อง Anda)", font=f_foot2, fill=(74, 222, 128), anchor="mm")
         else:
             draw.text((W // 2, 1750), f"ติดตามเกร็ดความรู้ & สาระดีๆ จากป้าเข็ม", font=f_foot1, fill=(255, 255, 255), anchor="mm")
             draw.text((W // 2, 1810), f"แอด LINE: @137gsref (ทักมาคุยกันได้ 24 ชม.)", font=f_foot2, fill=(74, 222, 128), anchor="mm")
 
+        # ป้ายพิกัดสินค้า 📍 #ID มุมล่างขวา (เพื่อให้คนดูส่ง ID มาทาง LINE → บอทตอบทันที)
+        if product_id and product_id > 0:
+            badge_label = f"📍 #{product_id}"
+            f_pid = get_font(FONT_BOLD, 38)
+            # วัดขนาดข้อความ
+            try:
+                bbox = draw.textbbox((0, 0), badge_label, font=f_pid)
+                txt_w = bbox[2] - bbox[0]
+                txt_h = bbox[3] - bbox[1]
+            except AttributeError:
+                txt_w, txt_h = 120, 38
+            pad_x, pad_y = 20, 12
+            bw = txt_w + pad_x * 2
+            bh = txt_h + pad_y * 2
+            bx1 = W - bw - 30          # มุมขวา ห่างขอบ 30px
+            by1 = 1650                  # เหนือแถบ conversion bar
+            bx2 = bx1 + bw
+            by2 = by1 + bh
+            draw.rounded_rectangle([bx1, by1, bx2, by2], radius=14,
+                                   fill=(238, 77, 45, 240), outline=(255, 255, 255, 200), width=2)
+            draw.text((bx1 + pad_x, by1 + pad_y), badge_label, font=f_pid, fill=(255, 255, 255))
+
         posters.append(canvas.convert("RGB"))
     return posters
+
 
 
 def _ffmpeg_exe() -> str:
@@ -1316,7 +1352,8 @@ def generate_product_reels(limit: int = 3, selection: str = "balanced",
                 sales_count=int(p.sales_count or 100),
                 img=pil_img,
                 seed_id=p.id,
-                content_mode="PRODUCT_HIGHLIGHT"
+                content_mode="PRODUCT_HIGHLIGHT",
+                product_id=p.id   # ✅ ป้าย 📍 #ID บนวิดีโอ
             )
 
             tmp_poster_paths = []
@@ -1343,6 +1380,22 @@ def generate_product_reels(limit: int = 3, selection: str = "balanced",
                     }
                     generated.append({"id": p.id, "name": clean_name, "file": filename, "content_mode": "PRODUCT_HIGHLIGHT"})
                     print(f"✅ สร้างคลิปวิดีโอ 3 จังหวะพร้อมไฮไลท์ข้อความสำเร็จ -> {filename}")
+                    # บันทึก Analytics (category + mode สำหรับวิเคราะห์รายสัปดาห์)
+                    try:
+                        import sys as _sys_a
+                        _td = str(Path(__file__).resolve().parent.parent / "tools")
+                        if _td not in _sys_a.path:
+                            _sys_a.path.insert(0, _td)
+                        from video_analytics import log_video_posted
+                        log_video_posted(
+                            product_id=p.id,
+                            category=p.category or "unknown",
+                            platform="local_produce",
+                            video_path=filename,
+                            content_mode="PRODUCT_HIGHLIGHT"
+                        )
+                    except Exception:
+                        pass
             finally:
                 for tp in tmp_poster_paths:
                     tp.unlink(missing_ok=True)
