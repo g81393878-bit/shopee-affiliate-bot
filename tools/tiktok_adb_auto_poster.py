@@ -229,15 +229,21 @@ def post_via_u2(d, video_path: pathlib.Path, caption: str = "") -> bool:
     
     time.sleep(4)
 
-    # 6. เลือกคลิปแรกสุดในคลังภาพ (Row 1 Col 1: ช่องบนซ้ายสุด 133, 310)
+    # 6. กดเลือกแท็บ 'วิดีโอ' เพื่อกรองเฉพาะไฟล์วิดีโอ (ตัดรูปภาพ/สกรีนช็อตออก 100%)
+    if d(text="วิดีโอ").exists:
+        log("🎬 กดแท็บ 'วิดีโอ' เพื่อกรองเฉพาะคลิป...")
+        d(text="วิดีโอ").click()
+        time.sleep(2)
+
+    # 7. เลือกคลิปแรกสุดในคลังภาพ (Row 1 Col 1: ช่องบนซ้ายสุด 133, 220)
     log("🎯 เลือกคลิปวิดีโอล่าสุดในแกลเลอรี (Row 1 Col 1)...")
     w, h = d.window_size()
     target_x = int(w * 0.166) if w > 0 else 133
-    target_y = int(h * 0.231) if h > 0 else 310
+    target_y = int(h * 0.164) if h > 0 else 220
     d.click(target_x, target_y)
     time.sleep(3)
 
-    # 7. กดปุ่ม 'ถัดไป' ในหน้าแกลเลอรี
+    # 8. กดปุ่ม 'ถัดไป' ในหน้าแกลเลอรี
     log("👉 กดปุ่มถัดไป (Next)...")
     if d(textMatches="(?i)ถัดไป.*|Next.*").exists:
         d(textMatches="(?i)ถัดไป.*|Next.*").click()
@@ -245,7 +251,7 @@ def post_via_u2(d, video_path: pathlib.Path, caption: str = "") -> bool:
         d.click(int(w * 0.925), int(h * 0.912))
     time.sleep(4)
 
-    # 8. กดปุ่ม 'ถัดไป' ในหน้าพรีวิววิดีโอ
+    # 9. กดปุ่ม 'ถัดไป' ในหน้าพรีวิววิดีโอ
     log("👉 กดปุ่มถัดไปหน้าพรีวิว...")
     if d(textMatches="(?i)ถัดไป.*|Next.*").exists:
         d(textMatches="(?i)ถัดไป.*|Next.*").click()
