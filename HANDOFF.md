@@ -14,6 +14,22 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- Google Trends Autopilot พร้อมใช้งาน Local และชุดทดสอบรวมเขียว: แก้ audio guard ให้ bypass เฉพาะ tiny pytest placeholder, แก้ TikTok brand/`#TikTokUni` และ Facebook category hashtag. Targeted 30 passed + orchestration/audio 14 passed; full suite **1249 passed**. พร้อม commit เฉพาะงานนี้; การเริ่ม runner/โพสต์จริงให้ตรวจ launcher และ process หลัง commit.
+
+- Autopilot validation ล่าสุด: ติดตั้ง `backend/requirements-video.txt` เข้า `backend/.venv` แล้ว (เพิ่ม beautifulsoup4/filelock/soupsieve; dependency อื่นมีอยู่). Targeted 14 passed; live end-to-end smoke ผ่าน factual repair/review, TTS, render และ QA. Full suite 1245 passed / 4 failed ใน audio bypass + hashtag tests เดิมที่ไม่อยู่ในขอบเขต Autopilot. ตามกฎห้ามปล่อยโค้ดที่ชุดรวมไม่เขียว จึงยังไม่เริ่ม `system_runner.py`, ไม่โพสต์, ไม่ commit/push. Trends สดรอบทดสอบ fail closed เพราะไม่มีหัวข้อผ่านทุกด่าน.
+
+- เพิ่ม Google Trends Autopilot: `tools/trend_autopilot.py` เชื่อม RSS → public-source guard → evidence-bound Groq script (`qwen/qwen3.8-27b`) → factual review/repair → motion renderer → QA → atomic pending queue. เชื่อม `system_runner.py` ให้ผลิต 90% trend / 10% product แบบ persistent และ single-instance. เพิ่ม dependencies/env example/tests/manual 09. Targeted live smoke iPhone 17 ผ่านทั้งสายงานและ video QA แต่ไม่เข้าคิว/ไม่โพสต์; Trends สดรอบทดสอบไม่มีหัวข้อผ่านจึง fail closed. ยังไม่ได้เริ่ม system_runner/โพสต์/commit เพราะต้องเก็บผล full suite ก่อน.
+
+- อัปเกรดคลิปด้วย `python tools/render_trend_sample.py --motion`: ได้ `artifacts/google_trends/iphone17_motion/iphone17_motion.mp4` 14.95 วินาที 1080x1920/30fps. ซับ 10 ช่วงจาก WordBoundary 71 คำ พร้อมไฮไลต์คำ ซูม 2.5% และ cross-dissolve 0.25 วิ. ตรวจ cue ไม่คร่อมฉาก/ไม่เกินเสียง, decode ทั้งไฟล์, ภาพ 5 ฉาก และไม่มีจอดำ >=0.3 วิ. เสียง peak -4.4 dB. เก็บคลิปเดิมไว้; ยังไม่ต่อคิว/โพสต์/commit. รายละเอียดใน CASE_STUDY_TREND_SAMPLE_VIDEO.md.
+
+- ผลิต iPhone 17 typography preview แล้ว: `artifacts/google_trends/iphone17_preview/iphone17_preview.mp4` ด้วย `tools/render_trend_sample.py`. เสียง PremwadeeNeural +20%, 5 scenes, Hook ประมาณ 2.11 วินาที. ตรวจ decode ทั้งไฟล์และภาพกลางทุกฉาก; เสียงเฉลี่ย -18.8 dB / peak -4.1 dB. ยังไม่ส่งคิวหรือโพสต์. แก้ FFmpeg concat relative path ด้วย cwd=OUT; บันทึกที่ `docs/manual/CASE_STUDY_TREND_SAMPLE_VIDEO.md`. ไม่ commit เพราะผลชุดรวมจากรอบก่อนยังไม่ผ่าน.
+
+- ต่อจากรายงาน: สร้างสคริปต์ตัวอย่าง 3 เรื่อง iPhone 17 / Apple Watch Series 12 / AirPods 5 ที่ `artifacts/google_trends/sample_scripts.json` และ `.md` อ้างอิงหน้า Apple ที่เปิดอ่านวันที่ 10 กันยายน 2026. ตรวจ Hook ตรงกันในชื่อ/เสียง/แคปชั่น/การ์ดแรก แยก hashtags และไม่มีคำราคาในข้อความเผยแพร่ ผ่านทั้ง 3 เรื่อง. เป็น editorial drafts เท่านั้น ไม่ต่อคิว ไม่สร้างเสียง/คลิป ไม่โพสต์ ไม่อ้างว่าผ่าน keyword dedup ของโรงงาน. ไม่เปลี่ยนโค้ดระบบในรอบนี้; ผล suite รวมค้างตามรายการด้านล่าง.
+
+- ผลตรวจชุดรวมของ Google Trends session: 1235 passed, 4 failed (audio bypass 1, hashtag expectations 3) หลังเพิ่มรากโปรเจกต์ใน PYTHONPATH. ไม่แก้โมดูลเหล่านั้นในงานนี้ ไม่ commit/push. ดู `docs/manual/CASE_STUDY_GOOGLE_TRENDS_VALIDATION.md`. งานต่อไป: ตรวจ failures ก่อน commit; การตั้งเวลา/VPS/Supabase ยังไม่ได้ทำ.
+
+- Google Trends shortlist: เพิ่ม `tools/google_trends_report.py` และ `backend/tests/test_google_trends_report.py` พร้อมคู่มือ `docs/manual/GOOGLE_TRENDS_REPORT.md`. ทดสอบเฉพาะส่วนใหม่ผ่าน 4 tests; ดึง RSS จริงได้ 10 รายการ กรอง 1 เหลือ 9. รายงานอยู่ `artifacts/google_trends/latest.html` และ JSON. ยังไม่ติดตั้ง VPS/ตั้งรอบ/เชื่อม Supabase/โพสต์. Working tree มีงานเดิมหลายไฟล์ที่ไม่ได้แก้ในงานนี้.
+
 - **TikTok Studio Multi-Account Automation & ป้องกันคลิปซ้ำ 100% (01-02/09):**
   ① **ระบบอัปโหลด TikTok Multi-Account (`tools/tiktok_studio_uploader.py`):** ใช้ Playwright Headless Chromium อัปโหลดคลิปเข้าช่อง 1 (`@healthgooddeals`) และช่อง 2 (`@cheepao.review`) พร้อมระบบปลดล็อค Pop-up (Escape Hashtag Dropdown, Onboarding Joyride, และ Double Confirmation `Post now`) ทำงานอัตโนมัติ 100%
   ② **สถาปัตยกรรมแยกเธรดเด็ดขาด (Decoupled Engine):** ตัดการเรียก TikTok ออกจาก `uploader.py` เพื่อให้ดูแลเฉพาะ Facebook (3 เพจ) + YouTube Shorts (5 ช่อง) ทุก 30 นาที และให้ `run_tiktok_uploader_loop` ใน `system_runner.py` ดูแล TikTok แต่เพียงผู้เดียวทุก 60 นาที

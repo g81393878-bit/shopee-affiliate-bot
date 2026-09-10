@@ -557,8 +557,11 @@ def verify_video_has_audio(video_path: Path | str) -> tuple[bool, str]:
     p = Path(video_path)
     if not p.exists() or not p.is_file():
         return False, f"File does not exist: {p}"
-    if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("TESTING"):
-        return True, "Test bypass"
+    # Some orchestration unit tests intentionally use a tiny text placeholder
+    # instead of generating an MP4. Limit the bypass to those placeholders;
+    # realistic fixtures and every production file still run the full guard.
+    if (os.getenv("PYTEST_CURRENT_TEST") or os.getenv("TESTING")) and p.stat().st_size < 50 * 1024:
+        return True, "Test placeholder bypass"
     if p.stat().st_size < 50 * 1024:
         return False, f"File too small ({p.stat().st_size} bytes)"
 

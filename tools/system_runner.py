@@ -91,22 +91,31 @@ def run_prebuffer_producer_loop():
             pending = uploader.list_pending()
             if len(pending) < 4:
                 needed = 4 - len(pending)
-                logger.info(f"📦 คิวคลิปพร้อมโพสต์เหลือ {len(pending)} คลิป — กำลังผลิตเติมคลัง {needed} คลิป (สินค้า Shopee 80% / ไวรัล 20%)...")
+                logger.info(f"📦 คิวคลิปพร้อมโพสต์เหลือ {len(pending)} คลิป — กำลังผลิตเติมคลัง {needed} คลิป (สินค้า Shopee 10% / ไวรัล 90%)...")
                 for _ in range(needed):
-                    # สัดส่วน 80% ขายสินค้า Shopee ตรงจุด / 20% ข่าวและไวรัล
-                    mode = random.choices(["PRODUCT", "STANDALONE"], weights=[80, 20])[0]
+                    from trend_autopilot import BASE, read_json, save_json, produce_one
+                    cycle_path = BASE / "production_cycle.json"
+                    cycle = read_json(cycle_path)
+                    completed = int(cycle.get("completed", 0))
+                    # Persist the successful production count: exactly one product per ten completions.
+                    mode = "PRODUCT" if completed % 10 == 9 else "STANDALONE"
+                    produced = False
                     if mode == "PRODUCT":
                         try:
                             prods = generate_product_reels(limit=1)
                             if prods:
+                                produced = True
                                 logger.info(f"✨ ผลิตคลิปสินค้า Shopee สำเร็จ: {prods[0].get('name', '')[:40]}")
                         except Exception as pe:
                             logger.warning(f"⚠️ Product reel gen warning: {pe}")
                     else:
-                        cat = random.choices(["CELEBRITY_TREND", "TRENDING_NEWS", "LUCKY_FORTUNE", "WORK_PRODUCTIVITY"], weights=[35, 35, 15, 15])[0]
-                        res = standalone_content_generator.generate_standalone_reel(cat)
-                        if res:
-                            logger.info(f"✨ ผลิตคลิปไวรัลสำเร็จ [{cat}]: {res.get('title')}")
+                        res = produce_one()
+                        produced = res.get("status") == "queued"
+                        logger.info("Trend producer: %s", res.get("status"))
+                    if produced:
+                        save_json(cycle_path, {"completed": completed + 1})
+                    else:
+                        break  # Retry on the next loop; never invent filler or change the ratio.
         except Exception as e:
             logger.warning(f"⚠️ Pre-buffer producer warning: {e}")
         time.sleep(90)  # ตรวจสอบทุก 90 วินาที
@@ -317,15 +326,8 @@ def execute_unified_broadcast(
         if enable_producer:
             logger.info("📦 [Unified Broadcast] ไม่มีคลิปพร้อมใช้ในคลัง — กำลังผลิตคลิปใหม่...")
             try:
-                import standalone_content_generator
-                import random
-                cat = random.choices([
-                    "CELEBRITY_TREND",
-                    "TRENDING_NEWS",
-                ], weights=[70, 30])[0]
-                res_gen = standalone_content_generator.generate_standalone_reel(cat)
-                if res_gen and res_gen.get("video_path"):
-                    candidate = Path(res_gen["video_path"])
+                # Only the prebuffer owns production, locking and the 90/10 cycle.
+                logger.info("Waiting for prebuffer to publish a verified clip")
             except Exception as e_gen:
                 logger.warning(f"⚠️ ผลิตคลิปฉุกเฉินล้มเหลว: {e_gen}")
         else:
@@ -819,4 +821,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    from filelock import FileLock, Timeout
+    lock_dir = ROOT_DIR / "artifacts" / "trend_autopilot"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        with FileLock(str(lock_dir / "system_runner.lock"), timeout=0):
+            main()
+    except Timeout:
+        logger.info("System runner is already active; duplicate startup skipped")

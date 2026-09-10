@@ -53,7 +53,7 @@ DEFAULT_CATEGORY_TAGS = {
         "facebook": ["#FBReels", "#ข่าวบันเทิง", "#ดาราดัง", "#กระแสมาแรง", "#เรื่องนี้ต้องแชร์"],
     },
     "WORK_PRODUCTIVITY": {
-        "tiktok": ["#TikTokป้ายยา", "#ทริคคนทำงาน", "#มนุษย์เงินเดือน", "#ป้าเข็มรีวิว"],
+        "tiktok": ["#TikTokUni", "#ทริคคนทำงาน", "#มนุษย์เงินเดือน", "#ป้าเข็มรีวิว"],
         "youtube": ["#Shorts", "#YouTubeShorts", "#ทริคคนทำงาน", "#มนุษย์เงินเดือน", "#พัฒนาตัวเอง"],
         "facebook": ["#FBReels", "#ของดีบอกต่อ", "#ทริคคนทำงาน", "#มนุษย์เงินเดือน", "#พัฒนาตัวเอง"],
     },
@@ -113,6 +113,15 @@ DEFAULT_CATEGORY_TAGS = {
         "facebook": ["#FBReels", "#ของดีบอกต่อ", "#รีวิวของใช้", "#ป้าเข็มป้ายยา", "#Shopee"],
     },
 }
+
+# ทุกหมวดบน TikTok ต้องมีแท็กแบรนด์ และคงเพดาน 5 แท็กตามกฎ anti-spam
+for _platform_tags in DEFAULT_CATEGORY_TAGS.values():
+    _tiktok_defaults = _platform_tags["tiktok"]
+    if "#ป้าเข็มรีวิว" not in _tiktok_defaults:
+        if len(_tiktok_defaults) >= 5:
+            _tiktok_defaults[-1] = "#ป้าเข็มรีวิว"
+        else:
+            _tiktok_defaults.append("#ป้าเข็มรีวิว")
 
 
 def sanitize_tag(text: str) -> str:
@@ -360,7 +369,11 @@ def generate_platform_hashtags(
     # 🔵 3. Facebook Reels Assembly: 4-5 แท็กเน้น Interest & Community
     # -----------------------------------------------------------------
     fb_tags = ["#ของดีบอกต่อ", "#ถ้าไม่คุ้มป้าบอกให้"]
-    primary_fb = fallback_pool["facebook"][1] if len(fallback_pool["facebook"]) > 1 else "#ทริคดีๆ"
+    generic_fb_tags = {"#FBReels", "#ของดีบอกต่อ", "#ถ้าไม่คุ้มป้าบอกให้", "#Shopee"}
+    primary_fb = next(
+        (tag for tag in fallback_pool["facebook"] if tag not in generic_fb_tags),
+        "#ทริคดีๆ",
+    )
     if primary_fb not in fb_tags:
         fb_tags.append(primary_fb)
 
