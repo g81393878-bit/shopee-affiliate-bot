@@ -45,6 +45,17 @@ CATEGORY_LABEL = "ข่าวและกระแส"
 BACKGROUND_IMAGE = None
 
 
+def caption_text(source):
+    parts = [source["caption"].strip()]
+    source_url = source.get("source_url", "").strip()
+    if source_url.startswith("https://"):
+        parts.append(f"อ่านข่าวต้นฉบับ: {source_url}")
+    hashtags = " ".join("#" + h for h in source.get("hashtags", []))
+    if hashtags:
+        parts.append(hashtags)
+    return "\n\n".join(parts)
+
+
 def wrap_thai_lines(text, font, width=840):
     lines, current = [], ""
     for token in word_tokenize(text, engine="newmm"):
@@ -138,7 +149,7 @@ async def main():
     verify = run(["-i", str(video), "-af", "volumedetect", "-f", "null", "-"])
     (OUT / "verification.log").write_text(verify.stderr, encoding="utf-8")
     (OUT / "timings.json").write_text(json.dumps(timings, ensure_ascii=False, indent=2), encoding="utf-8")
-    (OUT / "caption.txt").write_text(source["caption"] + "\n\n" + " ".join("#"+t for t in source["hashtags"]), encoding="utf-8")
+    (OUT / "caption.txt").write_text(caption_text(source), encoding="utf-8")
     thumbs = Image.new("RGB", (1080, 384), "#102030")
     for i in range(5):
         frame = OUT / f"check_{i+1}.png"
@@ -189,10 +200,27 @@ async def motion(source=None, output_dir=None):
                         words.append(chunk)
         except Exception:
             audio.unlink(missing_ok=True)
-            if os.getenv("TTS_ALLOW_GOOGLE_FALLBACK", "false").lower() not in ("true", "1", "yes"):
-                raise
-            from gtts import gTTS
-            gTTS(text=spoken, lang="th", slow=False).save(str(audio))
+            if (os.getenv("TTS_ALLOW_OPENAI_FALLBACK", "false").lower() in ("true", "1", "yes")
+                    and os.getenv("OPENAI_API_KEY")):
+                try:
+                    from openai import OpenAI
+                    response = OpenAI().audio.speech.create(
+                        model=os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"),
+                        voice=os.getenv("OPENAI_TTS_VOICE", "coral"),
+                        input=spoken,
+                        instructions=("พูดภาษาไทยแบบผู้หญิง กระชับ สดใส เป็นธรรมชาติ "
+                                      "เหมือนผู้ประกาศคลิปสั้น ไม่ลากเสียงและไม่เว้นช่วงนาน"),
+                        response_format="mp3",
+                        speed=1.12,
+                    )
+                    audio.write_bytes(response.content)
+                except Exception:
+                    audio.unlink(missing_ok=True)
+            if not audio.exists():
+                if os.getenv("TTS_ALLOW_GOOGLE_FALLBACK", "false").lower() not in ("true", "1", "yes"):
+                    raise
+                from gtts import gTTS
+                gTTS(text=spoken, lang="th", slow=False).save(str(audio))
             probe = run(["-i", str(audio), "-f", "null", "-"])
             match = re.search(r"Duration: (\d+):(\d+):(\d+\.\d+)", probe.stderr)
             if not match:
@@ -333,7 +361,7 @@ async def motion(source=None, output_dir=None):
     result = run(["-i",str(output),"-af","volumedetect","-vf","blackdetect=d=0.3:pix_th=0.05","-f","null","-"])
     (OUT/"verification.log").write_text(result.stderr,encoding="utf-8")
     (OUT/"scene_timing.json").write_text(json.dumps({"duration":duration,"scene_starts":starts,"word_count":len(words)},indent=2),encoding="utf-8")
-    (OUT/"caption.txt").write_text(source["caption"]+"\n\n"+" ".join("#"+h for h in source["hashtags"]),encoding="utf-8")
+    (OUT/"caption.txt").write_text(caption_text(source),encoding="utf-8")
     sheet = Image.new("RGB",(1080,384))
     for i,s in enumerate(starts):
         point = s+.65

@@ -113,6 +113,17 @@ def test_source_sentence_ranking_rewards_topic_keywords():
     assert ranked[0].startswith('มือถือรุ่นใหม่')
 
 
+def test_public_caption_includes_source_link():
+    import importlib.util
+    renderer_path = Path(__file__).resolve().parents[2] / 'tools/render_trend_sample.py'
+    renderer_spec = importlib.util.spec_from_file_location('render_trend_sample_caption', renderer_path)
+    renderer = importlib.util.module_from_spec(renderer_spec)
+    renderer_spec.loader.exec_module(renderer)
+    text = renderer.caption_text({'caption':'สรุปข่าว', 'source_url':'https://example.com/news',
+                                  'hashtags':['ข่าววันนี้']})
+    assert 'อ่านข่าวต้นฉบับ: https://example.com/news' in text
+
+
 def test_candidate_rows_survive_google_failure_with_thai_rss(monkeypatch):
     class BrokenClient:
         def __init__(self, *a, **k): pass

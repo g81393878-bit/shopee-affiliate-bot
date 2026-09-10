@@ -192,14 +192,14 @@ def _short_words(text, limit):
         if len(result + token) > limit:
             break
         result += token
-    return result.strip(" ,:;–—-ฯ")
+    return result.strip(" .,:;!?–—-ฯ")
 
 
 def _concise_fact(sentence, limit=22):
     """Keep a source-grounded fact short enough for a roughly 15-second reel."""
     chunks = re.split(r"[,;:]|\s+(?:โดย|ซึ่ง|ขณะที่|หลังจาก|ทั้งนี้)\s+", sentence)
     for chunk in chunks:
-        clean = " ".join(chunk.split()).strip(" ,:;–—-ฯ")
+        clean = " ".join(chunk.split()).strip(" .,:;!?–—-ฯ")
         if 14 <= len(clean) <= limit:
             return clean
     return _short_words(sentence, limit)
