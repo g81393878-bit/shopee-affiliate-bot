@@ -481,6 +481,7 @@ def test_product_post_loop_calls_runner(monkeypatch):
 
     monkeypatch.setattr(main_mod, "run_facebook_product_post", fake_runner)
     monkeypatch.setattr(main_mod, "_product_due", lambda: True)
+    monkeypatch.setattr(main_mod, "_is_active_hours", lambda: True)
     monkeypatch.setattr(main_mod.asyncio, "sleep", fake_sleep)
     monkeypatch.setattr(main_mod.asyncio, "to_thread", fake_to_thread)
 

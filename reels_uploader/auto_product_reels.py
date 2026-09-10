@@ -699,6 +699,24 @@ def generate_tts_audio(text: str, output_path: Path) -> bool:
             if 'raw_edge_m' in locals() and raw_edge_m.exists():
                 raw_edge_m.unlink(missing_ok=True)
 
+        # Datacenter IPs can be rejected by Edge TTS. This fallback is opt-in
+        # for VPS only; local production keeps the Premwadee/Niwat standard.
+        if os.getenv("TTS_ALLOW_GOOGLE_FALLBACK", "false").lower() in ("true", "1", "yes"):
+            try:
+                from gtts import gTTS
+                raw_google = output_path.with_suffix(".google.mp3")
+                gTTS(text=clean_text, lang="th", slow=False).save(str(raw_google))
+                if raw_google.exists() and raw_google.stat().st_size > 1000:
+                    if output_path.exists():
+                        output_path.unlink(missing_ok=True)
+                    raw_google.replace(output_path)
+                    if verify_audio_file(output_path):
+                        logger.warning("ใช้ Google TTS fallback เนื่องจาก Edge TTS ไม่ตอบสนอง")
+                        return True
+            except Exception as e:
+                logger.warning(f"Google TTS fallback ล้มเหลว: {e}")
+                if 'raw_google' in locals() and raw_google.exists():
+                    raw_google.unlink(missing_ok=True)
         return False
 
 

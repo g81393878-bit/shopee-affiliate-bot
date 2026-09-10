@@ -130,12 +130,29 @@ async def motion(source=None, output_dir=None):
     audio, word_file = OUT / "voice.mp3", OUT / "words.json"
     if not audio.exists() or not word_file.exists():
         words = []
-        with audio.open("wb") as stream:
-            async for chunk in edge_tts.Communicate(spoken, "th-TH-PremwadeeNeural", rate="+20%", volume="+0%", boundary="WordBoundary").stream():
-                if chunk["type"] == "audio":
-                    stream.write(chunk["data"])
-                elif chunk["type"] == "WordBoundary":
-                    words.append(chunk)
+        try:
+            with audio.open("wb") as stream:
+                async for chunk in edge_tts.Communicate(spoken, "th-TH-PremwadeeNeural", rate="+20%", volume="+0%", boundary="WordBoundary").stream():
+                    if chunk["type"] == "audio":
+                        stream.write(chunk["data"])
+                    elif chunk["type"] == "WordBoundary":
+                        words.append(chunk)
+        except Exception:
+            audio.unlink(missing_ok=True)
+            if os.getenv("TTS_ALLOW_GOOGLE_FALLBACK", "false").lower() not in ("true", "1", "yes"):
+                raise
+            from gtts import gTTS
+            gTTS(text=spoken, lang="th", slow=False).save(str(audio))
+            probe = run(["-i", str(audio), "-f", "null", "-"])
+            match = re.search(r"Duration: (\d+):(\d+):(\d+\.\d+)", probe.stderr)
+            if not match:
+                raise ValueError("Cannot measure fallback TTS")
+            speech_duration = int(match[1])*3600 + int(match[2])*60 + float(match[3])
+            for token in re.finditer(r"\S+", spoken):
+                start = speech_duration * token.start() / max(1, len(spoken))
+                end = speech_duration * token.end() / max(1, len(spoken))
+                words.append({"type":"WordBoundary", "text":token.group(),
+                              "offset":int(start*1e7), "duration":max(1, int((end-start)*1e7))})
         word_file.write_text(json.dumps(words, ensure_ascii=False, indent=2), encoding="utf-8")
     words = json.loads(word_file.read_text(encoding="utf-8"))
     if not words:

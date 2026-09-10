@@ -1,6 +1,7 @@
 # ใช้เฉพาะบอททำคลิปวิดีโอ (tools/make_video.py) — รันในเครื่อง ไม่ต้องติดตั้งบน Render
 moviepy>=2.0.0
 edge-tts>=7.2.8
+gTTS>=2.5.4
 imageio-ffmpeg>=0.5.0
 pillow>=10.0.0
 pythainlp>=5.3.0

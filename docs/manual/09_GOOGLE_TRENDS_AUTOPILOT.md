@@ -19,3 +19,5 @@
 รางสินค้าใช้ `PRODUCT_USE_AI=false` เป็นค่าเริ่มต้นเช่นกัน. ระบบเรียงสินค้าด้วยคะแนน Local จากยอดขาย รีวิว ค่าคอม ความพร้อมของลิงก์ Affiliate/ภาพจริง ราคาเปลี่ยนแปลง และ Demand Radar โดยไม่ใช้ `ai_score` ในการตัดสิน. เสียงขายสินค้าใช้คลังเทมเพลตตามหมวด; Groq จะทำงานเฉพาะเมื่อกำหนด `PRODUCT_USE_AI=true` เอง.
 
 `tools/performance_learner.py` อ่านยอดจริงจาก `performance_logs` ใน Supabase ทุกชั่วโมง คำนวณ CTR, Conversion, ค่าคอมต่อคลิก และ confidence จากจำนวนวิว แล้วเขียนคะแนนแบบ atomic ที่ `artifacts/product_learning/scores.json`. โรงงานนำคะแนนนี้ไปรวมในการเลือกสินค้ารอบถัดไปสูงสุด 20 คะแนน และส่งสรุป Telegram วันละครั้งช่วง 20:00 น. หากยังไม่มี log ระบบรายงานตามจริงและใช้คะแนนคุณภาพสินค้าพื้นฐานต่อไป.
+
+บน VPS ที่ Edge TTS ปฏิเสธ datacenter IP สามารถตั้ง `TTS_ALLOW_GOOGLE_FALLBACK=true` เพื่อใช้ Google TTS ภาษาไทยหลัง Premwadee และ Niwat ล้มทั้งคู่ ค่าเริ่มต้นยังเป็น false และ Local ยังคงใช้ PremwadeeNeural ตามมาตรฐานเดิม.
