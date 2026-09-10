@@ -32,6 +32,20 @@ BLOCKED_EDITORIAL = ("เลือกตั้ง", "รัฐบาล", "พ�
 LOG = logging.getLogger("TrendAutopilot")
 THAI_RE = re.compile(r"[\u0e00-\u0e7f]")
 SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?。！？])\s+|\n+")
+HOOKS_BY_CATEGORY = {
+    "ไอที": ("เทคโนโลยีนี้น่าจับตา!", "สายไอทีต้องรู้เรื่องนี้!", "เรื่องใหม่วงการไอที!"),
+    "ของใช้ในบ้าน": ("คนรักบ้านต้องรู้!", "เรื่องใกล้ตัวที่ควรรู้!", "บ้านยุคใหม่ต้องดู!"),
+    "สมาร์ตโฮม": ("บ้านอัจฉริยะไปอีกขั้น!", "เทคโนโลยีในบ้านมาแล้ว!", "คนใช้สมาร์ตโฮมต้องดู!"),
+    "สุขภาพ": ("เรื่องสุขภาพที่ควรรู้!", "ดูแลตัวเองต้องรู้เรื่องนี้!", "ข้อมูลสุขภาพน่าติดตาม!"),
+    "ความงาม": ("สายดูแลตัวเองต้องรู้!", "วงการความงามมีเรื่องใหม่!", "เรื่องนี้สายบิวตี้ต้องดู!"),
+    "สัตว์เลี้ยง": ("คนรักสัตว์ต้องรู้!", "ทาสหมาทาสแมวต้องดู!", "เรื่องใหม่ของสัตว์เลี้ยง!"),
+    "เครื่องครัว": ("คนเข้าครัวต้องรู้!", "เรื่องนี้สายครัวต้องดู!", "ครัวยุคใหม่มีอะไรเปลี่ยน!"),
+    "อุปกรณ์ติดรถ": ("คนใช้รถต้องรู้!", "เรื่องเดินทางที่ควรรู้!", "สายรถต้องดูเรื่องนี้!"),
+    "ดาราและบันเทิง": ("กระแสนี้กำลังมา!", "วงการบันเทิงมีเรื่องใหม่!", "คนกำลังพูดถึงเรื่องนี้!"),
+    "คนทำงาน": ("คนทำงานต้องรู้!", "เรื่องนี้ชาวออฟฟิศต้องดู!", "เทรนด์ใหม่ของคนทำงาน!"),
+    "ความเชื่อ": ("เรื่องความเชื่อที่ควรรู้!", "สายมูต้องอ่านให้ครบ!", "ศาสตร์นี้มีที่มา!"),
+    "ต้องตรวจหมวด": ("เรื่องนี้กำลังถูกค้นหา?", "คนกำลังสนใจเรื่องนี้!", "ประเด็นนี้น่าติดตาม!"),
+}
 
 
 def save_json(path, data):
@@ -94,6 +108,8 @@ def validate_plan(plan, evidence, evidence_blocks=None):
     # The opening hook can be a neutral question. Only factual scenes need a
     # verbatim evidence binding; the closing scene is a call to action.
     for s in scenes[1:4]:
+        if s.get("evidence_id") is None and s.get("neutral_transition") is True:
+            continue
         if evidence_blocks is not None:
             evidence_id = s.get("evidence_id")
             if isinstance(evidence_id, str) and evidence_id.isdigit():
@@ -118,7 +134,13 @@ def validate_plan(plan, evidence, evidence_blocks=None):
     return plan
 
 
-def _safe_source_sentences(article):
+def _topic_terms(row, headline):
+    text = f"{row.get('title', '')} {headline} {row.get('category', '')}".casefold()
+    terms = re.findall(r"[\u0e00-\u0e7f]{3,}|[a-z0-9]{3,}", text)
+    return list(dict.fromkeys(terms))[:20]
+
+
+def _safe_source_sentences(article, terms=()):
     """Select complete Thai source sentences without rewriting their claims."""
     selected = []
     seen = set()
@@ -136,15 +158,27 @@ def _safe_source_sentences(article):
         if key and key not in seen:
             seen.add(key)
             selected.append(sentence)
-    return selected
+    def importance(item):
+        index, sentence = item
+        folded = sentence.casefold()
+        keyword_hits = sum(1 for term in terms if term in folded)
+        number_bonus = 1 if re.search(r"\d", sentence) else 0
+        return (keyword_hits * 10 + number_bonus * 2 + max(0, 4 - index / 5), -index)
+    return [sentence for _, sentence in sorted(enumerate(selected), key=importance, reverse=True)]
+
+
+def choose_hook(category, topic):
+    hooks = HOOKS_BY_CATEGORY.get(category, HOOKS_BY_CATEGORY["ต้องตรวจหมวด"])
+    digest = hashlib.sha256(normalize(topic).encode()).digest()[0]
+    return hooks[digest % len(hooks)]
 
 
 def build_rule_plan(row, headline, article):
     """Build a publishable plan using local rules and exact source text only."""
-    evidence_blocks = _safe_source_sentences(article)
-    if len(evidence_blocks) < 3:
+    evidence_blocks = _safe_source_sentences(article, _topic_terms(row, headline))
+    if len(evidence_blocks) < 2:
         raise ValueError("Not enough safe Thai source sentences")
-    hook = "เรื่องนี้กำลังถูกค้นหา?"
+    hook = choose_hook(row.get("category", "ต้องตรวจหมวด"), row.get("title", headline))
     topic = " ".join((headline or row.get("title", "")).split())
     if (not topic or len(topic) > 60 or is_sensitive_forbidden_topic(topic)
             or any(term in topic.casefold() for term in BLOCKED_EDITORIAL)):
@@ -153,10 +187,14 @@ def build_rule_plan(row, headline, article):
                "detail": "สรุปจากแหล่งข่าวโดยตรง"}]
     labels = (("ประเด็นแรก", "ข้อมูลจากข่าว"), ("ประเด็นต่อมา", "อ่านให้ครบ"),
               ("สิ่งที่ควรรู้", "ตรวจจากต้นฉบับ"))
-    for evidence_id, (hero, detail) in enumerate(labels):
+    for evidence_id, (hero, detail) in enumerate(labels[:min(3, len(evidence_blocks))]):
         sentence = evidence_blocks[evidence_id]
         scenes.append({"voice": sentence, "headline": f"ข้อมูลสำคัญ {evidence_id + 1}",
                        "hero": hero, "detail": detail, "evidence_id": evidence_id})
+    if len(evidence_blocks) == 2:
+        scenes.append({"voice": "รายละเอียดอาจมีการอัปเดต ควรอ่านข้อมูลจากต้นฉบับประกอบนะจ๊ะ",
+                       "headline": "ตรวจข้อมูลต้นฉบับ", "hero": "อ่านให้ครบ",
+                       "detail": "ข้อมูลอาจเปลี่ยนแปลงได้", "neutral_transition": True})
     scenes.append({"voice": "คุณคิดเห็นอย่างไร คอมเมนต์และติดตามป้าเข็มไว้นะจ๊ะ",
                    "headline": "คุณคิดเห็นอย่างไร", "hero": "คุยกันได้",
                    "detail": "ติดตามป้าเข็มบอกต่อ"})
@@ -164,7 +202,32 @@ def build_rule_plan(row, headline, article):
     plan["source_url"] = row["source_url"]
     plan["source_label"] = "ข้อมูลจาก " + (urlparse(row["source_url"]).hostname or "แหล่งข่าว")
     plan["generation_mode"] = "local_rules"
+    plan["hook_variant"] = hook
     return plan
+
+
+def fetch_candidate_rows(history):
+    """Combine Google Trends with curated Thai RSS; each feed may fail alone."""
+    rows = []
+    try:
+        with httpx.Client(timeout=20, follow_redirects=True) as client:
+            feed = client.get(FEED)
+            feed.raise_for_status()
+        rows.extend(parse_feed(feed.content))
+    except Exception as exc:
+        LOG.warning("Google Trends feed unavailable: %s", type(exc).__name__)
+    try:
+        from app.services.facebook_curated import fetch_news_items
+        for item in fetch_news_items(max_items=40):
+            if item.get("title") and str(item.get("link", "")).startswith("https://"):
+                rows.append({"title": item["title"], "traffic": "", "published_at": "",
+                             "source_url": item["link"], "source_title": item.get("source", ""),
+                             "feed_source": item.get("source", "Thai RSS"),
+                             "source_summary": item["title"] + "\n" + BeautifulSoup(
+                                 item.get("summary", ""), "html.parser").get_text(" ", strip=True)})
+    except Exception as exc:
+        LOG.warning("Thai RSS fallback unavailable: %s", type(exc).__name__)
+    return rank_topics(rows, history)[0]
 
 
 def draft(row, headline, article):
@@ -289,12 +352,10 @@ def _produce_one():
         return {"status":"queue_full"}
     state_path = BASE/"state.json"
     state = read_json(state_path)
-    with httpx.Client(timeout=20, follow_redirects=True) as client:
-        feed = client.get(FEED)
-        feed.raise_for_status()
-    rows, _ = rank_topics(parse_feed(feed.content), history_titles(ROOT/"tools/posted_content_history.json"))
+    rows = fetch_candidate_rows(history_titles(ROOT/"tools/posted_content_history.json"))
     from standalone_content_generator import is_topic_duplicate, record_topic_used
-    for row in rows[:10]:
+    # Scan beyond cooled-down Google entries so healthy fallback feeds can run.
+    for row in rows[:40]:
         editorial = (row["title"] + " " + row.get("source_title", "")).casefold()
         if any(term in editorial for term in BLOCKED_EDITORIAL):
             continue
@@ -313,7 +374,16 @@ def _produce_one():
         state[key] = {"status":"building", "title":row["title"],"retry_after":time.time()+1800}
         save_json(state_path,state)
         try:
-            headline, article = article_text(row["source_url"])
+            try:
+                headline, article = article_text(row["source_url"])
+            except Exception:
+                # RSS descriptions are publisher supplied source text. They may
+                # safely replace an unreadable article only when three complete
+                # sentences still pass the same public-text guards.
+                summary = row.get("source_summary", "")
+                if len(_safe_source_sentences(summary, _topic_terms(row, row["title"]))) < 2:
+                    raise
+                headline, article = row["title"], summary
             # Local rules are the production default. AI is an explicit opt-in
             # fallback for sources whose safe Thai text cannot fill three scenes.
             try:
@@ -350,7 +420,8 @@ def _produce_one():
             record_topic_used(plan["title"], "TRENDING_NEWS", {"url":row["source_url"],"trend":row["title"]})
             return {"status":"queued","filename":filename}
         except Exception as exc:
-            state[key] = {"status":"retry","title":row["title"],"retry_after":time.time()+1800,"error_type":type(exc).__name__}
+            state[key] = {"status":"retry","title":row["title"],"retry_after":time.time()+1800,
+                          "error_type":type(exc).__name__, "reason":str(exc)[:180]}
             save_json(state_path,state)
             LOG.warning("Trend skipped (%s); retry after cooldown",type(exc).__name__)
     return {"status":"no_eligible_topic"}

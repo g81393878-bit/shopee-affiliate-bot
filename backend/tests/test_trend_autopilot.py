@@ -72,7 +72,7 @@ def test_rule_plan_uses_exact_source_sentences_without_ai():
     row = {'title':'ระบบใหม่มาแรง', 'source_url':'https://example.com/news'}
     plan = m.build_rule_plan(row, 'ระบบใหม่สำหรับผู้ใช้ไทย', ' '.join(sentences))
     assert plan['generation_mode'] == 'local_rules'
-    assert [s['voice'] for s in plan['scenes'][1:4]] == sentences
+    assert set(s['voice'] for s in plan['scenes'][1:4]) == set(sentences)
     assert plan['hook'] == plan['scenes'][0]['headline']
 
 
@@ -83,6 +83,47 @@ def test_rule_plan_filters_prices_and_fails_closed():
         m.build_rule_plan({'title':'ข่าวทั่วไป','source_url':'https://example.com/news'}, 'ข่าวทั่วไป', article)
 
 
+def test_two_source_sentences_add_only_neutral_transition():
+    sentences = [
+        'ระบบรุ่นใหม่รองรับภาษาไทยและเปิดให้ผู้ใช้ทั่วไปเริ่มทดลองใช้งานได้แล้ว.',
+        'ผู้พัฒนาระบุว่าอุปกรณ์ที่รองรับต้องเชื่อมต่ออินเทอร์เน็ตระหว่างใช้งาน.',
+    ]
+    plan = m.build_rule_plan({'title':'ระบบใหม่','source_url':'https://example.com/news'},
+                             'ระบบใหม่', ' '.join(sentences))
+    assert plan['scenes'][3]['neutral_transition'] is True
+    assert [s['voice'] for s in plan['scenes'][1:3]] == sentences
+
+
 def test_ai_is_disabled_by_default(monkeypatch):
     monkeypatch.delenv('TREND_USE_AI', raising=False)
     assert m.os.getenv('TREND_USE_AI', 'false') == 'false'
+
+
+def test_hook_library_has_at_least_thirty_category_variants():
+    assert sum(len(hooks) for hooks in m.HOOKS_BY_CATEGORY.values()) >= 30
+    assert m.choose_hook('ไอที', 'มือถือรุ่นใหม่') in m.HOOKS_BY_CATEGORY['ไอที']
+
+
+def test_source_sentence_ranking_rewards_topic_keywords():
+    article = ('ข้อมูลทั่วไปประโยคนี้มีรายละเอียดครบถ้วนและปลอดภัยสำหรับการเผยแพร่. '
+               'มือถือรุ่นใหม่รองรับภาษาไทยและเปิดให้ใช้งานบนอุปกรณ์ที่กำหนดแล้ว. '
+               'ข้อมูลเสริมอีกประโยคหนึ่งอธิบายเงื่อนไขการใช้งานไว้อย่างชัดเจน.')
+    ranked = m._safe_source_sentences(article, ['มือถือ', 'ภาษาไทย'])
+    assert ranked[0].startswith('มือถือรุ่นใหม่')
+
+
+def test_candidate_rows_survive_google_failure_with_thai_rss(monkeypatch):
+    class BrokenClient:
+        def __init__(self, *a, **k): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def get(self, *a, **k): raise RuntimeError('offline')
+    monkeypatch.setattr(m.httpx, 'Client', BrokenClient)
+    import app.services.facebook_curated as curated
+    monkeypatch.setattr(curated, 'fetch_news_items', lambda max_items: [{
+        'title':'มือถือรุ่นใหม่สำหรับคนไทย', 'link':'https://example.com/thai-news', 'source':'Tech Thai',
+        'summary':'<p>รายละเอียดข่าวภาษาไทยที่มาจากผู้เผยแพร่โดยตรงและอ่านได้ชัดเจน.</p>'}])
+    rows = m.fetch_candidate_rows([])
+    assert rows and rows[0]['source_url'] == 'https://example.com/thai-news'
+    assert '<p>' not in rows[0]['source_summary']
+    assert rows[0]['source_summary'].startswith('มือถือรุ่นใหม่')
