@@ -59,7 +59,7 @@ def read_json(path):
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
 
 
-def article_text(url):
+def article_text_and_image(url):
     # RSS sources vary. Permit public HTTPS only and resolve every redirect host
     # to prevent feeds from reaching loopback/private/link-local services.
     for _ in range(4):
@@ -93,8 +93,20 @@ def article_text(url):
         headline = title.get_text(" ", strip=True)
         if is_sensitive_forbidden_topic(headline) or any(term in headline.casefold() for term in BLOCKED_EDITORIAL):
             raise ValueError("Source topic rejected")
-        return headline, text
+        image = soup.select_one('meta[property="og:image"], meta[name="twitter:image"]')
+        image_url = image.get("content", "").strip() if image else ""
+        if image_url:
+            from urllib.parse import urljoin
+            image_url = urljoin(url, image_url)
+            if urlparse(image_url).scheme != "https":
+                image_url = ""
+        return headline, text, image_url
     raise ValueError("Too many redirects")
+
+
+def article_text(url):
+    headline, text, _ = article_text_and_image(url)
+    return headline, text
 
 
 def validate_plan(plan, evidence, evidence_blocks=None):
@@ -173,34 +185,76 @@ def choose_hook(category, topic):
     return hooks[digest % len(hooks)]
 
 
+def _short_words(text, limit):
+    from pythainlp import word_tokenize
+    result = ""
+    for token in word_tokenize(" ".join(text.split()), engine="newmm"):
+        if len(result + token) > limit:
+            break
+        result += token
+    return result.strip(" ,:;–—-ฯ")
+
+
+def _concise_fact(sentence, limit=28):
+    """Keep a source-grounded fact short enough for a roughly 15-second reel."""
+    chunks = re.split(r"[,;:]|\s+(?:โดย|ซึ่ง|ขณะที่|หลังจาก|ทั้งนี้)\s+", sentence)
+    for chunk in chunks:
+        clean = " ".join(chunk.split()).strip(" ,:;–—-ฯ")
+        if 18 <= len(clean) <= limit:
+            return clean
+    return _short_words(sentence, limit)
+
+
+def infer_category(row, topic):
+    declared = row.get("category")
+    if declared and declared != "ต้องตรวจหมวด":
+        return declared
+    folded = topic.casefold()
+    groups = (
+        ("กีฬา", ("ฟุตบอล", "บอล", "ทีม", "ลีก", "กีฬา", "match", "uefa")),
+        ("ดาราและบันเทิง", ("ดารา", "นักแสดง", "ซีรีส์", "ภาพยนตร์", "เพลง")),
+        ("ไอที", ("มือถือ", "สมาร์ตโฟน", "แอป", "เทคโนโลยี", "iphone", "android")),
+        ("สุขภาพ", ("สุขภาพ", "แพทย์", "โรค", "อาหาร", "ออกกำลัง")),
+        ("คนทำงาน", ("ทำงาน", "ออฟฟิศ", "พนักงาน", "อาชีพ")),
+    )
+    return next((name for name, terms in groups if any(term in folded for term in terms)), "ข่าวและกระแส")
+
+
 def build_rule_plan(row, headline, article):
     """Build a publishable plan using local rules and exact source text only."""
     evidence_blocks = _safe_source_sentences(article, _topic_terms(row, headline))
     if len(evidence_blocks) < 2:
         raise ValueError("Not enough safe Thai source sentences")
-    hook = choose_hook(row.get("category", "ต้องตรวจหมวด"), row.get("title", headline))
     topic = " ".join((headline or row.get("title", "")).split())
     if (not topic or len(topic) > 60 or is_sensitive_forbidden_topic(topic)
             or any(term in topic.casefold() for term in BLOCKED_EDITORIAL)):
         topic = "ประเด็นที่คนกำลังสนใจ"
-    scenes = [{"voice": hook, "headline": hook, "hero": "กำลังเป็นเทรนด์",
-               "detail": "สรุปจากแหล่งข่าวโดยตรง"}]
-    labels = (("ประเด็นแรก", "ข้อมูลจากข่าว"), ("ประเด็นต่อมา", "อ่านให้ครบ"),
-              ("สิ่งที่ควรรู้", "ตรวจจากต้นฉบับ"))
-    for evidence_id, (hero, detail) in enumerate(labels[:min(3, len(evidence_blocks))]):
+    category = infer_category(row, topic)
+    topic_lead = _short_words(topic, 14) or "เรื่องนี้"
+    hook = f"จับตา {topic_lead}"
+    scenes = [{"voice": hook, "headline": hook, "hero": _short_words(topic, 24),
+               "detail": f"สรุปข่าว{category}จากต้นฉบับ"}]
+    for evidence_id in range(min(3, len(evidence_blocks))):
         sentence = evidence_blocks[evidence_id]
-        scenes.append({"voice": sentence, "headline": f"ข้อมูลสำคัญ {evidence_id + 1}",
-                       "hero": hero, "detail": detail, "evidence_id": evidence_id})
+        voice = _concise_fact(sentence)
+        hero = _short_words(voice, 24)
+        detail_source = voice[len(hero):].strip(" ,:;–—-") or voice
+        scenes.append({"voice": voice, "headline": _short_words(voice, 40),
+                       "hero": hero, "detail": _short_words(detail_source, 58),
+                       "evidence_id": evidence_id})
     if len(evidence_blocks) == 2:
-        scenes.append({"voice": "รายละเอียดอาจมีการอัปเดต ควรอ่านข้อมูลจากต้นฉบับประกอบนะจ๊ะ",
+        scenes.append({"voice": "อ่านรายละเอียดต่อจากข่าวต้นฉบับจ้ะ",
                        "headline": "ตรวจข้อมูลต้นฉบับ", "hero": "อ่านให้ครบ",
                        "detail": "ข้อมูลอาจเปลี่ยนแปลงได้", "neutral_transition": True})
-    scenes.append({"voice": "คุณคิดเห็นอย่างไร คอมเมนต์และติดตามป้าเข็มไว้นะจ๊ะ",
+    scenes.append({"voice": "เห็นอย่างไร คอมเมนต์ได้เลยจ้ะ",
                    "headline": "คุณคิดเห็นอย่างไร", "hero": "คุยกันได้",
                    "detail": "ติดตามป้าเข็มบอกต่อ"})
     plan = validate_plan({"topic_title": topic, "scenes": scenes}, article, evidence_blocks)
+    if len(plan["voiceover_script"]) > 150:
+        raise ValueError("Voice script exceeds short-video budget")
     plan["source_url"] = row["source_url"]
     plan["source_label"] = "ข้อมูลจาก " + (urlparse(row["source_url"]).hostname or "แหล่งข่าว")
+    plan["category_label"] = category
     plan["generation_mode"] = "local_rules"
     plan["hook_variant"] = hook
     return plan
@@ -375,7 +429,7 @@ def _produce_one():
         save_json(state_path,state)
         try:
             try:
-                headline, article = article_text(row["source_url"])
+                headline, article, image_url = article_text_and_image(row["source_url"])
             except Exception:
                 # RSS descriptions are publisher supplied source text. They may
                 # safely replace an unreadable article only when three complete
@@ -384,6 +438,7 @@ def _produce_one():
                 if len(_safe_source_sentences(summary, _topic_terms(row, row["title"]))) < 2:
                     raise
                 headline, article = row["title"], summary
+                image_url = ""
             # Local rules are the production default. AI is an explicit opt-in
             # fallback for sources whose safe Thai text cannot fill three scenes.
             try:
@@ -393,6 +448,7 @@ def _produce_one():
                     raise
                 plan = draft(row, headline, article)
                 plan["generation_mode"] = "ai_fallback"
+            plan["image_url"] = image_url
             if is_topic_duplicate(plan["title"], url=row["source_url"]):
                 raise ValueError("Duplicate drafted topic")
             work = BASE/key/str(int(time.time()))
@@ -407,7 +463,7 @@ def _produce_one():
                 for meta_path in (ROOT/"reels_uploader/products.json",ROOT/"products.json"):
                     meta = read_json(meta_path)
                     meta[filename] = {"product_name":plan["title"],"price":"","affiliate_link":"",
-                        "is_pure_content":True,"content_mode":"TRENDING_NEWS","category":"ข่าวไอที",
+                        "is_pure_content":True,"content_mode":"TRENDING_NEWS","category":plan.get("category_label", "ข่าวและกระแส"),
                         "topic_data":{"title":plan["title"],"hook":plan["hook"],"detail":plan["caption"],
                         "url":row["source_url"],"voiceover_script":plan["voiceover_script"]}}
                     save_json(meta_path,meta)

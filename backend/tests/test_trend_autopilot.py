@@ -72,7 +72,8 @@ def test_rule_plan_uses_exact_source_sentences_without_ai():
     row = {'title':'ระบบใหม่มาแรง', 'source_url':'https://example.com/news'}
     plan = m.build_rule_plan(row, 'ระบบใหม่สำหรับผู้ใช้ไทย', ' '.join(sentences))
     assert plan['generation_mode'] == 'local_rules'
-    assert set(s['voice'] for s in plan['scenes'][1:4]) == set(sentences)
+    assert all(any(s['voice'] in source for source in sentences) for s in plan['scenes'][1:4])
+    assert len(plan['voiceover_script']) <= 210
     assert plan['hook'] == plan['scenes'][0]['headline']
 
 
@@ -91,7 +92,7 @@ def test_two_source_sentences_add_only_neutral_transition():
     plan = m.build_rule_plan({'title':'ระบบใหม่','source_url':'https://example.com/news'},
                              'ระบบใหม่', ' '.join(sentences))
     assert plan['scenes'][3]['neutral_transition'] is True
-    assert [s['voice'] for s in plan['scenes'][1:3]] == sentences
+    assert all(scene['voice'] in source for scene, source in zip(plan['scenes'][1:3], sentences))
 
 
 def test_ai_is_disabled_by_default(monkeypatch):

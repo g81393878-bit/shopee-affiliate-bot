@@ -6,11 +6,15 @@ import json
 import os
 import re
 import subprocess
+import socket
+import ipaddress
 from pathlib import Path
+from urllib.parse import urlparse
 
 import edge_tts
+import httpx
 import imageio_ffmpeg
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageEnhance, ImageFont, ImageOps
 from pythainlp import word_tokenize
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,6 +41,8 @@ BOLD = _font_path(
     "/usr/share/fonts/truetype/noto/NotoSansThai-Bold.ttf",
 )
 SOURCE_LABEL = "ข้อมูลจาก Apple • apple.com/iphone-17"
+CATEGORY_LABEL = "ข่าวและกระแส"
+BACKGROUND_IMAGE = None
 
 
 def wrap_thai_lines(text, font, width=840):
@@ -56,11 +62,16 @@ def wrap_thai_lines(text, font, width=840):
 
 
 def card(index, headline, hero, detail):
-    im = Image.new("RGB", (1080, 1920))
+    if BACKGROUND_IMAGE is not None:
+        im = ImageOps.fit(BACKGROUND_IMAGE, (1080, 1920), method=Image.Resampling.LANCZOS)
+        im = ImageEnhance.Brightness(im).enhance(0.42)
+    else:
+        im = Image.new("RGB", (1080, 1920))
     draw = ImageDraw.Draw(im)
-    for y in range(1920):
-        t = y / 1919
-        draw.line((0, y, 1080, y), fill=(int(12+9*t), int(24+36*t), int(42+27*t)))
+    if BACKGROUND_IMAGE is None:
+        for y in range(1920):
+            t = y / 1919
+            draw.line((0, y, 1080, y), fill=(int(12+9*t), int(24+36*t), int(42+27*t)))
     draw.rounded_rectangle((74, 185, 1006, 265), radius=40, fill="#184d56")
     def text(value, y, size, color="#f5f2e9", bold=False):
         font = ImageFont.truetype(str(BOLD if bold else FONT), size)
@@ -68,14 +79,14 @@ def card(index, headline, hero, detail):
             draw.text((540, y), line, font=font, fill=color, anchor="mt")
             y += int(size*1.55)
         return y
-    text("ป้าเข็มบอกต่อ  /  TECH EXPLAINED", 200, 32)
+    text(f"ป้าเข็มบอกต่อ  /  {CATEGORY_LABEL}", 200, 32)
     if text(headline, 375, 70, bold=True) > 670:
         raise ValueError("Headline exceeds card")
-    draw.rounded_rectangle((85, 700, 995, 1170), radius=48, fill="#f3efe5")
-    if text(hero, 790, 88, "#123b47", bold=True) > 980:
+    draw.rounded_rectangle((85, 690, 995, 1225), radius=48, fill="#f3efe5")
+    if text(hero, 770, 72, "#123b47", bold=True) > 1010:
         raise ValueError("Hero exceeds card")
-    end = text(detail, 990, 39, "#31525a")
-    if end > 1160:
+    end = text(detail, 1025, 39, "#31525a")
+    if end > 1215:
         raise ValueError("Detail exceeds card")
     text(SOURCE_LABEL, 1300, 30, "#a1c0c5")
     text("ความรู้ไอที เข้าใจง่าย", 1410, 39, "#81e2cc")
@@ -140,11 +151,31 @@ async def main():
 
 async def motion(source=None, output_dir=None):
     """Continuous TTS, timed captions and local frame animation."""
-    global OUT, SOURCE_LABEL
+    global OUT, SOURCE_LABEL, CATEGORY_LABEL, BACKGROUND_IMAGE
     OUT = Path(output_dir) if output_dir else ROOT / "artifacts/google_trends/iphone17_motion"
     OUT.mkdir(parents=True, exist_ok=True)
     source = source or json.loads((ROOT / "artifacts/google_trends/sample_scripts.json").read_text(encoding="utf-8"))["scripts"][0]
     SOURCE_LABEL = source.get("source_label", "ข้อมูลจาก Apple • apple.com/iphone-17")
+    CATEGORY_LABEL = source.get("category_label", "ข่าวและกระแส")
+    BACKGROUND_IMAGE = None
+    image_url = source.get("image_url", "")
+    if image_url:
+        parsed = urlparse(image_url)
+        if parsed.scheme == "https" and parsed.hostname:
+            addresses = socket.getaddrinfo(parsed.hostname, 443, type=socket.SOCK_STREAM)
+            if addresses and all(ipaddress.ip_address(a[4][0]).is_global for a in addresses):
+                try:
+                    response = httpx.get(image_url, timeout=20, follow_redirects=True,
+                                         headers={"User-Agent": "Mozilla/5.0"})
+                    response.raise_for_status()
+                    if len(response.content) <= 8_000_000:
+                        image_path = OUT / "source_image.jpg"
+                        image_path.write_bytes(response.content)
+                        with Image.open(image_path) as source_image:
+                            if source_image.width >= 640 and source_image.height >= 360:
+                                BACKGROUND_IMAGE = source_image.convert("RGB")
+                except Exception:
+                    BACKGROUND_IMAGE = None
     spoken = source["voiceover_script"]
     audio, word_file = OUT / "voice.mp3", OUT / "words.json"
     if not audio.exists() or not word_file.exists():
