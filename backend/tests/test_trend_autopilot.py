@@ -73,7 +73,7 @@ def test_rule_plan_uses_exact_source_sentences_without_ai():
     plan = m.build_rule_plan(row, 'ระบบใหม่สำหรับผู้ใช้ไทย', ' '.join(sentences))
     assert plan['generation_mode'] == 'local_rules'
     assert all(any(s['voice'] in source for source in sentences) for s in plan['scenes'][1:4])
-    assert len(plan['voiceover_script']) <= 210
+    assert len(plan['voiceover_script']) <= 115
     assert plan['hook'] == plan['scenes'][0]['headline']
 
 

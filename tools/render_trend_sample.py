@@ -259,8 +259,10 @@ async def motion(source=None, output_dir=None):
     if len(headings) != 5:
         raise ValueError("Exactly five scenes required")
     starts = [next(w["start"] for w in words if w["char_start"] == pos) for pos in scene_offsets]
-    if starts[1] > 3:
-        raise ValueError("Opening hook exceeds three seconds")
+    if starts[1] > 2.2:
+        raise ValueError("Opening hook exceeds two seconds")
+    if duration > 14.5:
+        raise ValueError("Voiceover exceeds 14.5-second pacing limit")
     starts[0] = 0
     cards = []
     for i, values in enumerate(headings):

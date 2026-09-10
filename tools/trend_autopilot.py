@@ -195,12 +195,12 @@ def _short_words(text, limit):
     return result.strip(" ,:;–—-ฯ")
 
 
-def _concise_fact(sentence, limit=28):
+def _concise_fact(sentence, limit=22):
     """Keep a source-grounded fact short enough for a roughly 15-second reel."""
     chunks = re.split(r"[,;:]|\s+(?:โดย|ซึ่ง|ขณะที่|หลังจาก|ทั้งนี้)\s+", sentence)
     for chunk in chunks:
         clean = " ".join(chunk.split()).strip(" ,:;–—-ฯ")
-        if 18 <= len(clean) <= limit:
+        if 14 <= len(clean) <= limit:
             return clean
     return _short_words(sentence, limit)
 
@@ -230,7 +230,7 @@ def build_rule_plan(row, headline, article):
             or any(term in topic.casefold() for term in BLOCKED_EDITORIAL)):
         topic = "ประเด็นที่คนกำลังสนใจ"
     category = infer_category(row, topic)
-    topic_lead = _short_words(topic, 14) or "เรื่องนี้"
+    topic_lead = _short_words(topic, 9) or "เรื่องนี้"
     hook = f"จับตา {topic_lead}"
     scenes = [{"voice": hook, "headline": hook, "hero": _short_words(topic, 24),
                "detail": f"สรุปข่าว{category}จากต้นฉบับ"}]
@@ -243,14 +243,14 @@ def build_rule_plan(row, headline, article):
                        "hero": hero, "detail": _short_words(detail_source, 58),
                        "evidence_id": evidence_id})
     if len(evidence_blocks) == 2:
-        scenes.append({"voice": "อ่านรายละเอียดต่อจากข่าวต้นฉบับจ้ะ",
+        scenes.append({"voice": "อ่านต่อที่ข่าวต้นฉบับ",
                        "headline": "ตรวจข้อมูลต้นฉบับ", "hero": "อ่านให้ครบ",
                        "detail": "ข้อมูลอาจเปลี่ยนแปลงได้", "neutral_transition": True})
-    scenes.append({"voice": "เห็นอย่างไร คอมเมนต์ได้เลยจ้ะ",
+    scenes.append({"voice": "คิดเห็นอย่างไร บอกได้เลย",
                    "headline": "คุณคิดเห็นอย่างไร", "hero": "คุยกันได้",
                    "detail": "ติดตามป้าเข็มบอกต่อ"})
     plan = validate_plan({"topic_title": topic, "scenes": scenes}, article, evidence_blocks)
-    if len(plan["voiceover_script"]) > 150:
+    if len(plan["voiceover_script"]) > 115:
         raise ValueError("Voice script exceeds short-video budget")
     plan["source_url"] = row["source_url"]
     plan["source_label"] = "ข้อมูลจาก " + (urlparse(row["source_url"]).hostname or "แหล่งข่าว")
