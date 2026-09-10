@@ -419,13 +419,14 @@ def build_voice_script(product_name: str, price: float, category: str, seed_id: 
 
 
 def local_product_score(product, latest_drop_pct: float = 0.0,
-                        demand_score: float = 0.0) -> float:
+                        demand_score: float = 0.0, performance_score: float = 0.0) -> float:
     """Deterministic private ranking score from real product fields only."""
     sales = max(0, int(getattr(product, "sales_count", 0) or 0))
     rating = min(5.0, max(0.0, float(getattr(product, "rating", 0) or 0)))
     commission = max(0.0, float(getattr(product, "commission", 0) or 0))
     drop = min(50.0, max(0.0, float(latest_drop_pct or 0)))
     demand = min(100.0, max(0.0, float(demand_score or 0)))
+    performance = min(100.0, max(0.0, float(performance_score or 0)))
     sales_points = min(35.0, math.log10(sales + 1) / 5.0 * 35.0)
     rating_points = rating / 5.0 * 20.0
     commission_points = min(15.0, math.log10(commission + 1) / 2.5 * 15.0)
@@ -434,8 +435,9 @@ def local_product_score(product, latest_drop_pct: float = 0.0,
         readiness_points += 10.0
     if str(getattr(product, "image_url", "") or "").startswith("https://"):
         readiness_points += 10.0
+    # Observed results can add up to 20 points, but cannot erase quality gates.
     return round(sales_points + rating_points + commission_points + readiness_points
-                 + drop / 50.0 * 5.0 + demand / 100.0 * 5.0, 3)
+                 + drop / 50.0 * 5.0 + demand / 100.0 * 5.0 + performance / 5.0, 3)
 
 
 # พจนานุกรมแปลงคำทับศัพท์/ตัวย่อสากลเป็นคำอ่านภาษาไทยสำหรับเสียงพากย์ TTS (Phonetic Normalizer)
@@ -1256,6 +1258,14 @@ def generate_product_reels(limit: int = 3, selection: str = "balanced",
                      .limit(4000).all()
 
         drop_map = _latest_price_drop_map(db)
+        performance_map = {}
+        try:
+            score_path = ROOT_DIR.parent / "artifacts/product_learning/scores.json"
+            score_data = json.loads(score_path.read_text(encoding="utf-8")) if score_path.exists() else {}
+            performance_map = {int(pid): float(row.get("score", 0))
+                               for pid, row in score_data.get("products", {}).items()}
+        except Exception as e:
+            logger.warning(f"Performance learning scores: {e}")
 
         if selection == "discount":
             radar_prods = [p for p in radar_prods if drop_map.get(p.id, 0.0) > 0]
@@ -1265,7 +1275,7 @@ def generate_product_reels(limit: int = 3, selection: str = "balanced",
         def rank_key(p):
             drop = drop_map.get(p.id, 0.0)
             sales = int(p.sales_count or 0)
-            local = local_product_score(p, drop, demand_map.get(p.id, 0))
+            local = local_product_score(p, drop, demand_map.get(p.id, 0), performance_map.get(p.id, 0))
             if selection == "discount":
                 return (drop, local, sales)
             if selection == "bestseller":
@@ -1318,7 +1328,7 @@ def generate_product_reels(limit: int = 3, selection: str = "balanced",
                     "sales_count": int(p.sales_count or 0),
                     "ai_score": int(p.ai_score or 0),
                     "local_score": local_product_score(
-                        p, drop_map.get(p.id, 0.0), demand_map.get(p.id, 0)),
+                        p, drop_map.get(p.id, 0.0), demand_map.get(p.id, 0), performance_map.get(p.id, 0)),
                     "latest_drop_pct": drop_map.get(p.id, 0.0),
                     "affiliate_url": p.affiliate_url or "",
                 })

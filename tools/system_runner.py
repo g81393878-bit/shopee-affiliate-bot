@@ -764,6 +764,25 @@ def run_daily_reporter_loop():
         time.sleep(180)  # เช็คทุก 3 นาที
 
 
+def run_performance_learning_loop():
+    """Refresh deterministic product scores hourly and notify once daily."""
+    last_notified = ""
+    while True:
+        try:
+            from performance_learner import run_once
+            now = datetime.now(ICT)
+            notify_key = now.strftime("%Y-%m-%d") if now.hour == 20 else ""
+            should_notify = bool(notify_key and notify_key != last_notified)
+            data = run_once(notify=should_notify)
+            if should_notify:
+                last_notified = notify_key
+            logger.info("📈 Local performance learner: %s products, %s categories",
+                        len(data.get("products", {})), len(data.get("categories", {})))
+        except Exception as exc:
+            logger.warning("⚠️ Performance learner error: %s", exc)
+        time.sleep(3600)
+
+
 def print_banner():
     bot_name = os.getenv("BOT_NAME", "ป้าเข็ม ขายของ")
     slogan = os.getenv("BRAND_SLOGAN", "คัดของดี ของเด็ด Shopee แท้ 100%")
@@ -803,7 +822,11 @@ def main():
     t_reporter = threading.Thread(target=run_daily_reporter_loop, daemon=True, name="SystemReporter")
     t_reporter.start()
 
-    # 4. รันเธรดศูนย์สั่งการโต้ตอบ Telegram Commander (ปุ่มสั่งการสด & ตอบแชท LINE 24/7)
+    # 4. เรียนรู้จากยอดจริงด้วยสูตร Local ทุกชั่วโมง
+    t_learning = threading.Thread(target=run_performance_learning_loop, daemon=True, name="PerformanceLearner")
+    t_learning.start()
+
+    # 5. รันเธรดศูนย์สั่งการโต้ตอบ Telegram Commander (ปุ่มสั่งการสด & ตอบแชท LINE 24/7)
     try:
         from telegram_commander import run_telegram_commander_loop
         t_commander = threading.Thread(target=run_telegram_commander_loop, daemon=True, name="TelegramCommander")
