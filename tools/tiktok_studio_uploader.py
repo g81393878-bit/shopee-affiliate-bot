@@ -234,8 +234,10 @@ def upload_video_via_web(
             caption_box = page.locator('div[contenteditable="true"]').first
             if caption_box.count() > 0:
                 caption_box.click(force=True)
-                caption_box.fill("")
-                caption_box.type(clean_caption, delay=20)
+                # TikTok's DraftJS editor can stall on per-character typing in
+                # headless Chromium. Playwright fill dispatches one input event
+                # and is both faster and reliable for contenteditable fields.
+                caption_box.fill(clean_caption)
                 page.keyboard.press("Escape")
                 page.wait_for_timeout(1000)
             else:
