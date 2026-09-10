@@ -16,8 +16,26 @@ from pythainlp import word_tokenize
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "artifacts/google_trends/iphone17_preview"
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
-FONT = Path("C:/Windows/Fonts/leelawad.ttf")
-BOLD = Path("C:/Windows/Fonts/leelawdb.ttf")
+
+
+def _font_path(*candidates):
+    for candidate in candidates:
+        path = Path(candidate)
+        if path.is_file():
+            return path
+    raise OSError("Thai font is not installed")
+
+
+FONT = _font_path(
+    "C:/Windows/Fonts/leelawad.ttf",
+    "/usr/share/fonts/truetype/tlwg/Loma.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSansThai-Regular.ttf",
+)
+BOLD = _font_path(
+    "C:/Windows/Fonts/leelawdb.ttf",
+    "/usr/share/fonts/truetype/tlwg/Loma-Bold.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSansThai-Bold.ttf",
+)
 SOURCE_LABEL = "ข้อมูลจาก Apple • apple.com/iphone-17"
 
 
