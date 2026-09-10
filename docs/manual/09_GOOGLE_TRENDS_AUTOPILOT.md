@@ -1,10 +1,10 @@
 # Google Trends Autopilot (Local Producer)
 
-ระบบ Local producer ดึง Google Trends Thailand RSS แล้วทำงานตามลำดับ: กรองหัวข้อเสี่ยงและซ้ำ → อ่านข่าวจาก HTTPS สาธารณะ → สร้างสคริปต์ 5 ฉาก → ผูกข้อความข้อเท็จจริงกับ evidence block → ตรวจสคริปต์ด้วย LLM รอบสอง → สร้างเสียง PremwadeeNeural +20% → เรนเดอร์ 1080x1920 พร้อมซับตาม WordBoundary → ตรวจ decode, AAC, ระดับเสียง และจอดำ → เขียน metadata/caption → เปลี่ยนชื่อไฟล์ `.part` เข้า `pending_videos` แบบ atomic.
+ระบบ Local producer ดึง Google Trends Thailand RSS แล้วทำงานตามลำดับ: กรองหัวข้อเสี่ยงและซ้ำ → อ่านข่าวจาก HTTPS สาธารณะ → คัดประโยคภาษาไทยที่สมบูรณ์ด้วยกฎ Local → สร้างสคริปต์ 5 ฉากจากข้อความต้นฉบับโดยตรง → สร้างเสียง PremwadeeNeural +20% → เรนเดอร์ 1080x1920 พร้อมซับตาม WordBoundary → ตรวจ decode, AAC, ระดับเสียง และจอดำ → เขียน metadata/caption → เปลี่ยนชื่อไฟล์ `.part` เข้า `pending_videos` แบบ atomic.
 
 `tools/system_runner.py` เรียก producer เมื่อคิวน้อยกว่า 4 คลิป และนับผลผลิตสำเร็จแบบถาวรเพื่อรักษา 90% trend content / 10% Shopee product. รอบโพสต์ฉุกเฉินไม่ผลิตแทรก เพื่อไม่ให้ข้าม lock, QA หรือสัดส่วน. มี single-instance lock ทั้ง producer และ system runner. หัวข้อที่ไม่ผ่านจะ cooldown 30 นาที; ไม่มีหัวข้อปลอดภัยแล้วไม่ผลิตข้อมูลจำลอง.
 
-ไลบรารี Local อยู่ใน `backend/requirements-video.txt`: moviepy, edge-tts 7.2.8+, imageio-ffmpeg 0.5+, Pillow, PyThaiNLP, HTTPX, BeautifulSoup, filelock, OpenAI SDK และ python-dotenv. ตั้ง `TREND_SCRIPT_MODEL=qwen/qwen3.8-27b`; ต้องมี `GROQ_API_KEY`. ติดตั้งด้วย `python -m pip install -r backend/requirements-video.txt`.
+ค่าเริ่มต้น `TREND_USE_AI=false` ไม่เรียก Groq หรือ LLM: บอทใช้ตัวกรอง, regex, anti-duplicate และ template บนเครื่องทั้งหมด และข้ามข่าวเมื่อหาประโยคไทยที่ปลอดภัยครบ 3 ประโยคไม่ได้. หากเจ้าของตั้ง `TREND_USE_AI=true` จึงอนุญาตให้ใช้ Groq เป็น fallback โดยใช้ `TREND_SCRIPT_MODEL`. ไลบรารี Local อยู่ใน `backend/requirements-video.txt`: moviepy, edge-tts 7.2.8+, imageio-ffmpeg 0.5+, Pillow, PyThaiNLP, HTTPX, BeautifulSoup, filelock, OpenAI SDK และ python-dotenv. ติดตั้งด้วย `python -m pip install -r backend/requirements-video.txt`.
 
 ทดสอบ producer อย่างเดียวด้วย `python tools/trend_autopilot.py --once`. คำสั่งนี้อาจนำคลิปที่ผ่านทุกด่านเข้าคิวจริง แต่ไม่เรียก uploader เอง. การทำงานต่อเนื่องใช้ `python tools/system_runner.py` ตาม launcher ของระบบเดิม.
 

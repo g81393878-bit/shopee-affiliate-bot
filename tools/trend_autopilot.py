@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 import socket
 import ipaddress
@@ -29,6 +30,8 @@ PENDING = ROOT / "reels_uploader/pending_videos"
 BLOCKED_EDITORIAL = ("เลือกตั้ง", "รัฐบาล", "พรรค", "รัฐสภา", "นายก", "คนร้าย", "ชิงเงิน", "ฆ่า", "ศพ",
                      "หุ้น", "ตลาดหุ้น", "เงินเฟ้อ", "คริปโต", "ลงทุน", "congress", "bjp", "soldier", "boycott")
 LOG = logging.getLogger("TrendAutopilot")
+THAI_RE = re.compile(r"[\u0e00-\u0e7f]")
+SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?。！？])\s+|\n+")
 
 
 def save_json(path, data):
@@ -88,7 +91,9 @@ def validate_plan(plan, evidence, evidence_blocks=None):
         for key, limit in (("voice", 150), ("headline", 42), ("hero", 24), ("detail", 60)):
             if not isinstance(s.get(key), str) or not 1 <= len(s[key]) <= limit:
                 raise ValueError(f"Invalid scene {key}")
-    for s in scenes[:4]:
+    # The opening hook can be a neutral question. Only factual scenes need a
+    # verbatim evidence binding; the closing scene is a call to action.
+    for s in scenes[1:4]:
         if evidence_blocks is not None:
             evidence_id = s.get("evidence_id")
             if isinstance(evidence_id, str) and evidence_id.isdigit():
@@ -110,6 +115,55 @@ def validate_plan(plan, evidence, evidence_blocks=None):
     plan["voiceover_script"] = " ".join(s["voice"] for s in scenes)
     plan["caption"] = plan["hook"] + "\n" + "\n".join(s["voice"] for s in scenes[1:])
     plan["hashtags"] = ["ข่าวไอที", "ความรู้รอบตัว", "ป้าเข็มบอกต่อ"]
+    return plan
+
+
+def _safe_source_sentences(article):
+    """Select complete Thai source sentences without rewriting their claims."""
+    selected = []
+    seen = set()
+    for raw in SENTENCE_SPLIT_RE.split(article):
+        sentence = " ".join(raw.split()).strip(" •\t")
+        folded = sentence.casefold()
+        if not 35 <= len(sentence) <= 145 or not THAI_RE.search(sentence):
+            continue
+        if (is_sensitive_forbidden_topic(sentence)
+                or any(term in folded for term in BLOCKED_EDITORIAL)
+                or any(term in folded for term in ("ราคา", "shopee", "http", "content_", "prod_", "#", "฿"))
+                or re.search(r"\b\d[\d,.]*\s*(?:บาท|บ\.)", sentence, re.IGNORECASE)):
+            continue
+        key = normalize(sentence)
+        if key and key not in seen:
+            seen.add(key)
+            selected.append(sentence)
+    return selected
+
+
+def build_rule_plan(row, headline, article):
+    """Build a publishable plan using local rules and exact source text only."""
+    evidence_blocks = _safe_source_sentences(article)
+    if len(evidence_blocks) < 3:
+        raise ValueError("Not enough safe Thai source sentences")
+    hook = "เรื่องนี้กำลังถูกค้นหา?"
+    topic = " ".join((headline or row.get("title", "")).split())
+    if (not topic or len(topic) > 60 or is_sensitive_forbidden_topic(topic)
+            or any(term in topic.casefold() for term in BLOCKED_EDITORIAL)):
+        topic = "ประเด็นที่คนกำลังสนใจ"
+    scenes = [{"voice": hook, "headline": hook, "hero": "กำลังเป็นเทรนด์",
+               "detail": "สรุปจากแหล่งข่าวโดยตรง"}]
+    labels = (("ประเด็นแรก", "ข้อมูลจากข่าว"), ("ประเด็นต่อมา", "อ่านให้ครบ"),
+              ("สิ่งที่ควรรู้", "ตรวจจากต้นฉบับ"))
+    for evidence_id, (hero, detail) in enumerate(labels):
+        sentence = evidence_blocks[evidence_id]
+        scenes.append({"voice": sentence, "headline": f"ข้อมูลสำคัญ {evidence_id + 1}",
+                       "hero": hero, "detail": detail, "evidence_id": evidence_id})
+    scenes.append({"voice": "คุณคิดเห็นอย่างไร คอมเมนต์และติดตามป้าเข็มไว้นะจ๊ะ",
+                   "headline": "คุณคิดเห็นอย่างไร", "hero": "คุยกันได้",
+                   "detail": "ติดตามป้าเข็มบอกต่อ"})
+    plan = validate_plan({"topic_title": topic, "scenes": scenes}, article, evidence_blocks)
+    plan["source_url"] = row["source_url"]
+    plan["source_label"] = "ข้อมูลจาก " + (urlparse(row["source_url"]).hostname or "แหล่งข่าว")
+    plan["generation_mode"] = "local_rules"
     return plan
 
 
@@ -260,7 +314,15 @@ def _produce_one():
         save_json(state_path,state)
         try:
             headline, article = article_text(row["source_url"])
-            plan = draft(row, headline, article)
+            # Local rules are the production default. AI is an explicit opt-in
+            # fallback for sources whose safe Thai text cannot fill three scenes.
+            try:
+                plan = build_rule_plan(row, headline, article)
+            except ValueError:
+                if os.getenv("TREND_USE_AI", "false").strip().lower() not in {"1", "true", "yes", "on"}:
+                    raise
+                plan = draft(row, headline, article)
+                plan["generation_mode"] = "ai_fallback"
             if is_topic_duplicate(plan["title"], url=row["source_url"]):
                 raise ValueError("Duplicate drafted topic")
             work = BASE/key/str(int(time.time()))

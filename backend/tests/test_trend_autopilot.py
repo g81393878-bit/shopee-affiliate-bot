@@ -61,3 +61,28 @@ def test_atomic_state_preserves_json(tmp_path):
 def test_default_trend_model_is_json_capable(monkeypatch):
     monkeypatch.delenv('TREND_SCRIPT_MODEL', raising=False)
     assert m.os.getenv('TREND_SCRIPT_MODEL', 'qwen/qwen3.8-27b') == 'qwen/qwen3.8-27b'
+
+
+def test_rule_plan_uses_exact_source_sentences_without_ai():
+    sentences = [
+        'บริษัทเปิดตัวระบบใหม่ที่ช่วยให้ผู้ใช้จัดการข้อมูลบนอุปกรณ์ได้สะดวกขึ้นอย่างชัดเจน.',
+        'บริการนี้รองรับภาษาไทยและเปิดให้ผู้ใช้ทั่วไปทดลองใช้งานผ่านแอปพลิเคชันแล้ว.',
+        'ผู้พัฒนาระบุว่าระบบทำงานบนอุปกรณ์ที่รองรับและต้องเชื่อมต่ออินเทอร์เน็ต.',
+    ]
+    row = {'title':'ระบบใหม่มาแรง', 'source_url':'https://example.com/news'}
+    plan = m.build_rule_plan(row, 'ระบบใหม่สำหรับผู้ใช้ไทย', ' '.join(sentences))
+    assert plan['generation_mode'] == 'local_rules'
+    assert [s['voice'] for s in plan['scenes'][1:4]] == sentences
+    assert plan['hook'] == plan['scenes'][0]['headline']
+
+
+def test_rule_plan_filters_prices_and_fails_closed():
+    article = ('สินค้านี้มีราคา 999 บาทและกำลังได้รับความสนใจอย่างมากจากผู้ซื้อ. '
+               'มีข้อมูลภาษาไทยที่ปลอดภัยเพียงประโยคเดียวสำหรับใช้สรุปเนื้อหาอย่างตรงไปตรงมา.')
+    with pytest.raises(ValueError, match='Not enough safe Thai'):
+        m.build_rule_plan({'title':'ข่าวทั่วไป','source_url':'https://example.com/news'}, 'ข่าวทั่วไป', article)
+
+
+def test_ai_is_disabled_by_default(monkeypatch):
+    monkeypatch.delenv('TREND_USE_AI', raising=False)
+    assert m.os.getenv('TREND_USE_AI', 'false') == 'false'
