@@ -14,6 +14,10 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- เปิดใช้งาน Local สำเร็จ: `system_runner.py` PID 24384 เริ่ม 10/09/2026 19:02 ICT; prebuffer, orchestrator และ Telegram Commander active. เพิ่ม Scheduled Task `PaKhem Trends Autopilot` แบบ Hidden/AtLogOn/IgnoreNew/restart 3 ครั้ง เพื่อเริ่มเองหลังล็อกอิน. รอบแรกไม่มี trend ผ่าน จึงไม่มีไฟล์/โพสต์. Full suite หลังแก้ audio/hashtag guards ผ่าน **1249 tests**. Commit หลัก `4c48150`. ไม่ push/VPS.
+
+- Live runner พบ Groq OTPM limit 1000 แต่ generation max_tokens 1500 ทำให้ 429; ลด initial/repair plan เหลือ 800 แล้ว targeted regression ผ่าน 37 tests. บันทึก follow-up และ restart runner เพื่อโหลดค่าใหม่.
+
 - Google Trends Autopilot พร้อมใช้งาน Local และชุดทดสอบรวมเขียว: แก้ audio guard ให้ bypass เฉพาะ tiny pytest placeholder, แก้ TikTok brand/`#TikTokUni` และ Facebook category hashtag. Targeted 30 passed + orchestration/audio 14 passed; full suite **1249 passed**. พร้อม commit เฉพาะงานนี้; การเริ่ม runner/โพสต์จริงให้ตรวจ launcher และ process หลัง commit.
 
 - Autopilot validation ล่าสุด: ติดตั้ง `backend/requirements-video.txt` เข้า `backend/.venv` แล้ว (เพิ่ม beautifulsoup4/filelock/soupsieve; dependency อื่นมีอยู่). Targeted 14 passed; live end-to-end smoke ผ่าน factual repair/review, TTS, render และ QA. Full suite 1245 passed / 4 failed ใน audio bypass + hashtag tests เดิมที่ไม่อยู่ในขอบเขต Autopilot. ตามกฎห้ามปล่อยโค้ดที่ชุดรวมไม่เขียว จึงยังไม่เริ่ม `system_runner.py`, ไม่โพสต์, ไม่ commit/push. Trends สดรอบทดสอบ fail closed เพราะไม่มีหัวข้อผ่านทุกด่าน.

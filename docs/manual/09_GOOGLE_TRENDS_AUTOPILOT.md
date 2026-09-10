@@ -10,4 +10,6 @@
 
 การทดสอบข้อมูลจริงวันที่ 10 กันยายน 2026: รอบ Trends สดไม่มีหัวข้อผ่านทุกด่านจึงคืน `no_eligible_topic` และไม่สร้างคลิป. Smoke test ด้วยหน้า Apple iPhone 17 ผ่าน generation → evidence mapping → factual repair/review → TTS → render → video QA; output อยู่ `artifacts/trend_autopilot/pipeline_smoke/iphone17_motion.mp4`. พบ Groq 429 ระหว่าง repair และ SDK retry สำเร็จ. ไม่ได้คัดลอก smoke test เข้าคิวและไม่ได้โพสต์.
 
+เปิดใช้งาน Local วันที่ 10 กันยายน 2026: process เริ่มด้วย `backend/.venv/Scripts/python.exe tools/system_runner.py`; stdout/stderr อยู่ใต้ `artifacts/trend_autopilot/`. Windows Scheduled Task ชื่อ `PaKhem Trends Autopilot` เริ่มเมื่อผู้ใช้ล็อกอิน ตั้ง Hidden, IgnoreNew, restart ได้ 3 ครั้ง และไม่มี execution time limit. ตัว lock ใน Python ป้องกัน process ซ้ำอีกชั้น. Scheduled Task เป็นสถานะเครื่อง Local จึงไม่ได้อยู่ใน Git; ตรวจด้วย `Get-ScheduledTask -TaskName 'PaKhem Trends Autopilot'`.
+
 ข้อจำกัด: ตัวผลิตนี้ใช้ typography gradient ตาม fallback ของโปรเจกต์ ยังไม่ได้ดึงภาพข่าวมาใช้. การมีข่าวใน RSS ไม่รับประกันว่าจะผลิตได้ หากหน้าอ่านไม่ได้ เนื้อหาเสี่ยง แหล่งข่าวไม่ตรงคำค้น หรือหลักฐานไม่พอ ระบบจะข้าม. Production ยังขึ้นกับ token/session ของแต่ละแพลตฟอร์มและเครื่อง Local ต้องเปิดอยู่.

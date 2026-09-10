@@ -178,7 +178,7 @@ def draft(row, headline, article):
         try:
             result = completion(client, [{"role":"system","content":system},
                 {"role":"user","content":json.dumps({"trend":row["title"],"headline":headline,
-                "evidence_blocks":[{"id":i,"text":v} for i,v in enumerate(evidence_blocks)]},ensure_ascii=False)}], 1500, plan_schema)
+                "evidence_blocks":[{"id":i,"text":v} for i,v in enumerate(evidence_blocks)]},ensure_ascii=False)}], 800, plan_schema)
             raw_plan = parse_object(result.choices[0].message.content)
             raw_plan["topic_title"] = raw_plan.get("topic_title") or row["title"]
             plan = validate_plan(raw_plan, article, evidence_blocks)
@@ -190,7 +190,7 @@ def draft(row, headline, article):
                 repair = completion(client, [{"role":"system","content":system},
                     {"role":"user","content":json.dumps({"task":"Correct the rejected plan. Remove or narrow every unsupported claim. Keep exactly five scenes and use only supplied evidence IDs.",
                     "trend":row["title"],"review_reason":review_data.get("reason",""),"rejected_plan":raw_plan,
-                    "evidence_blocks":[{"id":i,"text":v} for i,v in enumerate(evidence_blocks)]},ensure_ascii=False)}], 1500, plan_schema)
+                    "evidence_blocks":[{"id":i,"text":v} for i,v in enumerate(evidence_blocks)]},ensure_ascii=False)}], 800, plan_schema)
                 repaired = parse_object(repair.choices[0].message.content)
                 repaired["topic_title"] = repaired.get("topic_title") or row["title"]
                 plan = validate_plan(repaired, article, evidence_blocks)
