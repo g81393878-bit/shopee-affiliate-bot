@@ -14,7 +14,7 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
-- เพิ่ม Local product intelligence: `PRODUCT_USE_AI=false` เป็นค่าเริ่มต้น, voice ใช้เทมเพลตตามหมวดจากชื่อจริง, ranking ใช้ยอดขาย/รีวิว/ค่าคอม/ภาพ/ลิงก์/price drop/Demand Radar และไม่ใช้ `ai_score`. Supabase จริงพบสินค้า link-ok 2,528 รายการ; ผลิตคลิป Local สำเร็จ 2 ไฟล์ (สินค้า 25, 939) เข้าคิว. Tests 1255 passed. Runner หยุดระหว่างแก้และต้อง restart หลัง commit.
+- เพิ่ม Local product intelligence: `PRODUCT_USE_AI=false` เป็นค่าเริ่มต้น, voice ใช้เทมเพลตตามหมวดจากชื่อจริง, ranking ใช้ยอดขาย/รีวิว/ค่าคอม/ภาพ/ลิงก์/price drop/Demand Radar และไม่ใช้ `ai_score`. Supabase จริงพบสินค้า link-ok 2,528 รายการ; ผลิตคลิป Local สำเร็จ 2 ไฟล์ (สินค้า 25, 939) เข้าคิว. Tests 1255 passed. Restart runner สำเร็จ PID 23216; คิว 2 คลิป, prebuffer/orchestrator/Telegram active.
 
 - ปรับ Google Trends Autopilot เป็น Local-rules-first: ค่าเริ่มต้น `TREND_USE_AI=false` ไม่เรียก Groq/LLM, ใช้ประโยคภาษาไทยจากต้นฉบับตรง ๆ พร้อม safety/price/evidence/duplicate guards และ fail closed เมื่อหลักฐานไม่ครบ. Targeted 17 passed, `backend/tests` 1252 passed, live Trends คืน `no_eligible_topic` โดยไม่สร้างข้อมูลจำลอง. ตั้งค่า Local `.env` เป็น false และ restart runner สำเร็จที่ PID 14488; prebuffer/orchestrator/Telegram active.
 
