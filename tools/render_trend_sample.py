@@ -191,15 +191,25 @@ async def motion(source=None, output_dir=None):
     audio, word_file = OUT / "voice.mp3", OUT / "words.json"
     if not audio.exists() or not word_file.exists():
         words = []
-        try:
-            with audio.open("wb") as stream:
-                async for chunk in edge_tts.Communicate(spoken, "th-TH-PremwadeeNeural", rate="+20%", volume="+0%", boundary="WordBoundary").stream():
-                    if chunk["type"] == "audio":
-                        stream.write(chunk["data"])
-                    elif chunk["type"] == "WordBoundary":
-                        words.append(chunk)
-        except Exception:
-            audio.unlink(missing_ok=True)
+        edge_error = None
+        for edge_voice in ("th-TH-PremwadeeNeural", "th-TH-NiwatNeural"):
+            try:
+                words = []
+                with audio.open("wb") as stream:
+                    async for chunk in edge_tts.Communicate(
+                            spoken, edge_voice, rate="+25%", volume="+0%",
+                            boundary="WordBoundary").stream():
+                        if chunk["type"] == "audio":
+                            stream.write(chunk["data"])
+                        elif chunk["type"] == "WordBoundary":
+                            words.append(chunk)
+                if audio.stat().st_size > 1000 and words:
+                    edge_error = None
+                    break
+            except Exception as exc:
+                edge_error = exc
+                audio.unlink(missing_ok=True)
+        if edge_error is not None or not audio.exists():
             if (os.getenv("TTS_ALLOW_OPENAI_FALLBACK", "false").lower() in ("true", "1", "yes")
                     and os.getenv("OPENAI_API_KEY")):
                 try:
@@ -218,7 +228,7 @@ async def motion(source=None, output_dir=None):
                     audio.unlink(missing_ok=True)
             if not audio.exists():
                 if os.getenv("TTS_ALLOW_GOOGLE_FALLBACK", "false").lower() not in ("true", "1", "yes"):
-                    raise
+                    raise edge_error or RuntimeError("Edge TTS returned no audio")
                 from gtts import gTTS
                 gTTS(text=spoken, lang="th", slow=False).save(str(audio))
             probe = run(["-i", str(audio), "-f", "null", "-"])
