@@ -197,7 +197,7 @@ async def motion(source=None, output_dir=None):
                 words = []
                 with audio.open("wb") as stream:
                     async for chunk in edge_tts.Communicate(
-                            spoken, edge_voice, rate="+25%", volume="+0%",
+                            spoken, edge_voice, rate="+20%", volume="+0%",
                             boundary="WordBoundary").stream():
                         if chunk["type"] == "audio":
                             stream.write(chunk["data"])

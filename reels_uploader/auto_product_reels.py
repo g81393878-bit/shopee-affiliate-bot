@@ -668,7 +668,7 @@ def generate_tts_audio(text: str, output_path: Path) -> bool:
             import concurrent.futures
             raw_edge = output_path.with_suffix(".tmp.mp3")
             with concurrent.futures.ThreadPoolExecutor() as pool:
-                pool.submit(asyncio.run, _tts_save(clean_text, str(raw_edge), voice="th-TH-PremwadeeNeural", rate="+0%")).result(timeout=60)
+                pool.submit(asyncio.run, _tts_save(clean_text, str(raw_edge), voice="th-TH-PremwadeeNeural", rate="+20%")).result(timeout=60)
             
             if raw_edge.exists() and raw_edge.stat().st_size > 1000:
                 # บันทึกไฟล์เสียงจาก Edge TTS โดยตรง คมชัด 100% ไม่ผ่านการแปลง MP3 ซ้ำซ้อน เพื่อคงคุณภาพคลื่นเสียงระดับสตูดิโอ
@@ -687,7 +687,7 @@ def generate_tts_audio(text: str, output_path: Path) -> bool:
             import concurrent.futures
             raw_edge_m = output_path.with_suffix(".tmpm.mp3")
             with concurrent.futures.ThreadPoolExecutor() as pool:
-                pool.submit(asyncio.run, _tts_save(clean_text, str(raw_edge_m), voice="th-TH-NiwatNeural", rate="+0%")).result(timeout=60)
+                pool.submit(asyncio.run, _tts_save(clean_text, str(raw_edge_m), voice="th-TH-NiwatNeural", rate="+20%")).result(timeout=60)
             if raw_edge_m.exists() and raw_edge_m.stat().st_size > 1000:
                 if output_path.exists():
                     output_path.unlink(missing_ok=True)
