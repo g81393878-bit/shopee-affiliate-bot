@@ -13,3 +13,5 @@
 เปิดใช้งาน Local วันที่ 10 กันยายน 2026: process เริ่มด้วย `backend/.venv/Scripts/python.exe tools/system_runner.py`; stdout/stderr อยู่ใต้ `artifacts/trend_autopilot/`. Windows Scheduled Task ชื่อ `PaKhem Trends Autopilot` เริ่มเมื่อผู้ใช้ล็อกอิน ตั้ง Hidden, IgnoreNew, restart ได้ 3 ครั้ง และไม่มี execution time limit. ตัว lock ใน Python ป้องกัน process ซ้ำอีกชั้น. Scheduled Task เป็นสถานะเครื่อง Local จึงไม่ได้อยู่ใน Git; ตรวจด้วย `Get-ScheduledTask -TaskName 'PaKhem Trends Autopilot'`.
 
 ข้อจำกัด: ตัวผลิตนี้ใช้ typography gradient ตาม fallback ของโปรเจกต์ ยังไม่ได้ดึงภาพข่าวมาใช้. การมีข่าวใน RSS ไม่รับประกันว่าจะผลิตได้ หากหน้าอ่านไม่ได้ เนื้อหาเสี่ยง แหล่งข่าวไม่ตรงคำค้น หรือหลักฐานไม่พอ ระบบจะข้าม. Production ยังขึ้นกับ token/session ของแต่ละแพลตฟอร์มและเครื่อง Local ต้องเปิดอยู่.
+
+รางสินค้าใช้ `PRODUCT_USE_AI=false` เป็นค่าเริ่มต้นเช่นกัน. ระบบเรียงสินค้าด้วยคะแนน Local จากยอดขาย รีวิว ค่าคอม ความพร้อมของลิงก์ Affiliate/ภาพจริง ราคาเปลี่ยนแปลง และ Demand Radar โดยไม่ใช้ `ai_score` ในการตัดสิน. เสียงขายสินค้าใช้คลังเทมเพลตตามหมวด; Groq จะทำงานเฉพาะเมื่อกำหนด `PRODUCT_USE_AI=true` เอง.

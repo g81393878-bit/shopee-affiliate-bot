@@ -12,6 +12,7 @@ import asyncio
 import io
 import json
 import logging
+import math
 import os
 import re
 import shutil
@@ -305,13 +306,42 @@ def _remove_child_address(text: str) -> str:
     return text
 
 
+def build_local_product_voice(product_name: str, category: str = "", seed_id: int = 0) -> str:
+    """Local templates mention only identity/category facts present in product data."""
+    clean_name = sanitize_public_product_text(clean_display_text(product_name))
+    clean_name = re.sub(r'\b[A-Za-z]{2,}\d{3,}[A-Za-z0-9]*\b', '', clean_name)
+    clean_name = re.sub(r'\s+', ' ', clean_name).strip()
+    title = " ".join(clean_name.split()[:4]) or (category.strip() or "สินค้าน่าใช้")
+    combined = f"{product_name} {category}".casefold()
+    groups = (
+        (("สายชาร์จ", "หูฟัง", "มือถือ", "คีย์บอร์ด", "ไอที", "usb", "bluetooth"), "สายไอทีต้องดู"),
+        (("แมว", "หมา", "สัตว์เลี้ยง", "pet"), "คนเลี้ยงสัตว์ต้องดู"),
+        (("กระทะ", "หม้อ", "มีด", "เครื่องครัว"), "คนเข้าครัวต้องดู"),
+        (("รถ", "เดินทาง", "ยาง", "ปั๊มลม"), "คนใช้รถต้องดู"),
+        (("ครีม", "เซรั่ม", "ผิว", "ความงาม"), "สายดูแลตัวเองต้องดู"),
+        (("วิตามิน", "สุขภาพ", "อาหารเสริม"), "สายดูแลสุขภาพต้องดู"),
+        (("บ้าน", "ทิชชู่", "ทำความสะอาด", "จัดระเบียบ"), "ของใช้ในบ้านน่าดู"),
+    )
+    hook = next((label for words, label in groups if any(word in combined for word in words)),
+                "ของชิ้นนี้น่าดู")
+    endings = (
+        "ดูรายละเอียดของจริงได้ที่ลิงก์ในแคปชั่นนะจ๊ะ",
+        "สนใจชิ้นนี้ กดดูรายละเอียดที่ลิงก์ในแคปชั่นได้เลยจ้า",
+        "อยากรู้ว่าเหมาะกับคุณไหม เปิดดูรายละเอียดในแคปชั่นได้เลย",
+    )
+    return f"{hook}! นี่คือ {title} {endings[seed_id % len(endings)]}"
+
+
 def build_voice_script(product_name: str, price: float, category: str, seed_id: int = 0, content_mode: str = "PRODUCT_HIGHLIGHT") -> str:
-    """สร้างบทพูดสั้นกระชับ สไตล์ป้าเข็ม 7-10 วิ ด้วย AI อัจฉริยะ (พร้อมระบบ Fallback ตรงหมวด 100%)"""
-    # 1. พยายามใช้ Groq AI ก่อนเสมอ เพื่อให้ได้บทพูดที่ตรงกับจุดเด่นของสินค้านั้นจริงๆ
-    ai_script = generate_ai_voice_script(product_name, category, content_mode=content_mode)
-    if ai_script:
-        logger.info(f"🎙️ สร้างสคริปต์ [{content_mode}] ด้วย Groq AI สำเร็จ: {ai_script[:60]}...")
-        return ai_script
+    """สร้างบทพูดด้วยกฎ Local; ใช้ Groq เฉพาะเมื่อเปิด PRODUCT_USE_AI เอง."""
+    use_ai = os.getenv("PRODUCT_USE_AI", "false").strip().lower() in {"1", "true", "yes", "on"}
+    if use_ai:
+        ai_script = generate_ai_voice_script(product_name, category, content_mode=content_mode)
+        if ai_script:
+            logger.info(f"🎙️ สร้างสคริปต์ [{content_mode}] ด้วย Groq AI สำเร็จ: {ai_script[:60]}...")
+            return ai_script
+    else:
+        return build_local_product_voice(product_name, category, seed_id)
 
     # 2. กรณีออฟไลน์/API ล้มเหลว -> ใช้ Smart Semantic Fallback ที่จำแนกตรงตามประเภทสินค้าจริง
     clean_name = sanitize_public_product_text(clean_display_text(product_name))
@@ -386,6 +416,26 @@ def build_voice_script(product_name: str, price: float, category: str, seed_id: 
         ]
 
     return hooks[seed_id % len(hooks)]
+
+
+def local_product_score(product, latest_drop_pct: float = 0.0,
+                        demand_score: float = 0.0) -> float:
+    """Deterministic private ranking score from real product fields only."""
+    sales = max(0, int(getattr(product, "sales_count", 0) or 0))
+    rating = min(5.0, max(0.0, float(getattr(product, "rating", 0) or 0)))
+    commission = max(0.0, float(getattr(product, "commission", 0) or 0))
+    drop = min(50.0, max(0.0, float(latest_drop_pct or 0)))
+    demand = min(100.0, max(0.0, float(demand_score or 0)))
+    sales_points = min(35.0, math.log10(sales + 1) / 5.0 * 35.0)
+    rating_points = rating / 5.0 * 20.0
+    commission_points = min(15.0, math.log10(commission + 1) / 2.5 * 15.0)
+    readiness_points = 0.0
+    if str(getattr(product, "affiliate_url", "") or "").startswith("https://s.shopee.co.th/"):
+        readiness_points += 10.0
+    if str(getattr(product, "image_url", "") or "").startswith("https://"):
+        readiness_points += 10.0
+    return round(sales_points + rating_points + commission_points + readiness_points
+                 + drop / 50.0 * 5.0 + demand / 100.0 * 5.0, 3)
 
 
 # พจนานุกรมแปลงคำทับศัพท์/ตัวย่อสากลเป็นคำอ่านภาษาไทยสำหรับเสียงพากย์ TTS (Phonetic Normalizer)
@@ -1173,6 +1223,7 @@ def generate_product_reels(limit: int = 3, selection: str = "balanced",
 
         # 1. ให้ Demand Radar เป็นตัวตัดสินใจอันดับ 1 (Top Priority Demand Radar Decider)
         radar_prods = []
+        demand_map = {}
         try:
             radar_events = (db.query(models.FacebookDemandEvent)
                               .filter(models.FacebookDemandEvent.demand_score >= 70,
@@ -1181,6 +1232,10 @@ def generate_product_reels(limit: int = 3, selection: str = "balanced",
                                         models.FacebookDemandEvent.created_at.desc())
                               .limit(20).all())
             radar_pids = [ev.matched_product_id for ev in radar_events if ev.matched_product_id and ev.matched_product_id not in used_ids]
+            for ev in radar_events:
+                if ev.matched_product_id:
+                    demand_map[ev.matched_product_id] = max(
+                        demand_map.get(ev.matched_product_id, 0), float(ev.demand_score or 0))
             if radar_pids:
                 radar_prods = (db.query(models.Product)
                                  .filter(models.Product.id.in_(radar_pids),
@@ -1196,8 +1251,8 @@ def generate_product_reels(limit: int = 3, selection: str = "balanced",
         if used_ids:
             query = query.filter(~models.Product.id.in_(used_ids))
 
-        prods = query.order_by(models.Product.ai_score.desc(),
-                               models.Product.sales_count.desc()) \
+        prods = query.order_by(models.Product.sales_count.desc(),
+                               models.Product.rating.desc()) \
                      .limit(4000).all()
 
         drop_map = _latest_price_drop_map(db)
@@ -1210,13 +1265,12 @@ def generate_product_reels(limit: int = 3, selection: str = "balanced",
         def rank_key(p):
             drop = drop_map.get(p.id, 0.0)
             sales = int(p.sales_count or 0)
-            ai = int(p.ai_score or 0)
+            local = local_product_score(p, drop, demand_map.get(p.id, 0))
             if selection == "discount":
-                return (drop, sales, ai)
+                return (drop, local, sales)
             if selection == "bestseller":
-                return (sales, ai, drop)
-            return (ai * 2 + min(sales, 100000) / 1000 + drop * 2,
-                    sales, drop)
+                return (sales, local, drop)
+            return (local, sales, drop)
         prods.sort(key=rank_key, reverse=True)
 
         print(f"✨ คัดเลือกสินค้าตรงกับ 8 หมวดหมู่เทรนด์ยอดฮิต: {len(prods)} รายการ (เต็มคลัง 100%)")
@@ -1263,6 +1317,8 @@ def generate_product_reels(limit: int = 3, selection: str = "balanced",
                     "price": float(p.price or 0),
                     "sales_count": int(p.sales_count or 0),
                     "ai_score": int(p.ai_score or 0),
+                    "local_score": local_product_score(
+                        p, drop_map.get(p.id, 0.0), demand_map.get(p.id, 0)),
                     "latest_drop_pct": drop_map.get(p.id, 0.0),
                     "affiliate_url": p.affiliate_url or "",
                 })
