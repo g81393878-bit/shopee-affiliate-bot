@@ -14,7 +14,7 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
-- เพิ่มวงจรเรียนรู้ผลงาน Local ที่ `tools/performance_learner.py`: อ่าน `performance_logs` จาก Supabase, คำนวณ CTR/Conversion/EPC/confidence, เขียนคะแนน atomic ให้ product selector อ่านทุกชั่วโมง และรายงาน Telegram วันละครั้ง 20:00. Live DB ปัจจุบันมี performance product 0 รายการ จึง fail factual และใช้ base score ต่อ. Tests 1259 passed; ต้อง restart runner หลัง commit.
+- เพิ่มวงจรเรียนรู้ผลงาน Local ที่ `tools/performance_learner.py`: อ่าน `performance_logs` จาก Supabase, คำนวณ CTR/Conversion/EPC/confidence, เขียนคะแนน atomic ให้ product selector อ่านทุกชั่วโมง และรายงาน Telegram วันละครั้ง 20:00. Live DB ปัจจุบันมี performance product 0 รายการ จึงรายงานตามจริงและใช้ base score ต่อ. Tests 1259 passed; restart runner สำเร็จ PID 8412 และ learner ทำงานแล้ว.
 
 - เพิ่ม Local product intelligence: `PRODUCT_USE_AI=false` เป็นค่าเริ่มต้น, voice ใช้เทมเพลตตามหมวดจากชื่อจริง, ranking ใช้ยอดขาย/รีวิว/ค่าคอม/ภาพ/ลิงก์/price drop/Demand Radar และไม่ใช้ `ai_score`. Supabase จริงพบสินค้า link-ok 2,528 รายการ; ผลิตคลิป Local สำเร็จ 2 ไฟล์ (สินค้า 25, 939) เข้าคิว. Tests 1255 passed. Restart runner สำเร็จ PID 23216; คิว 2 คลิป, prebuffer/orchestrator/Telegram active.
 
