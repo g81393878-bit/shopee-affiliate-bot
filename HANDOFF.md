@@ -14,7 +14,7 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
-- ปรับ Google Trends Autopilot เป็น Local-rules-first: ค่าเริ่มต้น `TREND_USE_AI=false` ไม่เรียก Groq/LLM, ใช้ประโยคภาษาไทยจากต้นฉบับตรง ๆ พร้อม safety/price/evidence/duplicate guards และ fail closed เมื่อหลักฐานไม่ครบ. Targeted 17 passed, `backend/tests` 1252 passed, live Trends คืน `no_eligible_topic` โดยไม่สร้างข้อมูลจำลอง. หยุด runner PID 17096 ระหว่างแก้และต้อง restart หลัง commit.
+- ปรับ Google Trends Autopilot เป็น Local-rules-first: ค่าเริ่มต้น `TREND_USE_AI=false` ไม่เรียก Groq/LLM, ใช้ประโยคภาษาไทยจากต้นฉบับตรง ๆ พร้อม safety/price/evidence/duplicate guards และ fail closed เมื่อหลักฐานไม่ครบ. Targeted 17 passed, `backend/tests` 1252 passed, live Trends คืน `no_eligible_topic` โดยไม่สร้างข้อมูลจำลอง. ตั้งค่า Local `.env` เป็น false และ restart runner สำเร็จที่ PID 14488; prebuffer/orchestrator/Telegram active.
 
 - เปิดใช้งาน Local สำเร็จ: `system_runner.py` PID 24384 เริ่ม 10/09/2026 19:02 ICT; prebuffer, orchestrator และ Telegram Commander active. เพิ่ม Scheduled Task `PaKhem Trends Autopilot` แบบ Hidden/AtLogOn/IgnoreNew/restart 3 ครั้ง เพื่อเริ่มเองหลังล็อกอิน. รอบแรกไม่มี trend ผ่าน จึงไม่มีไฟล์/โพสต์. Full suite หลังแก้ audio/hashtag guards ผ่าน **1249 tests**. Commit หลัก `4c48150`. ไม่ push/VPS.
 
