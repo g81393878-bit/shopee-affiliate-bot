@@ -599,13 +599,29 @@ def update_reading_video_url(reading_id: str, video_url: str):
 def main():
     parser = argparse.ArgumentParser(description="Celtic Cross Video Renderer & Multi-Platform Uploader")
     parser.add_argument("--reading-id", type=str, help="รหัสคำทำนาย (reading_id)")
+    parser.add_argument("--video", type=str, help="พาธไฟล์วิดีโอที่เรนเดอร์ไว้แล้ว")
     parser.add_argument("--render-only", action="store_true", help="เรนเดอร์อย่างเดียว ไม่โพสต์")
     parser.add_argument("--youtube", action="store_true", help="ส่งขึ้น YouTube Shorts")
     parser.add_argument("--facebook", action="store_true", help="ส่งขึ้น Facebook 2 เพจ")
     parser.add_argument("--all", action="store_true", help="ส่งทั้ง YouTube และ Facebook 2 เพจ")
     args = parser.parse_args()
 
-    info = render_celtic_cross_video(args.reading_id)
+    info = None
+    if args.video and Path(args.video).exists():
+        vid_path = Path(args.video).resolve()
+        rid = args.reading_id or "celtic_20260913170154_918399"
+        txt_path = vid_path.with_suffix(".txt")
+        caption = txt_path.read_text(encoding="utf-8") if txt_path.exists() else ""
+        info = {
+            "reading_id": rid,
+            "video_path": vid_path,
+            "caption": caption,
+            "title": "🔮 เปิดไพ่ยิปซีเซลติกครอส 10 ใบ เจาะลึกชะตาชีวิต | ป้าเข็มพยากรณ์ #Shorts",
+            "tunnel_url": "https://couple-tire-looksmart-personally.trycloudflare.com"
+        }
+    else:
+        info = render_celtic_cross_video(args.reading_id)
+
     if not info:
         print("❌ ผลิตคลิปวิดีโอล้มเหลว")
         sys.exit(1)
