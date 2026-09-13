@@ -45,29 +45,58 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8648538339:AAGDjwjHlrYRj-g
 TELEGRAM_CHAT_ID = str(os.getenv("TELEGRAM_CHAT_ID", "6734965582")).strip()
 
 
+_commander_lock = threading.Lock()
+_commander_last_sent: float = 0.0
+_commander_backoff_until: float = 0.0
+
+
 def send_tg_message(text: str, reply_markup: dict = None, target_chat_id: str = None) -> bool:
-    """ส่งข้อความเข้า Telegram แอดมิน พร้อมปุ่มกด (ถ้ามี)"""
+    """ส่งข้อความเข้า Telegram แอดมิน พร้อมปุ่มกด (ถ้ามี) พร้อมระบบ Rate Limiting & 429 Backoff"""
+    global _commander_last_sent, _commander_backoff_until
     token = os.getenv("TELEGRAM_BOT_TOKEN") or TELEGRAM_BOT_TOKEN
     chat_id = target_chat_id or os.getenv("TELEGRAM_CHAT_ID") or TELEGRAM_CHAT_ID
     if not token or not chat_id:
         return False
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = {
-        "chat_id": chat_id,
-        "text": text[:4000],
-        "disable_web_page_preview": True
-    }
-    if reply_markup:
-        payload["reply_markup"] = reply_markup
 
-    try:
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=10) as response:
-            return response.status == 200
-    except Exception as e:
-        logger.warning(f"Telegram send message failed: {e}")
-        return False
+    now = time.time()
+    with _commander_lock:
+        if now < _commander_backoff_until:
+            logger.warning("[TELEGRAM] Commander is backing off due to 429 rate limit, skipping message")
+            return False
+
+        # Minimum interval 1.5s
+        elapsed = now - _commander_last_sent
+        if elapsed < 1.5:
+            time.sleep(1.5 - elapsed)
+            now = time.time()
+
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        payload = {
+            "chat_id": chat_id,
+            "text": text[:4000],
+            "disable_web_page_preview": True
+        }
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
+
+        try:
+            data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=10) as response:
+                if response.status == 200:
+                    _commander_last_sent = time.time()
+                    return True
+        except urllib.error.HTTPError as he:
+            if he.code == 429:
+                _commander_backoff_until = time.time() + 60
+                logger.error("🚨 [TELEGRAM RATE LIMIT] Commander got 429! Backing off 60s")
+            else:
+                logger.warning(f"Telegram send message HTTP error: {he.code}")
+            return False
+        except Exception as e:
+            logger.warning(f"Telegram send message failed: {e}")
+            return False
+    return False
 
 
 def answer_callback_query(callback_query_id: str, text: str = None) -> bool:
@@ -98,6 +127,7 @@ def setup_bot_commands():
         {"command": "menu", "description": "👑 เปิดแผงควบคุมหลัก"},
         {"command": "status", "description": "📊 เช็คสถานะระบบสด"},
         {"command": "post", "description": "🚀 สั่งโพสต์คลิปทันที"},
+        {"command": "tarot", "description": "🔮 ผลิตคลิปดูดวงเซลติกครอส 10 ใบ"},
         {"command": "sheet", "description": "📈 ดูชีทยอดวิว & สถิติ"},
         {"command": "sync", "description": "🔄 ซิงค์ยอดวิวชีทสด"},
         {"command": "produce", "description": "🏭 ผลิตคลิปเพิ่ม 3 ตัว"},
@@ -125,14 +155,15 @@ def get_main_menu_markup() -> dict:
                 {"text": "🚀 สั่งโพสต์คลิปทันที", "callback_data": "cmd_post"}
             ],
             [
+                {"text": "🔮 ผลิตคลิปดูดวง 10 ใบ", "callback_data": "cmd_tarot"},
+                {"text": "📦 ดูคลังวิดีโอ", "callback_data": "cmd_stock"}
+            ],
+            [
                 {"text": "📈 ดูชีทยอดวิว", "callback_data": "cmd_sheet"},
                 {"text": "🔄 ซิงค์ยอดวิวชีท", "callback_data": "cmd_refresh_metrics"}
             ],
             [
                 {"text": "🏭 ผลิตคลิปเพิ่ม 3 ตัว", "callback_data": "cmd_produce"},
-                {"text": "📦 ดูคลังวิดีโอ", "callback_data": "cmd_stock"}
-            ],
-            [
                 {"text": "🔄 รีสตาร์ทบอท VPS", "callback_data": "cmd_restart"}
             ]
         ]
@@ -144,9 +175,9 @@ def get_persistent_keyboard_markup() -> dict:
     return {
         "keyboard": [
             [{"text": "📊 เช็คสถานะสด"}, {"text": "🚀 สั่งโพสต์คลิปทันที"}],
+            [{"text": "🔮 ทำคลิปดูดวง 10 ใบ"}, {"text": "📦 ดูคลังวิดีโอ"}],
             [{"text": "📈 ดูชีทยอดวิว"}, {"text": "🔄 ซิงค์ยอดวิวชีท"}],
-            [{"text": "🏭 ผลิตคลิปเพิ่ม 3 ตัว"}, {"text": "📦 ดูคลังวิดีโอ"}],
-            [{"text": "👑 เปิดเมนูหลัก"}, {"text": "🔄 รีสตาร์ทบอท VPS"}]
+            [{"text": "🏭 ผลิตคลิปเพิ่ม 3 ตัว"}, {"text": "🔄 รีสตาร์ทบอท VPS"}]
         ],
         "resize_keyboard": True,
         "is_persistent": True
@@ -269,6 +300,40 @@ def execute_produce_command():
     threading.Thread(target=_run, daemon=True).start()
 
 
+def execute_tarot_command(chat_id=None):
+    """สั่งเรนเดอร์และอัปโหลดคลิปดูดวงเซลติกครอส 10 ใบ เข้า YouTube Shorts + Facebook 2 เพจ"""
+    def _run():
+        send_tg_message("🔮 [กำลังเริ่มผลิตคลิปไพ่ยิปซีเซลติกครอส 10 ใบ]\nบอทกำลังสร้างภาพไพ่ Rider-Waite HD + เสียงพากย์ป้าเข็ม และส่งขึ้น YouTube Shorts + Facebook 2 เพจ...", target_chat_id=chat_id)
+        try:
+            from render_tarot_video import render_celtic_cross_video, upload_to_youtube, upload_to_facebook_pages, update_reading_video_url
+            info = render_celtic_cross_video()
+            if info:
+                yt_url = upload_to_youtube(info["video_path"], info["title"], info["caption"])
+                fb_res = upload_to_facebook_pages(info["video_path"], info["title"], info["caption"])
+                if yt_url:
+                    update_reading_video_url(info["reading_id"], yt_url)
+                
+                msg = (
+                    f"🎉 [ผลิตและเผยแพร่คลิปดูดวงสำเร็จ 100%!]\n"
+                    f"━━━━━━━━━━━━━━━━━━\n"
+                    f"• 🔮 คำทำนาย: {info['reading_id']}\n"
+                    f"• 🎬 หน้าเว็บเครื่องเล่น: {info['tunnel_url']}/tarot/reading/{info['reading_id']}\n"
+                )
+                if yt_url:
+                    msg += f"• 🔴 YouTube Shorts: {yt_url}\n"
+                if fb_res:
+                    for fb in fb_res:
+                        msg += f"• 🔵 Facebook เพจ {fb['page_index']}: {fb['url']}\n"
+                msg += "━━━━━━━━━━━━━━━━━━"
+                send_tg_message(msg, target_chat_id=chat_id)
+            else:
+                send_tg_message("⚠️ ผลิตคลิปดูดวงไม่สำเร็จ (ตรวจสอบ log)", target_chat_id=chat_id)
+        except Exception as e:
+            send_tg_message(f"❌ ผลิตคลิปดูดวงล้มเหลว: {e}", target_chat_id=chat_id)
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
 def execute_stock_command() -> str:
     """ตรวจสอบรายชื่อคลิปในคลัง"""
     import uploader
@@ -338,6 +403,8 @@ def handle_telegram_update(update: dict):
             send_tg_message(execute_status_command(), target_chat_id=chat_id)
         elif data == "cmd_post":
             execute_post_command()
+        elif data == "cmd_tarot":
+            execute_tarot_command(chat_id=chat_id)
         elif data == "cmd_sheet":
             send_tg_message(execute_sheet_command(), target_chat_id=chat_id)
         elif data == "cmd_refresh_metrics":
@@ -388,6 +455,9 @@ def handle_telegram_update(update: dict):
         elif lower in ("/post", "โพสต์", "post", "ยิงคลิป", "🚀 สั่งโพสต์คลิปทันที") or "สั่งโพสต์" in lower:
             execute_post_command()
 
+        elif lower in ("/tarot", "/ไพ่", "ดูดวง", "ไพ่ยิปซี", "🔮 ทำคลิปดูดวง 10 ใบ", "ทำคลิปดูดวง") or "คลิปดูดวง" in lower:
+            execute_tarot_command(chat_id=chat_id)
+
         elif lower in ("/sheet", "/stats", "/ชีท", "/สถิติ", "/views", "sheet", "ชีท", "ยอดวิว", "📈 ดูชีทยอดวิว") or "ดูชีท" in lower:
             send_tg_message(execute_sheet_command(), target_chat_id=chat_id)
 
@@ -396,6 +466,20 @@ def handle_telegram_update(update: dict):
 
         elif lower in ("/produce", "ผลิต", "ทำคลิป", "🏭 ผลิตคลิปเพิ่ม 3 ตัว") or "ผลิตคลิป" in lower:
             execute_produce_command()
+
+        elif lower in ("/battle", "/poll", "ทำโพล", "คลิปโพล", "โพล", "battle") or "คลิปเปรียบเทียบ" in lower:
+            def _run_battle():
+                send_tg_message("⚔️ [กำลังเริ่มผลิตคลิปเปรียบเทียบ Poll Battle]\nบอทกำลังจับคู่สินค้าชนิดเดียวกันเป๊ะๆ และเรนเดอร์วิดีโอ 9:16 เว้น Safe Zone สติกเกอร์โพล...")
+                try:
+                    from auto_poll_battle_reels import produce_poll_battle_reel
+                    b_res = produce_poll_battle_reel()
+                    if b_res:
+                        send_tg_message(f"✅ [ผลิตคลิปเปรียบเทียบสำเร็จ 100%]\n• 🎯 เรื่อง: {b_res.get('title')}\n• 📦 บันทึกเข้าคลังรอโพสต์เรียบร้อยครับ")
+                    else:
+                        send_tg_message("⚠️ ไม่สามารถผลิตคลิปเปรียบเทียบได้ในรอบนี้ (อาจพบคู่สินค้าซ้ำ หรือรูปภาพโหลดไม่สมบูรณ์)")
+                except Exception as e:
+                    send_tg_message(f"⚠️ ผลิตคลิปโพลล้มเหลว: {e}")
+            threading.Thread(target=_run_battle, daemon=True).start()
 
         elif lower in ("/stock", "สต็อก", "คลัง", "stock", "📦 ดูคลังวิดีโอ") or "คลัง" in lower:
             send_tg_message(execute_stock_command(), target_chat_id=chat_id)
@@ -465,16 +549,30 @@ def run_telegram_commander_loop():
 
     logger.info("🤖 เริ่มต้นระบบ PaKhem Commander Polling Loop (24/7 Controller)...")
     
-    # 2. ส่งข้อความเปิดระบบพร้อมแผงปุ่มกดที่ตรึงล่างหน้าจอ
-    try:
-        welcome_msg = (
-            "👑 [PaKhem Commander — เปิดใช้งานแผงควบคุม 24/7]\n"
-            "━━━━━━━━━━━━━━━━━━\n"
-            "แผงสั่งการพร้อมทำงานแล้วครับ! สามารถแตะปุ่มที่ตรึงไว้ด้านล่างหน้าจอเพื่อสั่งการได้ทันทีเลยครับ"
-        )
-        send_tg_message(welcome_msg, reply_markup=get_persistent_keyboard_markup())
-    except Exception as e:
-        logger.warning(f"⚠️ Startup welcome send error: {e}")
+    # 2. ส่งข้อความเปิดระบบพร้อมแผงปุ่มกดที่ตรึงล่างหน้าจอ (มี cooldown 1 ชม. กันสแปมเวลารีสตาร์ทบอท)
+    welcome_state_file = ROOT / ".tg_commander_welcome_ts"
+    now_ts = time.time()
+    should_send_welcome = True
+    if welcome_state_file.exists():
+        try:
+            last_ts = float(welcome_state_file.read_text(encoding="utf-8").strip())
+            if (now_ts - last_ts) < 3600:
+                should_send_welcome = False
+                logger.info("ℹ️ ข้ามข้อความเปิดระบบ PaKhem Commander (ส่งไปแล้วภายใน 1 ชม.)")
+        except Exception:
+            pass
+
+    if should_send_welcome:
+        try:
+            welcome_msg = (
+                "👑 [PaKhem Commander — เปิดใช้งานแผงควบคุม 24/7]\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                "แผงสั่งการพร้อมทำงานแล้วครับ! สามารถแตะปุ่มที่ตรึงไว้ด้านล่างหน้าจอเพื่อสั่งการได้ทันทีเลยครับ"
+            )
+            send_tg_message(welcome_msg, reply_markup=get_persistent_keyboard_markup())
+            welcome_state_file.write_text(str(now_ts), encoding="utf-8")
+        except Exception as e:
+            logger.warning(f"⚠️ Startup welcome send error: {e}")
 
     offset = 0
     while True:
