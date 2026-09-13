@@ -32,13 +32,14 @@ API_BASE = "https://api.line.me/v2/bot"
 IMAGE_BASE = "https://api-data.line.me/v2/bot"  # อัปโหลดรูป rich menu ใช้ base นี้
 
 MENU_ITEMS = [
+    {"label": "ดูดวงใหญ่ 10 ใบ", "sub": "เลือกเลขเอง 1-78 ละเอียดลึกซึ้ง", "icon": "🔮", "color": "#7C3AED", "send": "เปิดไพ่"},
     {"label": "ค้นหาสินค้า", "sub": "พิมพ์ชื่อหรือระบุงบ", "icon": "🔍", "color": "#EE4D2D", "send": "ค้นสินค้า"},
     {"label": "บอทรายเดือน", "sub": "เริ่มต้น 490.- / แพ็กเกจ", "icon": "💼", "color": "#F59E0B", "send": "ราคาบอท"},
     {"label": "คุยกับป้าเข็ม", "sub": "ปรึกษา & เช็คของแท้", "icon": "💬", "color": "#059669", "send": "คุยกับป้าเข็ม"},
 ]
 
 W, H = 2500, 843
-COL_W = W // 3  # 833
+COL_W = W // 4  # 625
 
 
 def load_token() -> str:
@@ -96,16 +97,26 @@ def draw_menu(path: str):
     img = Image.new("RGBA", (W, H), (11, 15, 25, 255))
     d = ImageDraw.Draw(img)
 
-    # วาด Ambient Glow เล็กน้อยด้านหลัง
+    # วาด Ambient Glow เล็กน้อยด้านหลัง 4 จุด
     glow1 = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     g_draw = ImageDraw.Draw(glow1)
-    g_draw.ellipse([100, -100, 900, 700], fill=(255, 75, 43, 35))
-    g_draw.ellipse([850, -100, 1650, 700], fill=(245, 158, 11, 35))
-    g_draw.ellipse([1600, -100, 2400, 700], fill=(16, 185, 129, 35))
+    g_draw.ellipse([50, -100, 650, 700], fill=(124, 58, 237, 40))   # Purple Tarot
+    g_draw.ellipse([650, -100, 1250, 700], fill=(255, 75, 43, 35))  # Orange Search
+    g_draw.ellipse([1250, -100, 1850, 700], fill=(245, 158, 11, 35)) # Gold Bot
+    g_draw.ellipse([1850, -100, 2450, 700], fill=(16, 185, 129, 35)) # Green Chat
     img = Image.alpha_composite(img, glow1)
     d = ImageDraw.Draw(img)
 
     CARDS = [
+        {
+            "badge": "🔮 ศาสตร์ 10 ใบแท้",
+            "title": "ดูดวงใหญ่ 10 ใบ",
+            "sub": "เลือกเลข 1-78 ละเอียดลึกซึ้ง",
+            "cta": "เปิดไพ่เซลติกครอส  ›",
+            "c_start": (124, 58, 237, 255),   # Royal Violet
+            "c_end": (76, 29, 149, 255),      # Deep Mystical Purple
+            "icon_type": "tarot"
+        },
         {
             "badge": "🔥 ค้นหาของแท้ & ดีลลด",
             "title": "ค้นหาสินค้า",
@@ -136,9 +147,9 @@ def draw_menu(path: str):
     ]
 
     for i, item in enumerate(CARDS):
-        x0 = i * COL_W + 28
+        x0 = i * COL_W + 18
         y0 = 28
-        x1 = (i + 1) * COL_W - 28
+        x1 = (i + 1) * COL_W - 18
         y1 = H - 28
         cw = x1 - x0
         ch = y1 - y0
@@ -147,68 +158,82 @@ def draw_menu(path: str):
         card_img = create_gradient(cw, ch, item["c_start"], item["c_end"])
         mask = Image.new("L", (cw, ch), 0)
         mask_draw = ImageDraw.Draw(mask)
-        mask_draw.rounded_rectangle([0, 0, cw, ch], radius=44, fill=255)
+        mask_draw.rounded_rectangle([0, 0, cw, ch], radius=40, fill=255)
 
         # แปะการ์ดลงบนพื้นหลัง
         img.paste(card_img, (x0, y0), mask)
 
         # วาดเส้นขอบ Glass Border บางๆ (Inner/Outer Glow)
-        d.rounded_rectangle([x0, y0, x1, y1], radius=44, outline=(255, 255, 255, 120), width=4)
+        d.rounded_rectangle([x0, y0, x1, y1], radius=40, outline=(255, 255, 255, 120), width=3)
 
         cx = x0 + cw // 2
 
         # 1. Badge ด้านบน (Pill Shape)
-        badge_w, badge_h = 420, 68
+        badge_w, badge_h = 360, 64
         bx0 = cx - badge_w // 2
-        by0 = y0 + 44
+        by0 = y0 + 40
         d.rounded_rectangle([bx0, by0, bx0 + badge_w, by0 + badge_h],
-                            radius=34, fill=(0, 0, 0, 90), outline=(255, 255, 255, 80), width=2)
-        f_badge = load_font(36, "medium")
+                            radius=32, fill=(0, 0, 0, 95), outline=(255, 255, 255, 80), width=2)
+        f_badge = load_font(32, "medium")
         bb = d.textbbox((0, 0), item["badge"], font=f_badge)
         d.text((cx - (bb[2] - bb[0]) / 2, by0 + (badge_h - (bb[3] - bb[1])) / 2 - bb[1] - 2),
                item["badge"], fill="#FFFFFF", font=f_badge)
 
         # 2. วาด Vector Icon โมเดิร์นตรงกลาง
-        icon_cy = y0 + 235
+        icon_cy = y0 + 225
         # วงกลมแก้วรอบไอคอน
-        d.ellipse([cx - 85, icon_cy - 85, cx + 85, icon_cy + 85],
+        d.ellipse([cx - 75, icon_cy - 75, cx + 75, icon_cy + 75],
                   fill=(255, 255, 255, 45), outline=(255, 255, 255, 140), width=3)
 
-        if item["icon_type"] == "search":
+        if item["icon_type"] == "tarot":
+            # ไพ่ทาโรต์ 2 ใบซ้อนกันอย่างสง่างาม
+            # ไพ่ใบหลังเอียงเล็กน้อย
+            d.rounded_rectangle([cx - 15, icon_cy - 48, cx + 45, icon_cy + 42],
+                                radius=10, fill=(255, 255, 255, 140))
+            # ไพ่ใบหน้า
+            d.rounded_rectangle([cx - 35, icon_cy - 40, cx + 25, icon_cy + 50],
+                                radius=10, fill="#FFFFFF")
+            # ดวงดาวบนหน้าไพ่
+            d.ellipse([cx - 12, icon_cy - 3, cx + 2, icon_cy + 11], fill=item["c_end"])
+            # ลายขอบไพ่
+            d.rounded_rectangle([cx - 30, icon_cy - 35, cx + 20, icon_cy + 45],
+                                radius=6, outline=item["c_end"], width=2)
+
+        elif item["icon_type"] == "search":
             # แว่นขยายทรงโมเดิร์น
-            d.ellipse([cx - 45, icon_cy - 48, cx + 22, icon_cy + 19],
-                      outline="#FFFFFF", width=9)
-            d.line([cx + 12, icon_cy + 12, cx + 46, icon_cy + 46],
-                   fill="#FFFFFF", width=12)
+            d.ellipse([cx - 40, icon_cy - 42, cx + 18, icon_cy + 16],
+                      outline="#FFFFFF", width=8)
+            d.line([cx + 10, icon_cy + 10, cx + 40, icon_cy + 40],
+                   fill="#FFFFFF", width=10)
             # ประกายแสงวิ้ง
-            d.ellipse([cx - 28, icon_cy - 34, cx - 18, icon_cy - 24], fill="#FFFFFF")
+            d.ellipse([cx - 24, icon_cy - 30, cx - 15, icon_cy - 21], fill="#FFFFFF")
 
         elif item["icon_type"] == "bot":
             # ไอคอนหุ่นยนต์ / ชิปอัจฉริยะ & กระเป๋าธุรกิจ
-            d.rounded_rectangle([cx - 42, icon_cy - 38, cx + 42, icon_cy + 40],
-                                radius=16, fill="#FFFFFF")
+            d.rounded_rectangle([cx - 38, icon_cy - 34, cx + 38, icon_cy + 36],
+                                radius=14, fill="#FFFFFF")
             # ตาหุ่นยนต์
-            d.rounded_rectangle([cx - 28, icon_cy - 18, cx - 12, icon_cy + 2], radius=6, fill=item["c_end"])
-            d.rounded_rectangle([cx + 12, icon_cy - 18, cx + 28, icon_cy + 2], radius=6, fill=item["c_end"])
+            d.rounded_rectangle([cx - 25, icon_cy - 16, cx - 11, icon_cy + 2], radius=5, fill=item["c_end"])
+            d.rounded_rectangle([cx + 11, icon_cy - 16, cx + 25, icon_cy + 2], radius=5, fill=item["c_end"])
             # เสาอากาศ AI
-            d.line([cx, icon_cy - 38, cx, icon_cy - 52], fill="#FFFFFF", width=6)
-            d.ellipse([cx - 7, icon_cy - 64, cx + 7, icon_cy - 50], fill="#FFFFFF")
+            d.line([cx, icon_cy - 34, cx, icon_cy - 46], fill="#FFFFFF", width=5)
+            d.ellipse([cx - 6, icon_cy - 56, cx + 6, icon_cy - 44], fill="#FFFFFF")
             # รอยยิ้ม
-            d.arc([cx - 22, icon_cy + 6, cx + 22, icon_cy + 26], start=0, end=180, fill=item["c_end"], width=5)
+            d.arc([cx - 18, icon_cy + 6, cx + 18, icon_cy + 22], start=0, end=180, fill=item["c_end"], width=4)
 
         elif item["icon_type"] == "chat":
             # กล่องแชททรงโมเดิร์น
-            d.rounded_rectangle([cx - 48, icon_cy - 42, cx + 48, icon_cy + 30],
-                                radius=20, fill="#FFFFFF")
+            d.rounded_rectangle([cx - 42, icon_cy - 38, cx + 42, icon_cy + 26],
+                                radius=18, fill="#FFFFFF")
             # หางแชท
-            d.polygon([(cx - 20, icon_cy + 30), (cx - 42, icon_cy + 48), (cx - 6, icon_cy + 30)], fill="#FFFFFF")
+            d.polygon([(cx - 18, icon_cy + 26), (cx - 38, icon_cy + 42), (cx - 5, icon_cy + 26)], fill="#FFFFFF")
             # จุด 3 จุดในแชท
-            d.ellipse([cx - 28, icon_cy - 10, cx - 18, icon_cy], fill=item["c_end"])
-            d.ellipse([cx - 5, icon_cy - 10, cx + 5, icon_cy], fill=item["c_end"])
-            d.ellipse([cx + 18, icon_cy - 10, cx + 28, icon_cy], fill=item["c_end"])
+            d.ellipse([cx - 24, icon_cy - 8, cx - 15, icon_cy + 1], fill=item["c_end"])
+            d.ellipse([cx - 4, icon_cy - 8, cx + 5, icon_cy + 1], fill=item["c_end"])
+            d.ellipse([cx + 16, icon_cy - 8, cx + 25, icon_cy + 1], fill=item["c_end"])
 
-        # 3. Main Title ข้อความหลัก (ตัวหนาคมชัด)
-        f_main = load_font(102, "bold")
+        # 3. Main Title ข้อความหลัก (ตัวหนาคมชัด พอดี 4 คอลัมน์)
+        f_main = load_font(84, "bold")
         bb = d.textbbox((0, 0), item["title"], font=f_main)
         # เงาข้อความ Subtle Drop Shadow
         d.text((cx - (bb[2] - bb[0]) / 2 + 3, y0 + 363 - bb[1]),
@@ -217,18 +242,18 @@ def draw_menu(path: str):
                item["title"], fill="#FFFFFF", font=f_main)
 
         # 4. Subtitle คำอธิบายย่อย
-        f_sub = load_font(48, "medium")
+        f_sub = load_font(40, "medium")
         bb = d.textbbox((0, 0), item["sub"], font=f_sub)
         d.text((cx - (bb[2] - bb[0]) / 2, y0 + 490 - bb[1]),
                item["sub"], fill="#F8FAFC", font=f_sub)
 
         # 5. Bottom CTA Button (Pill Button สวยหรู)
-        btn_w, btn_h = 580, 100
+        btn_w, btn_h = 490, 96
         btn_x0 = cx - btn_w // 2
         btn_y0 = y1 - 145
         d.rounded_rectangle([btn_x0, btn_y0, btn_x0 + btn_w, btn_y0 + btn_h],
-                            radius=50, fill=(255, 255, 255, 240))
-        f_cta = load_font(46, "bold")
+                            radius=48, fill=(255, 255, 255, 240))
+        f_cta = load_font(40, "bold")
         bb = d.textbbox((0, 0), item["cta"], font=f_cta)
         d.text((cx - (bb[2] - bb[0]) / 2, btn_y0 + (btn_h - (bb[3] - bb[1])) / 2 - bb[1] - 2),
                item["cta"], fill=item["c_end"], font=f_cta)
