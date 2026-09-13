@@ -4,6 +4,7 @@ import json
 import re
 import logging
 import inspect
+import threading
 import urllib.request
 from typing import List, Optional, Tuple
 from fastapi import APIRouter, HTTPException, Header, Request, Response
@@ -510,8 +511,9 @@ def nosearch_new_text(user_text: str, category: str, tone: str = "neutral") -> s
 
 def quick_reply_items() -> QuickReply:
     """ปุ่มลัดแบบสากล (Quick Reply) — ลูกค้าแตะแทนพิมพ์
-    4 ปุ่ม: 🔍 ค้นหาสินค้า · 💬 ฝากคำถาม · 💰 ราคาบอท/แพ็กเกจ · 💰 วิธีจ่ายเงิน"""
+    5 ปุ่ม: 🔮 เปิดไพ่ยิปซี · 🔍 ค้นหาสินค้า · 💬 ฝากคำถาม · 💰 ราคาบอท · 💰 วิธีจ่ายเงิน"""
     return QuickReply(items=[
+        QuickReplyButton(action=MessageAction(label="🔮 เปิดไพ่ยิปซี", text="เปิดไพ่")),
         QuickReplyButton(action=MessageAction(label="🔍 ค้นหาสินค้า", text="ค้นสินค้า")),
         QuickReplyButton(action=MessageAction(label="💬 ฝากคำถาม", text="ฝากคำถาม")),
         QuickReplyButton(action=MessageAction(label="💰 ราคาบอท/แพ็กเกจ", text="ราคาบอท")),
@@ -942,38 +944,63 @@ def _track_bot_purchase(db, line_user_id: str, text: str) -> None:
 
 
 _telegram_rate_cache: dict = {}  # throttle_key -> timestamp
+_tg_line_lock = threading.Lock()
+_tg_line_last_sent: float = 0.0
+_tg_line_backoff_until: float = 0.0
 
 
-def _send_telegram(text: str, throttle_key: str = None, cooldown_seconds: int = 20) -> bool:
+def _send_telegram(text: str, throttle_key: str = None, cooldown_seconds: int = 60) -> bool:
     """ส่งแจ้งเตือนเข้า Telegram Commander แอดมิน (พร้อมระบบ Anti-Spam Throttle ป้องกันสแปม 100%)"""
+    global _tg_line_last_sent, _tg_line_backoff_until
+
     # Guard 1: ห้ามส่งข้อความจาก Unit Test / Mock Data เข้า Telegram จริงเด็ดขาด
     if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("TESTING"):
         return True
     if "U_cust_" in text or "U_mock" in text or "test_user" in text:
         return True
 
-    # Guard 2: Anti-Spam Cooldown Throttle (กันลูกค้ากดปุ่มรัวๆ หรือสแปมข้อความซ้ำ)
     now = time.time()
-    t_key = throttle_key or text[:100]
-    last_sent = _telegram_rate_cache.get(t_key, 0)
-    if (now - last_sent) < cooldown_seconds:
-        logger.info(f"[ANTI-SPAM] Throttled duplicate alert: {t_key[:50]}")
-        return True
-    _telegram_rate_cache[t_key] = now
+    with _tg_line_lock:
+        if now < _tg_line_backoff_until:
+            logger.warning("[ANTI-SPAM] Telegram API is backing off due to rate limit, skipping message")
+            return False
 
-    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-    chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
-    if not token or not chat_id or "mock" in token.lower():
-        return False
-    try:
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        payload = json.dumps({"chat_id": chat_id, "text": text[:4000], "disable_web_page_preview": True}).encode("utf-8")
-        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=5) as res:
-            return res.status == 200
-    except Exception as e:
-        logger.warning(f"Telegram notify failed: {e}")
-        return False
+        # Guard 2: Anti-Spam Cooldown Throttle (กันลูกค้ากดปุ่มรัวๆ หรือสแปมข้อความซ้ำ)
+        t_key = throttle_key or text[:80]
+        last_sent = _telegram_rate_cache.get(t_key, 0)
+        if (now - last_sent) < cooldown_seconds:
+            logger.info(f"[ANTI-SPAM] Throttled duplicate alert: {t_key[:50]}")
+            return True
+
+        # Minimum interval between LINE bot telegram messages (3 seconds)
+        elapsed = now - _tg_line_last_sent
+        if elapsed < 3.0:
+            time.sleep(3.0 - elapsed)
+            now = time.time()
+
+        token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+        chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+        if not token or not chat_id or "mock" in token.lower():
+            return False
+        try:
+            url = f"https://api.telegram.org/bot{token}/sendMessage"
+            payload = json.dumps({"chat_id": chat_id, "text": text[:4000], "disable_web_page_preview": True}).encode("utf-8")
+            req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=5) as res:
+                if res.status == 200:
+                    _tg_line_last_sent = time.time()
+                    _telegram_rate_cache[t_key] = _tg_line_last_sent
+                    return True
+        except urllib.error.HTTPError as he:
+            if he.code == 429:
+                _tg_line_backoff_until = time.time() + 60
+                logger.error("🚨 [TELEGRAM RATE LIMIT] Telegram returned 429! Backing off for 60 seconds")
+            else:
+                logger.warning(f"Telegram notify HTTP error: {he.code}")
+            return False
+        except Exception as e:
+            logger.warning(f"Telegram notify failed: {e}")
+            return False
 
 
 def _notify_owner_payment_intent(user, text: str = "") -> None:
@@ -3108,7 +3135,7 @@ def _notify_owner_question(user, question: str) -> None:
             f"• ✍️ ตอบกลับผ่าน LINE: /ตอบ {uid} <ข้อความ>\n"
             f"━━━━━━━━━━━━━━━━━━"
         )
-        _send_telegram(text)
+        _send_telegram(text, throttle_key=f"cust_q_{uid}", cooldown_seconds=60)
         if "mock" not in LINE_ACCESS_TOKEN.lower():
             line_bot_api.push_message(ADMIN_LINE_USER_ID, TextSendMessage(text=text))
     except Exception as e:
@@ -3531,6 +3558,24 @@ def message_text(event):
             # สินค้าในคลิปล่าสุด (YouTube Shorts / Reels) -> ส่งการ์ดสินค้าที่เพิ่งโพสต์ให้ทันที
             reply = handle_latest_video_products(db, user, is_owner=is_owner)
             intent = 'latest_video'
+        elif any(k in normalized_text for k in ("เปิดไพ่", "ไพ่ยิปซี", "ไพ่ทาโรต์", "ทาโรต์", "ยิปซี", "ดูดวง")):
+            # 🔮 ไพ่ยิปซีแท้ (Tarot Cards Major Arcana 22 ใบ) — ป้าเข็ม
+            # ตรวจว่าเป็นการเปิดไพ่เจาะจงใบ เช่น "เปิดไพ่ใบที่ 19", "ใบที่ 1"
+            tarot_match = re.search(r"(?:ใบที่|กองที่|กอง|เลข|ไพ่ใบที่|#)\s*(\d{1,2})", normalized_text)
+            if tarot_match:
+                from app.services.product_cards import tarot_reading_card
+                card_id = int(tarot_match.group(1))
+                reply = tarot_reading_card(card_id)
+                intent = 'tarot_reveal'
+            else:
+                from app.services.product_cards import tarot_selection_carousel
+                text_intro = TextSendMessage(
+                    text="🔮 [ศาสตร์ไพ่ยิปซีแท้ — Major Arcana 22 ใบ]\n"
+                         "ตั้งจิตสงบนึกถึงเรื่องที่อยากรู้ แล้วเลือกแตะไพ่ยิปซีใบที่ดึงดูดใจที่สุดด้านล่างนี้ได้เลยนะลูก ✨"
+                )
+                carousel_reply = tarot_selection_carousel()
+                reply = [text_intro, carousel_reply]
+                intent = 'tarot_pick'
         elif normalized_text == "อันดับขายดี":
             reply = handle_top_sellers(db, user, is_owner=is_owner)
             intent = 'top'
@@ -3725,7 +3770,7 @@ def follow_event(event):
             f"• ⏰ เวลา: {_fmt_bkk(datetime.datetime.utcnow())} น.\n"
             f"━━━━━━━━━━━━━━━━━━"
         )
-        _send_telegram(admin_msg)
+        _send_telegram(admin_msg, throttle_key=f"new_follow_{line_user_id}", cooldown_seconds=300)
     except Exception as e:
         logger.error(f"Follow welcome error: {e}")
     finally:

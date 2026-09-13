@@ -211,7 +211,8 @@ def test_quick_reply_includes_bot_price_button():
     qr = lb.quick_reply_items()
     labels = [item.action.label for item in qr.items]
     texts = [item.action.text for item in qr.items]
-    assert labels == ["🔍 ค้นหาสินค้า", "💬 ฝากคำถาม", "💰 ราคาบอท/แพ็กเกจ", "💰 วิธีจ่ายเงิน"], labels
+    assert labels == ["🔮 เปิดไพ่ยิปซี", "🔍 ค้นหาสินค้า", "💬 ฝากคำถาม", "💰 ราคาบอท/แพ็กเกจ", "💰 วิธีจ่ายเงิน"], labels
+    assert texts[0] == "เปิดไพ่"
     assert texts[-2] == "ราคาบอท"
     assert texts[-1] == "วิธีจ่ายค่าบอท"
     assert "คุยกับป้าเข็ม" not in texts
