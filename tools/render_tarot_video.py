@@ -568,7 +568,7 @@ def upload_to_facebook_pages(video_path: Path, title: str, caption: str) -> List
                 file_path=str(video_path),
                 title=title,
                 page_id=pid,
-                page_token=ptoken
+                access_token=ptoken
             )
             if res.get("ok"):
                 vid_id = res.get("video_id")
