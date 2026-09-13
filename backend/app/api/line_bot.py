@@ -362,13 +362,16 @@ class TarotSessionManager:
     def save_reading(db: Session, line_user_id: str, card_nums: list) -> str:
         """บันทึกประวัติการเปิดไพ่ 10 ใบลงในฐานข้อมูลถาวร และสร้าง reading_id"""
         import uuid
+        import urllib.parse
         rid = f"celtic_{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{str(uuid.uuid4())[:6]}"
+        q = urllib.parse.quote(f"เซลติกครอส 10 ใบ ไพ่ยิปซี ป้าเข็ม {rid}")
+        v_url = f"https://www.youtube.com/results?search_query={q}"
         try:
             reading = models.TarotReading(
                 reading_id=rid,
                 line_user_id=line_user_id,
                 cards_data=card_nums,
-                video_url=f"https://www.youtube.com/results?search_query=เซลติกครอส+10+ใบ+ไพ่ยิปซี+ป้าเข็ม+{rid}"
+                video_url=v_url
             )
             db.add(reading)
             db.commit()

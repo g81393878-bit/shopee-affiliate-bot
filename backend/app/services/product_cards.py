@@ -701,7 +701,9 @@ def tarot_celtic_cross_summary_card(reading_id: str, card_nums: list, video_url:
         if idx < 9:
             rows.append({"type": "separator", "margin": "xs"})
 
-    v_url = video_url or f"https://www.youtube.com/results?search_query=เซลติกครอส+10+ใบ+ไพ่ยิปซี+ป้าเข็ม"
+    import urllib.parse
+    q = urllib.parse.quote("เซลติกครอส 10 ใบ ไพ่ยิปซี ป้าเข็ม")
+    v_url = video_url or f"https://www.youtube.com/results?search_query={q}"
 
     bubble = {
         "type": "bubble",
