@@ -338,13 +338,23 @@ class TarotSessionManager:
 
     @staticmethod
     def extract_tarot_numbers(text: str) -> List[int]:
-        """สกัดตัวเลข 1-78 จากข้อความ เช่น '7 24 55', '9,18,36', 'เลข 35', 'เปิดไพ่ 12'"""
+        """สกัดตัวเลขจากข้อความ หากเลขเกิน 78 (เช่น 88) จะแปลงเข้าสำรับ 1-78 อัตโนมัติ (เช่น 88 -> 10) เพื่อให้ผู้ใช้ที่พิมพ์ครบ 10 ตัวไม่ต้องติดค้าง"""
         t = _strip_polite_suffix((text or "").strip()).strip()
-        raw_nums = re.findall(r'\b\d{1,2}\b', t)
+        raw_nums = re.findall(r'\b\d+\b', t)
         valid = []
         for n in raw_nums:
             val = int(n)
-            if 1 <= val <= 78 and val not in valid:
+            # ถ้าเลขเป็น 0 หรือเกิน 78 ให้แปลงเป็นช่วง 1-78 อัตโนมัติ
+            if val <= 0:
+                val = 1
+            elif val > 78:
+                val = ((val - 1) % 78) + 1
+            
+            # ถ้าเลขซ้ำในชุด ให้ขยับหาใบถัดไปที่ว่างในสำรับ
+            while val in valid and len(valid) < 78:
+                val = (val % 78) + 1
+                
+            if val not in valid:
                 valid.append(val)
         return valid
 

@@ -475,15 +475,20 @@ def tarot_invitation_card() -> FlexSendMessage:
                     "spacing": "xs",
                     "contents": [
                         {"type": "text", "text": "🎴 ไพ่สับแล้วและคว่ำหน้าเรียง 1-78 ใบ:", "weight": "bold", "size": "sm", "color": "#4338CA"},
-                        {"type": "text", "text": "• เลข 1 ถึง 78 คือ 'ตำแหน่งไพ่' บนโต๊ะทำนาย\n• ตั้งจิตนิ่งๆ เลือกเลขตำแหน่งที่สะดุดตามา 10 เลข\n👉 พิมพ์เว้นวรรค เช่น: 5 12 21 34 45 52 60 67 71 78", "size": "xs", "wrap": True, "color": "#334155"}
+                        {"type": "text", "text": "• เลข 1 ถึง 78 คือ 'ตำแหน่งไพ่' บนโต๊ะทำนาย\n• เลือกได้ 2 แบบ: พิมพ์เลขเอง 10 ตัว หรือแตะปุ่มสุ่มด้านล่างจ้า", "size": "xs", "wrap": True, "color": "#334155"}
                     ]
                 },
                 {
-                    "type": "text",
-                    "text": "✨ หากไม่อยากพิมพ์เอง กดปุ่มสุ่มด้านล่างได้ทันทีค่ะ 👇",
-                    "size": "xxs",
-                    "color": "#6B21A8",
-                    "align": "center"
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#EEF2FF",
+                    "paddingAll": "md",
+                    "cornerRadius": "md",
+                    "spacing": "xs",
+                    "contents": [
+                        {"type": "text", "text": "✍️ พิมพ์เอง: ส่งเลข 10 ตัวเว้นวรรค เช่น:", "weight": "bold", "size": "xs", "color": "#3730A3"},
+                        {"type": "text", "text": "5 12 21 34 45 52 60 67 71 78", "size": "sm", "weight": "bold", "color": "#4338CA"}
+                    ]
                 }
             ]
         },
@@ -509,7 +514,7 @@ def tarot_invitation_card() -> FlexSendMessage:
     }
 
     return FlexSendMessage(
-        alt_text="🔮 มาสุ่มเปิดไพ่ยิปซี 78 ใบ รับข้อคิดและพลังบวกวันนี้กับป้าเข็มกันจ้า",
+        alt_text="🔮 ตั้งจิตนิ่งๆ แล้วเลือกเลขไพ่ 1-78 มา 10 ตัว หรือกดสุ่มเพื่อเปิดดวงชะตาฉบับเต็มจ้า",
         contents=bubble
     )
 

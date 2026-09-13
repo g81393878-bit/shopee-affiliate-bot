@@ -1658,3 +1658,27 @@ def test_tarot_celtic_cross_accumulation_and_db_save(sim, db):
     lb.TarotSessionManager.clear_session(uid)
 
 
+def test_tarot_out_of_range_number_completes_10_cards(sim, db):
+    """ทดสอบกรณีพิมพ์เลขเกิน 78 (เช่น 88) ระบบต้องแปลงเข้า 1-78 และเปิด 10 ใบสำเร็จทันที ไม่ค้างที่ 9/10"""
+    uid = "U_celtic_tester_88"
+    lb.TarotSessionManager.clear_session(uid)
+
+    # ผู้ใช้พิมพ์ 10 เลข โดยมีเลข 88 ปิดท้าย
+    r = sim.send(uid, "4 5 6 8 9 16 44 55 68 88")
+    assert r["intent"] == "tarot_celtic_cross", f"Expected tarot_celtic_cross, got {r['intent']}"
+    assert "เซลติกครอส 10 ใบ" in r["preview"]
+
+    # ตรวจสอบใน DB
+    saved = db.query(models.TarotReading).filter(models.TarotReading.line_user_id == uid).first()
+    assert saved is not None
+    assert len(saved.cards_data) == 10
+    # 88 แปลงเป็น ((88-1)%78)+1 = 10
+    assert 10 in saved.cards_data
+
+    # Cleanup
+    db.query(models.TarotReading).filter(models.TarotReading.line_user_id == uid).delete()
+    db.commit()
+    lb.TarotSessionManager.clear_session(uid)
+
+
+
