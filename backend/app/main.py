@@ -475,7 +475,7 @@ def tarot_celtic_reading_player(reading_id: str):
     from app.db import SessionLocal
     from app import models
     from app.services.product_cards import get_tarot_card_by_number
-    import json
+    import json, re
     
     cards_data = [4, 5, 3, 2, 8, 15, 23, 21, 19, 9] # fallback
     video_url = ""
