@@ -226,7 +226,13 @@ def create_card_slide(card_num: int, pos_idx: int, pos_title: str, card: Dict, c
     badge_colors = {
         1: ("#4338CA", "ใบที่ 1: ตัวตนและสภาวะปัจจุบัน"),
         2: ("#DC2626", "ใบที่ 2: อุปสรรคและแรงต้านที่ขวางทับ"),
+        3: ("#D97706", "ใบที่ 3: จิตสำนึกและเป้าหมายในหัว"),
+        4: ("#0D9488", "ใบที่ 4: จิตใต้สำนึกและรากปัญหา"),
+        5: ("#475569", "ใบที่ 5: อดีตที่เพิ่งผ่านพ้นมา"),
         6: ("#2563EB", "ใบที่ 6: อนาคตอันใกล้ (1-3 เดือน)"),
+        7: ("#7C3AED", "ใบที่ 7: ทัศนคติและมุมมองเจ้าชะตา"),
+        8: ("#059669", "ใบที่ 8: อิทธิพลคนรอบตัวและสิ่งแวดล้อม"),
+        9: ("#E11D48", "ใบที่ 9: ความหวังลึกๆ และความกลัวในใจ"),
         10: ("#B45309", "ใบที่ 10: บทสรุปสูงสุดและผลลัพธ์ปลายทาง"),
     }
     bcolor, btitle = badge_colors.get(pos_idx, ("#6366F1", pos_title))
@@ -418,22 +424,35 @@ def render_celtic_cross_video(reading_id: Optional[str] = None) -> Optional[Dict
     # Fetch card objects
     deck_cards = [get_tarot_card_by_number(num) for num in cards_data[:10]]
 
-    # Positions to highlight in video
-    c1 = deck_cards[0] # ตัวตนปัจจุบัน
-    c2 = deck_cards[1] # อุปสรรคขวางทับ
-    c6 = deck_cards[5] if len(deck_cards) > 5 else deck_cards[0] # อนาคตอันใกล้
-    c10 = deck_cards[9] if len(deck_cards) > 9 else deck_cards[-1] # ผลลัพธ์สูงสุด
+    POSITIONS_SHORT = [
+        "ตัวตนปัจจุบัน",
+        "อุปสรรคขวางทับ",
+        "เป้าหมายในใจ",
+        "รากเหง้าปัญหา",
+        "อดีตที่ผ่านมา",
+        "อนาคตอันใกล้",
+        "ทัศนคติตัวคุณ",
+        "คนรอบข้าง",
+        "ความหวังในใจ",
+        "บทสรุปสูงสุด"
+    ]
+    THAI_ORDINALS = [
+        "หนึ่ง", "สอง", "สาม", "สี่", "ห้า",
+        "หก", "เจ็ด", "แปด", "เก้า", "สิบ"
+    ]
 
-    # Script segments & narration
-    # Strict 3-second hook:
-    s0_voice = "เปิดดวงชะตาเซลติกครอสสิบใบ กับป้าเข็มพยากรณ์ พลังงานสำคัญที่คุณต้องรู้ตอนนี้จ้า!"
-    s1_voice = f"ใบที่หนึ่ง ตัวตนปัจจุบัน ไพ่{c1.get('thai','')} {c1.get('desc','')} ป้าเข็มบอกเลยว่า {c1.get('advice','')}"
-    s2_voice = f"ใบที่สอง อุปสรรคที่ขวางอยู่ ไพ่{c2.get('thai','')} {c2.get('desc','')}"
-    s3_voice = f"ใบที่หก อนาคตอันใกล้ ไพ่{c6.get('thai','')} {c6.get('desc','')}"
-    s4_voice = f"และใบที่สิบ บทสรุปสูงสุด ไพ่{c10.get('thai','')} {c10.get('desc','')}"
-    s5_voice = "ดูคำทำนายฉบับเต็มทั้งสิบใบ และเปิดไพ่ด้วยตัวเองฟรี ทักไลน์ แอด 137gsref หรือกดลิงก์หน้าโปรไฟล์ได้เลยจ้า!"
+    # Download Images for ALL 10 CARDS
+    logger.info("📥 กำลังดาวน์โหลดภาพไพ่ Rider-Waite ทั้ง 10 ใบ...")
+    card_images = []
+    for c in deck_cards:
+        img = download_image(c.get("img", ""))
+        card_images.append(img)
 
-    full_voice = f"{s0_voice} {s1_voice} {s2_voice} {s3_voice} {s4_voice} {s5_voice}"
+    slide0 = create_overview_slide(deck_cards)
+    slide_outro = create_outro_slide()
+
+    s0_voice = "เปิดดวงชะตาเซลติกครอส 10 ใบครบทุกมิติ กับป้าเข็มพยากรณ์ พลังงานที่คุณต้องรู้ตอนนี้จ้า!"
+    s_outro_voice = "ดูคำทำนายฉบับเต็มทั้งสิบใบ และเปิดไพ่ด้วยตัวเองได้ฟรี ทักไลน์ แอด 137gsref หรือกดลิงก์หน้าโปรไฟล์ได้เลยจ้า!"
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     ts = int(time.time())
@@ -441,51 +460,80 @@ def render_celtic_cross_video(reading_id: Optional[str] = None) -> Optional[Dict
     video_path = OUTPUT_DIR / f"content_tarot_celtic_{reading_id}_{ts}.mp4"
     txt_path = OUTPUT_DIR / f"content_tarot_celtic_{reading_id}_{ts}.txt"
 
-    logger.info("🎙️ กำลังสร้างเสียงพากย์ป้าเข็ม Edge TTS...")
-    generate_voiceover(full_voice, audio_path)
-    if not audio_path.exists():
-        logger.error("สร้างเสียงพากย์ล้มเหลว")
-        return None
+    scenes = []
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_p = Path(tmp_dir)
+        audio_segments = []
 
-    total_audio_dur = get_audio_duration(audio_path)
-    logger.info(f"🔊 ความยาวเสียงพากย์รวม: {total_audio_dur:.2f} วินาที")
+        logger.info("🎙️ กำลังสร้างเสียงพากย์และกำหนดเวลาทั้ง 10 ใบ...")
+        # 0. Hook
+        a0 = tmp_p / "audio_00.mp3"
+        generate_voiceover(s0_voice, a0)
+        dur0 = get_audio_duration(a0)
+        audio_segments.append(a0)
+        scenes.append((slide0, dur0))
 
-    # Download Images for highlighted cards
-    img_c1 = download_image(c1.get("img", ""))
-    img_c2 = download_image(c2.get("img", ""))
-    img_c6 = download_image(c6.get("img", ""))
-    img_c10 = download_image(c10.get("img", ""))
+        # 1..10 Cards
+        badge_meta = [
+            (1, "ใบที่ 1: ตัวตนและสภาวะปัจจุบัน"),
+            (2, "ใบที่ 2: อุปสรรคและแรงต้านที่ขวางทับ"),
+            (3, "ใบที่ 3: จิตสำนึกและเป้าหมายในหัว"),
+            (4, "ใบที่ 4: จิตใต้สำนึกและรากปัญหา"),
+            (5, "ใบที่ 5: อดีตที่เพิ่งผ่านพ้นมา"),
+            (6, "ใบที่ 6: อนาคตอันใกล้ (1-3 เดือน)"),
+            (7, "ใบที่ 7: ทัศนคติและมุมมองเจ้าชะตา"),
+            (8, "ใบที่ 8: อิทธิพลคนรอบตัวและสิ่งแวดล้อม"),
+            (9, "ใบที่ 9: ความหวังลึกๆ และความกลัวในใจ"),
+            (10, "ใบที่ 10: บทสรุปสูงสุดและผลลัพธ์ปลายทาง"),
+        ]
 
-    # Create Slides
-    slide0 = create_overview_slide(deck_cards)
-    slide1 = create_card_slide(cards_data[0], 1, "ใบที่ 1: ตัวตนและสภาวะปัจจุบัน", c1, img_c1)
-    slide2 = create_card_slide(cards_data[1], 2, "ใบที่ 2: อุปสรรคและแรงต้านที่ขวางทับ", c2, img_c2)
-    slide3 = create_card_slide(cards_data[5], 6, "ใบที่ 6: อนาคตอันใกล้ (1-3 เดือน)", c6, img_c6)
-    slide4 = create_card_slide(cards_data[9], 10, "ใบที่ 10: บทสรุปสูงสุดและผลลัพธ์ปลายทาง", c10, img_c10)
-    slide5 = create_outro_slide()
+        for idx in range(10):
+            c = deck_cards[idx]
+            pos_id = idx + 1
+            pos_title = badge_meta[idx][1]
+            card_slide = create_card_slide(cards_data[idx], pos_id, pos_title, c, card_images[idx])
+            
+            # Crisp voice for this card
+            desc_snip = c.get('desc', '')[:35].strip()
+            v_text = f"ใบที่{THAI_ORDINALS[idx]} {POSITIONS_SHORT[idx]} ได้ไพ่{c.get('thai','')} {desc_snip}"
+            a_idx = tmp_p / f"audio_{pos_id:02d}.mp3"
+            generate_voiceover(v_text, a_idx)
+            dur_idx = get_audio_duration(a_idx)
+            audio_segments.append(a_idx)
+            scenes.append((card_slide, dur_idx))
 
-    # Time budget per scene
-    dur0 = 4.0 # Hook
-    dur_rem = max(10.0, total_audio_dur - dur0)
-    dur_card = dur_rem / 4.8
-    dur_outro = dur_rem - (dur_card * 4) + 1.0
+        # 11. Outro
+        a_out = tmp_p / "audio_outro.mp3"
+        generate_voiceover(s_outro_voice, a_out)
+        dur_out = get_audio_duration(a_out)
+        audio_segments.append(a_out)
+        scenes.append((slide_outro, dur_out))
 
-    scenes = [
-        (slide0, dur0),
-        (slide1, dur_card),
-        (slide2, dur_card),
-        (slide3, dur_card),
-        (slide4, dur_card),
-        (slide5, dur_outro),
-    ]
+        total_audio_dur = sum(s[1] for s in scenes)
+        logger.info(f"🔊 รวมความยาวเสียงพากย์ครบ 10 ใบ: {total_audio_dur:.2f} วินาที")
 
-    logger.info("🎬 กำลังเรนเดอร์วิดีโอ 9:16 Full HD ด้วย FFmpeg...")
-    ok = assemble_tarot_video(scenes, audio_path, video_path)
-    audio_path.unlink(missing_ok=True)
+        # Concat audio files using ffmpeg
+        concat_audio_txt = tmp_p / "concat_audio.txt"
+        concat_audio_txt.write_text("\n".join(f"file '{a.as_posix()}'" for a in audio_segments), encoding="utf-8")
 
-    if not ok:
-        logger.error("ประกอบไฟล์วิดีโอล้มเหลว")
-        return None
+        cmd_a = [
+            _ffmpeg_exe(), "-y",
+            "-f", "concat", "-safe", "0", "-i", str(concat_audio_txt),
+            "-c:a", "libmp3lame", "-b:a", "192k",
+            str(audio_path)
+        ]
+        res_a = subprocess.run(cmd_a, capture_output=True, timeout=60)
+        if res_a.returncode != 0 or not audio_path.exists():
+            logger.error(f"Audio concat error: {res_a.stderr.decode('utf-8', errors='ignore')}")
+            return None
+
+        logger.info("🎬 กำลังเรนเดอร์วิดีโอครบ 10 ใบ 9:16 Full HD ด้วย FFmpeg...")
+        ok = assemble_tarot_video(scenes, audio_path, video_path)
+        audio_path.unlink(missing_ok=True)
+
+        if not ok:
+            logger.error("ประกอบไฟล์วิดีโอล้มเหลว")
+            return None
 
     # Register video quality approval
     register_video_quality(video_path)
