@@ -478,15 +478,45 @@ def tarot_celtic_reading_player(reading_id: str):
     import json
     
     cards_data = [4, 5, 3, 2, 8, 15, 23, 21, 19, 9] # fallback
+    video_url = ""
     db = SessionLocal()
     try:
         r = db.query(models.TarotReading).filter(models.TarotReading.reading_id == reading_id).first()
-        if r and r.cards_data:
-            cards_data = r.cards_data
+        if r:
+            if r.cards_data:
+                cards_data = r.cards_data
+            if r.video_url:
+                video_url = r.video_url
     except Exception as e:
         logger.warning(f"Failed to fetch reading {reading_id}: {e}")
     finally:
         db.close()
+
+    yt_embed = ""
+    if video_url:
+        m = re.search(r'(?:v=|youtu\.be/|shorts/)([a-zA-Z0-9_-]{11})', video_url)
+        if m:
+            yt_embed = f"https://www.youtube.com/embed/{m.group(1)}?rel=0"
+
+    video_html = ""
+    if yt_embed:
+        video_html = f"""
+  <div style="width: 100%; max-width: 460px; margin-bottom: 20px; border-radius: 18px; overflow: hidden; border: 2px solid var(--gold); box-shadow: 0 10px 30px rgba(0,0,0,0.8); background: #000;">
+    <div style="position: relative; padding-bottom: 177.77%; height: 0;">
+      <iframe src="{yt_embed}" style="position: absolute; top:0; left: 0; width: 100%; height: 100%;" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+    </div>
+    <div style="padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; background: #171026;">
+      <span style="font-size: 13px; color: var(--gold-light);">🎬 วิดีโอทำนายดวงเซลติกครอส</span>
+      <a href="{video_url}" target="_blank" style="color: #FFF; background: #FF0000; padding: 6px 12px; border-radius: 16px; text-decoration: none; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">▶️ YouTube Shorts</a>
+    </div>
+  </div>
+"""
+    elif video_url and "youtube.com" in video_url:
+        video_html = f"""
+  <div style="margin-bottom: 15px;">
+    <a href="{video_url}" target="_blank" style="color: #FFF; background: #FF0000; padding: 8px 16px; border-radius: 20px; text-decoration: none; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">▶️ ชมคลิปบน YouTube Shorts</a>
+  </div>
+"""
         
     positions_info = [
         {"title": "1. ตัวตนและสภาวะปัจจุบัน", "color": "#4338CA"},
@@ -722,7 +752,12 @@ def tarot_celtic_reading_player(reading_id: str):
 <div class="header">
   <h1>THE CELTIC CROSS</h1>
   <div class="badge">รหัสคำทำนาย: {reading_id}</div>
+  <div style="margin-top: 10px;">
+    <a href="/tarot" style="color: var(--gold-light); font-size: 13px; text-decoration: none; border: 1px solid rgba(245,158,11,0.4); padding: 5px 16px; border-radius: 20px; background: rgba(245,158,11,0.12); display: inline-block;">🔮 กลับไปหน้าสุ่ม / เลือกไพ่ 10 ใบ</a>
+  </div>
 </div>
+
+{video_html}
 
 <div class="theater-container">
   <div id="pos-badge" class="pos-badge">1. ตัวตนและสภาวะปัจจุบัน</div>
