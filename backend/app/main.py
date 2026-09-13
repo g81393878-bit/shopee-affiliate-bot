@@ -13,7 +13,7 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 import httpx
 from sqlalchemy import text
@@ -429,6 +429,44 @@ tiktok-developers-site-verification=aw2u4qsbt1fl8su8
 </html>"""
 
 
+@app.get("/api/tarot/tts")
+async def tarot_tts_endpoint(card_num: int = 1, pos_idx: int = 1):
+    """🎙️ บริการสตรีมเสียงพากย์ป้าเข็มแท้ 100% (Microsoft Edge Neural TTS: th-TH-PremwadeeNeural)
+    เล่นได้ทุกเครื่อง ทั้ง iOS Safari, LINE In-App Browser และ Android
+    """
+    import hashlib
+    import tempfile
+    from pathlib import Path
+    from app.services.product_cards import get_tarot_card_by_number
+    
+    positions_info = [
+        "ตัวตนและสภาวะปัจจุบัน", "อุปสรรคและแรงต้านที่ขวางทับ", "จิตสำนึกและเป้าหมายในหัว",
+        "จิตใต้สำนึกและรากเหง้าของปัญหา", "อดีตที่เพิ่งผ่านพ้นมา", "อนาคตอันใกล้",
+        "ทัศนคติและมุมมองของตัวคุณ", "อิทธิพลคนรอบตัวและสิ่งแวดล้อม", "ความหวังลึกๆ และความกลัวในใจ",
+        "บทสรุปสูงสุดและผลลัพธ์ปลายทาง"
+    ]
+    p_name = positions_info[(pos_idx - 1) % len(positions_info)]
+    card = get_tarot_card_by_number(card_num)
+    
+    text = (
+        f"ตำแหน่งที่ {pos_idx} {p_name} ท่านได้ไพ่ {card.get('thai')} {card.get('name')} "
+        f"{card.get('desc')} ข้อคิดคำแนะนำจากป้าเข็มคือ {card.get('advice')}"
+    )
+    
+    # แคชไฟล์เสียงตาม hash เพื่อให้โหลดได้ทันที
+    cache_dir = Path(tempfile.gettempdir()) / "tarot_tts_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    text_hash = hashlib.md5(text.encode("utf-8")).hexdigest()
+    audio_path = cache_dir / f"tarot_{text_hash}.mp3"
+    
+    if not audio_path.exists():
+        import edge_tts
+        communicate = edge_tts.Communicate(text, "th-TH-PremwadeeNeural", rate="+10%")
+        await communicate.save(str(audio_path))
+        
+    return Response(content=audio_path.read_bytes(), media_type="audio/mpeg")
+
+
 @app.get("/tarot/reading/{reading_id}", response_class=HTMLResponse)
 def tarot_celtic_reading_player(reading_id: str):
     """🎬 โรงภาพยนตร์คำทำนายไพ่ยิปซี 10 ใบ ป้าเข็ม (Personalized Celtic Cross Video/Audio Player)
@@ -701,8 +739,8 @@ def tarot_celtic_reading_player(reading_id: str):
     <div id="card-advice" class="card-advice">...</div>
   </div>
 
-  <button id="btn-speak" class="btn btn-speak" onclick="playVoice()">
-    🔊 ให้ป้าเข็มพากย์เสียงคำทำนายใบนี้
+  <button id="btn-speak" class="btn btn-speak" onclick="toggleVoice()">
+    🔊 ฟังเสียงพากย์ป้าเข็ม (วิเคราะห์ใบนี้)
   </button>
 
   <div class="controls">
@@ -716,7 +754,8 @@ def tarot_celtic_reading_player(reading_id: str):
 <script>
 const cards = {cards_json};
 let currentIndex = 0;
-let synth = window.speechSynthesis;
+let audioPlayer = new Audio();
+let isPlaying = false;
 
 function renderGrid() {{
   const nav = document.getElementById('grid-nav');
@@ -749,26 +788,60 @@ function showCard(idx) {{
 }}
 
 function changeCard(dir) {{
-  if (synth) synth.cancel();
+  stopVoice();
   showCard(currentIndex + dir);
-  playVoice();
 }}
 
 function selectCard(idx) {{
-  if (synth) synth.cancel();
+  stopVoice();
   showCard(idx);
+}}
+
+function stopVoice() {{
+  if (audioPlayer) {{
+    audioPlayer.pause();
+    audioPlayer.currentTime = 0;
+  }}
+  isPlaying = false;
+  const btn = document.getElementById('btn-speak');
+  if (btn) btn.innerHTML = '🔊 ฟังเสียงพากย์ป้าเข็ม (วิเคราะห์ใบนี้)';
+}}
+
+function toggleVoice() {{
+  if (isPlaying) {{
+    stopVoice();
+    return;
+  }}
   playVoice();
 }}
 
 function playVoice() {{
-  if (!('speechSynthesis' in window)) return;
-  synth.cancel();
   const c = cards[currentIndex];
-  const text = `ตำแหน่ง${{c.pos}} ท่านได้ไพ่ ${{c.thai}} ${{c.name}} ${{c.desc}} ข้อคิดคำแนะนำจากป้าเข็มคือ ${{c.advice}}`;
-  const utter = new SpeechSynthesisUtterance(text);
-  utter.lang = 'th-TH';
-  utter.rate = 0.95;
-  synth.speak(utter);
+  const btn = document.getElementById('btn-speak');
+  if (btn) btn.innerHTML = '⏳ ป้าเข็มกำลังตั้งจิตอ่านคำทำนาย...';
+  
+  const audioUrl = `/api/tarot/tts?card_num=${{c.num}}&pos_idx=${{c.idx}}`;
+  audioPlayer.src = audioUrl;
+  
+  audioPlayer.onplay = () => {{
+    isPlaying = true;
+    if (btn) btn.innerHTML = '⏸️ หยุดฟังเสียงป้าเข็ม';
+  }};
+  
+  audioPlayer.onended = () => {{
+    stopVoice();
+  }};
+  
+  audioPlayer.onerror = (e) => {{
+    console.warn('Audio play error, fallback:', e);
+    stopVoice();
+    if (btn) btn.innerHTML = '🔊 ฟังเสียงพากย์ป้าเข็ม (วิเคราะห์ใบนี้)';
+  }};
+  
+  audioPlayer.play().catch(err => {{
+    console.warn('Playback blocked by browser:', err);
+    stopVoice();
+  }});
 }}
 
 // เริ่มต้นใบแรก
