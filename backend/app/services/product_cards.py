@@ -701,9 +701,17 @@ def tarot_celtic_cross_summary_card(reading_id: str, card_nums: list, video_url:
         if idx < 9:
             rows.append({"type": "separator", "margin": "xs"})
 
-    import urllib.parse
-    q = urllib.parse.quote("เซลติกครอส 10 ใบ ไพ่ยิปซี ป้าเข็ม")
-    v_url = video_url or f"https://www.youtube.com/results?search_query={q}"
+    tunnel_url = "https://couple-tire-looksmart-personally.trycloudflare.com"
+    try:
+        import os
+        if os.path.exists("/tmp/tunnel_url.txt"):
+            with open("/tmp/tunnel_url.txt", "r") as f:
+                u = f.read().strip()
+                if u:
+                    tunnel_url = u
+    except Exception:
+        pass
+    v_url = video_url or f"{tunnel_url}/tarot/reading/{reading_id}"
 
     bubble = {
         "type": "bubble",

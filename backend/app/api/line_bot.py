@@ -364,8 +364,18 @@ class TarotSessionManager:
         import uuid
         import urllib.parse
         rid = f"celtic_{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{str(uuid.uuid4())[:6]}"
-        q = urllib.parse.quote(f"เซลติกครอส 10 ใบ ไพ่ยิปซี ป้าเข็ม {rid}")
-        v_url = f"https://www.youtube.com/results?search_query={q}"
+        # ดึง URL จาก Tunnel หรือ Domain หลัก
+        tunnel_url = "https://couple-tire-looksmart-personally.trycloudflare.com"
+        try:
+            if os.path.exists("/tmp/tunnel_url.txt"):
+                with open("/tmp/tunnel_url.txt", "r") as f:
+                    u = f.read().strip()
+                    if u:
+                        tunnel_url = u
+        except Exception:
+            pass
+            
+        v_url = f"{tunnel_url}/tarot/reading/{rid}"
         try:
             reading = models.TarotReading(
                 reading_id=rid,
