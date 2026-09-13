@@ -436,7 +436,8 @@ def get_tarot_card_by_number(num: int) -> dict:
 def tarot_invitation_card() -> FlexSendMessage:
     """สร้างการ์ดเชิญชวนเลือกเลข 1-78 สวยงาม น่าค้นหา และมีปุ่มสุ่มนำทาง"""
     import random
-    seed_numbers = sorted(random.sample(range(1, 79), 3))
+    seed_10 = sorted(random.sample(range(1, 79), 10))
+    seed_10_str = " ".join(str(n) for n in seed_10)
 
     bubble = {
         "type": "bubble",
@@ -447,8 +448,8 @@ def tarot_invitation_card() -> FlexSendMessage:
             "backgroundColor": "#1E1B4B",
             "paddingAll": "lg",
             "contents": [
-                {"type": "text", "text": "🌌 สำรับไพ่ยิปซี 78 ใบแห่งคำตอบ", "weight": "bold", "size": "md", "color": "#FDE047"},
-                {"type": "text", "text": "ประตูชะตากำลังเปิดออก... จักรวาลมีสารอะไรถึงคุณ?", "size": "xs", "color": "#E0E7FF", "margin": "xs"}
+                {"type": "text", "text": "🏛️ ผังเซลติกครอส 10 ใบ (Celtic Cross)", "weight": "bold", "size": "md", "color": "#FDE047"},
+                {"type": "text", "text": "สำรับ 78 ใบ • วิเคราะห์ดวงชะตาเชิงลึกรอบด้าน", "size": "xs", "color": "#E0E7FF", "margin": "xs"}
             ]
         },
         "hero": {
@@ -473,41 +474,16 @@ def tarot_invitation_card() -> FlexSendMessage:
                     "cornerRadius": "md",
                     "spacing": "xs",
                     "contents": [
-                        {"type": "text", "text": "🔮 วิธีรับสารและพลังบวกวันนี้:", "weight": "bold", "size": "sm", "color": "#4338CA"},
-                        {"type": "text", "text": "• นึกถึงเรื่องที่อยากรู้ในใจ หรือปล่อยใจให้สบาย\n• พิมพ์ตัวเลข 1 ถึง 78 ที่แวบเข้ามาในใจ\n• ส่ง 1 เลข เพื่อดูพลังบวกรายวัน\n• หรือส่ง 3 เลข (เช่น 7 24 55) เพื่อดู อดีต-ปัจจุบัน-อนาคต จ้า", "size": "xs", "wrap": True, "color": "#334155"}
+                        {"type": "text", "text": "🎴 ไพ่สับแล้วและคว่ำหน้าเรียง 1-78 ใบ:", "weight": "bold", "size": "sm", "color": "#4338CA"},
+                        {"type": "text", "text": "• เลข 1 ถึง 78 คือ 'ตำแหน่งไพ่' บนโต๊ะทำนาย\n• ตั้งจิตนิ่งๆ เลือกเลขตำแหน่งที่สะดุดตามา 10 เลข\n👉 พิมพ์เว้นวรรค เช่น: 5 12 21 34 45 52 60 67 71 78", "size": "xs", "wrap": True, "color": "#334155"}
                     ]
                 },
                 {
                     "type": "text",
-                    "text": "✨ ตัวอย่างเลขดวงสมพงษ์รอบนี้แตะได้เลย 👇",
+                    "text": "✨ หากไม่อยากพิมพ์เอง กดปุ่มสุ่มด้านล่างได้ทันทีค่ะ 👇",
                     "size": "xxs",
                     "color": "#6B21A8",
                     "align": "center"
-                },
-                {
-                    "type": "box",
-                    "layout": "horizontal",
-                    "spacing": "sm",
-                    "contents": [
-                        {
-                            "type": "button",
-                            "style": "secondary",
-                            "height": "sm",
-                            "action": {"type": "message", "label": f"เลข {seed_numbers[0]}", "text": f"เปิดไพ่ {seed_numbers[0]}"}
-                        },
-                        {
-                            "type": "button",
-                            "style": "secondary",
-                            "height": "sm",
-                            "action": {"type": "message", "label": f"เลข {seed_numbers[1]}", "text": f"เปิดไพ่ {seed_numbers[1]}"}
-                        },
-                        {
-                            "type": "button",
-                            "style": "secondary",
-                            "height": "sm",
-                            "action": {"type": "message", "label": f"เลข {seed_numbers[2]}", "text": f"เปิดไพ่ {seed_numbers[2]}"}
-                        }
-                    ]
                 }
             ]
         },
@@ -516,15 +492,16 @@ def tarot_invitation_card() -> FlexSendMessage:
             "layout": "vertical",
             "backgroundColor": "#FAF5FF",
             "paddingAll": "md",
+            "spacing": "sm",
             "contents": [
                 {
                     "type": "button",
                     "style": "primary",
-                    "color": "#6366F1",
+                    "color": "#4338CA",
                     "action": {
                         "type": "message",
-                        "label": f"🎲 สุ่ม 3 เลขจัดเต็ม ({seed_numbers[0]}, {seed_numbers[1]}, {seed_numbers[2]})",
-                        "text": f"เปิดไพ่ {seed_numbers[0]} {seed_numbers[1]} {seed_numbers[2]}"
+                        "label": "🎲 สุ่มเปิดดวง 10 ใบ (1 คลิก)",
+                        "text": f"เปิดไพ่ {seed_10_str}"
                     }
                 }
             ]
