@@ -582,8 +582,8 @@ def tarot_selection_carousel() -> FlexSendMessage:
                 "spacing": "xs",
                 "paddingAll": "md",
                 "contents": [
-                    {"type": "text", "text": f"✨ กองที่ {pile_num}: แตะเพื่อเปิดไพ่", "weight": "bold", "size": "sm"},
-                    {"type": "text", "text": "สารจากจิตใต้สำนึก (Jungian Synchronicity)", "size": "xxs", "color": "#64748B"}
+                    {"type": "text", "text": f"✨ ไพ่ใบที่ {pile_num} แตะเปิดดูได้เลยจ้า", "weight": "bold", "size": "sm"},
+                    {"type": "text", "text": "หยิบคำทำนายกำลังใจวันนี้ให้ตัวเอง 💖", "size": "xxs", "color": "#64748B"}
                 ]
             },
             "footer": {
@@ -596,7 +596,7 @@ def tarot_selection_carousel() -> FlexSendMessage:
                         "color": c["color"],
                         "action": {
                             "type": "message",
-                            "label": f"🔮 เปิดคำทำนายกองที่ {pile_num}",
+                            "label": f"✨ แตะเปิดใบที่ {pile_num}",
                             "text": f"เปิดไพ่ใบที่ {c['id']}"
                         }
                     }
@@ -606,13 +606,13 @@ def tarot_selection_carousel() -> FlexSendMessage:
         bubbles.append(bubble)
 
     return FlexSendMessage(
-        alt_text="🔮 ตั้งจิตอธิษฐานแล้วเลือกไพ่ยิปซีใบที่ดึงดูดใจที่สุดได้เลยจ้า",
+        alt_text="✨ มาสุ่มเปิดไพ่ยิปซีรับพลังบวกและข้อคิดดีๆ วันนี้กันจ้า",
         contents={"type": "carousel", "contents": bubbles}
     )
 
 
 def tarot_reading_card(card_id: int) -> FlexSendMessage:
-    """สร้างการ์ดเฉลยคำทำนายไพ่ยิปซีใบใหญ่ พร้อมภาพ Rider-Waite แท้ 2:3"""
+    """สร้างการ์ดเฉลยคำทำนายไพ่ยิปซีใบใหญ่ ฟีลเป็นกันเอง ให้กำลังใจ ไม่ตึงเครียด"""
     card = next((c for c in TAROT_MAJOR_ARCANA_DICT if c["id"] == card_id), TAROT_MAJOR_ARCANA_DICT[19])
     theme_color = card.get("color", "#D97706")
 
@@ -625,9 +625,8 @@ def tarot_reading_card(card_id: int) -> FlexSendMessage:
             "backgroundColor": theme_color,
             "paddingAll": "md",
             "contents": [
-                {"type": "text", "text": f"🃏 สารจากไพ่ยิปซี: ใบที่ {card['id']}", "weight": "bold", "size": "sm", "color": "#FFFFFF"},
-                {"type": "text", "text": f"{card['name']} ({card['thai']})", "weight": "bold", "size": "lg", "color": "#FFFFFF"},
-                {"type": "text", "text": f"✨ {card['keyword']}", "size": "xxs", "color": "#FEF3C7"}
+                {"type": "text", "text": f"✨ คำทำนายวันนี้: {card['name']} ({card['thai']})", "weight": "bold", "size": "md", "color": "#FFFFFF"},
+                {"type": "text", "text": f"🌟 จุดเด่น: {card['keyword']}", "size": "xxs", "color": "#FEF3C7"}
             ]
         },
         "hero": {
@@ -651,7 +650,7 @@ def tarot_reading_card(card_id: int) -> FlexSendMessage:
                     "cornerRadius": "md",
                     "spacing": "xs",
                     "contents": [
-                        {"type": "text", "text": "🧠 สาส์นสะท้อนจากจิตใต้สำนึก (Jungian Reflection):", "weight": "bold", "size": "xs", "color": "#475569"},
+                        {"type": "text", "text": "💬 ความหมายไพ่วันนี้:", "weight": "bold", "size": "xs", "color": "#475569"},
                         {"type": "text", "text": card["desc"], "size": "sm", "wrap": True, "color": "#1E293B"}
                     ]
                 },
@@ -660,7 +659,7 @@ def tarot_reading_card(card_id: int) -> FlexSendMessage:
                     "layout": "vertical",
                     "spacing": "xs",
                     "contents": [
-                        {"type": "text", "text": f"💡 ป้าเข็มชวนคิด: \"เรื่องที่กังวลอยู่ พลังของไพ่ {card['name']} กำลังชี้ทางออก ขอให้มีสติและเชื่อมั่นในตัวเองนะลูก\"", "size": "xs", "color": "#059669", "wrap": True}
+                        {"type": "text", "text": f"💖 ป้าเข็มส่งกำลังใจ: \"{card['advice']}\"", "size": "xs", "color": "#059669", "wrap": True}
                     ]
                 }
             ]
@@ -675,7 +674,7 @@ def tarot_reading_card(card_id: int) -> FlexSendMessage:
                     "style": "secondary",
                     "action": {
                         "type": "message",
-                        "label": "🔄 สุ่มเปิดไพ่ยิปซีใบใหม่",
+                        "label": "🔄 สุ่มเปิดใบใหม่เล่นๆ ได้อีกนะ",
                         "text": "เปิดไพ่"
                     }
                 }

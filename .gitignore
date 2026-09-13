@@ -38,6 +38,7 @@ tiktok_user_data*/
 tools/posted_tiktok_videos.txt
 posted_tiktok_videos.txt
 tools/*.gs
+gas_project/
 telegram-smart-memo-*.json
 *.mp3
 
@@ -142,6 +143,8 @@ reels_uploader/posted/duplicate_*
 tools/last_*_index.txt
 tools/daily_tiktok_counts.json
 tools/youtube_channel_stats.json
+tools/youtube_health_state.json
+tools/youtube_token*.json.*.tmp
 tools/posted_content_history.json
 tools/posted_reels_title_history.json
 tools/posted_youtube_history.json
@@ -164,3 +167,6 @@ tools/create_named_tunnel.py
 tools/setup_cf_worker.py
 tools/update_worker.py
 
+# Local upstream source checkout (installed package is pinned separately)
+.local/
+!backend/requirements-skillclaw.txt

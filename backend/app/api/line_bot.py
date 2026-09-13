@@ -3570,8 +3570,8 @@ def message_text(event):
             else:
                 from app.services.product_cards import tarot_selection_carousel
                 text_intro = TextSendMessage(
-                    text="🔮 [ศาสตร์ไพ่ยิปซีแท้ — Major Arcana 22 ใบ]\n"
-                         "ตั้งจิตสงบนึกถึงเรื่องที่อยากรู้ แล้วเลือกแตะไพ่ยิปซีใบที่ดึงดูดใจที่สุดด้านล่างนี้ได้เลยนะลูก ✨"
+                    text="✨ [เปิดไพ่ยิปซีรับพลังบวก วันนี้กับป้าเข็ม]\n"
+                         "หยิบไพ่เล่นๆ สบายใจ ไม่ต้องคิดมากน้า แตะเลือกใบที่สะดุดตาข้างล่างนี้ได้เลยจ้า 💖"
                 )
                 carousel_reply = tarot_selection_carousel()
                 reply = [text_intro, carousel_reply]
