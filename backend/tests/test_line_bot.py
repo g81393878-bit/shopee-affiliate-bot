@@ -1620,3 +1620,41 @@ def test_direct_product_code_dispatch(sim, db):
         db.query(models.Product).filter(models.Product.id == 9876).delete()
         db.commit()
 
+
+def test_tarot_celtic_cross_accumulation_and_db_save(sim, db):
+    """ทดสอบสะสมตัวเลขเซลติกครอสทีละใบจนครบ 10 ใบ และบันทึกลง DB"""
+    uid = "U_celtic_tester_1"
+    lb.TarotSessionManager.clear_session(uid)
+    
+    # 1. เริ่มต้นเข้าสู่โหมดเซลติกครอส
+    r = sim.send(uid, "เปิดไพ่")
+    assert r["intent"] == "tarot_pick"
+    assert lb.TarotSessionManager.get_session(uid) is not None
+    
+    # 2. ส่งเลขใบที่ 1
+    r = sim.send(uid, "1")
+    assert r["intent"] == "tarot_accumulate"
+    assert "บันทึกไพ่แล้ว 1/10 ใบ" in r["preview"]
+    
+    # 3. ส่งต่อจนครบ 10 ใบ
+    for n in [5, 12, 23, 34, 45, 56, 67, 71]:
+        r = sim.send(uid, str(n))
+        assert r["intent"] == "tarot_accumulate"
+        
+    # 4. ส่งใบที่ 10 ปิดท้าย -> ต้องได้ intent tarot_celtic_cross
+    r = sim.send(uid, "78")
+    assert r["intent"] == "tarot_celtic_cross"
+    assert "เซลติกครอส 10 ใบ" in r["preview"]
+    
+    # 5. ตรวจสอบว่าถูกบันทึกลง Table tarot_readings จริง
+    saved = db.query(models.TarotReading).filter(models.TarotReading.line_user_id == uid).first()
+    assert saved is not None
+    assert len(saved.cards_data) == 10
+    assert saved.cards_data == [1, 5, 12, 23, 34, 45, 56, 67, 71, 78]
+    
+    # Cleanup
+    db.query(models.TarotReading).filter(models.TarotReading.line_user_id == uid).delete()
+    db.commit()
+    lb.TarotSessionManager.clear_session(uid)
+
+

@@ -6,7 +6,7 @@ import logging
 import inspect
 import threading
 import urllib.request
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 from fastapi import APIRouter, HTTPException, Header, Request, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -280,6 +280,93 @@ def parse_product_code(text: str) -> Optional[int]:
         except ValueError:
             return None
     return None
+
+
+# ==============================================================================
+# 🔮 ระบบจัดการคิวตัวเลขเปิดไพ่ยิปซีเซลติกครอส 10 ใบ (Tarot 10-Card Stateful Manager)
+# ==============================================================================
+_tarot_user_sessions: Dict[str, dict] = {}
+
+CELTIC_CROSS_POSITIONS = [
+    "1. ตัวตนและสภาวะปัจจุบัน",
+    "2. อุปสรรคและแรงต้านที่ขวางทับ",
+    "3. จิตสำนึกและเป้าหมายในหัว",
+    "4. จิตใต้สำนึกและรากเหง้าของปัญหา",
+    "5. อดีตที่เพิ่งผ่านพ้นมา",
+    "6. อนาคตอันใกล้ (1-3 เดือนข้างหน้า)",
+    "7. ทัศนคติและมุมมองของตัวคุณ",
+    "8. อิทธิพลคนรอบตัวและสิ่งแวดล้อม",
+    "9. ความหวังลึกๆ และความกลัวในใจ",
+    "10. บทสรุปสูงสุดและผลลัพธ์ปลายทาง",
+]
+
+class TarotSessionManager:
+    """จัดการ Session การสะสมตัวเลข 1-78 สำหรับเปิดไพ่ยิปซี 10 ใบ (เซลติกครอส) หรือ 1-3 ใบ"""
+    @staticmethod
+    def start_session(user_id: str, target_count: int = 10):
+        _tarot_user_sessions[user_id] = {
+            "numbers": [],
+            "target": target_count,
+            "created_at": datetime.datetime.utcnow()
+        }
+
+    @staticmethod
+    def get_session(user_id: str) -> Optional[dict]:
+        sess = _tarot_user_sessions.get(user_id)
+        if not sess:
+            return None
+        # TTL 15 นาที เพื่อให้มีเวลาสงบทำสมาธิ
+        if (datetime.datetime.utcnow() - sess["created_at"]).total_seconds() > 900:
+            _tarot_user_sessions.pop(user_id, None)
+            return None
+        return sess
+
+    @staticmethod
+    def add_number(user_id: str, num: int) -> list:
+        sess = _tarot_user_sessions.get(user_id)
+        if not sess:
+            TarotSessionManager.start_session(user_id, 10)
+            sess = _tarot_user_sessions[user_id]
+        if num not in sess["numbers"]:
+            sess["numbers"].append(num)
+        sess["created_at"] = datetime.datetime.utcnow()
+        return sess["numbers"]
+
+    @staticmethod
+    def clear_session(user_id: str):
+        _tarot_user_sessions.pop(user_id, None)
+
+    @staticmethod
+    def extract_tarot_numbers(text: str) -> List[int]:
+        """สกัดตัวเลข 1-78 จากข้อความ เช่น '7 24 55', '9,18,36', 'เลข 35', 'เปิดไพ่ 12'"""
+        t = _strip_polite_suffix((text or "").strip()).strip()
+        raw_nums = re.findall(r'\b\d{1,2}\b', t)
+        valid = []
+        for n in raw_nums:
+            val = int(n)
+            if 1 <= val <= 78 and val not in valid:
+                valid.append(val)
+        return valid
+
+    @staticmethod
+    def save_reading(db: Session, line_user_id: str, card_nums: list) -> str:
+        """บันทึกประวัติการเปิดไพ่ 10 ใบลงในฐานข้อมูลถาวร และสร้าง reading_id"""
+        import uuid
+        rid = f"celtic_{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{str(uuid.uuid4())[:6]}"
+        try:
+            reading = models.TarotReading(
+                reading_id=rid,
+                line_user_id=line_user_id,
+                cards_data=card_nums,
+                video_url=f"https://www.youtube.com/results?search_query=เซลติกครอส+10+ใบ+ไพ่ยิปซี+ป้าเข็ม+{rid}"
+            )
+            db.add(reading)
+            db.commit()
+        except Exception as e:
+            logger.warning(f"Failed to save tarot reading: {e}")
+            db.rollback()
+        return rid
+
 
 
 def handle_latest_video_products(db: Session, user: models.User, is_owner: bool = False):
@@ -3543,6 +3630,100 @@ def message_text(event):
         elif is_owner and normalized_text in ADMIN_STATS_CMDS:
             reply = TextSendMessage(text=admin_customer_stats(db))
             intent = 'admin'
+        elif any(k in normalized_text for k in ("เปิดไพ่", "ไพ่ยิปซี", "ไพ่ทาโรต์", "ทาโรต์", "ยิปซี", "ดูดวง", "เซลติกครอส")):
+            # 🔮 ไพ่ยิปซีแท้ ผังเซลติกครอส 10 ใบ ดั้งเดิมแท้ — ป้าเข็ม
+            from app.services.product_cards import (
+                tarot_invitation_card, tarot_reading_card, tarot_reading_carousel,
+                tarot_celtic_cross_summary_card
+            )
+            extracted_nums = TarotSessionManager.extract_tarot_numbers(normalized_text)
+            if len(extracted_nums) >= 10:
+                # ส่งมาครบ 10 เลขในคำสั่งเดียว
+                TarotSessionManager.clear_session(line_user_id)
+                rid = TarotSessionManager.save_reading(db, line_user_id, extracted_nums[:10])
+                reply = tarot_celtic_cross_summary_card(rid, extracted_nums[:10])
+                intent = 'tarot_celtic_cross'
+            elif len(extracted_nums) == 1:
+                # ส่งมา 1 เลขเดี่ยว
+                TarotSessionManager.clear_session(line_user_id)
+                reply = tarot_reading_card(extracted_nums[0])
+                intent = 'tarot_reveal_1'
+            else:
+                # เข้าสู่โหมดเซลติกครอส 10 ใบ เริ่มต้น session รอรับตัวเลขทีละใบ
+                TarotSessionManager.start_session(line_user_id, target_count=10)
+                intro_msg = TextSendMessage(
+                    text="🏛️ [ผังเซลติกครอส 10 ใบ — ศาสตร์ไพ่ยิปซีดั้งเดิมแท้]\n"
+                         "━━━━━━━━━━━━━━━━━━\n"
+                         "• หลับตา หายใจเข้าลึกๆ ตั้งสมาธินึกถึงเรื่องที่ต้องการทางสว่าง\n"
+                         "• สำรับ 78 ใบถูกล้างพลังงานและสับวางตรงหน้าคุณแล้ว\n"
+                         "• ค่อยๆ พิมพ์ตัวเลข 1 ถึง 78 ทีละใบตามการนำจิต หรือพิมพ์ 10 เลขพร้อมกันได้เลยจ้า\n\n"
+                         "👉 เริ่มต้นใบที่ 1: นึกถึง 'ตัวตนและสภาวะปัจจุบัน' แล้วพิมพ์เลข 1-78 ส่งมาได้เลยนะลูก 🕯️"
+                )
+                reply = [intro_msg, tarot_invitation_card()]
+                intent = 'tarot_pick'
+        elif TarotSessionManager.get_session(line_user_id) is not None:
+            # กำลังอยู่ใน Session สะสมตัวเลขไพ่ยิปซีเซลติกครอส 10 ใบ
+            from app.services.product_cards import (
+                tarot_reading_card, tarot_reading_carousel, tarot_celtic_cross_summary_card
+            )
+            extracted_nums = TarotSessionManager.extract_tarot_numbers(normalized_text)
+            if extracted_nums:
+                session = TarotSessionManager.get_session(line_user_id)
+                current_nums = session["numbers"]
+                for n in extracted_nums:
+                    if n not in current_nums and len(current_nums) < 10:
+                        current_nums.append(n)
+                
+                count = len(current_nums)
+                if count >= 10:
+                    # ครบ 10 ใบสมบูรณ์แบบ -> บันทึกลงฐานข้อมูลและส่งการ์ดผังเซลติกครอสพร้อมวิดีโอ
+                    TarotSessionManager.clear_session(line_user_id)
+                    rid = TarotSessionManager.save_reading(db, line_user_id, current_nums[:10])
+                    reply = tarot_celtic_cross_summary_card(rid, current_nums[:10])
+                    intent = 'tarot_celtic_cross'
+                else:
+                    # นำจิตสู่ตำแหน่งถัดไปอย่างสุขุม นิ่ง สงบ
+                    next_pos_name = CELTIC_CROSS_POSITIONS[count]
+                    nums_str = ", ".join(str(x) for x in current_nums)
+                    reply = TextSendMessage(
+                        text=f"✨ [บันทึกไพ่แล้ว {count}/10 ใบ]: ({nums_str})\n"
+                             f"━━━━━━━━━━━━━━━━━━\n"
+                             f"🕯️ ตำแหน่งต่อไป: “{next_pos_name}”\n"
+                             f"• ตั้งจิตนึกถึงเรื่องนี้ แล้วพิมพ์เลข 1 ถึง 78 ส่งต่อมาได้เลยจ้ะ"
+                    )
+                    intent = 'tarot_accumulate'
+            else:
+                # พิมพ์ข้อความอื่นที่ไม่ใช่ตัวเลข -> เคลียร์ session แล้วส่งต่อไปคำนวณตามปกติ
+                TarotSessionManager.clear_session(line_user_id)
+                if parse_product_code(normalized_text) is not None:
+                    prod_id = parse_product_code(normalized_text)
+                    p_reply = handle_direct_product_code(db, user, prod_id, is_owner=is_owner)
+                    if p_reply:
+                        reply = p_reply
+                        intent = 'product_code'
+                    else:
+                        reply = TextSendMessage(text=f"ขออภัยจ้า ไม่พบสินค้ารหัส {prod_id} ในระบบ หรือสินค้าอาจหมดชั่วคราว ลองพิมพ์ค้นหาชื่อสินค้าแทนได้นะคะ 😊",
+                                                quick_reply=quick_reply_items())
+                        intent = 'product_code'
+        elif (
+            # ตรวจสอบกรณีพิมพ์ 10 ตัวเลขพร้อมกัน เช่น "1 5 12 23 34 45 56 67 71 78"
+            len(TarotSessionManager.extract_tarot_numbers(normalized_text)) >= 10
+            and not normalized_text.lower().startswith(("รหัส", "code", "item", "id", "#"))
+        ):
+            from app.services.product_cards import tarot_celtic_cross_summary_card
+            nums = TarotSessionManager.extract_tarot_numbers(normalized_text)
+            rid = TarotSessionManager.save_reading(db, line_user_id, nums[:10])
+            reply = tarot_celtic_cross_summary_card(rid, nums[:10])
+            intent = 'tarot_celtic_cross'
+        elif (
+            # ตรวจสอบกรณีพิมพ์ 3 ตัวเลขพร้อมกัน เช่น "7 24 55"
+            len(TarotSessionManager.extract_tarot_numbers(normalized_text)) >= 3
+            and not normalized_text.lower().startswith(("รหัส", "code", "item", "id", "#"))
+        ):
+            from app.services.product_cards import tarot_reading_carousel
+            nums = TarotSessionManager.extract_tarot_numbers(normalized_text)
+            reply = tarot_reading_carousel(nums[:3])
+            intent = 'tarot_reveal_3'
         elif parse_product_code(normalized_text) is not None:
             # รหัสสินค้าตรงตัวจากคลิป (เช่น "รหัส 1628", "code 1628") -> ส่งการ์ดสินค้าชิ้นนั้นทันทีใน 0.1 วิ
             prod_id = parse_product_code(normalized_text)
@@ -3558,24 +3739,6 @@ def message_text(event):
             # สินค้าในคลิปล่าสุด (YouTube Shorts / Reels) -> ส่งการ์ดสินค้าที่เพิ่งโพสต์ให้ทันที
             reply = handle_latest_video_products(db, user, is_owner=is_owner)
             intent = 'latest_video'
-        elif any(k in normalized_text for k in ("เปิดไพ่", "ไพ่ยิปซี", "ไพ่ทาโรต์", "ทาโรต์", "ยิปซี", "ดูดวง")):
-            # 🔮 ไพ่ยิปซีแท้ (Tarot Cards Major Arcana 22 ใบ) — ป้าเข็ม
-            # ตรวจว่าเป็นการเปิดไพ่เจาะจงใบ เช่น "เปิดไพ่ใบที่ 19", "ใบที่ 1"
-            tarot_match = re.search(r"(?:ใบที่|กองที่|กอง|เลข|ไพ่ใบที่|#)\s*(\d{1,2})", normalized_text)
-            if tarot_match:
-                from app.services.product_cards import tarot_reading_card
-                card_id = int(tarot_match.group(1))
-                reply = tarot_reading_card(card_id)
-                intent = 'tarot_reveal'
-            else:
-                from app.services.product_cards import tarot_selection_carousel
-                text_intro = TextSendMessage(
-                    text="✨ [เปิดไพ่ยิปซีรับพลังบวก วันนี้กับป้าเข็ม]\n"
-                         "หยิบไพ่เล่นๆ สบายใจ ไม่ต้องคิดมากน้า แตะเลือกใบที่สะดุดตาข้างล่างนี้ได้เลยจ้า 💖"
-                )
-                carousel_reply = tarot_selection_carousel()
-                reply = [text_intro, carousel_reply]
-                intent = 'tarot_pick'
         elif normalized_text == "อันดับขายดี":
             reply = handle_top_sellers(db, user, is_owner=is_owner)
             intent = 'top'

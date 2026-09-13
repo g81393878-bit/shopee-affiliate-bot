@@ -359,3 +359,20 @@ class CreativeBrief(Base):
     # Relationships
     product = relationship("Product", back_populates="creative_briefs")
 
+
+# ===========================================================================
+# 🔮 Tarot Reading — บันทึกประวัติการเปิดไพ่ยิปซีเซลติกครอส 10 ใบเฉพาะบุคคล
+# ===========================================================================
+
+class TarotReading(Base):
+    """บันทึกรอบการเปิดไพ่ยิปซี 10 ใบ ผูกกับ line_user_id เพื่อนำไปสร้าง/ดูวิดีโอเฉพาะบุคคล"""
+    __tablename__ = "tarot_readings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    reading_id = Column(String(64), unique=True, index=True, nullable=False)
+    line_user_id = Column(String(100), index=True, nullable=False)
+    cards_data = Column(JSON, nullable=False)  # list of 10 card dicts or card numbers
+    video_url = Column(String(500), nullable=True)  # URL วิดีโอเฉพาะบุคคล
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+
+

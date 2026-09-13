@@ -386,235 +386,162 @@ def dual_persona_cards_message(products: List[models.Product], style: str = "hed
 
 
 # ==============================================================================
-# 🔮 ไพ่ยิปซีแท้ Major Arcana 22 ใบ (Rider-Waite 1909 Public Domain HD)
+# 🔮 ไพ่ยิปซีแท้ Rider-Waite 1909 ครบทั้งสำรับ 78 ใบ (22 Major + 56 Minor)
 # ==============================================================================
 TAROT_CDN_BASE = "https://cdn.jsdelivr.net/gh/lalesleon13-hash/Tarot@main/"
-TAROT_MAJOR_ARCANA_DICT = [
-    {
-        "id": 0, "name": "The Fool", "thai": "คนพเนจร",
-        "keyword": "การเริ่มต้นใหม่ • อิสรภาพ • ก้าวสู่สิ่งที่ไม่รู้",
-        "desc": "สื่อถึงการเริ่มต้นใหม่ ความเสี่ยง การเดินทาง หรือการทำอะไรด้วยสัญชาตญาณบริสุทธิ์โดยไม่ลังเล",
-        "img": TAROT_CDN_BASE + "RWS_Tarot_00_Fool.jpg",
-        "color": "#0284C7", "lucky": "กระเป๋า"
-    },
-    {
-        "id": 1, "name": "The Magician", "thai": "จอมเวท",
-        "keyword": "พรสวรรค์ • ทักษะโดดเด่น • ความเชี่ยวชาญ",
-        "desc": "สื่อถึงพรสวรรค์ ทักษะความสามารถที่โดดเด่น มีเครื่องมือพร้อมสร้างความสำเร็จได้ด้วยตัวเอง",
-        "img": TAROT_CDN_BASE + "RWS_Tarot_01_Magician.jpg",
-        "color": "#7C3AED", "lucky": "ปากกา"
-    },
-    {
-        "id": 2, "name": "The High Priestess", "thai": "นักบวชหญิง",
-        "keyword": "ซิกซ์เซนส์ • ความลึกลับ • ลางสังหรณ์",
-        "desc": "สื่อถึงซิกซ์เซนส์ เรื่องเหนือธรรมชาติ ความลึกลับ หรือสิ่งที่ซ่อนเร้น จงเชื่อในสัญชาตญาณตัวเอง",
-        "img": TAROT_CDN_BASE + "RWS_Tarot_02_High_Priestess.jpg",
-        "color": "#4F46E5", "lucky": "หินมงคล"
-    },
-    {
-        "id": 3, "name": "The Empress", "thai": "จักรพรรดินี",
-        "keyword": "ความเป็นแม่ • อุดมสมบูรณ์ • ความอบอุ่น",
-        "desc": "สื่อถึงความเป็นแม่ การตั้งครรภ์ ความอุดมสมบูรณ์ และการเติบโตงอกงามของสิ่งดีๆ ในชีวิต",
-        "img": TAROT_CDN_BASE + "RWS_Tarot_03_Empress.jpg",
-        "color": "#DB2777", "lucky": "สร้อยคอ"
-    },
-    {
-        "id": 4, "name": "The Emperor", "thai": "จักรพรรดิ",
-        "keyword": "อำนาจ • ความมั่นคง • ภาวะผู้นำ",
-        "desc": "สื่อถึงการมีอำนาจ ความมั่นคง การปกครอง การควบคุมสถานการณ์ และระเบียบวินัยที่เข้มแข็ง",
-        "img": TAROT_CDN_BASE + "RWS_Tarot_04_Emperor.jpg",
-        "color": "#DC2626", "lucky": "นาฬิกา"
-    },
-    {
-        "id": 5, "name": "The Hierophant", "thai": "สังฆราช",
-        "keyword": "คุณธรรม • ผู้ให้คำปรึกษา • ความถูกต้อง",
-        "desc": "สื่อถึงความเชื่อ ศาสนา ครู อาจารย์ ผู้ใหญ่ที่เคารพ หรือการตัดสินใจบนหลักคุณธรรมและเหตุผล",
-        "img": TAROT_CDN_BASE + "RWS_Tarot_05_Hierophant.jpg",
-        "color": "#D97706", "lucky": "พระเครื่อง"
-    },
-    {
-        "id": 6, "name": "The Lovers", "thai": "คู่รัก",
-        "keyword": "ความโรแมนติก • พรหมลิขิต • การอยู่ร่วมกัน",
-        "desc": "สื่อถึงความโรแมนติก พรหมลิขิต ความรักมั่นคง การอยู่ร่วมกัน หรือการตัดสินใจเลือกทางเดินสำคัญ",
-        "img": TAROT_CDN_BASE + "RWS_Tarot_06_Lovers.jpg",
-        "color": "#E11D48", "lucky": "แหวน"
-    },
-    {
-        "id": 7, "name": "The Chariot", "thai": "นักรบรถศึก",
-        "keyword": "ความก้าวหน้า • การเดินทาง • ชัยชนะ",
-        "desc": "สื่อถึงความก้าวหน้า การเดินทาง ยานพาหนะ และชัยชนะที่เกิดจากความมุ่งมั่นควบคุมอย่างเด็ดขาด",
-        "img": TAROT_CDN_BASE + "RWS_Tarot_07_Chariot.jpg",
-        "color": "#2563EB", "lucky": "อุปกรณ์รถยนต์"
-    },
-    {
-        "id": 8, "name": "Strength", "thai": "ความแข็งแกร่ง",
-        "keyword": "พลังภายใน • ความอดทน • ชนะใจผู้อื่น",
-        "desc": "สื่อถึงความแข็งแกร่ง การอดทนควบคุมอารมณ์ และการเอาชนะปัญหาหรือชนะใจผู้อื่นด้วยความอ่อนโยน",
-        "img": TAROT_CDN_BASE + "RWS_Tarot_08_Strength.jpg",
-        "color": "#EA580C", "lucky": "กำไล"
-    },
-    {
-        "id": 9, "name": "The Hermit", "thai": "ฤๅษี",
-        "keyword": "ความสันโดษ • ทบทวนตัวเอง • ผู้แสวงหา",
-        "desc": "สื่อถึงความสันโดษ ความสงบ การอยู่ลำพังเพื่อค้นหาคำตอบในจิตใจ หรือการเป็นผู้เชี่ยวชาญเฉพาะทาง",
-        "img": TAROT_CDN_BASE + "RWS_Tarot_09_Hermit.jpg",
-        "color": "#475569", "lucky": "โคมไฟ"
-    },
-    {
-        "id": 10, "name": "Wheel of Fortune", "thai": "กงล้อโชคชะตา",
-        "keyword": "โชคชะตา • จุดพลิกผัน • การเปลี่ยนแปลง",
-        "desc": "สื่อถึงโชคชะตา การเปลี่ยนแปลง และจุดพลิกผันของเหตุการณ์ เรื่องที่ติดขัดกำลังจะหมุนสู่ทิศทางที่ดี",
-        "img": TAROT_CDN_BASE + "RWS_Tarot_10_Wheel_of_Fortune.jpg",
-        "color": "#9333EA", "lucky": "พวงกุญแจ"
-    },
-    {
-        "id": 11, "name": "Justice", "thai": "ความยุติธรรม",
-        "keyword": "ความเป็นธรรม • ความถูกต้อง • ความสมดุล",
-        "desc": "สื่อถึงความเป็นธรรม ศาล กฎหมาย สัญญา ความยุติธรรม และผลลัพธ์ที่เป็นไปตามเหตุและผล",
-        "img": TAROT_CDN_BASE + "RWS_Tarot_11_Justice.jpg",
-        "color": "#0891B2", "lucky": "สมุดโน้ต"
-    },
-    {
-        "id": 12, "name": "The Hanged Man", "thai": "คนห้อยหัว",
-        "keyword": "การรอคอย • การเสียสละ • มองมุมกลับ",
-        "desc": "สื่อถึงการรอคอย สถานการณ์หยุดชะงักชั่วคราว การยอมเสียสละ หรือต้องเปลี่ยนมุมมองชีวิตใหม่",
-        "img": TAROT_CDN_BASE + "RWS_Tarot_12_Hanged_Man.jpg",
-        "color": "#0D9488", "lucky": "หมอน"
-    },
-    {
-        "id": 13, "name": "Death", "thai": "การสิ้นสุด",
-        "keyword": "การสิ้นสุด • จบสิ่งเก่า • เริ่มต้นใหม่",
-        "desc": "สื่อถึงการสิ้นสุดของสิ่งเดิมเพื่อเริ่มต้นสิ่งใหม่ที่ดีกว่า หรือการพ้นจากเรื่องเลวร้ายในอดีต",
-        "img": TAROT_CDN_BASE + "RWS_Tarot_13_Death.jpg",
-        "color": "#1E293B", "lucky": "กระจก"
-    },
-    {
-        "id": 14, "name": "Temperance", "thai": "ความสมดุล",
-        "keyword": "ความสมดุล • การยั้งคิด • การปรับเปลี่ยน",
-        "desc": "สื่อถึงความสมดุล การยั้งคิด การผสมผสาน และการสลับปรับเปลี่ยนอย่างเท่าเทียมและลงตัว",
-        "img": TAROT_CDN_BASE + "RWS_Tarot_14_Temperance.jpg",
-        "color": "#059669", "lucky": "แก้วน้ำ"
-    },
-    {
-        "id": 15, "name": "The Devil", "thai": "ปีศาจ",
-        "keyword": "กิเลสตัณหา • การยึดติด • พันธนาการ",
-        "desc": "สื่อถึงกิเลสตัณหา ราคะ รสนิยม หรือการติดอยู่ในด้านมืดของจิตใจที่คุณสามารถปลดปล่อยตัวเองได้",
-        "img": TAROT_CDN_BASE + "RWS_Tarot_15_Devil.jpg",
-        "color": "#991B1B", "lucky": "น้ำหอม"
-    },
-    {
-        "id": 16, "name": "The Tower", "thai": "หอคอยถล่ม",
-        "keyword": "ความโกลาหล • สิ่งที่พังทลาย • ความไม่แน่นอน",
-        "desc": "สื่อถึงความโกลาหล สิ่งที่คาดหวังไว้พังทลายกะทันหัน หรือการตื่นรู้เพื่อสร้างรากฐานใหม่ที่มั่นคงกว่าเดิม",
-        "img": TAROT_CDN_BASE + "RWS_Tarot_16_Tower.jpg",
-        "color": "#B91C1C", "lucky": "เคสโทรศัพท์"
-    },
-    {
-        "id": 17, "name": "The Star", "thai": "ดวงดาว",
-        "keyword": "ความหวัง • ความสงบ • สมปรารถนา",
-        "desc": "สื่อถึงความหวัง การมองโลกในแง่ดี ความสงบทางใจ และการเดินทางสู่สิ่งที่ปรารถนาอย่างแท้จริง",
-        "img": TAROT_CDN_BASE + "RWS_Tarot_17_Star.jpg",
-        "color": "#0284C7", "lucky": "โคมไฟดวงดาว"
-    },
-    {
-        "id": 18, "name": "The Moon", "thai": "พระจันทร์",
-        "keyword": "ความกังวล • ความเหงา • ภาพลวงตา",
-        "desc": "สื่อถึงความกังวลใจ ความเหงา เศร้าสร้อย หรืออาจพบเจอกับการหลอกลวง จงมีสติอย่าเพิ่งด่วนตัดสินใจ",
-        "img": TAROT_CDN_BASE + "RWS_Tarot_18_Moon.jpg",
-        "color": "#334155", "lucky": "เทียนหอม"
-    },
-    {
-        "id": 19, "name": "The Sun", "thai": "พระอาทิตย์",
-        "keyword": "ความสำเร็จ • ความสุข • ชัยชนะรุ่งโรจน์",
-        "desc": "สื่อถึงความสำเร็จสูงสุด ความสุขสดใส โชคลาภ หรือโอกาสได้บุตรและข่าวดีในเร็ววัน",
-        "img": TAROT_CDN_BASE + "RWS_Tarot_19_Sun.jpg",
-        "color": "#D97706", "lucky": "แว่นตากันแดด"
-    },
-    {
-        "id": 20, "name": "Judgement", "thai": "การพิพากษา",
-        "keyword": "โอกาสครั้งใหม่ • การตื่นรู้ • ก้าวสู่สิ่งใหม่",
-        "desc": "สื่อถึงโอกาสครั้งใหม่ การเปลี่ยนแปลงเพื่อเริ่มทำสิ่งใหม่ ละทิ้งสิ่งเก่า และรับผลดีจากการกระทำที่ผ่านมา",
-        "img": TAROT_CDN_BASE + "RWS_Tarot_20_Judgement.jpg",
-        "color": "#6D28D9", "lucky": "นาฬิกาปลุก"
-    },
-    {
-        "id": 21, "name": "The World", "thai": "โลก",
-        "keyword": "ความสมบูรณ์แบบ • สำเร็จเกินคาด • ชัยชนะสมบูรณ์",
-        "desc": "สื่อถึงความสมบูรณ์แบบ ความสำเร็จที่เกินคาด การสิ้นสุดวงจรเดิมอย่างงดงาม และชัยชนะในทุกด้าน",
-        "img": TAROT_CDN_BASE + "RWS_Tarot_21_World.jpg",
-        "color": "#059669", "lucky": "กระเป๋าเดินทาง"
-    },
-]
-
 TAROT_BACK_IMG = "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop"
 
+def _load_tarot_deck_78() -> list:
+    import json
+    from pathlib import Path
+    json_path = Path(__file__).parent / "tarot_deck_78.json"
+    if json_path.exists():
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.warning(f"Failed to load tarot_deck_78.json: {e}")
+    # Fallback to 22 Major if json missing
+    return TAROT_MAJOR_ARCANA_DICT
 
-def tarot_selection_carousel() -> FlexSendMessage:
-    """สร้างการ์ด Carousel สำหรับเลือกไพ่ยิปซี 3 กอง (สัดส่วน 2:3 ทรงไพ่จริง)"""
+TAROT_MAJOR_ARCANA_DICT = [
+    {
+        "num": 1, "card_no": 0, "id": 0, "name": "The Fool", "thai": "คนพเนจร",
+        "keyword": "การเริ่มต้นใหม่ • อิสรภาพ • ก้าวสู่สิ่งใหม่",
+        "desc": "สื่อถึงการเริ่มต้นใหม่อย่างสดใส ก้าวข้ามความลังเลด้วยหัวใจที่เปิดกว้าง",
+        "advice": "อย่ากลัวความผิดพลาด ทุกการก้าวเดินคือบทเรียนล้ำค่าเสมอจ้ะ",
+        "img": TAROT_CDN_BASE + "RWS_Tarot_00_Fool.jpg",
+        "color": "#0284C7"
+    }
+]
+TAROT_DECK_78 = _load_tarot_deck_78()
+
+
+def get_tarot_card_by_number(num: int) -> dict:
+    """ดึงข้อมูลไพ่ตามหมายเลข 1 ถึง 78 (หรือ 0-21)"""
+    if not TAROT_DECK_78:
+        return TAROT_MAJOR_ARCANA_DICT[0]
+    # 1. ลองเทียบจาก num (1-78)
+    for c in TAROT_DECK_78:
+        if c.get("num") == num:
+            return c
+    # 2. ลองเทียบจาก card_no หรือ id (0-21)
+    for c in TAROT_DECK_78:
+        if c.get("card_no") == num or c.get("id") == num:
+            return c
+    # Fallback สุ่มหรือใบแรก
+    return TAROT_DECK_78[(num - 1) % len(TAROT_DECK_78)]
+
+
+def tarot_invitation_card() -> FlexSendMessage:
+    """สร้างการ์ดเชิญชวนเลือกเลข 1-78 สวยงาม น่าค้นหา และมีปุ่มสุ่มนำทาง"""
     import random
-    selected = random.sample(TAROT_MAJOR_ARCANA_DICT, 3)
-    bubbles = []
-    for idx, c in enumerate(selected):
-        pile_num = idx + 1
-        bubble = {
-            "type": "bubble",
-            "size": "kilo",
-            "header": {
-                "type": "box",
-                "layout": "vertical",
-                "backgroundColor": c["color"],
-                "paddingAll": "md",
-                "contents": [
-                    {"type": "text", "text": f"🃏 ไพ่ยิปซี กองที่ {pile_num}", "weight": "bold", "size": "md", "color": "#FFFFFF"},
-                    {"type": "text", "text": "ตั้งจิตสงบ นึกถึงเรื่องที่อยากรู้", "size": "xxs", "color": "#F1F5F9"}
-                ]
-            },
-            "hero": {
-                "type": "image",
-                "url": TAROT_BACK_IMG,
-                "size": "full",
-                "aspectRatio": "2:3",
-                "aspectMode": "cover"
-            },
-            "body": {
-                "type": "box",
-                "layout": "vertical",
-                "spacing": "xs",
-                "paddingAll": "md",
-                "contents": [
-                    {"type": "text", "text": f"✨ ไพ่ใบที่ {pile_num} แตะเปิดดูได้เลยจ้า", "weight": "bold", "size": "sm"},
-                    {"type": "text", "text": "หยิบคำทำนายกำลังใจวันนี้ให้ตัวเอง 💖", "size": "xxs", "color": "#64748B"}
-                ]
-            },
-            "footer": {
-                "type": "box",
-                "layout": "vertical",
-                "contents": [
-                    {
-                        "type": "button",
-                        "style": "primary",
-                        "color": c["color"],
-                        "action": {
-                            "type": "message",
-                            "label": f"✨ แตะเปิดใบที่ {pile_num}",
-                            "text": f"เปิดไพ่ใบที่ {c['id']}"
+    seed_numbers = sorted(random.sample(range(1, 79), 3))
+
+    bubble = {
+        "type": "bubble",
+        "size": "mega",
+        "header": {
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": "#1E1B4B",
+            "paddingAll": "lg",
+            "contents": [
+                {"type": "text", "text": "🌌 สำรับไพ่ยิปซี 78 ใบแห่งคำตอบ", "weight": "bold", "size": "md", "color": "#FDE047"},
+                {"type": "text", "text": "ประตูชะตากำลังเปิดออก... จักรวาลมีสารอะไรถึงคุณ?", "size": "xs", "color": "#E0E7FF", "margin": "xs"}
+            ]
+        },
+        "hero": {
+            "type": "image",
+            "url": TAROT_BACK_IMG,
+            "size": "full",
+            "aspectRatio": "2:3",
+            "aspectMode": "cover"
+        },
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "md",
+            "paddingAll": "lg",
+            "backgroundColor": "#FAF5FF",
+            "contents": [
+                {
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#FFFFFF",
+                    "paddingAll": "md",
+                    "cornerRadius": "md",
+                    "spacing": "xs",
+                    "contents": [
+                        {"type": "text", "text": "🔮 วิธีรับสารและพลังบวกวันนี้:", "weight": "bold", "size": "sm", "color": "#4338CA"},
+                        {"type": "text", "text": "• นึกถึงเรื่องที่อยากรู้ในใจ หรือปล่อยใจให้สบาย\n• พิมพ์ตัวเลข 1 ถึง 78 ที่แวบเข้ามาในใจ\n• ส่ง 1 เลข เพื่อดูพลังบวกรายวัน\n• หรือส่ง 3 เลข (เช่น 7 24 55) เพื่อดู อดีต-ปัจจุบัน-อนาคต จ้า", "size": "xs", "wrap": True, "color": "#334155"}
+                    ]
+                },
+                {
+                    "type": "text",
+                    "text": "✨ ตัวอย่างเลขดวงสมพงษ์รอบนี้แตะได้เลย 👇",
+                    "size": "xxs",
+                    "color": "#6B21A8",
+                    "align": "center"
+                },
+                {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "spacing": "sm",
+                    "contents": [
+                        {
+                            "type": "button",
+                            "style": "secondary",
+                            "height": "sm",
+                            "action": {"type": "message", "label": f"เลข {seed_numbers[0]}", "text": f"เปิดไพ่ {seed_numbers[0]}"}
+                        },
+                        {
+                            "type": "button",
+                            "style": "secondary",
+                            "height": "sm",
+                            "action": {"type": "message", "label": f"เลข {seed_numbers[1]}", "text": f"เปิดไพ่ {seed_numbers[1]}"}
+                        },
+                        {
+                            "type": "button",
+                            "style": "secondary",
+                            "height": "sm",
+                            "action": {"type": "message", "label": f"เลข {seed_numbers[2]}", "text": f"เปิดไพ่ {seed_numbers[2]}"}
                         }
+                    ]
+                }
+            ]
+        },
+        "footer": {
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": "#FAF5FF",
+            "paddingAll": "md",
+            "contents": [
+                {
+                    "type": "button",
+                    "style": "primary",
+                    "color": "#6366F1",
+                    "action": {
+                        "type": "message",
+                        "label": f"🎲 สุ่ม 3 เลขจัดเต็ม ({seed_numbers[0]}, {seed_numbers[1]}, {seed_numbers[2]})",
+                        "text": f"เปิดไพ่ {seed_numbers[0]} {seed_numbers[1]} {seed_numbers[2]}"
                     }
-                ]
-            }
+                }
+            ]
         }
-        bubbles.append(bubble)
+    }
 
     return FlexSendMessage(
-        alt_text="✨ มาสุ่มเปิดไพ่ยิปซีรับพลังบวกและข้อคิดดีๆ วันนี้กันจ้า",
-        contents={"type": "carousel", "contents": bubbles}
+        alt_text="🔮 มาสุ่มเปิดไพ่ยิปซี 78 ใบ รับข้อคิดและพลังบวกวันนี้กับป้าเข็มกันจ้า",
+        contents=bubble
     )
 
 
-def tarot_reading_card(card_id: int) -> FlexSendMessage:
-    """สร้างการ์ดเฉลยคำทำนายไพ่ยิปซีใบใหญ่ ฟีลเป็นกันเอง ให้กำลังใจ ไม่ตึงเครียด"""
-    card = next((c for c in TAROT_MAJOR_ARCANA_DICT if c["id"] == card_id), TAROT_MAJOR_ARCANA_DICT[19])
-    theme_color = card.get("color", "#D97706")
+def tarot_reading_card(card_num: int, label_prefix: str = "") -> FlexSendMessage:
+    """สร้างการ์ดเฉลยคำทำนายไพ่ยิปซี 1 ใบ พร้อมพลังบวกและข้อคิดจากป้าเข็ม"""
+    card = get_tarot_card_by_number(card_num)
+    theme_color = card.get("color", "#6366F1")
+    title_text = f"{label_prefix}: {card['name']} ({card['thai']})" if label_prefix else f"✨ {card['name']} ({card['thai']})"
 
     bubble = {
         "type": "bubble",
@@ -625,8 +552,9 @@ def tarot_reading_card(card_id: int) -> FlexSendMessage:
             "backgroundColor": theme_color,
             "paddingAll": "md",
             "contents": [
-                {"type": "text", "text": f"✨ คำทำนายวันนี้: {card['name']} ({card['thai']})", "weight": "bold", "size": "md", "color": "#FFFFFF"},
-                {"type": "text", "text": f"🌟 จุดเด่น: {card['keyword']}", "size": "xxs", "color": "#FEF3C7"}
+                {"type": "text", "text": f"🔮 เลข {card['num']}: {card.get('suite', 'ไพ่ยิปซี')}", "size": "xxs", "color": "#F1F5F9"},
+                {"type": "text", "text": title_text, "weight": "bold", "size": "md", "color": "#FFFFFF"},
+                {"type": "text", "text": f"🌟 {card['keyword']}", "size": "xxs", "color": "#FEF3C7", "margin": "xs"}
             ]
         },
         "hero": {
@@ -674,7 +602,7 @@ def tarot_reading_card(card_id: int) -> FlexSendMessage:
                     "style": "secondary",
                     "action": {
                         "type": "message",
-                        "label": "🔄 สุ่มเปิดใบใหม่เล่นๆ ได้อีกนะ",
+                        "label": "🔄 เปิดไพ่ใบใหม่อีกครั้ง",
                         "text": "เปิดไพ่"
                     }
                 }
@@ -686,4 +614,182 @@ def tarot_reading_card(card_id: int) -> FlexSendMessage:
         alt_text=f"🃏 คำทำนายไพ่ยิปซี: {card['name']} ({card['thai']})",
         contents=bubble
     )
+
+
+def tarot_reading_carousel(card_nums: list) -> FlexSendMessage:
+    """สร้างการ์ด Carousel เฉลยไพ่ยิปซี 3 ใบ จัดเรียงตามตำแหน่ง อดีต/ปัจจุบัน/อนาคต"""
+    positions = [
+        "🌱 ใบที่ 1 (สถานการณ์ที่ผ่านมา / ตัวตน)",
+        "⚡ ใบที่ 2 (สิ่งที่กำลังเผชิญ / สิ่งที่ควรระวัง)",
+        "☀️ ใบที่ 3 (คำแนะนำ / ทางออก / บทสรุป)"
+    ]
+    bubbles = []
+    for idx, num in enumerate(card_nums[:3]):
+        card = get_tarot_card_by_number(num)
+        pos_title = positions[idx] if idx < len(positions) else f"🃏 ใบที่ {idx+1}"
+        theme_color = card.get("color", "#6366F1")
+
+        bubble = {
+            "type": "bubble",
+            "size": "kilo",
+            "header": {
+                "type": "box",
+                "layout": "vertical",
+                "backgroundColor": theme_color,
+                "paddingAll": "sm",
+                "contents": [
+                    {"type": "text", "text": pos_title, "weight": "bold", "size": "xxs", "color": "#FDE047"},
+                    {"type": "text", "text": f"เลข {card['num']}: {card['name']}", "weight": "bold", "size": "sm", "color": "#FFFFFF"},
+                    {"type": "text", "text": card["thai"], "size": "xxs", "color": "#E0E7FF"}
+                ]
+            },
+            "hero": {
+                "type": "image",
+                "url": card["img"],
+                "size": "full",
+                "aspectRatio": "2:3",
+                "aspectMode": "cover"
+            },
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "xs",
+                "paddingAll": "md",
+                "contents": [
+                    {"type": "text", "text": f"🌟 {card['keyword']}", "weight": "bold", "size": "xxs", "color": "#4338CA", "wrap": True},
+                    {"type": "text", "text": card["desc"], "size": "xxs", "wrap": True, "color": "#334155", "margin": "xs"},
+                    {"type": "separator", "margin": "sm"},
+                    {"type": "text", "text": f"💡 {card['advice']}", "size": "xxs", "color": "#059669", "wrap": True, "margin": "xs"}
+                ]
+            },
+            "footer": {
+                "type": "box",
+                "layout": "vertical",
+                "paddingAll": "sm",
+                "contents": [
+                    {
+                        "type": "button",
+                        "style": "secondary",
+                        "height": "sm",
+                        "action": {
+                            "type": "message",
+                            "label": "🔄 เสี่ยงทายใหม่",
+                            "text": "เปิดไพ่"
+                        }
+                    }
+                ]
+            }
+        }
+        bubbles.append(bubble)
+
+    return FlexSendMessage(
+        alt_text="🔮 คำทำนายไพ่ยิปซี 3 ใบ (อดีต - ปัจจุบัน - อนาคต) มาแล้วจ้า",
+        contents={"type": "carousel", "contents": bubbles}
+    )
+
+
+def tarot_celtic_cross_summary_card(reading_id: str, card_nums: list, video_url: str = None) -> FlexSendMessage:
+    """สร้างการ์ดสรุปผังเซลติกครอส 10 ใบ พร้อมปุ่มเปิดดูวิดีโออธิบายแบบละเอียดไม่รีบเร่ง"""
+    positions = [
+        ("1. ตัวตนปัจจุบัน", "#4338CA"),
+        ("2. อุปสรรคขวางทับ", "#DC2626"),
+        ("3. จิตสำนึก/เป้าหมาย", "#D97706"),
+        ("4. จิตใต้สำนึก/รากปัญหา", "#0D9488"),
+        ("5. อดีตที่ผ่านมา", "#475569"),
+        ("6. อนาคตอันใกล้", "#2563EB"),
+        ("7. ทัศนคติเจ้าชะตา", "#7C3AED"),
+        ("8. อิทธิพลคนรอบตัว", "#059669"),
+        ("9. ความหวังและความกลัว", "#E11D48"),
+        ("10. บทสรุปสูงสุด", "#B45309"),
+    ]
+    
+    rows = []
+    for idx, num in enumerate(card_nums[:10]):
+        c = get_tarot_card_by_number(num)
+        pos_name, color = positions[idx]
+        rows.append({
+            "type": "box",
+            "layout": "horizontal",
+            "spacing": "sm",
+            "contents": [
+                {"type": "text", "text": pos_name, "size": "xxs", "color": color, "weight": "bold", "flex": 4},
+                {"type": "text", "text": f"{c['name']} ({c['thai']})", "size": "xxs", "color": "#1E293B", "flex": 5, "align": "end"}
+            ]
+        })
+        if idx < 9:
+            rows.append({"type": "separator", "margin": "xs"})
+
+    v_url = video_url or f"https://www.youtube.com/results?search_query=เซลติกครอส+10+ใบ+ไพ่ยิปซี+ป้าเข็ม"
+
+    bubble = {
+        "type": "bubble",
+        "size": "giga",
+        "header": {
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": "#1E1B4B",
+            "paddingAll": "lg",
+            "contents": [
+                {"type": "text", "text": "🏛️ ผังเซลติกครอส 10 ใบ (The Celtic Cross)", "weight": "bold", "size": "md", "color": "#FDE047"},
+                {"type": "text", "text": f"รหัสรอบทำนาย: {reading_id} • ศาสตร์ดั้งเดิมแท้", "size": "xxs", "color": "#C7D2FE", "margin": "xs"}
+            ]
+        },
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "sm",
+            "paddingAll": "lg",
+            "backgroundColor": "#FFFFFF",
+            "contents": [
+                {
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#F8FAFC",
+                    "paddingAll": "md",
+                    "cornerRadius": "md",
+                    "spacing": "xs",
+                    "contents": rows
+                }
+            ]
+        },
+        "footer": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "sm",
+            "backgroundColor": "#FAF5FF",
+            "paddingAll": "md",
+            "contents": [
+                {
+                    "type": "button",
+                    "style": "primary",
+                    "color": "#4338CA",
+                    "action": {
+                        "type": "uri",
+                        "label": "🎬 ชมวิดีโอคำทำนายแบบละเอียด (ไม่รีบเร่ง)",
+                        "uri": v_url
+                    }
+                },
+                {
+                    "type": "button",
+                    "style": "secondary",
+                    "height": "sm",
+                    "action": {
+                        "type": "message",
+                        "label": "🔄 ตั้งจิตเปิดผังใหม่",
+                        "text": "เปิดไพ่"
+                    }
+                }
+            ]
+        }
+    }
+
+    return FlexSendMessage(
+        alt_text="🏛️ ผังเซลติกครอส 10 ใบและวิดีโอคำทำนายฉบับเต็มของคุณพร้อมแล้วจ้า",
+        contents=bubble
+    )
+
+
+def tarot_selection_carousel() -> FlexSendMessage:
+    """รองรับ Backward Compatibility สำหรับโค้ดเก่าที่เรียก tarot_selection_carousel()"""
+    return tarot_invitation_card()
 
