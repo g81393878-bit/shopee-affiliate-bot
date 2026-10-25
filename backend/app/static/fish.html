@@ -904,50 +904,66 @@
     </section>
 
 
-    <!-- Vacuum Seal Quality & Japanese Standard Section -->
-    <section class="vacuum-quality-section" style="background:#ffffff; border-radius:18px; padding:24px 20px; margin-bottom:30px; box-shadow:0 4px 20px rgba(0,0,0,0.06); border:1px solid #e2e8f0;">
-      <div style="text-align:center; margin-bottom:18px;">
-        <span style="background:#e0f2fe; color:#0284c7; font-size:0.8rem; font-weight:700; padding:4px 12px; border-radius:20px; text-transform:uppercase; letter-spacing:0.5px;">
-          🇯🇵 มาตรฐานการถนอมอาหารระดับพรีเมียม
+    <!-- Vacuum Seal & Foil + Ice Pack Quality Section (Clean 2-Step Showcase) -->
+    <section class="vacuum-quality-section" style="background:#ffffff; border-radius:18px; padding:24px 20px; margin-bottom:28px; box-shadow:0 4px 20px rgba(0,0,0,0.05); border:1px solid #e2e8f0;">
+      <div style="text-align:center; margin-bottom:20px;">
+        <span style="background:#e0f2fe; color:#0369a1; font-size:0.78rem; font-weight:700; padding:5px 14px; border-radius:99px; letter-spacing:0.3px; display:inline-block;">
+          ❄️ มาตรฐานการถนอมอาหาร & ระบบส่งด่วนเก็บความเย็น 2 ชั้น
         </span>
-        <h2 style="font-size:1.4rem; font-weight:800; color:#0f172a; margin-top:8px; line-height:1.3;">
-          ซีลสูญญากาศ (Vacuum Seal) ล็อคความสดใหม่ถึงมือคุณ
+        <h2 style="font-size:1.35rem; font-weight:800; color:#0f172a; margin-top:10px; line-height:1.3;">
+          ล็อคความสดตั้งแต่หน้าเตา ส่งตรงถึงมือคุณอย่างปลอดภัย
         </h2>
-        <p style="font-size:0.9rem; color:#64748b; margin-top:4px;">
-          ปิดมิดชิด ป้องกันความชื้น รักษาความสด ยืดอายุนาน 3–5 เท่า ไร้กลิ่นคาวรั่วซึม
+        <p style="font-size:0.88rem; color:#64748b; margin-top:4px;">
+          ผสานเทคโนโลยีซีลสุญญากาศ PA/PE มาตรฐานญี่ปุ่น คู่กับระบบแพ็กฟอยล์ + เจลไอซ์ ส่งด่วนพิเศษ (แตะที่ภาพเพื่อขยายดูรายละเอียด)
         </p>
       </div>
 
-      <div style="display:flex; flex-direction:column; gap:20px; align-items:center;">
-        <div style="width:100%; max-width:680px; text-align:center; position:relative; cursor:pointer;" onclick="openInfographicModal()">
-          <img src="vacuum_seal_infographic.png" alt="อินโฟกราฟิกซีลสูญญากาศปลาแดดเดียว ป้าเข็ม" style="width:100%; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,0.08); border:1px solid #cbd5e1; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.01)'" onmouseout="this.style.transform='scale(1)'">
-          <div style="position:absolute; bottom:12px; right:12px; background:rgba(15,23,42,0.75); color:#fff; font-size:0.75rem; padding:4px 10px; border-radius:20px; backdrop-filter:blur(4px);">
-            🔍 แตะเพื่อดูภาพขยาย
+      <!-- Clean 2-Card Grid (Side-by-Side on Desktop, Neat Stack on Mobile) -->
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(290px, 1fr)); gap:16px; align-items:stretch;">
+        
+        <!-- Step 1: Vacuum Seal Infographic -->
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:14px; display:flex; flex-direction:column; justify-content:space-between; transition:box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 8px 20px rgba(15,23,42,0.08)'" onmouseout="this.style.boxShadow='none'">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+            <span style="background:#0284c7; color:#fff; font-size:0.72rem; font-weight:800; padding:3px 9px; border-radius:99px; flex-shrink:0;">STEP 1</span>
+            <div style="font-size:0.92rem; font-weight:700; color:#0f172a; line-height:1.25;">🛡️ ซีลสุญญากาศ PA/PE ล็อคความสด</div>
+          </div>
+          <div style="position:relative; cursor:pointer; border-radius:10px; overflow:hidden; background:#ffffff; border:1px solid #cbd5e1; aspect-ratio:16/13; display:flex; align-items:center; justify-content:center;" onclick="openInfographicModal('vacuum_seal_infographic.png', 'อินโฟกราฟิกซีลสุญญากาศปลาสลิดแดดเดียว ป้าเข็ม')">
+            <img src="vacuum_seal_infographic.png" alt="อินโฟกราฟิกซีลสุญญากาศปลาแดดเดียว ป้าเข็ม" style="width:100%; height:100%; object-fit:contain; display:block; transition:transform 0.25s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" loading="lazy">
+            <div style="position:absolute; bottom:8px; right:8px; background:rgba(15,23,42,0.75); color:#fff; font-size:0.72rem; padding:3px 9px; border-radius:99px; backdrop-filter:blur(4px);">
+              🔍 แตะเพื่อขยาย
+            </div>
+          </div>
+          <div style="margin-top:10px; font-size:0.8rem; color:#475569; text-align:center; line-height:1.4;">
+            ดูดอากาศออก 99.9% ป้องกัน Freezer Burn เก็บในช่องฟรีซได้นาน 6–12 เดือน
           </div>
         </div>
 
-        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; width:100%;">
-          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px;">
-            <div style="font-size:1.3rem; margin-bottom:4px;">🛡️</div>
-            <strong style="font-size:0.95rem; color:#0f172a; display:block; margin-bottom:4px;">ถุง PA/PE Food Grade</strong>
-            <span style="font-size:0.82rem; color:#64748b; line-height:1.4; display:block;">ฟิล์มซ้อนชั้นเหนียวทนก้างปลา ไร้สารก่อมะเร็ง BPA-Free 100% สัมผัสอาหารได้อย่างปลอดภัย</span>
+        <!-- Step 2: Foil + Ice Gel Express Pack Infographic -->
+        <div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:14px; padding:14px; display:flex; flex-direction:column; justify-content:space-between; transition:box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 8px 20px rgba(2,132,199,0.12)'" onmouseout="this.style.boxShadow='none'">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+            <span style="background:#0369a1; color:#fff; font-size:0.72rem; font-weight:800; padding:3px 9px; border-radius:99px; flex-shrink:0;">STEP 2</span>
+            <div style="font-size:0.92rem; font-weight:700; color:#0c4a6e; line-height:1.25;">🧊 แพ็กฟอยล์ + เจลไอซ์ ส่งด่วนพิเศษ</div>
           </div>
-          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px;">
-            <div style="font-size:1.3rem; margin-bottom:4px;">❄️</div>
-            <strong style="font-size:0.95rem; color:#0f172a; display:block; margin-bottom:4px;">ป้องกัน Freezer Burn</strong>
-            <span style="font-size:0.82rem; color:#64748b; line-height:1.4; display:block;">ล็อคความชุ่มชื้นในเนื้อปลา แช่ฟรีซนาน 6-12 เดือน เนื้อไม่แห้งแข็ง ทอดแล้วฟูกรอบนุ่มใน</span>
+          <div style="position:relative; cursor:pointer; border-radius:10px; overflow:hidden; background:#ffffff; border:1px solid #93c5fd; aspect-ratio:16/13; display:flex; align-items:center; justify-content:center;" onclick="openInfographicModal('foil_ice_infographic.jpg?v=1', 'ขั้นตอนการแพ็กฟอยล์ + เจลไอซ์ ส่งด่วนพิเศษ ป้าเข็ม')">
+            <img src="foil_ice_infographic.jpg?v=1" alt="อินโฟกราฟิกแพ็กฟอยล์ + เจลไอซ์ ส่งด่วนพิเศษ ป้าเข็ม" style="width:100%; height:100%; object-fit:contain; display:block; transition:transform 0.25s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'" loading="lazy">
+            <div style="position:absolute; bottom:8px; right:8px; background:rgba(15,23,42,0.75); color:#fff; font-size:0.72rem; padding:3px 9px; border-radius:99px; backdrop-filter:blur(4px);">
+              🔍 แตะเพื่อขยาย
+            </div>
           </div>
-          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px;">
-            <div style="font-size:1.3rem; margin-bottom:4px;">⏳</div>
-            <strong style="font-size:0.95rem; color:#0f172a; display:block; margin-bottom:4px;">ยืดอายุความสด 3–5 เท่า</strong>
-            <span style="font-size:0.82rem; color:#64748b; line-height:1.4; display:block;">ดูดออกซิเจนออก 99.9% ยับยั้งแบคทีเรียและเชื้อรา คงรสชาติกลมกล่อมเหมือนวันแรกที่ตาก</span>
-          </div>
-          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px;">
-            <div style="font-size:1.3rem; margin-bottom:4px;">🧊</div>
-            <strong style="font-size:0.95rem; color:#0f172a; display:block; margin-bottom:4px;">แพ็กฟอยล์เจลไอซ์ & รถห้องเย็น</strong>
-            <span style="font-size:0.82rem; color:#64748b; line-height:1.4; display:block;">แช่แข็งจัดก่อนห่อฟอยล์เก็บความเย็น + เจลไอซ์ ส่งด่วนทั่วไทย (พร้อมตัวเลือกอัปเกรดส่งรถห้องเย็น SCG/Inter)</span>
+          <div style="margin-top:10px; font-size:0.8rem; color:#0369a1; text-align:center; line-height:1.4; font-weight:500;">
+            แช่แข็งปลาให้แข็งจัดก่อนส่ง ห่อซองฟอยล์เก็บความเย็นคู่เจลไอซ์ ถึงมือสดอร่อย 100%
           </div>
         </div>
+
+      </div>
+
+      <!-- Compact Summary Strip (Replaces Cluttered 4-Card Text Grid) -->
+      <div style="margin-top:14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:10px 14px; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:8px 18px; font-size:0.8rem; color:#334155; font-weight:600;">
+        <span>🛡️ ถุง PA/PE Food Grade (BPA-Free)</span>
+        <span style="color:#cbd5e1;">•</span>
+        <span>❄️ แช่แข็งจัด 12 ชม. ก่อนแพ็ก</span>
+        <span style="color:#cbd5e1;">•</span>
+        <span>🧊 ห่อฟอยล์เก็บความเย็น + เจลไอซ์ (หรืออัปเกรดรถห้องเย็น SCG/Inter)</span>
       </div>
     </section>
 
@@ -1107,7 +1123,7 @@
   <div id="infographicModal" class="modal-backdrop" onclick="closeInfographicModal()">
     <div style="position:relative; max-width:92vw; max-height:92vh;" onclick="event.stopPropagation()">
       <button onclick="closeInfographicModal()" style="position:absolute; top:-12px; right:-12px; background:#e11d48; color:#fff; border:none; width:32px; height:32px; border-radius:50%; font-size:1.1rem; cursor:pointer; font-weight:700; box-shadow:0 2px 8px rgba(0,0,0,0.3); z-index:10;">✕</button>
-      <img src="vacuum_seal_infographic.png" alt="อินโฟกราฟิกซีลสูญญากาศ" style="width:100%; max-height:88vh; object-fit:contain; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+      <img id="infographicModalImg" src="foil_ice_infographic.jpg?v=1" alt="อินโฟกราฟิกมาตรฐานป้าเข็ม" style="width:100%; max-height:88vh; object-fit:contain; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
     </div>
   </div>
 
@@ -1603,6 +1619,21 @@
 
     function closeModal() {
       document.getElementById('successModal').style.display = 'none';
+    }
+
+    function openInfographicModal(src, altText) {
+      const modal = document.getElementById('infographicModal');
+      const img = document.getElementById('infographicModalImg');
+      if (img && src) {
+        img.src = src;
+        if (altText) img.alt = altText;
+      }
+      if (modal) modal.style.display = 'flex';
+    }
+
+    function closeInfographicModal() {
+      const modal = document.getElementById('infographicModal');
+      if (modal) modal.style.display = 'none';
     }
 
 
