@@ -44,7 +44,7 @@ BRAND_SLOGAN="คัดของดี ของเด็ด Shopee แท้ 10
 BRAND_COLOR="#EE4D2D"
 TTS_VOICE="th-TH-PremwadeeNeural"
 
-GROQ_API_KEY="gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+GROQ_API_KEY="REDACTED_SECRET"
 FACEBOOK_PAGE_ID="1307380735783361"
 FACEBOOK_PAGE_ACCESS_TOKEN="EAAR9kFeYyesBSxxxxxxxxxxxxxxxxxxxx"
 ```

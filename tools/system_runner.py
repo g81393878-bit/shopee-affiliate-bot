@@ -610,6 +610,10 @@ def run_tiktok_led_unified_loop():
     • พร้อมซิงค์วิดีโอตัวเดียวกันทันทีขึ้น Facebook Reels (2 เพจ) และ YouTube Shorts (หมุนเวียน 6 ช่อง)
     • ย้ายคลิปเข้า posted/ และแจ้งเตือนสรุปครบทุกแพลตฟอร์มเข้า Telegram
     """
+    enable_broadcast = os.getenv("ENABLE_AUTO_BROADCAST", "false").lower() in ("true", "1", "yes")
+    if not enable_broadcast:
+        logger.info("⏸️ ระบบ Auto Reels Broadcast: STANDBY (ปิดการกระจายอัตโนมัติ — แจ้งเตือนเฉพาะออเดอร์)")
+        return
     logger.info("🚀 เริ่มต้นระบบ TikTok-Led Unified Master Orchestrator (รอบหมุนเวียนทุก 45 นาที)")
     interval_minutes = int(os.getenv("TIKTOK_INTERVAL_MINUTES", "45"))
     # ให้เวลา Pre-buffer Producer ตรวจสอบสต็อกและเริ่มทำงานก่อน 10 วินาที
@@ -733,6 +737,10 @@ def prune_old_posted_videos(days: int = 14) -> tuple:
 
 def run_daily_reporter_loop():
     """เธรดส่งรายงานสรุปสถานะระบบประจำช่วงเวลา (08:00 น. และ 20:00 น.) พร้อมอัปเดตยอดวิวลง Google Sheets และล้างดิสก์อัตโนมัติ"""
+    enable_reports = os.getenv("ENABLE_PERIODIC_REPORTS", "false").lower() in ("true", "1", "yes")
+    if not enable_reports:
+        logger.info("⏸️ ระบบ Daily Reporter: STANDBY (ปิดการส่งสรุปประจำวันอัตโนมัติ)")
+        return
     last_reported_slot = ""
     while True:
         try:
