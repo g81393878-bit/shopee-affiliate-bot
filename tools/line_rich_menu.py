@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ตั้ง Rich Menu (แถบเมนูติดด้านล่าง) ให้บอท LINE — ป้าเข็ม ขายของ
-============================================================
-วาด PNG 2500x843 (3 ปุ่ม) ด้วย Pillow -> อัปโหลดผ่าน LINE Messaging API
--> ตั้งเป็น rich menu เริ่มต้น (ผู้ใช้เห็นทันที ไม่ต้องพิมพ์)
+ตั้ง Rich Menu 6 ช่องพรีเมียม (Full Grid 2500x1686) ให้บอท LINE — ป้าเข็ม ขายของ
+=============================================================================
+โครงสร้าง 6 ช่อง (2 แถว x 3 คอลัมน์) โทนอาหารไทยพรีเมียม ส้มทอง-แดง-ขาว:
+  [ แถวบน - ปิดการขาย ]
+  1. 🐟 สั่งปลาแดดเดียว (รูปถ่ายปลาทอดจริงสีทอง) -> ส่งข้อความ "ปลาแดดเดียว"
+  2. 🎁 ชุดยอดฮิต 1 กก. (ชูโปรโมชั่น 290.- ส่งฟรี) -> ส่งข้อความ "สั่งซื้อปลาแดดเดียว 1 กิโลกรัม"
+  3. 🛍️ หน้าร้านออนไลน์ (เว็บ D2C สั่งซื้อตรง) -> ลิงก์ URI fish.html
+  
+  [ แถวล่าง - บริการ & สร้างความมั่นใจ ]
+  4. 📦 เช็คสถานะพัสดุ (ส่งรถเย็น / รถด่วน) -> ส่งข้อความ "เช็คพัสดุ"
+  5. ❄️ วิธีเก็บรักษา (ซีลสุญญากาศมาตรฐานญี่ปุ่น) -> ส่งข้อความ "วิธีเก็บรักษา"
+  6. 💬 คุยกับป้าเข็ม (รูปป้าเข็ม AI ตอบ 24 ชม.) -> ส่งข้อความ "ถามได้ทุกเรื่อง"
 
 รัน:
   backend/.venv/Scripts/python tools/line_rich_menu.py
-
-ต้องมี LINE_CHANNEL_ACCESS_TOKEN ใน backend/.env (หรือ env) — admin token
 """
 
 import json
@@ -22,24 +28,20 @@ try:
 except Exception:
     pass
 
-# Pillow ใช้เฉพาะวาดภาพ
 from PIL import Image, ImageDraw, ImageFont
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 ENV_PATH = PROJECT_ROOT / "backend" / ".env"
 
 API_BASE = "https://api.line.me/v2/bot"
-IMAGE_BASE = "https://api-data.line.me/v2/bot"  # อัปโหลดรูป rich menu ใช้ base นี้
+IMAGE_BASE = "https://api-data.line.me/v2/bot"
 
-MENU_ITEMS = [
-    {"label": "ดูดวงใหญ่ 10 ใบ", "sub": "เลือกเลขเอง 1-78 ละเอียดลึกซึ้ง", "icon": "🔮", "color": "#7C3AED", "send": "เปิดไพ่"},
-    {"label": "ค้นหาสินค้า", "sub": "พิมพ์ชื่อหรือระบุงบ", "icon": "🔍", "color": "#EE4D2D", "send": "ค้นสินค้า"},
-    {"label": "บอทรายเดือน", "sub": "เริ่มต้น 490.- / แพ็กเกจ", "icon": "💼", "color": "#F59E0B", "send": "ราคาบอท"},
-    {"label": "คุยกับป้าเข็ม", "sub": "ปรึกษา & เช็คของแท้", "icon": "💬", "color": "#059669", "send": "คุยกับป้าเข็ม"},
-]
+W, H = 2500, 1686
+COL_W = W // 3       # 833 (ช่องสุดท้าย 834)
+ROW_H = H // 2       # 843
 
-W, H = 2500, 843
-COL_W = W // 4  # 625
+FONT_DIR = PROJECT_ROOT / "tools" / "fonts"
+WEB_DIR = PROJECT_ROOT / "backend" / "app" / "static"
 
 
 def load_token() -> str:
@@ -52,17 +54,15 @@ def load_token() -> str:
     return token or ""
 
 
-FONT_DIR = PROJECT_ROOT / "tools" / "fonts"
-
 def load_font(size: int, weight: str = "bold"):
-    fname = f"Prompt-Bold.ttf" if weight == "bold" else (f"Prompt-Medium.ttf" if weight == "medium" else "Prompt-Regular.ttf")
+    fname = "Prompt-Bold.ttf" if weight == "bold" else ("Prompt-Medium.ttf" if weight == "medium" else "Prompt-Regular.ttf")
     fpath = FONT_DIR / fname
     if fpath.exists():
         try:
             return ImageFont.truetype(str(fpath), size)
         except Exception:
             pass
-    # Fallback
+    # Fallback ระบบ Windows
     candidates = [
         r"C:\Windows\Fonts\leelawdb.ttf" if weight == "bold" else r"C:\Windows\Fonts\leelawadeeui.ttf",
         r"C:\Windows\Fonts\tahomabd.ttf" if weight == "bold" else r"C:\Windows\Fonts\tahoma.ttf",
@@ -77,190 +77,250 @@ def load_font(size: int, weight: str = "bold"):
 
 
 def create_gradient(width: int, height: int, start_color: tuple, end_color: tuple) -> Image.Image:
-    """สร้างภาพ Gradient แนวตั้ง/แนวเฉียงที่เรียบเนียนระดับพรีเมียม"""
+    """สร้างภาพ Gradient ไล่เฉียงพรีเมียม"""
     base = Image.new("RGBA", (width, height), start_color)
     top = Image.new("RGBA", (width, height), end_color)
     mask = Image.new("L", (width, height))
     mask_data = []
     for y in range(height):
         for x in range(width):
-            # ไล่เฉียงจากบนซ้ายไปล่างขวา
-            p = (y / height) * 0.7 + (x / width) * 0.3
+            p = (y / height) * 0.75 + (x / width) * 0.25
             mask_data.append(int(255 * min(max(p, 0.0), 1.0)))
     mask.putdata(mask_data)
     base.paste(top, (0, 0), mask)
     return base
 
 
-def draw_menu(path: str):
-    # 1. Background พื้นหลัง Dark Cyber Slate ลึก พรีเมียม
-    img = Image.new("RGBA", (W, H), (11, 15, 25, 255))
+def make_circular_thumbnail(img_path: pathlib.Path, size: int = 240, border_color=(255, 255, 255), border_width: int = 6) -> Image.Image:
+    """ตัดภาพเป็นวงกลมพร้อมเส้นขอบสวยงาม"""
+    if not img_path.exists():
+        im = Image.new("RGBA", (size, size), (255, 255, 255, 60))
+    else:
+        im = Image.open(img_path).convert("RGBA")
+        w, h = im.size
+        min_side = min(w, h)
+        left = (w - min_side) // 2
+        top = (h - min_side) // 2
+        im = im.crop((left, top, left + min_side, top + min_side))
+        im = im.resize((size, size), Image.Resampling.LANCZOS)
+
+    mask = Image.new("L", (size, size), 0)
+    draw = ImageDraw.Draw(mask)
+    draw.ellipse((0, 0, size, size), fill=255)
+
+    output = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    output.paste(im, (0, 0), mask)
+
+    b_draw = ImageDraw.Draw(output)
+    bw2 = border_width // 2
+    b_draw.ellipse((bw2, bw2, size - bw2, size - bw2), outline=border_color, width=border_width)
+    return output
+
+
+def draw_rich_menu(output_path: str):
+    # 1. Background พื้นหลังพรีเมียม Dark Warm Slate
+    img = Image.new("RGBA", (W, H), (15, 18, 26, 255))
+
+    # Glow บรรยากาศพื้นหลัง
+    glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    g_draw = ImageDraw.Draw(glow)
+    g_draw.ellipse([-100, -100, 1000, 900], fill=(245, 158, 11, 40))
+    g_draw.ellipse([800, -100, 1700, 900], fill=(239, 68, 68, 40))
+    g_draw.ellipse([1600, -100, 2600, 900], fill=(249, 115, 22, 40))
+    g_draw.ellipse([-100, 800, 1000, 1800], fill=(79, 70, 229, 35))
+    g_draw.ellipse([800, 800, 1700, 1800], fill=(13, 148, 136, 35))
+    g_draw.ellipse([1600, 800, 2600, 1800], fill=(168, 85, 247, 35))
+    img = Image.alpha_composite(img, glow)
     d = ImageDraw.Draw(img)
 
-    # วาด Ambient Glow เล็กน้อยด้านหลัง 4 จุด
-    glow1 = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    g_draw = ImageDraw.Draw(glow1)
-    g_draw.ellipse([50, -100, 650, 700], fill=(124, 58, 237, 40))   # Purple Tarot
-    g_draw.ellipse([650, -100, 1250, 700], fill=(255, 75, 43, 35))  # Orange Search
-    g_draw.ellipse([1250, -100, 1850, 700], fill=(245, 158, 11, 35)) # Gold Bot
-    g_draw.ellipse([1850, -100, 2450, 700], fill=(16, 185, 129, 35)) # Green Chat
-    img = Image.alpha_composite(img, glow1)
-    d = ImageDraw.Draw(img)
+    fried_fish_path = WEB_DIR / "fried_fish.jpg"
+    avatar_path = WEB_DIR / "pa-khem-avatar.png"
+    infographic_path = WEB_DIR / "vacuum_seal_infographic.png"
 
     CARDS = [
+        # --- แถวบน (Row 0) ---
         {
-            "badge": "🔮 ศาสตร์ 10 ใบแท้",
-            "title": "ดูดวงใหญ่ 10 ใบ",
-            "sub": "เลือกเลข 1-78 ละเอียดลึกซึ้ง",
-            "cta": "เปิดไพ่เซลติกครอส  ›",
-            "c_start": (124, 58, 237, 255),   # Royal Violet
-            "c_end": (76, 29, 149, 255),      # Deep Mystical Purple
-            "icon_type": "tarot"
+            "col": 0, "row": 0,
+            "badge": "⭐ สุพรรณบุรีแท้ ไซส์จัมโบ้",
+            "title": "ปลาสลิด 6 ตัวโล",
+            "sub": "เริ่ม 390.- ส่งด่วนเจลเย็นฟรี!",
+            "cta": "ดูแพ็กเกจ & สั่งซื้อ  ›",
+            "c_start": (245, 158, 11, 255),  # Golden Amber
+            "c_end": (180, 83, 9, 255),      # Deep Burnt Gold
+            "type": "image_thumb",
+            "img_path": fried_fish_path,
+            "border_color": (254, 240, 138, 255)  # Gold ring
         },
         {
-            "badge": "🔥 ค้นหาของแท้ & ดีลลด",
-            "title": "ค้นหาสินค้า",
-            "sub": "พิมพ์ชื่อของ หรือบอกงบที่ต้องการ",
-            "cta": "แตะเพื่อค้นหาทันที  ›",
-            "c_start": (255, 75, 43, 255),    # Coral Orange
-            "c_end": (225, 29, 72, 255),      # Vivid Crimson Rose
-            "icon_type": "search"
+            "col": 1, "row": 0,
+            "badge": "🏆 ขายดีอันดับ 1 (คุ้มสุด)",
+            "title": "ชุดยอดฮิต 1 กก.",
+            "sub": "เพียง 550.- (🔥 จัดส่งฟรี)",
+            "cta": "รับชุด 1 กก. ทันที  ›",
+            "c_start": (239, 68, 68, 255),   # Bright Ruby Crimson
+            "c_end": (185, 28, 28, 255),     # Deep Wine Red
+            "type": "deal_badge",
+            "price": "550.-",
+            "deal_sub": "🔥 ส่งฟรีทั่วไทย"
         },
         {
-            "badge": "⚡️ เริ่มต้น 490.- / เดือน",
-            "title": "บอทรายเดือน",
-            "sub": "เช่าบอทช่วยขาย Shopee 24 ชม.",
-            "cta": "ดูแพ็กเกจ & ราคาบอท  ›",
-            "c_start": (245, 158, 11, 255),   # Royal Amber
-            "c_end": (180, 83, 9, 255),       # Deep Gold Amber
-            "icon_type": "bot"
+            "col": 2, "row": 0,
+            "badge": "🌐 สั่งผ่านเว็บ 24 ชม.",
+            "title": "หน้าร้านออนไลน์",
+            "sub": "เลือกดูสินค้า & สั่งซื้อ (COD/โอน)",
+            "cta": "แตะเปิดหน้าร้าน  ›",
+            "c_start": (249, 115, 22, 255),  # Vibrant Sunset Orange
+            "c_end": (194, 65, 12, 255),     # Deep Rust Amber
+            "type": "shop_icon"
+        },
+
+        # --- แถวล่าง (Row 1) ---
+        {
+            "col": 0, "row": 1,
+            "badge": "🚚 ส่งรถเย็น / รถด่วน",
+            "title": "เช็คสถานะพัสดุ",
+            "sub": "พิมพ์เลขหรือเบอร์โทรเช็คสด",
+            "cta": "ตรวจเลขพัสดุ  ›",
+            "c_start": (79, 70, 229, 255),   # Royal Indigo
+            "c_end": (55, 48, 163, 255),     # Deep Navy Indigo
+            "type": "track_icon"
         },
         {
-            "badge": "🟢 ออนไลน์ตอบไว 24 ชม.",
+            "col": 1, "row": 1,
+            "badge": "🇯🇵 ถุง PA/PE ไร้สาร BPA",
+            "title": "วิธีเก็บรักษา",
+            "sub": "ซีลสุญญากาศ ตุนฟรีซ 6-12 ด.",
+            "cta": "ดูวิธีเก็บ & ทอด  ›",
+            "c_start": (13, 148, 136, 255),  # Deep Teal / Emerald
+            "c_end": (15, 118, 110, 255),    # Dark Sea Green
+            "type": "image_thumb",
+            "img_path": infographic_path,
+            "border_color": (153, 246, 228, 255)
+        },
+        {
+            "col": 2, "row": 1,
+            "badge": "👵 ตอบไว ตลอด 24 ชม.",
             "title": "คุยกับป้าเข็ม",
-            "sub": "ปรึกษา เช็คพิกัดของแท้ หรือทักทาย",
-            "cta": "ทักแชทคุยกับป้าเข็ม  ›",
-            "c_start": (16, 185, 129, 255),   # Emerald
-            "c_end": (4, 120, 87, 255),       # Deep Teal Green
-            "icon_type": "chat"
+            "sub": "สอบถาม สั่งซื้อ หรือปรึกษา",
+            "cta": "แชทถามป้าเข็ม  ›",
+            "c_start": (168, 85, 247, 255),  # Vivid Purple
+            "c_end": (126, 34, 206, 255),    # Deep Royal Plum
+            "type": "image_thumb",
+            "img_path": avatar_path,
+            "border_color": (253, 224, 71, 255)  # Gold Halo
         },
     ]
 
-    for i, item in enumerate(CARDS):
-        x0 = i * COL_W + 18
-        y0 = 28
-        x1 = (i + 1) * COL_W - 18
-        y1 = H - 28
+    for item in CARDS:
+        col = item["col"]
+        row = item["row"]
+
+        x0 = col * COL_W + 18
+        y0 = row * ROW_H + 18
+        x1 = (col + 1) * COL_W - (18 if col < 2 else 12)
+        y1 = (row + 1) * ROW_H - 18
         cw = x1 - x0
         ch = y1 - y0
 
-        # สร้างการ์ด Gradient ขอบมน
+        # วาด Gradient Card
         card_img = create_gradient(cw, ch, item["c_start"], item["c_end"])
         mask = Image.new("L", (cw, ch), 0)
         mask_draw = ImageDraw.Draw(mask)
         mask_draw.rounded_rectangle([0, 0, cw, ch], radius=40, fill=255)
 
-        # แปะการ์ดลงบนพื้นหลัง
         img.paste(card_img, (x0, y0), mask)
 
-        # วาดเส้นขอบ Glass Border บางๆ (Inner/Outer Glow)
-        d.rounded_rectangle([x0, y0, x1, y1], radius=40, outline=(255, 255, 255, 120), width=3)
+        # ขอบ Glass Border
+        d.rounded_rectangle([x0, y0, x1, y1], radius=40, outline=(255, 255, 255, 120), width=4)
 
         cx = x0 + cw // 2
 
-        # 1. Badge ด้านบน (Pill Shape)
-        badge_w, badge_h = 360, 64
+        # 1. Badge ด้านบน
+        badge_w, badge_h = 440, 62
         bx0 = cx - badge_w // 2
-        by0 = y0 + 40
+        by0 = y0 + 36
         d.rounded_rectangle([bx0, by0, bx0 + badge_w, by0 + badge_h],
-                            radius=32, fill=(0, 0, 0, 95), outline=(255, 255, 255, 80), width=2)
-        f_badge = load_font(32, "medium")
+                            radius=31, fill=(0, 0, 0, 95), outline=(255, 255, 255, 80), width=2)
+        f_badge = load_font(33, "medium")
         bb = d.textbbox((0, 0), item["badge"], font=f_badge)
         d.text((cx - (bb[2] - bb[0]) / 2, by0 + (badge_h - (bb[3] - bb[1])) / 2 - bb[1] - 2),
                item["badge"], fill="#FFFFFF", font=f_badge)
 
-        # 2. วาด Vector Icon โมเดิร์นตรงกลาง
-        icon_cy = y0 + 225
-        # วงกลมแก้วรอบไอคอน
-        d.ellipse([cx - 75, icon_cy - 75, cx + 75, icon_cy + 75],
-                  fill=(255, 255, 255, 45), outline=(255, 255, 255, 140), width=3)
+        # 2. Thumbnail / Vector Icon
+        icon_cy = y0 + 245
 
-        if item["icon_type"] == "tarot":
-            # ไพ่ทาโรต์ 2 ใบซ้อนกันอย่างสง่างาม
-            # ไพ่ใบหลังเอียงเล็กน้อย
-            d.rounded_rectangle([cx - 15, icon_cy - 48, cx + 45, icon_cy + 42],
-                                radius=10, fill=(255, 255, 255, 140))
-            # ไพ่ใบหน้า
-            d.rounded_rectangle([cx - 35, icon_cy - 40, cx + 25, icon_cy + 50],
-                                radius=10, fill="#FFFFFF")
-            # ดวงดาวบนหน้าไพ่
-            d.ellipse([cx - 12, icon_cy - 3, cx + 2, icon_cy + 11], fill=item["c_end"])
-            # ลายขอบไพ่
-            d.rounded_rectangle([cx - 30, icon_cy - 35, cx + 20, icon_cy + 45],
-                                radius=6, outline=item["c_end"], width=2)
+        if item["type"] == "image_thumb":
+            thumb = make_circular_thumbnail(item["img_path"], size=230,
+                                            border_color=item.get("border_color", (255, 255, 255)),
+                                            border_width=7)
+            img.paste(thumb, (cx - 115, icon_cy - 115), thumb)
 
-        elif item["icon_type"] == "search":
-            # แว่นขยายทรงโมเดิร์น
-            d.ellipse([cx - 40, icon_cy - 42, cx + 18, icon_cy + 16],
-                      outline="#FFFFFF", width=8)
-            d.line([cx + 10, icon_cy + 10, cx + 40, icon_cy + 40],
-                   fill="#FFFFFF", width=10)
-            # ประกายแสงวิ้ง
-            d.ellipse([cx - 24, icon_cy - 30, cx - 15, icon_cy - 21], fill="#FFFFFF")
+        elif item["type"] == "deal_badge":
+            # ตราโปรโมชั่น 290.- ส่งฟรี
+            circle_r = 115
+            d.ellipse([cx - circle_r, icon_cy - circle_r, cx + circle_r, icon_cy + circle_r],
+                      fill=(255, 255, 255, 45), outline=(254, 240, 138, 255), width=7)
+            d.ellipse([cx - circle_r + 10, icon_cy - circle_r + 10, cx + circle_r - 10, icon_cy + circle_r - 10],
+                      fill=(220, 38, 38, 240))
+            f_price = load_font(72, "bold")
+            bb = d.textbbox((0, 0), item["price"], font=f_price)
+            d.text((cx - (bb[2] - bb[0]) / 2, icon_cy - 48 - bb[1]), item["price"], fill="#FEF08A", font=f_price)
 
-        elif item["icon_type"] == "bot":
-            # ไอคอนหุ่นยนต์ / ชิปอัจฉริยะ & กระเป๋าธุรกิจ
-            d.rounded_rectangle([cx - 38, icon_cy - 34, cx + 38, icon_cy + 36],
-                                radius=14, fill="#FFFFFF")
-            # ตาหุ่นยนต์
-            d.rounded_rectangle([cx - 25, icon_cy - 16, cx - 11, icon_cy + 2], radius=5, fill=item["c_end"])
-            d.rounded_rectangle([cx + 11, icon_cy - 16, cx + 25, icon_cy + 2], radius=5, fill=item["c_end"])
-            # เสาอากาศ AI
-            d.line([cx, icon_cy - 34, cx, icon_cy - 46], fill="#FFFFFF", width=5)
-            d.ellipse([cx - 6, icon_cy - 56, cx + 6, icon_cy - 44], fill="#FFFFFF")
-            # รอยยิ้ม
-            d.arc([cx - 18, icon_cy + 6, cx + 18, icon_cy + 22], start=0, end=180, fill=item["c_end"], width=4)
+            f_deal = load_font(32, "bold")
+            bb = d.textbbox((0, 0), item["deal_sub"], font=f_deal)
+            d.text((cx - (bb[2] - bb[0]) / 2, icon_cy + 30 - bb[1]), item["deal_sub"], fill="#FFFFFF", font=f_deal)
 
-        elif item["icon_type"] == "chat":
-            # กล่องแชททรงโมเดิร์น
-            d.rounded_rectangle([cx - 42, icon_cy - 38, cx + 42, icon_cy + 26],
-                                radius=18, fill="#FFFFFF")
-            # หางแชท
-            d.polygon([(cx - 18, icon_cy + 26), (cx - 38, icon_cy + 42), (cx - 5, icon_cy + 26)], fill="#FFFFFF")
-            # จุด 3 จุดในแชท
-            d.ellipse([cx - 24, icon_cy - 8, cx - 15, icon_cy + 1], fill=item["c_end"])
-            d.ellipse([cx - 4, icon_cy - 8, cx + 5, icon_cy + 1], fill=item["c_end"])
-            d.ellipse([cx + 16, icon_cy - 8, cx + 25, icon_cy + 1], fill=item["c_end"])
+        elif item["type"] == "shop_icon":
+            # ไอคอนหน้าร้าน / ตะกร้าช้อปปิ้งพรีเมียม
+            d.ellipse([cx - 100, icon_cy - 100, cx + 100, icon_cy + 100],
+                      fill=(255, 255, 255, 40), outline=(255, 255, 255, 140), width=5)
+            # ถุงช้อปปิ้ง
+            d.arc([cx - 26, icon_cy - 55, cx + 26, icon_cy - 10], start=180, end=0, fill="#FFFFFF", width=8)
+            d.rounded_rectangle([cx - 48, icon_cy - 16, cx + 48, icon_cy + 52], radius=14, fill="#FFFFFF")
+            d.arc([cx - 22, icon_cy + 6, cx + 22, icon_cy + 30], start=0, end=180, fill=item["c_end"], width=7)
+            d.ellipse([cx + 28, icon_cy - 30, cx + 38, icon_cy - 20], fill="#FFFFFF")
 
-        # 3. Main Title ข้อความหลัก (ตัวหนาคมชัด พอดี 4 คอลัมน์)
-        f_main = load_font(84, "bold")
+        elif item["type"] == "track_icon":
+            # ไอคอนรถส่งของด่วน / พัสดุ
+            d.ellipse([cx - 100, icon_cy - 100, cx + 100, icon_cy + 100],
+                      fill=(255, 255, 255, 40), outline=(255, 255, 255, 140), width=5)
+            # รถตู้ส่งของ (Delivery Van)
+            d.rounded_rectangle([cx - 55, icon_cy - 28, cx + 15, icon_cy + 32], radius=10, fill="#FFFFFF")
+            d.rounded_rectangle([cx + 15, icon_cy - 10, cx + 55, icon_cy + 32], radius=8, fill="#FFFFFF")
+            # หน้าต่างรถ
+            d.rounded_rectangle([cx + 20, icon_cy - 4, cx + 46, icon_cy + 12], radius=4, fill=item["c_end"])
+            # ล้อรถ
+            d.ellipse([cx - 36, icon_cy + 22, cx - 14, icon_cy + 44], fill="#1E293B", outline="#FFFFFF", width=4)
+            d.ellipse([cx + 22, icon_cy + 22, cx + 44, icon_cy + 44], fill="#1E293B", outline="#FFFFFF", width=4)
+            # เส้นความเร็ว
+            d.line([cx - 75, icon_cy - 10, cx - 62, icon_cy - 10], fill="#FFFFFF", width=5)
+            d.line([cx - 82, icon_cy + 6, cx - 62, icon_cy + 6], fill="#FFFFFF", width=5)
+
+        # 3. Main Title ข้อความหลัก
+        f_main = load_font(74, "bold")
         bb = d.textbbox((0, 0), item["title"], font=f_main)
-        # เงาข้อความ Subtle Drop Shadow
-        d.text((cx - (bb[2] - bb[0]) / 2 + 3, y0 + 363 - bb[1]),
-               item["title"], fill=(0, 0, 0, 100), font=f_main)
-        d.text((cx - (bb[2] - bb[0]) / 2, y0 + 360 - bb[1]),
-               item["title"], fill="#FFFFFF", font=f_main)
+        d.text((cx - (bb[2] - bb[0]) / 2 + 3, y0 + 403 - bb[1]), item["title"], fill=(0, 0, 0, 110), font=f_main)
+        d.text((cx - (bb[2] - bb[0]) / 2, y0 + 400 - bb[1]), item["title"], fill="#FFFFFF", font=f_main)
 
         # 4. Subtitle คำอธิบายย่อย
-        f_sub = load_font(40, "medium")
+        f_sub = load_font(38, "medium")
         bb = d.textbbox((0, 0), item["sub"], font=f_sub)
-        d.text((cx - (bb[2] - bb[0]) / 2, y0 + 490 - bb[1]),
-               item["sub"], fill="#F8FAFC", font=f_sub)
+        d.text((cx - (bb[2] - bb[0]) / 2, y0 + 515 - bb[1]), item["sub"], fill="#F8FAFC", font=f_sub)
 
-        # 5. Bottom CTA Button (Pill Button สวยหรู)
-        btn_w, btn_h = 490, 96
+        # 5. Bottom CTA Button (White Pill)
+        btn_w, btn_h = 580, 96
         btn_x0 = cx - btn_w // 2
-        btn_y0 = y1 - 145
+        btn_y0 = y1 - 138
         d.rounded_rectangle([btn_x0, btn_y0, btn_x0 + btn_w, btn_y0 + btn_h],
-                            radius=48, fill=(255, 255, 255, 240))
-        f_cta = load_font(40, "bold")
+                            radius=48, fill=(255, 255, 255, 245))
+        f_cta = load_font(42, "bold")
         bb = d.textbbox((0, 0), item["cta"], font=f_cta)
         d.text((cx - (bb[2] - bb[0]) / 2, btn_y0 + (btn_h - (bb[3] - bb[1])) / 2 - bb[1] - 2),
                item["cta"], fill=item["c_end"], font=f_cta)
 
-    # บันทึกเป็น RGB PNG (LINE API รองรับ standard image/png)
     final_rgb = img.convert("RGB")
-    final_rgb.save(path, "PNG", optimize=True)
+    final_rgb.save(output_path, "PNG", optimize=True)
+    print(f"  บันทึกภาพ Rich Menu สำเร็จ: {output_path} ({pathlib.Path(output_path).stat().st_size // 1024} KB)")
 
 
 def api(method: str, path: str, token: str, body=None, headers=None, raw=None, base=None):
@@ -294,23 +354,46 @@ def main():
             s2, _ = api("DELETE", f"/richmenu/{rid}", token)
             print(f"  ลบ rich menu เก่า {rid}: HTTP {s2}")
 
-    # 2. วาด PNG
+    # 2. วาด PNG 2500x1686
     png_path = PROJECT_ROOT / "tools" / "rich_menu.png"
-    draw_menu(str(png_path))
-    print(f"  วาด PNG แล้ว: {png_path} ({png_path.stat().st_size // 1024} KB)")
+    draw_rich_menu(str(png_path))
 
-    # 3. สร้าง rich menu (กำหนดพื้นที่ 3 ปุ่ม)
-    areas = []
-    for i, item in enumerate(MENU_ITEMS):
-        areas.append({
-            "bounds": {"x": i * COL_W, "y": 0, "width": COL_W, "height": H},
-            "action": {"type": "message", "text": item["send"]},
-        })
+    # 3. กำหนดพื้นที่ 6 ปุ่ม (2 แถว x 3 คอลัมน์)
+    areas = [
+        # แถวบน (Row 0)
+        {
+            "bounds": {"x": 0, "y": 0, "width": COL_W, "height": ROW_H},
+            "action": {"type": "message", "text": "ปลาแดดเดียว"}
+        },
+        {
+            "bounds": {"x": COL_W, "y": 0, "width": COL_W, "height": ROW_H},
+            "action": {"type": "message", "text": "สั่งซื้อปลาแดดเดียว 1 กิโลกรัม"}
+        },
+        {
+            "bounds": {"x": COL_W * 2, "y": 0, "width": W - (COL_W * 2), "height": ROW_H},
+            "action": {"type": "uri", "uri": "https://watt29.github.io/pakhem-shop/fish.html"}
+        },
+
+        # แถวล่าง (Row 1)
+        {
+            "bounds": {"x": 0, "y": ROW_H, "width": COL_W, "height": H - ROW_H},
+            "action": {"type": "message", "text": "เช็คพัสดุ"}
+        },
+        {
+            "bounds": {"x": COL_W, "y": ROW_H, "width": COL_W, "height": H - ROW_H},
+            "action": {"type": "message", "text": "วิธีเก็บรักษา"}
+        },
+        {
+            "bounds": {"x": COL_W * 2, "y": ROW_H, "width": W - (COL_W * 2), "height": H - ROW_H},
+            "action": {"type": "message", "text": "ถามได้ทุกเรื่อง"}
+        },
+    ]
+
     body = {
         "size": {"width": W, "height": H},
-        "selected": False,
-        "name": "menu-pakhem-3",
-        "chatBarText": "🛍️ เมนูป้าเข็ม",
+        "selected": True,  # เปิดค้างแสดงให้เห็นชัดเจนตลอดเวลา
+        "name": "menu-pakhem-6-grid-v1",
+        "chatBarText": "👉 แตะเปิดเมนู 🛍️",
         "areas": areas,
     }
     st, raw = api("POST", "/richmenu", token, body=body)
@@ -318,7 +401,7 @@ def main():
         print(f"✗ สร้าง rich menu ล้ม: HTTP {st} {raw.decode()[:200]}")
         sys.exit(1)
     rid = json.loads(raw)["richMenuId"]
-    print(f"  สร้าง rich menu: {rid}")
+    print(f"  สร้าง rich menu 6 ช่องสำเร็จ: {rid}")
 
     # 4. อัปโหลดรูป
     st, raw = api("POST", f"/richmenu/{rid}/content", token,
@@ -328,13 +411,19 @@ def main():
     if st != 200:
         print(f"✗ อัปโหลดรูปล้ม: HTTP {st} {raw.decode()[:200]}")
         sys.exit(1)
-    print("  อัปโหลดรูป: HTTP 200")
+    print("  อัปโหลดภาพขึ้นระบบ LINE: HTTP 200")
 
-    # 5. ตั้งเป็นค่าเริ่มต้น
+    # 5. ตั้งเป็นค่าเริ่มต้นให้ทุกคน
     st, raw = api("POST", f"/user/all/richmenu/{rid}", token)
-    print(f"  ตั้งเป็นค่าเริ่มต้น: HTTP {st}")
+    print(f"  ตั้งเป็นค่าเริ่มต้นสำหรับทุกคน: HTTP {st}")
+
+    # 6. ลิงก์ตรงให้แอดมิน / ลูกค้าทดสอบ
+    admin_uid = "Uc88eb3896b0e4bcc5fbaa9b78ac1294e"
+    st_u, _ = api("POST", f"/user/{admin_uid}/richmenu/{rid}", token)
+    print(f"  ผูกเมนูตรงกับแอดมิน ({admin_uid}): HTTP {st_u}")
+
     if st == 200:
-        print("\n✅ Rich Menu พร้อมใช้ — ลูกค้าเห็นแถบเมนูด้านล่างทันที (ถ้ายังไม่เห็น ให้กดปุ่ม ▾ ที่ช่องพิมพ์)")
+        print("\n✅ Rich Menu 6 ช่องพรีเมียมพร้อมใช้งาน 100% — เปิดดูใน LINE ได้ทันทีครับ!")
 
 
 if __name__ == "__main__":
