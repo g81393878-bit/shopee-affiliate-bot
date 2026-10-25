@@ -943,9 +943,9 @@
             <span style="font-size:0.82rem; color:#64748b; line-height:1.4; display:block;">ดูดออกซิเจนออก 99.9% ยับยั้งแบคทีเรียและเชื้อรา คงรสชาติกลมกล่อมเหมือนวันแรกที่ตาก</span>
           </div>
           <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px;">
-            <div style="font-size:1.3rem; margin-bottom:4px;">🚚</div>
-            <strong style="font-size:0.95rem; color:#0f172a; display:block; margin-bottom:4px;">ส่งรถเย็นควบคุมอุณหภูมิ</strong>
-            <span style="font-size:0.82rem; color:#64748b; line-height:1.4; display:block;">จัดส่งด้วย Inter Express Logistics ถึงหน้าบ้านทั่วไทย สด สะอาด พร้อมลงกระทะได้ทันที</span>
+            <div style="font-size:1.3rem; margin-bottom:4px;">🧊</div>
+            <strong style="font-size:0.95rem; color:#0f172a; display:block; margin-bottom:4px;">แพ็กฟอยล์เจลไอซ์ & รถห้องเย็น</strong>
+            <span style="font-size:0.82rem; color:#64748b; line-height:1.4; display:block;">แช่แข็งจัดก่อนห่อฟอยล์เก็บความเย็น + เจลไอซ์ ส่งด่วนทั่วไทย (พร้อมตัวเลือกอัปเกรดส่งรถห้องเย็น SCG/Inter)</span>
           </div>
         </div>
       </div>
@@ -1029,6 +1029,18 @@
         <div class="form-group">
           <label for="custAddress">ที่อยู่จัดส่งโดยละเอียด *</label>
           <textarea id="custAddress" class="form-control" rows="3" placeholder="บ้านเลขที่, ถนน/ซอย, ตำบล, อำเภอ, จังหวัด, รหัสไปรษณีย์" required></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>รูปแบบการจัดส่ง (แช่แข็งจัดจากตู้แช่ก่อนส่งทุกกล่อง) *</label>
+          <div class="pay-methods">
+            <div class="pay-opt active" id="ship-foil" onclick="selectShippingMode('FOIL_ICE')">
+              🧊 ส่งด่วนแพ็กฟอยล์ + เจลไอซ์<br><small id="shipFoilSub" style="font-weight:500; font-size:0.76rem; color:#047857;">ส่งฟรี (1 กก. ขึ้นไป)</small>
+            </div>
+            <div class="pay-opt" id="ship-cold" onclick="selectShippingMode('COLD_TRUCK')">
+              ❄️ อัปเกรดส่งรถห้องเย็น<br><small id="shipColdSub" style="font-weight:500; font-size:0.76rem; color:#64748b;">SCG / Inter (+100 บาท)</small>
+            </div>
+          </div>
         </div>
 
         <div class="form-group">
@@ -1180,6 +1192,65 @@
 
     let currentSelectedSku = 'SKU-SLID-MD-1KG';
     let currentPayment = 'COD';
+    let currentShippingMode = 'FOIL_ICE'; // 'FOIL_ICE' (แพ็กฟอยล์+เจลไอซ์) หรือ 'COLD_TRUCK' (รถห้องเย็น SCG/Inter)
+
+    function getColdTruckUpgradeFee(p) {
+      if (!p) return 0;
+      if (currentShippingMode !== 'COLD_TRUCK') return 0;
+      return (p.sku === 'SKU-SLID-MD-2KG') ? 0 : 100;
+    }
+
+    function getOrderTotalPay(p) {
+      if (!p) return 0;
+      return p.price + (p.shippingFee || 0) + getColdTruckUpgradeFee(p);
+    }
+
+    function updateOrderPricingDisplay() {
+      const p = PRODUCTS.find(x => x.sku === currentSelectedSku) || PRODUCTS[0];
+      if (!p) return;
+      const totalPay = getOrderTotalPay(p);
+      const coldFee = getColdTruckUpgradeFee(p);
+
+      const foilSub = document.getElementById('shipFoilSub');
+      const coldSub = document.getElementById('shipColdSub');
+      if (foilSub) {
+        foilSub.innerText = p.shippingFee ? `ค่าส่ง +${p.shippingFee}.- (รวม ${(p.price + p.shippingFee).toLocaleString()}.-)` : 'ส่งฟรี! (0 บาท)';
+      }
+      if (coldSub) {
+        coldSub.innerText = (p.sku === 'SKU-SLID-MD-2KG') ? 'ชุด 2 กก. ส่งฟรีรถเย็น! (0 บาท)' : 'SCG / Inter (+เพิ่ม 100 บาท)';
+      }
+
+      let shipText = '';
+      if (currentShippingMode === 'COLD_TRUCK') {
+        shipText = (p.sku === 'SKU-SLID-MD-2KG')
+          ? '❄️ ส่งฟรีรถห้องเย็นควบคุมอุณหภูมิ (SCG/Inter)'
+          : `❄️ อัปเกรดส่งรถห้องเย็น +${coldFee}.- (รวม ${totalPay.toLocaleString()}.-)`;
+      } else {
+        shipText = (p.sku === 'SKU-SLID-MD-2KG')
+          ? '🧊 ส่งฟรี! (แพ็กฟอยล์เจลไอซ์ / รถห้องเย็น)'
+          : (p.shippingFee ? `📦 ค่าส่งด่วนแพ็กฟอยล์+เจลไอซ์ +${p.shippingFee}.- (รวม ${totalPay.toLocaleString()}.-)` : '🔥 ส่งด่วนแพ็กฟอยล์+เจลไอซ์ ฟรีทั่วไทย');
+      }
+
+      document.getElementById('displaySelectedName').innerText = p.name;
+      document.getElementById('displaySelectedSpec').innerText = `ขนาด ${p.weight} (${p.pieces}) | ${shipText}`;
+      document.getElementById('displaySelectedPrice').innerText = `${totalPay.toLocaleString()} ฿`;
+      document.getElementById('btnPrice').innerText = totalPay.toLocaleString();
+      const transferAmt = document.getElementById('transferExactAmount');
+      if (transferAmt) transferAmt.innerText = `${totalPay.toLocaleString()} บาท`;
+
+      // Update Sticky Bar
+      document.getElementById('stickyProdName').innerText = p.name;
+      document.getElementById('stickyPriceText').innerText = `${totalPay.toLocaleString()} บาท` + (p.shippingFee || coldFee ? ' (รวมส่ง)' : ' (ส่งฟรี)');
+    }
+
+    function selectShippingMode(mode) {
+      currentShippingMode = mode;
+      const foilEl = document.getElementById('ship-foil');
+      const coldEl = document.getElementById('ship-cold');
+      if (foilEl) foilEl.classList.toggle('active', mode === 'FOIL_ICE');
+      if (coldEl) coldEl.classList.toggle('active', mode === 'COLD_TRUCK');
+      updateOrderPricingDisplay();
+    }
 
     function renderProducts(filterCat = 'all') {
       const grid = document.getElementById('productGrid');
@@ -1232,19 +1303,9 @@
       const activeCard = document.getElementById(`card-${sku}`);
       if (activeCard) activeCard.classList.add('selected');
 
-      // Update Form display
-      const totalPay = p.price + (p.shippingFee || 0);
-      const shipText = p.sku === 'SKU-SLID-MD-2KG' ? '❄️ ส่งฟรีรถตู้เย็นควบคุมอุณหภูมิ' : (p.shippingFee ? `📦 ค่าส่งด่วนแพ็คเจลเก็บความเย็น +${p.shippingFee}.- (รวม ${totalPay}.-)` : '🔥 ส่งด่วนแพ็คเจลเก็บความเย็น ฟรีทั่วไทย');
-      document.getElementById('displaySelectedName').innerText = p.name;
-      document.getElementById('displaySelectedSpec').innerText = `ขนาด ${p.weight} (${p.pieces}) | ${shipText}`;
-      document.getElementById('displaySelectedPrice').innerText = `${totalPay.toLocaleString()} ฿`;
-      document.getElementById('btnPrice').innerText = totalPay.toLocaleString();
-      const transferAmt = document.getElementById('transferExactAmount');
-      if (transferAmt) transferAmt.innerText = `${totalPay.toLocaleString()} บาท`;
-
-      // Update Sticky Bar
-      document.getElementById('stickyProdName').innerText = p.name;
-      document.getElementById('stickyPriceText').innerText = `${p.price.toLocaleString()} บาท` + (p.shippingFee ? ` (+ส่ง ${p.shippingFee}.-)` : ' (ส่งฟรี)');
+      // Update Form display & Sticky Bar
+      updateOrderPricingDisplay();
+      const totalPay = getOrderTotalPay(p);
 
       // Meta Pixel: Track AddToCart when customer selects a package
       if (typeof window.pkfTrackMetaEvent === 'function') {
@@ -1274,7 +1335,7 @@
         transferBox.style.display = (method === 'TRANSFER') ? 'block' : 'none';
         if (method === 'TRANSFER') {
           const p = PRODUCTS.find(x => x.sku === currentSelectedSku) || PRODUCTS[0];
-          const totalPay = p.price + (p.shippingFee || 0);
+          const totalPay = getOrderTotalPay(p);
           document.getElementById('transferExactAmount').innerText = totalPay.toLocaleString() + ' บาท';
         }
       }
@@ -1451,6 +1512,13 @@
         uploadedSlipUrl = await uploadSlipToSupabase(orderId, selectedSlipFile);
       }
 
+      const totalPay = getOrderTotalPay(p);
+      const coldFee = getColdTruckUpgradeFee(p);
+      const shipLabel = currentShippingMode === 'COLD_TRUCK'
+        ? (coldFee > 0 ? `[❄️ ส่งรถห้องเย็น +${coldFee}.-]` : `[❄️ ส่งรถห้องเย็น (ชุด 2 กก.)]`)
+        : `[🧊 ส่งด่วนแพ็กฟอยล์+เจลไอซ์]`;
+      const combinedNote = [shipLabel, note].filter(Boolean).join(' ');
+
       const payload = {
         action: 'order_fish',
         order_id: orderId,
@@ -1459,10 +1527,10 @@
         phone: phone,
         address: address,
         package: p.sku,
-        package_name: p.name,
-        price: p.price + (p.shippingFee || 0),
+        package_name: p.name + ' ' + shipLabel,
+        price: totalPay,
         payment_method: currentPayment,
-        note: note,
+        note: combinedNote,
         slip_url: uploadedSlipUrl,
         fbc: window.pkfFbc || localStorage.getItem('pkf_fbc') || null,
         fbp: window.pkfFbp || localStorage.getItem('pkf_fbp') || null,
@@ -1471,19 +1539,18 @@
       };
 
       try {
-        const totalPay = p.price + (p.shippingFee || 0);
         const orderRow = {
           order_code: orderId,
           product_name: p.name,
           package_code: p.sku,
-          package_name: p.name,
+          package_name: p.name + ' ' + shipLabel,
           price: totalPay,
           customer_name: name,
           phone: phone,
           address: address,
           payment_method: currentPayment,
           status: 'PENDING',
-          note: note || null,
+          note: combinedNote || null,
           slip_url: uploadedSlipUrl,
           created_at: now.toISOString()
         };
@@ -1515,6 +1582,7 @@
         document.getElementById('modalOrderId').innerText = orderId;
         document.getElementById('modalSummary').innerHTML = `
           <div><b>สินค้า:</b> ${p.name}</div>
+          <div><b>การจัดส่ง:</b> ${shipLabel}</div>
           <div><b>ยอดชำระสุทธิ:</b> ${totalPay.toLocaleString()} บาท (${currentPayment === 'COD' ? '🚚 เก็บเงินปลายทาง' : '💳 โอนเงิน'})</div>
           <div><b>ผู้รับ:</b> คุณ${name} (${phone})</div>
           ${saved ? '' : `<div style="margin-top:10px; padding:10px; border-radius:10px; background:#fef3c7; color:#92400e; font-size:0.85rem;">
@@ -1528,7 +1596,7 @@
       } finally {
         isSubmitting = false;
         btn.disabled = false;
-        const totalPay = p.price + (p.shippingFee || 0);
+        const totalPay = getOrderTotalPay(p);
         btn.innerHTML = `<span>ยืนยันการสั่งซื้อ (${totalPay.toLocaleString()} บาท)</span> <span>👉</span>`;
       }
     }
@@ -1545,7 +1613,7 @@
           content_name: p.name,
           content_ids: [p.sku],
           content_type: 'product',
-          value: p.price + (p.shippingFee || 0),
+          value: getOrderTotalPay(p),
           currency: 'THB'
         });
       }
@@ -1593,7 +1661,7 @@
                   content_name: p.name,
                   content_ids: [p.sku],
                   content_type: 'product',
-                  value: p.price + (p.shippingFee || 0),
+                  value: getOrderTotalPay(p),
                   currency: 'THB'
                 });
               }
@@ -1673,6 +1741,7 @@
 
     // Initialize
     renderProducts('all');
+    updateOrderPricingDisplay();
   
     // Real Dynamic Orders Ticker (Supabase Ground-Truth - Zero Hallucination)
     let liveRealOrders = [];
