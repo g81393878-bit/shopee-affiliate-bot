@@ -11,7 +11,7 @@
     "original_price": "690.00",
     "is_best_seller": true,
     "is_active": true,
-    "image_url": "https://down-th.img.susercontent.com/file/th-11134207-7r98o-lmv8k8dqu6s392",
+    "image_url": "/static/card_1kg_family.jpg?v=3",
     "description": "ปลาสลิดบางบ่อแท้ คัดไซส์กลางยอดนิยม ตัดหัวควักไส้สะอาด ตากในมุ้งชีวภาพ ปราศจากฝุ่นและแมลงวัน 100% ซีลสูญญากาศส่งพร้อมเจลเก็บความเย็น",
     "created_at": "2026-10-25 06:18:29.297730+00:00"
   },
@@ -27,7 +27,7 @@
     "original_price": "450.00",
     "is_best_seller": false,
     "is_active": true,
-    "image_url": "https://down-th.img.susercontent.com/file/th-11134207-7r98o-lmv8k8dqu6s392",
+    "image_url": "/static/card_500g_comfort.jpg?v=3",
     "description": "ปลาสลิดแดดเดียวขนาดครึ่งกิโลกรัม เหมาะสำหรับทาน 1-2 มื้อ ซีลสูญญากาศแยกเก็บในช่องฟรีซได้นาน 6 เดือน",
     "created_at": "2026-10-25 06:18:29.297730+00:00"
   },
@@ -43,7 +43,7 @@
     "original_price": "1290.00",
     "is_best_seller": false,
     "is_active": true,
-    "image_url": "https://down-th.img.susercontent.com/file/th-11134207-7r98o-lmv8k8dqu6s392",
+    "image_url": "/static/card_2kg_gift.jpg?v=3",
     "description": "ชุดครอบครัว 2 กิโลกรัม บรรจุถุงละ 1 กิโลกรัม 2 ถุงแยกกัน คุ้มค่าที่สุด ได้รับความนิยมจากลูกค้าประจำ",
     "created_at": "2026-10-25 06:18:29.297730+00:00"
   },
