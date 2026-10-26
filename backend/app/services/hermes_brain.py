@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Hermes AI — สมองกลเรียนรู้ตลาด ปรับนิสัยบอทป้าเข็มแบบ Hot-Reload.
+"""Hermes AI — สมองกลเรียนรู้ตลาด & วิเคราะห์ยอดสั่งซื้อปลาสลิดป้าเข็มแบบ Hot-Reload.
 
-วิเคราะห์ `chat_logs` + `facebook_demand_events` ย้อนหลัง แล้วให้ Groq สรุป
-ปรับ `trending_categories` / `radar_min_demand_score` / `pa_khem_tone` เก็บลง
-`system_preferences` (Supabase, key="hermes_skills") ให้บอท LINE (Render) กับ
-radar (local) แชร์สมองกลก้อนเดียวกัน
+วิเคราะห์:
+1. `direct_orders` (ยอดสั่งซื้อปลาสลิดแดดเดียวสุพรรณแท้ ป้าเข็ม: แพ็กเกจขายดี, สัดส่วนโอนเงิน vs COD, ช่องทางที่ขายดี)
+2. `chat_logs` + `facebook_demand_events` ย้อนหลัง
+แล้วให้ Groq สรุปปรับ `trending_categories` / `radar_min_demand_score` / `pa_khem_tone` /
+`fish_focus_package` / `fish_marketing_strategy` เก็บลง `system_preferences` (Supabase, key="hermes_skills")
+ให้บอททุกช่องทางแชร์สมองกลก้อนเดียวกัน
 
 ใช้จาก `tools/hermes_brain.py` (CLI) หรือ cron endpoint บน Render (M2).
 
@@ -112,8 +114,110 @@ def market_emphasis(db) -> str:
     return market_emphasis_for(market_tone(db))
 
 
+def gather_fish_order_stats(db, hours: int = 48) -> dict:
+    """รวบรวมสถิติยอดสั่งซื้อปลาสลิดป้าเข็มจากตาราง direct_orders (ทั้งสะสมทั้งหมดและย้อนหลัง N ชม.)."""
+    cutoff = _now() - datetime.timedelta(hours=hours)
+    empty_stats = {
+        "total_orders_all_time": 0,
+        "total_revenue_all_time": 0.0,
+        "recent_orders_count": 0,
+        "recent_revenue": 0.0,
+        "package_breakdown": {"500g": 0, "1kg": 0, "2kg": 0},
+        "payment_breakdown": {"TRANSFER": 0, "COD": 0},
+        "status_breakdown": {},
+        "channel_breakdown": {},
+        "best_selling_package": "1kg",
+        "cod_ratio_pct": 0.0,
+    }
+    try:
+        all_orders = db.query(models.DirectOrder).all()
+    except Exception as e:
+        logger.warning(f"[Hermes] ไม่สามารถดึงข้อมูล direct_orders ได้ ({e})")
+        return empty_stats
+
+    total_orders = 0
+    total_revenue = 0.0
+    recent_orders = 0
+    recent_revenue = 0.0
+    pkg_counts = {"500g": 0, "1kg": 0, "2kg": 0}
+    pay_counts = {"TRANSFER": 0, "COD": 0}
+    status_counts: dict[str, int] = {}
+    channel_counts: dict[str, int] = {}
+
+    for o in all_orders:
+        st = (o.status or "PENDING").strip().upper()
+        status_counts[st] = status_counts.get(st, 0) + 1
+        if st == "CANCELLED":
+            continue
+
+        price_val = float(o.price or 0.0)
+        total_orders += 1
+        total_revenue += price_val
+
+        # เช็คเวลา created_at (รองรับทั้ง aware และ naive จาก SQLite/Postgres)
+        created = o.created_at
+        if created is not None:
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=datetime.timezone.utc)
+            if created >= cutoff:
+                recent_orders += 1
+                recent_revenue += price_val
+
+        # แยกตามแพ็กเกจ (500g / 1kg / 2kg)
+        pcode = (o.package_code or "").strip().lower()
+        pname = (o.package_name or "").strip().lower()
+        if "500" in pcode or "500" in pname:
+            pkg_counts["500g"] += 1
+        elif "2kg" in pcode or "2 กิโล" in pname or "2โล" in pname:
+            pkg_counts["2kg"] += 1
+        else:
+            pkg_counts["1kg"] += 1
+
+        # แยกตามวิธีชำระเงิน (โอนเงิน vs เก็บปลายทาง COD)
+        pmethod = (o.payment_method or "").upper()
+        if "COD" in pmethod or "ปลายทาง" in pmethod:
+            pay_counts["COD"] += 1
+        else:
+            pay_counts["TRANSFER"] += 1
+
+        # แยกตามช่องทางที่สั่งซื้อจาก note
+        note = o.note or ""
+        if "[LINE_UID:" in note or "LINE" in note.upper():
+            ch = "LINE OA"
+        elif "[FB_ID:" in note or "MESSENGER" in note.upper():
+            ch = "Facebook Messenger"
+        elif "คอมเมนต์" in note or "COMMENT" in note.upper():
+            ch = "Facebook Comment"
+        else:
+            ch = "Web Storefront"
+        channel_counts[ch] = channel_counts.get(ch, 0) + 1
+
+    # หาแพ็กเกจขายดีอันดับ 1 (ถ้าเท่ากันหรือยังไม่มีออเดอร์ ให้ 1kg เป็นค่าเริ่มต้น)
+    best_pkg = "1kg"
+    max_pkg_cnt = -1
+    for k in ("1kg", "500g", "2kg"):
+        if pkg_counts[k] > max_pkg_cnt and pkg_counts[k] > 0:
+            max_pkg_cnt = pkg_counts[k]
+            best_pkg = k
+
+    cod_ratio = round((pay_counts["COD"] / total_orders) * 100, 1) if total_orders > 0 else 0.0
+
+    return {
+        "total_orders_all_time": total_orders,
+        "total_revenue_all_time": round(total_revenue, 2),
+        "recent_orders_count": recent_orders,
+        "recent_revenue": round(recent_revenue, 2),
+        "package_breakdown": pkg_counts,
+        "payment_breakdown": pay_counts,
+        "status_breakdown": status_counts,
+        "channel_breakdown": channel_counts,
+        "best_selling_package": best_pkg,
+        "cod_ratio_pct": cod_ratio,
+    }
+
+
 def gather_market_data(db, hours: int = 48) -> dict:
-    """รวมข้อมูลตลาดย้อนหลัง N ชม. และประวัติสถิติ Reels Insights -> report dict."""
+    """รวมข้อมูลตลาดย้อนหลัง N ชม. + ยอดสั่งซื้อปลาสลิด (direct_orders) + สถิติ Reels Insights -> report dict."""
     cutoff = _now() - datetime.timedelta(hours=hours)
 
     chats = db.query(models.ChatLog).filter(models.ChatLog.created_at >= cutoff).all()
@@ -144,6 +248,8 @@ def gather_market_data(db, hours: int = 48) -> dict:
     except Exception:
         pass
 
+    fish_orders = gather_fish_order_stats(db, hours=hours)
+
     return {
         "chat_count": len(chats),
         "chat_categories_requested": chat_categories,
@@ -151,11 +257,12 @@ def gather_market_data(db, hours: int = 48) -> dict:
         "facebook_demand_keywords": demand_keywords,
         "high_urgency_demands": high_urgency,
         "latest_facebook_insights": insights_history,
+        "fish_orders": fish_orders,
     }
 
 
 def merge_skills(current: dict, llm_result: dict) -> dict:
-    """ผสานผล LLM เข้ากับ skills ปัจจุบัน — clamp radar_min_demand_score ให้ [50, 90]."""
+    """ผสานผล LLM เข้ากับ skills ปัจจุบัน — clamp radar_min_demand_score ให้ [50, 90] และเก็บกลยุทธ์ปลาสลิด."""
     merged = dict(current or DEFAULT_SKILLS)
     # radar_daily_post_limit เป็นของแอดมิน (env RADAR_MAX_DAILY_POSTS) — ห้าม persist
     # ผ่าน Hermes (เคยทำให้บอทโพสต์ระเบิด 21 ตัวในวินาทีเดียว)
@@ -176,6 +283,14 @@ def merge_skills(current: dict, llm_result: dict) -> dict:
     if isinstance(tone, str) and tone.strip():
         merged["pa_khem_tone"] = tone.strip()
 
+    fish_pkg = llm_result.get("fish_focus_package")
+    if isinstance(fish_pkg, str) and fish_pkg.strip() in ("500g", "1kg", "2kg"):
+        merged["fish_focus_package"] = fish_pkg.strip()
+
+    fish_strat = llm_result.get("fish_marketing_strategy")
+    if isinstance(fish_strat, str) and fish_strat.strip():
+        merged["fish_marketing_strategy"] = fish_strat.strip()
+
     return merged
 
 
@@ -184,15 +299,20 @@ def _build_prompt(report: dict, current: dict) -> dict:
         "market_data": report,
         "current_skills": current,
         "instruction": (
-            "You are Hermes AI, the brain behind 'Pa Khem' (an expert Thai e-commerce "
-            "affiliate bot). Analyze the market_data. Identify the top 3 trending_categories. "
-            "If 'latest_facebook_insights' contains demographics like main_age_group (e.g. 45-54 or older), "
-            "please adjust 'pa_khem_tone' to suit their preference (e.g., use highly polite, respectful, and "
-            "caring Thai language). If there is a drop_off_seconds (e.g. 3s), write recommendations about "
-            "how to hook viewers in the first 3 seconds of the next video. "
-            "Decide radar_min_demand_score (usually 70, lower to 60 if demand is very low, "
-            "max 85 if too much spam). Return ONLY valid JSON with keys: trending_categories "
-            "(list of str), radar_min_demand_score (int), pa_khem_tone (str), and reason (str)."
+            "You are Hermes AI, the master brain behind 'Pa Khem' (ร้านปลาสลิดแดดเดียวสุพรรณแท้ ป้าเข็ม "
+            "and Thai e-commerce assistant). Analyze the market_data, especially 'fish_orders' "
+            "(DirectOrders of ปลาสลิดแดดเดียว ไซส์จัมโบ้ 6 ตัวโล: 500g=390 THB transfer/410 COD, "
+            "1kg=550 THB transfer/570 COD, 2kg=1,090 THB transfer free cold-chain shipping, no COD). "
+            "1. Identify top 3 trending_categories. "
+            "2. Decide radar_min_demand_score (50-90, default 70). "
+            "3. Adjust 'pa_khem_tone' to suit customers. "
+            "4. Choose 'fish_focus_package' ('500g', '1kg', or '2kg') to promote next based on fish_orders. "
+            "5. Write 'fish_marketing_strategy' in Thai: actionable advice on how to boost fish sales "
+            "and encourage bank transfer (free shipping) over COD based on current package_breakdown, "
+            "payment_breakdown, and channel_breakdown. "
+            "Return ONLY valid JSON with keys: trending_categories (list of str), "
+            "radar_min_demand_score (int), pa_khem_tone (str), fish_focus_package (str), "
+            "fish_marketing_strategy (str), and reason (str)."
         ),
     }
 
@@ -255,17 +375,40 @@ def format_market_memory(result: dict, timestamp: datetime.datetime | None = Non
     skills = result.get("skills", {})
     report = result.get("report", {})
     reason = result.get("reason", "")
+    fish = report.get("fish_orders") or {}
     ts = timestamp or _now()
     top_cats = list(report.get("chat_categories_requested", {}).keys())[:5]
+
+    fish_section = ""
+    if fish:
+        pkg_bd = fish.get("package_breakdown", {})
+        pay_bd = fish.get("payment_breakdown", {})
+        ch_bd = fish.get("channel_breakdown", {})
+        fish_section = (
+            "## 🐟 สถานะยอดสั่งซื้อปลาสลิดป้าเข็ม (Direct Orders)\n"
+            f"* **ยอดสั่งซื้อสะสมทั้งหมด**: {fish.get('total_orders_all_time', 0)} ออเดอร์ "
+            f"(รายได้รวม {fish.get('total_revenue_all_time', 0.0):,.2f} บาท)\n"
+            f"* **ยอดสั่งซื้อใหม่ (48h)**: {fish.get('recent_orders_count', 0)} ออเดอร์ "
+            f"(รายได้ {fish.get('recent_revenue', 0.0):,.2f} บาท)\n"
+            f"* **แพ็กเกจขายดีอันดับ 1**: `{fish.get('best_selling_package', '1kg')}` "
+            f"(500g: {pkg_bd.get('500g', 0)} | 1kg: {pkg_bd.get('1kg', 0)} | 2kg: {pkg_bd.get('2kg', 0)})\n"
+            f"* **วิธีชำระเงิน**: โอนเงิน {pay_bd.get('TRANSFER', 0)} | เก็บปลายทาง COD {pay_bd.get('COD', 0)} "
+            f"(สัดส่วน COD: {fish.get('cod_ratio_pct', 0.0)}%)\n"
+            f"* **ช่องทางที่ลูกค้าสั่งซื้อ**: {json.dumps(ch_bd, ensure_ascii=False)}\n"
+            f"* **แพ็กเกจที่ Hermes แนะนำให้ดันต่อ**: `{skills.get('fish_focus_package', fish.get('best_selling_package', '1kg'))}`\n"
+            f"* **กลยุทธ์การตลาดปลาสลิด**: {skills.get('fish_marketing_strategy', 'เน้นโปรโอนเงินส่งฟรีทุกชุด')}\n\n"
+        )
+
     return (
-        "# 🧠 Shopee Market Memory (Hermes AI)\n\n"
-        "บันทึกข้อเท็จจริง/แนวโน้มตลาดที่ Hermes วิเคราะห์ (Hot-Reload skills)\n\n"
-        "## 📊 สถานะตลาดล่าสุด\n"
+        "# 🧠 Pa Khem Market & Fish Sales Memory (Hermes AI)\n\n"
+        "บันทึกข้อเท็จจริง/แนวโน้มยอดขายปลาสลิดแดดเดียวและตลาดที่ Hermes วิเคราะห์ (Hot-Reload skills)\n\n"
+        f"{fish_section}"
+        "## 📊 สถานะตลาดและแชทล่าสุด\n"
         f"* **เวลา**: {ts.isoformat()}\n"
         f"* **LINE Chats (48h)**: {report.get('chat_count', 0)} (Top: {top_cats})\n"
         f"* **Facebook Demands (48h)**: {report.get('facebook_demand_count', 0)} "
         f"(High Urgency: {report.get('high_urgency_demands', 0)})\n"
-        f"* **เหตุผล LLM**: {reason or 'N/A'}\n\n"
+        f"* **เหตุผลวิเคราะห์รวม (LLM)**: {reason or 'N/A'}\n\n"
         "## ⚙️ Active Bot Skills (Hot-Reloaded)\n"
         "```json\n" + json.dumps(skills, indent=2, ensure_ascii=False) + "\n```\n"
     )
