@@ -1416,6 +1416,8 @@
         const rawDataUrl = evt.target.result;
         document.getElementById('slipThumbnail').src = rawDataUrl;
         try {
+          const curProd = PRODUCTS.find(x => x.sku === currentSelectedSku) || PRODUCTS[0];
+          const expectedPay = getOrderTotalPay(curProd);
           const smallDataUrl = await compressSlipForVision(rawDataUrl, 850);
           const res = await pkfFetchWithTimeout(PKF_GAS_URL, {
             method: 'POST',
@@ -1423,7 +1425,8 @@
             body: JSON.stringify({
               action: 'verify_slip',
               image_base64: smallDataUrl,
-              content_type: 'image/jpeg'
+              content_type: 'image/jpeg',
+              expected_amount: expectedPay
             })
           }, 15000);
           const vision = await res.json();
@@ -1439,15 +1442,26 @@
             statusEl.innerText = 'AI ตรวจพบเป็น: ' + selectedSlipInvalidReason + ' (กรุณากดลบแล้วเลือกภาพใบเสร็จสลิปโอนเงินที่มีรายการโอนสำเร็จนะคะ)';
             return;
           }
+          if (vision && vision.is_slip && vision.reject_reason) {
+            selectedSlipFile = null;
+            selectedSlipInvalidReason = vision.reject_reason;
+            box.style.borderColor = '#fca5a5';
+            box.style.background = '#fef2f2';
+            nameEl.style.color = '#b91c1c';
+            nameEl.innerText = '⚠️ สลิปไม่ผ่านการตรวจสอบค่ะ!';
+            statusEl.style.color = '#dc2626';
+            statusEl.innerText = vision.reject_reason + ' (กรุณาตรวจสอบสลิปอีกครั้งนะคะ)';
+            return;
+          }
           if (vision && vision.is_slip) {
             const amtStr = vision.amount ? Number(vision.amount).toLocaleString() + ' บาท' : '';
-            selectedSlipOcrText = `[AI ยืนยันสลิปจริง: ${amtStr}${vision.bank ? ' ' + vision.bank : ''}${vision.ref_no ? ' Ref:' + vision.ref_no : ''}]`;
+            selectedSlipOcrText = [AI ยืนยันสลิปจริงครบ 5 ชั้น: ];
             box.style.borderColor = '#6ee7b7';
             box.style.background = '#ffffff';
             nameEl.style.color = '#065f46';
-            nameEl.innerText = '✅ ตรวจสอบสลิปโอนเงินจริงสำเร็จ!';
+            nameEl.innerText = '✅ ตรวจสอบสลิปโอนเงินจริงสำเร็จ (ครบ 5 ชั้น)!';
             statusEl.style.color = '#059669';
-            statusEl.innerText = `ยอดโอนในสลิป: ${amtStr}${vision.bank ? ' • ' + vision.bank : ''}${vision.ref_no ? ' (Ref: ' + vision.ref_no + ')' : ''}`;
+            statusEl.innerText = ยอดโอน:  • ผู้รับ: นายจีรวัฒน์ พลอาจ;
             return;
           }
         } catch (err) {
