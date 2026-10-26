@@ -1097,13 +1097,13 @@
               </span>
             </div>
             <!-- Slip Thumbnail Preview -->
-            <div id="slipPreviewBox" style="display:none; margin-top:10px; align-items:center; gap:12px; background:#fff; padding:8px 12px; border-radius:8px; border:1px solid #a7f3d0;">
+            <div id="slipPreviewBox" style="display:none; margin-top:10px; align-items:center; gap:12px; background:#fff; padding:10px 12px; border-radius:8px; border:1.5px solid #a7f3d0;">
               <img id="slipThumbnail" src="" alt="สลิปโอนเงิน" style="width:55px; height:55px; object-fit:cover; border-radius:6px; border:1px solid #cbd5e1;">
               <div style="flex:1;">
-                <div style="font-size:0.85rem; font-weight:700; color:#065f46;" id="slipFileName">สลิปแนบสำเร็จ</div>
-                <div style="font-size:0.75rem; color:#059669;">✅ พร้อมตรวจสอบอัตโนมัติ</div>
+                <div style="font-size:0.86rem; font-weight:700; color:#065f46;" id="slipFileName">กำลังตรวจสอบรูปภาพ...</div>
+                <div style="font-size:0.78rem; color:#059669; margin-top:2px;" id="slipVerifyStatus">⏳ ระบบ AI กำลังตรวจสอบสลิปโอนเงิน...</div>
               </div>
-              <button type="button" onclick="clearSlipSelection()" style="background:#fee2e2; color:#b91c1c; border:none; padding:4px 8px; border-radius:6px; font-size:0.75rem; cursor:pointer;">ลบ</button>
+              <button type="button" onclick="clearSlipSelection()" style="background:#fee2e2; color:#b91c1c; border:none; padding:4px 8px; border-radius:6px; font-size:0.75rem; cursor:pointer;">ลบ / เปลี่ยนรูป</button>
             </div>
           </div>
         </div>
@@ -1363,8 +1363,31 @@
 
     
     let selectedSlipFile = null;
+    let selectedSlipChecking = false;
+    let selectedSlipInvalidReason = null;
+    let selectedSlipOcrText = '';
 
-    function handleSlipSelected(e) {
+    function compressSlipForVision(dataUrl, maxDim = 850) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = function() {
+          let w = img.width, h = img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+            else { w = Math.round(w * maxDim / h); h = maxDim; }
+          }
+          const c = document.createElement('canvas');
+          c.width = w; c.height = h;
+          const ctx = c.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(c.toDataURL('image/jpeg', 0.82));
+        };
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
+      });
+    }
+
+    async function handleSlipSelected(e) {
       const file = e.target.files[0];
       if (!file) return;
       if (!file.type.startsWith('image/')) {
@@ -1372,18 +1395,80 @@
         return;
       }
       selectedSlipFile = file;
+      selectedSlipChecking = true;
+      selectedSlipInvalidReason = null;
+      selectedSlipOcrText = '';
+
+      const box = document.getElementById('slipPreviewBox');
+      const nameEl = document.getElementById('slipFileName');
+      const statusEl = document.getElementById('slipVerifyStatus');
+      box.style.borderColor = '#93c5fd';
+      box.style.background = '#eff6ff';
+      nameEl.style.color = '#1e40af';
+      nameEl.innerText = '⏳ กำลังตรวจสอบรูปสลิปด้วย AI...';
+      statusEl.style.color = '#1d4ed8';
+      statusEl.innerText = 'กำลังอ่านข้อมูลธนาคารและยอดเงินโอน...';
+      box.style.display = 'flex';
+      document.getElementById('slipUploadTrigger').style.display = 'none';
+
       const reader = new FileReader();
-      reader.onload = function(evt) {
-        document.getElementById('slipThumbnail').src = evt.target.result;
-        document.getElementById('slipFileName').innerText = file.name.slice(0, 20) + (file.name.length > 20 ? '…' : '');
-        document.getElementById('slipPreviewBox').style.display = 'flex';
-        document.getElementById('slipUploadTrigger').style.display = 'none';
+      reader.onload = async function(evt) {
+        const rawDataUrl = evt.target.result;
+        document.getElementById('slipThumbnail').src = rawDataUrl;
+        try {
+          const smallDataUrl = await compressSlipForVision(rawDataUrl, 850);
+          const res = await pkfFetchWithTimeout(PKF_GAS_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({
+              action: 'verify_slip',
+              image_base64: smallDataUrl,
+              content_type: 'image/jpeg'
+            })
+          }, 15000);
+          const vision = await res.json();
+          selectedSlipChecking = false;
+          if (vision && vision.ok && !vision.is_slip) {
+            selectedSlipFile = null;
+            selectedSlipInvalidReason = vision.description || 'รูปภาพที่ไม่ใช่สลิปโอนเงิน';
+            box.style.borderColor = '#fca5a5';
+            box.style.background = '#fef2f2';
+            nameEl.style.color = '#b91c1c';
+            nameEl.innerText = '❌ รูปนี้ไม่ใช่สลิปโอนเงินธนาคารค่ะ!';
+            statusEl.style.color = '#dc2626';
+            statusEl.innerText = 'AI ตรวจพบเป็น: ' + selectedSlipInvalidReason + ' (กรุณากดลบแล้วเลือกภาพใบเสร็จสลิปโอนเงินที่มีรายการโอนสำเร็จนะคะ)';
+            return;
+          }
+          if (vision && vision.is_slip) {
+            const amtStr = vision.amount ? Number(vision.amount).toLocaleString() + ' บาท' : '';
+            selectedSlipOcrText = `[AI ยืนยันสลิปจริง: ${amtStr}${vision.bank ? ' ' + vision.bank : ''}${vision.ref_no ? ' Ref:' + vision.ref_no : ''}]`;
+            box.style.borderColor = '#6ee7b7';
+            box.style.background = '#ffffff';
+            nameEl.style.color = '#065f46';
+            nameEl.innerText = '✅ ตรวจสอบสลิปโอนเงินจริงสำเร็จ!';
+            statusEl.style.color = '#059669';
+            statusEl.innerText = `ยอดโอนในสลิป: ${amtStr}${vision.bank ? ' • ' + vision.bank : ''}${vision.ref_no ? ' (Ref: ' + vision.ref_no + ')' : ''}`;
+            return;
+          }
+        } catch (err) {
+          console.warn('Slip AI verify fallback:', err);
+        }
+        selectedSlipChecking = false;
+        box.style.borderColor = '#a7f3d0';
+        box.style.background = '#ffffff';
+        nameEl.style.color = '#065f46';
+        nameEl.innerText = file.name.slice(0, 20) + (file.name.length > 20 ? '…' : '');
+        statusEl.style.color = '#059669';
+        statusEl.innerText = '✅ แนบรูปภาพเรียบร้อย (รอแอดมินตรวจสอบ)';
       };
       reader.readAsDataURL(file);
     }
 
     function clearSlipSelection() {
       selectedSlipFile = null;
+      selectedSlipChecking = false;
+      selectedSlipInvalidReason = null;
+      selectedSlipOcrText = '';
       document.getElementById('slipFileInput').value = '';
       document.getElementById('slipPreviewBox').style.display = 'none';
       document.getElementById('slipUploadTrigger').style.display = 'block';
@@ -1514,6 +1599,16 @@
         isSubmitting = false;
         return;
       }
+      if (currentPayment === 'TRANSFER' && selectedSlipChecking) {
+        alert('กรุณารอระบบ AI ตรวจสอบรูปสลิปสักครู่นะคะ ⏳');
+        isSubmitting = false;
+        return;
+      }
+      if (currentPayment === 'TRANSFER' && selectedSlipInvalidReason) {
+        alert('❌ รูปที่แนบไม่ใช่สลิปโอนเงินค่ะ (AI ตรวจพบเป็น: ' + selectedSlipInvalidReason + ')\nกรุณาเปลี่ยนรูปเป็นสลิปโอนเงินธนาคารที่ถูกต้องก่อนกดยืนยันสั่งซื้อนะคะ 🙏');
+        isSubmitting = false;
+        return;
+      }
 
       const p = PRODUCTS.find(x => x.sku === currentSelectedSku) || PRODUCTS[0];
       const btn = document.getElementById('submitBtn');
@@ -1537,7 +1632,7 @@
       const shipLabel = currentShippingMode === 'COLD_TRUCK'
         ? (coldFee > 0 ? `[❄️ ส่งรถห้องเย็น +${coldFee}.-]` : `[❄️ ส่งรถห้องเย็น (ชุด 2 กก.)]`)
         : `[🧊 ส่งด่วนแพ็กฟอยล์+เจลไอซ์]`;
-      const combinedNote = [shipLabel, note].filter(Boolean).join(' ');
+      const combinedNote = [shipLabel, selectedSlipOcrText, note].filter(Boolean).join(' ');
 
       const payload = {
         action: 'order_fish',

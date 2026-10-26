@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 # Groq vision model — ใช้ SLIP_OCR_MODEL ถ้าตั้ง env ไว้ (override ได้)
 # (llama-3.2-11b-vision-preview ถูก decommission แล้ว 16/08/26 — เหลือ qwen3.6-27b ที่รับภาพได้)
-_SLIP_OCR_MODEL = "qwen/qwen3.6-27b"
+_SLIP_OCR_MODEL = "qwen/qwen3.8-27b"
 
 _SLIP_OCR_PROMPT = (
     "อ่านรูปสลิปโอนเงินธนาคารไทยนี้ แล้วตอบเป็น JSON เท่านั้น ไม่มีข้อความอื่น:\n"
@@ -155,3 +155,70 @@ def amount_matches(ocr_text, expected_text) -> bool:
         return False
     lo, hi = rng
     return lo <= ocr <= hi
+
+
+_SLIP_VERIFY_PROMPT = (
+    'ตรวจสอบว่ารูปภาพนี้เป็น "สลิปโอนเงินธนาคารไทย (Bank Transfer E-Slip ที่มีรายการโอนเงินสำเร็จ วันที่-เวลา ยอดเงินโอน และรหัสอ้างอิง)" จริงหรือไม่?\n'
+    'กฎเหล็ก:\n'
+    '1. หากเป็นรูปสมุดบัญชีธนาคาร (Passbook), รูปอาหาร/ปลาทอด, รูปสินค้า, รูปคน, รูปแชท, หรือรูปทั่วไปที่ไม่มีรายการโอนเงินสำเร็จ ให้ตอบ "is_slip": false เสมอ ห้ามเหมาเป็นสลิปเด็ดขาด!\n'
+    '2. จะตอบ "is_slip": true ได้ก็ต่อเมื่อเป็นใบเสร็จสลิปโอนเงินจากแอปธนาคารไทยที่ระบุโอนเงินสำเร็จ มียอดเงินโอน (amount > 0) และมีรหัสอ้างอิงเท่านั้น\n'
+    'ตอบเป็น JSON เท่านั้น:\n'
+    '{"is_slip": true/false, "category": "slip|passbook|food|product|other", "amount": "ตัวเลขยอดโอนหรือค่าว่าง", "bank": "ชื่อธนาคาร", "receiver_name": "ชื่อผู้รับโอน", "ref_no": "รหัสอ้างอิง", "description": "อธิบายสั้นๆ ว่าคือภาพอะไร"}'
+)
+
+
+def verify_and_extract_slip(image_bytes: bytes, content_type: str = "image/jpeg") -> dict:
+    """ตรวจสอบด้วย AI Vision ว่ารูปเป็นสลิปโอนเงินจริงหรือไม่ พร้อมดึงข้อมูลยอดโอน/ธนาคาร/เลขอ้างอิง."""
+    res = {
+        "is_slip": False,
+        "category": "other",
+        "amount": None,
+        "bank": None,
+        "receiver_name": None,
+        "ref_no": None,
+        "description": "รูปภาพทั่วไป",
+    }
+    clients = groq_clients()
+    if not image_bytes or not clients:
+        return res
+    try:
+        data_url = "data:%s;base64,%s" % (
+            content_type or "image/jpeg",
+            base64.b64encode(image_bytes).decode("ascii"),
+        )
+        for client in clients:
+            try:
+                response = call_with_backoff(
+                    lambda: client.chat.completions.create(
+                        model=getattr(settings, "SLIP_OCR_MODEL", "") or _SLIP_OCR_MODEL,
+                        messages=[
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": _SLIP_VERIFY_PROMPT},
+                                    {"type": "image_url", "image_url": {"url": data_url}},
+                                ],
+                            },
+                        ],
+                    ),
+                    circuit_key=client.api_key,
+                )
+                data = _parse_json(response.choices[0].message.content)
+                if isinstance(data, dict):
+                    amt = clean_amount(data.get("amount"))
+                    amt_val = parse_amount(amt)
+                    cat = str(data.get("category") or "other").strip().lower()
+                    is_valid = bool(data.get("is_slip") is True and amt_val and amt_val > 0 and cat == "slip")
+                    res["is_slip"] = is_valid
+                    res["category"] = cat
+                    res["amount"] = amt if is_valid else None
+                    res["bank"] = (str(data.get("bank") or "").strip() or None)
+                    res["receiver_name"] = (str(data.get("receiver_name") or "").strip() or None)
+                    res["ref_no"] = clean_ref(data.get("ref_no") or data.get("ref"))
+                    res["description"] = str(data.get("description") or ("สลิปโอนเงินธนาคาร" if is_valid else "รูปภาพทั่วไป")).strip()
+                return res
+            except Exception as e:
+                logger.warning(f"Groq verify_and_extract_slip key failed: {e}")
+    except Exception as e:
+        logger.warning(f"verify_and_extract_slip error: {e}")
+    return res

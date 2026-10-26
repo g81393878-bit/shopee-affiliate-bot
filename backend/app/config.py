@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 # Load environment variables from .env file
 env_path = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(dotenv_path=env_path)
+load_dotenv(dotenv_path=env_path, override=True)
 
 class Settings:
     PORT: int = int(os.getenv("PORT", 8000))
@@ -19,7 +19,7 @@ class Settings:
     # (llama-3.3-70b-versatile ถูกถอดออก 16/08/2026 — ตาม docs deprecation ของ Groq)
     GROQ_MODEL: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
     # Groq vision model สำหรับ OCR สลิป (อ่านรูป): ต้องเป็น model ที่รองรับภาพ
-    SLIP_OCR_MODEL: str = os.getenv("SLIP_OCR_MODEL", "qwen/qwen3.6-27b")
+    SLIP_OCR_MODEL: str = os.getenv("SLIP_OCR_MODEL", "qwen/qwen3.8-27b")
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
     # Claude model ผ่าน OpenAI-compat endpoint (https://api.anthropic.com/v1/): e.g. claude-opus-5
     ANTHROPIC_MODEL: str = os.getenv("ANTHROPIC_MODEL", "claude-opus-5")

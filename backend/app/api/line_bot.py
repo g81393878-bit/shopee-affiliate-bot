@@ -4,9 +4,8 @@ import json
 import re
 import logging
 import inspect
-import threading
 import urllib.request
-from typing import List, Optional, Tuple, Dict
+from typing import List, Optional, Tuple
 from fastapi import APIRouter, HTTPException, Header, Request, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -20,7 +19,7 @@ from pydantic import BaseModel
 
 from app.db import SessionLocal, get_db
 from app import models
-from app.services.product_cards import product_cards_message, link_button_message
+from app.services.product_cards import product_cards_message, link_button_message, build_direct_fish_card
 from app.services.product_price_policy import sanitize_public_product_text
 from app.services.line_quota import push_guard
 from app.services.category import guess_category, CATEGORY_KEYWORDS, normalize_query
@@ -28,7 +27,7 @@ from app.services.web_search import web_search_answer
 from app.services.hermes_brain import load_skills_safe, market_emphasis
 from app.config import settings
 from app.services.bot_profile import BOT_NAME, BOT_SLOGAN, owner_contact_text
-from app.services.slip_ocr import extract_slip_info, amount_matches
+from app.services.slip_ocr import extract_slip_info, verify_and_extract_slip, amount_matches
 
 logger = logging.getLogger(__name__)
 
@@ -282,116 +281,6 @@ def parse_product_code(text: str) -> Optional[int]:
     return None
 
 
-# ==============================================================================
-# 🔮 ระบบจัดการคิวตัวเลขเปิดไพ่ยิปซีเซลติกครอส 10 ใบ (Tarot 10-Card Stateful Manager)
-# ==============================================================================
-_tarot_user_sessions: Dict[str, dict] = {}
-
-CELTIC_CROSS_POSITIONS = [
-    "1. ตัวตนและสภาวะปัจจุบัน",
-    "2. อุปสรรคและแรงต้านที่ขวางทับ",
-    "3. จิตสำนึกและเป้าหมายในหัว",
-    "4. จิตใต้สำนึกและรากเหง้าของปัญหา",
-    "5. อดีตที่เพิ่งผ่านพ้นมา",
-    "6. อนาคตอันใกล้ (1-3 เดือนข้างหน้า)",
-    "7. ทัศนคติและมุมมองของตัวคุณ",
-    "8. อิทธิพลคนรอบตัวและสิ่งแวดล้อม",
-    "9. ความหวังลึกๆ และความกลัวในใจ",
-    "10. บทสรุปสูงสุดและผลลัพธ์ปลายทาง",
-]
-
-class TarotSessionManager:
-    """จัดการ Session การสะสมตัวเลข 1-78 สำหรับเปิดไพ่ยิปซี 10 ใบ (เซลติกครอส) หรือ 1-3 ใบ"""
-    @staticmethod
-    def start_session(user_id: str, target_count: int = 10):
-        _tarot_user_sessions[user_id] = {
-            "numbers": [],
-            "target": target_count,
-            "created_at": datetime.datetime.utcnow()
-        }
-
-    @staticmethod
-    def get_session(user_id: str) -> Optional[dict]:
-        sess = _tarot_user_sessions.get(user_id)
-        if not sess:
-            return None
-        # TTL 15 นาที เพื่อให้มีเวลาสงบทำสมาธิ
-        if (datetime.datetime.utcnow() - sess["created_at"]).total_seconds() > 900:
-            _tarot_user_sessions.pop(user_id, None)
-            return None
-        return sess
-
-    @staticmethod
-    def add_number(user_id: str, num: int) -> list:
-        sess = _tarot_user_sessions.get(user_id)
-        if not sess:
-            TarotSessionManager.start_session(user_id, 10)
-            sess = _tarot_user_sessions[user_id]
-        if num not in sess["numbers"]:
-            sess["numbers"].append(num)
-        sess["created_at"] = datetime.datetime.utcnow()
-        return sess["numbers"]
-
-    @staticmethod
-    def clear_session(user_id: str):
-        _tarot_user_sessions.pop(user_id, None)
-
-    @staticmethod
-    def extract_tarot_numbers(text: str) -> List[int]:
-        """สกัดตัวเลขจากข้อความ หากเลขเกิน 78 (เช่น 88) จะแปลงเข้าสำรับ 1-78 อัตโนมัติ (เช่น 88 -> 10) เพื่อให้ผู้ใช้ที่พิมพ์ครบ 10 ตัวไม่ต้องติดค้าง"""
-        t = _strip_polite_suffix((text or "").strip()).strip()
-        raw_nums = re.findall(r'\b\d+\b', t)
-        valid = []
-        for n in raw_nums:
-            val = int(n)
-            # ถ้าเลขเป็น 0 หรือเกิน 78 ให้แปลงเป็นช่วง 1-78 อัตโนมัติ
-            if val <= 0:
-                val = 1
-            elif val > 78:
-                val = ((val - 1) % 78) + 1
-            
-            # ถ้าเลขซ้ำในชุด ให้ขยับหาใบถัดไปที่ว่างในสำรับ
-            while val in valid and len(valid) < 78:
-                val = (val % 78) + 1
-                
-            if val not in valid:
-                valid.append(val)
-        return valid
-
-    @staticmethod
-    def save_reading(db: Session, line_user_id: str, card_nums: list) -> str:
-        """บันทึกประวัติการเปิดไพ่ 10 ใบลงในฐานข้อมูลถาวร และสร้าง reading_id"""
-        import uuid
-        import urllib.parse
-        rid = f"celtic_{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{str(uuid.uuid4())[:6]}"
-        # ดึง URL จาก Tunnel หรือ Domain หลัก
-        tunnel_url = "https://couple-tire-looksmart-personally.trycloudflare.com"
-        try:
-            if os.path.exists("/tmp/tunnel_url.txt"):
-                with open("/tmp/tunnel_url.txt", "r") as f:
-                    u = f.read().strip()
-                    if u:
-                        tunnel_url = u
-        except Exception:
-            pass
-            
-        v_url = f"{tunnel_url}/tarot/reading/{rid}"
-        try:
-            reading = models.TarotReading(
-                reading_id=rid,
-                line_user_id=line_user_id,
-                cards_data=card_nums,
-                video_url=v_url
-            )
-            db.add(reading)
-            db.commit()
-        except Exception as e:
-            logger.warning(f"Failed to save tarot reading: {e}")
-            db.rollback()
-        return rid
-
-
-
 def handle_latest_video_products(db: Session, user: models.User, is_owner: bool = False):
     """ดึงสินค้า 3 รายการล่าสุดที่เพิ่งโพสต์ลง YouTube Shorts/Reels ส่งให้ลูกค้าทันที"""
     posted_ids = []
@@ -429,6 +318,14 @@ def handle_direct_product_code(db: Session, user: models.User, prod_id: int, is_
         return TextSendMessage(text=f"ขออภัยจ้า สินค้ารหัส {prod_id} ({p.name[:30]}) สินค้าหมดหรือปิดการขายชั่วคราว ลองดูสินค้าแนะนำอื่นนะคะ")
     return None
 
+
+
+
+def is_fish_product_query(text: str) -> bool:
+    """ตรวจจับคำถามเกี่ยวกับปลาแดดเดียว (สินค้าตรงของร้าน)"""
+    t = (text or "").strip().lower()
+    fish_keys = ["ปลา", "ปลาแดดเดียว", "ปลาสลิด", "สั่งปลา", "ปลาทอด", "ซื้อปลา", "ปลาเค็ม", "ปลาแดด", "ราคาปลา", "ของกิน", "อาหาร", "ปลาแห้ง", "แดดเดียว"]
+    return any(k == t or k in t for k in fish_keys)
 
 def is_deal_query(text: str) -> bool:
     """แยก 'ขอสินค้าแนะนำ' ออกจาก 'คำค้นสินค้า' — 'หูฟังขายดี' ต้องไปค้น ไม่ใช่เมนูแนะนำ"""
@@ -621,13 +518,11 @@ def nosearch_new_text(user_text: str, category: str, tone: str = "neutral") -> s
 
 def quick_reply_items() -> QuickReply:
     """ปุ่มลัดแบบสากล (Quick Reply) — ลูกค้าแตะแทนพิมพ์
-    5 ปุ่ม: 🔮 เปิดไพ่ยิปซี · 🔍 ค้นหาสินค้า · 💬 ฝากคำถาม · 💰 ราคาบอท · 💰 วิธีจ่ายเงิน"""
+    3 ปุ่ม: 🔍 ค้นหาสินค้า · 💡 ถามได้ทุกเรื่อง · 🔥 สินค้าขายดี"""
     return QuickReply(items=[
-        QuickReplyButton(action=MessageAction(label="🔮 เปิดไพ่ยิปซี", text="เปิดไพ่")),
         QuickReplyButton(action=MessageAction(label="🔍 ค้นหาสินค้า", text="ค้นสินค้า")),
-        QuickReplyButton(action=MessageAction(label="💬 ฝากคำถาม", text="ฝากคำถาม")),
-        QuickReplyButton(action=MessageAction(label="💰 ราคาบอท/แพ็กเกจ", text="ราคาบอท")),
-        QuickReplyButton(action=MessageAction(label="💰 วิธีจ่ายเงิน", text="วิธีจ่ายค่าบอท")),
+        QuickReplyButton(action=MessageAction(label="💡 ถามได้ทุกเรื่อง", text="ถามได้ทุกเรื่อง")),
+        QuickReplyButton(action=MessageAction(label="🔥 สินค้าขายดี", text="สินค้าขายดี")),
     ])
 
 
@@ -809,14 +704,14 @@ BOT_MANUAL = (
     "ป้าเข็มหาให้จากของจริงในร้านได้เลยค่ะ\n\n"
     "อยากได้อะไรเป็นพิเศษ (เทียบของ / จำความชอบ / เช็คพัสดุ / โปรฯ)\n"
     "ถามป้าเข็มได้เลย หรือแตะปุ่มด้านล่างจ๊ะ 👇\n\n"
-    "🛠️ อยากเอาไปเปิดร้านเอง — ถาม \"ติดตั้งยังไง\" ป้าเข็มบอกทีละขั้นให้จ๊ะ"
+    "🛍️ ช้อปของดี ปลอดภัย มั่นใจได้ 100% จ้า 💕"
 )
 
 # แพ็กเกจ/ราคาบอท (ขายต่อ) — keyword เดียวกับ BOT_MANUAL_SECTIONS + ใช้จับ branch การ์ด Flex
 PACKAGE_KWS = (
-    "ค่าบริการ", "แพ็กเกจราคา", "ราคาแพ็กเกจ", "ราคาบอท", "แพ็กเกจ",
+    "ค่าบริการ", "แพ็กเกจราคา", "ราคาแพ็กเกจ", "ราคาบอท",
     "สมัครใช้", "สมัครบอท", "สมัครสมาชิก", "สมัครแพ็กเกจ",
-    "ซื้อบอท", "ขายบอท", "สนใจบอท", "อยากได้บอท", "เปิดร้าน", "ระบบบอท",
+    "ซื้อบอท", "อยากได้บอท", "เปิดร้าน",
 )
 
 # ขายขาด/ซื้อครั้งเดียว (แม่ค้าไม่อยากผูกเดือน) — ทางเลือกซื้อขาดจบครั้งเดียว
@@ -909,11 +804,6 @@ PACKAGE_PAYMENTS = (
 
 
 def package_payment_key(text: str):
-    """'ยอดlean'/'ยอดstarter'/... → คืน key แพ็กเกจ; ไม่ตรง → None (ปุ่ม Quick Reply ส่ง 'ยอด <แพ็กเกจ>')"""
-    t = (text or "").strip().lower().replace(" ", "")
-    for p in PACKAGE_PAYMENTS:
-        if f"ยอด{p['key']}" in t:
-            return p["key"]
     return None
 
 
@@ -1054,63 +944,38 @@ def _track_bot_purchase(db, line_user_id: str, text: str) -> None:
 
 
 _telegram_rate_cache: dict = {}  # throttle_key -> timestamp
-_tg_line_lock = threading.Lock()
-_tg_line_last_sent: float = 0.0
-_tg_line_backoff_until: float = 0.0
 
 
-def _send_telegram(text: str, throttle_key: str = None, cooldown_seconds: int = 60) -> bool:
+def _send_telegram(text: str, throttle_key: str = None, cooldown_seconds: int = 20) -> bool:
     """ส่งแจ้งเตือนเข้า Telegram Commander แอดมิน (พร้อมระบบ Anti-Spam Throttle ป้องกันสแปม 100%)"""
-    global _tg_line_last_sent, _tg_line_backoff_until
-
     # Guard 1: ห้ามส่งข้อความจาก Unit Test / Mock Data เข้า Telegram จริงเด็ดขาด
     if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("TESTING"):
         return True
     if "U_cust_" in text or "U_mock" in text or "test_user" in text:
         return True
 
+    # Guard 2: Anti-Spam Cooldown Throttle (กันลูกค้ากดปุ่มรัวๆ หรือสแปมข้อความซ้ำ)
     now = time.time()
-    with _tg_line_lock:
-        if now < _tg_line_backoff_until:
-            logger.warning("[ANTI-SPAM] Telegram API is backing off due to rate limit, skipping message")
-            return False
+    t_key = throttle_key or text[:100]
+    last_sent = _telegram_rate_cache.get(t_key, 0)
+    if (now - last_sent) < cooldown_seconds:
+        logger.info(f"[ANTI-SPAM] Throttled duplicate alert: {t_key[:50]}")
+        return True
+    _telegram_rate_cache[t_key] = now
 
-        # Guard 2: Anti-Spam Cooldown Throttle (กันลูกค้ากดปุ่มรัวๆ หรือสแปมข้อความซ้ำ)
-        t_key = throttle_key or text[:80]
-        last_sent = _telegram_rate_cache.get(t_key, 0)
-        if (now - last_sent) < cooldown_seconds:
-            logger.info(f"[ANTI-SPAM] Throttled duplicate alert: {t_key[:50]}")
-            return True
-
-        # Minimum interval between LINE bot telegram messages (3 seconds)
-        elapsed = now - _tg_line_last_sent
-        if elapsed < 3.0:
-            time.sleep(3.0 - elapsed)
-            now = time.time()
-
-        token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-        chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
-        if not token or not chat_id or "mock" in token.lower():
-            return False
-        try:
-            url = f"https://api.telegram.org/bot{token}/sendMessage"
-            payload = json.dumps({"chat_id": chat_id, "text": text[:4000], "disable_web_page_preview": True}).encode("utf-8")
-            req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=5) as res:
-                if res.status == 200:
-                    _tg_line_last_sent = time.time()
-                    _telegram_rate_cache[t_key] = _tg_line_last_sent
-                    return True
-        except urllib.error.HTTPError as he:
-            if he.code == 429:
-                _tg_line_backoff_until = time.time() + 60
-                logger.error("🚨 [TELEGRAM RATE LIMIT] Telegram returned 429! Backing off for 60 seconds")
-            else:
-                logger.warning(f"Telegram notify HTTP error: {he.code}")
-            return False
-        except Exception as e:
-            logger.warning(f"Telegram notify failed: {e}")
-            return False
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+    if not token or not chat_id or "mock" in token.lower():
+        return False
+    try:
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        payload = json.dumps({"chat_id": chat_id, "text": text[:4000], "disable_web_page_preview": True}).encode("utf-8")
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=5) as res:
+            return res.status == 200
+    except Exception as e:
+        logger.warning(f"Telegram notify failed: {e}")
+        return False
 
 
 def _notify_owner_payment_intent(user, text: str = "") -> None:
@@ -1536,11 +1401,9 @@ BOT_MANUAL_SECTIONS = [
      "🙂 ไม่ต้องเป็นโปรแกรมเมอร์ก็ใช้ได้จ๊ะ — ทำตามคู่มือทีละขั้น ~15 นาที (มีคำสั่งก๊อป-แปะ) "
      "ติดตรงไหน ถามป้าเข็มได้เลย"),
     (("ลิขสิทธิ์", "license", "ขายต่อ", "ไวรัส", "อันตราย"),
-     "✅ บอทป้าเข็มเป็นสินค้ามีลิขสิทธิ์ของร้าน (ไม่มีไวรัส ปลอดภัย) — ขายเป็นแพ็กเกจ 990/1,990/4,990 "
-     "ห้ามเอาไปขายต่อ/ดัดแปลงขายโดยไม่ได้รับอนุญาตจากเจ้าของร้านนะจ๊ะ"),
+     "✅ ระบบร้านป้าเข็มปลอดภัย 100% ไม่มีไวรัส ไม่เก็บรหัสผ่านหรือข้อมูลการเงินใดๆ ช้อปสบายใจได้เลยจ้า"),
     (("ค่าใช้จ่าย", "เสียเงิน"),
-     "💰 ลูกค้าที่ซื้อของผ่านบอท = ไม่มีค่าใช้จ่ายจ๊ะ (จ่ายตามราคาร้านค้าบน Shopee) "
-     "ส่วนคนอยากได้บอทไปเปิดร้านเอง มีแพ็กเกจ 990/1,990/4,990 — ถาม \"ราคาบอท\" ได้เลยจ๊ะ"),
+     "💰 การใช้งานค้นหาสินค้ากับป้าเข็ม ฟรี 100% ไม่มีค่าใช้จ่ายจ้า ซื้อสินค้าตามราคาจริงใน Shopee ไม่มีบวกเพิ่มจ๊ะ"),
     (("สมัครshopee", "สมัครaffiliate", "สมัครแอฟฟิลิเอต", "สมัครนายหน้า", "affiliateสมัคร"),
      "📦 สมัคร Shopee Affiliate ฟรี: affiliate.shopee.co.th → สมัคร/รออนุมัติ → ได้ Affiliate ID "
      "ใช้ทำลิงก์ค่าคอม + export สินค้า (ขั้นละเอียดใน docs/setup-guide.md จ๊ะ)"),
@@ -1562,8 +1425,7 @@ BOT_MANUAL_SECTIONS = [
      "💵 จ่ายปลายทาง (COD) ได้หรือไม่ — ตามที่ร้านค้าบน Shopee เปิดไว้จ๊ะ ดูตัวเลือกตอนกดสั่งซื้อ "
      "(บางร้านมี/ไม่มี ขึ้นกับร้านค้านั้นๆ)"),
     (("โค้ดจากไหน", "โค้ดอยู่ไหน", "โค้ดหน่อย", "โค้ดของบอท", "โค้ด", "ดาวน์โหลด", "github", "ซอร์ส", "source"),
-     "💻 โค้ดบอทเป็นความลับของร้าน ไม่เปิดให้ดาวน์โหลดแล้วจ๊ะ — อยากได้บอทไปใช้เอง สมัครแพ็กเกจได้เลย "
-     "ถาม \"ราคาบอท\" ดูราคา 990/1,990/4,990 จ๊ะ"),
+     "💻 ร้านป้าเข็มเป็นระบบแนะนำสินค้าอัตโนมัติ สำหรับค้นหาและเช็คของแท้จาก Shopee จ้า สนใจหาสินค้าอะไรพิมพ์บอกป้าได้เลยนะคะ"),
     (("ขอบคุณ", "ขอบใจ"),
      "😊 ด้วยความยินดีจ๊ะ! ถ้าอยากได้อะไรเพิ่ม พิมพ์ชื่อสินค้า หรือแตะเมนูด้านล่างได้เลยนะคะ"),
     (("ราคาเท่าไหร่", "ราคาเท่าไร"),
@@ -1611,49 +1473,19 @@ BOT_MANUAL_SECTIONS = [
     (("ลบ", "ข้อมูล", "ส่วนตัว"), "🗑️ พิมพ์ \"ลบข้อมูลฉัน\" → ป้าเข็มลบประวัติ + ความจำทั้งหมดให้ทันที (สิทธิ์ตาม PDPA) จ๊ะ"),
     # --- Lean Stack / แพลตฟอร์ม / ไฟล์สินค้า / ฟีเจอร์เสริม / ค่า LINE OA (ขายบอท) ---
     (("ลีนสแต็ค", "leanstack", "บอทง่าย", "บอทถูก", "ตอบkeyword", "keyword", "googlesheets", "แอปสคริปต์", "appsscript", "sheets"),
-     "🟡 Lean 490/เดือน = บอทแบบง่าย ไม่มี AI/ฐานข้อมูล/เซิร์ฟเวอร์จ๊ะ:\n"
-     "• ตอบตามคีย์เวิร์ด (แก้คำตอบใน Google ชีท ไม่แตะโค้ด)\n"
-     "• เก็บข้อความลูกค้าลง Google Sheets อัตโนมัติ\n"
-     "• ต้อนรับอัตโนมัติ + ฝากคำถามให้เจ้าของ\n"
-     "• ติดตั้งไฟล์เดียว ตั้งค่า 3 จุด (ชีท ID + Token + Secret) ใช้ได้เลย\n\n"
-     "เหมาะกับร้านที่อยากได้บอทตอบ FAQ ง่าย ๆ — ถาม \"ราคาบอท\" ดูครบ 4 ระดับได้เลยจ๊ะ"),
-    (WHY_490_KWS,
-     "💛 ทำไม 490฿/เดือน? ป้าเข็มตอบให้แม่ค้าชัด ๆ จ๊ะ:\n\n"
-     "1️⃣ ถูกกว่าจ้างคนตอบแชท\n"
-     "   490/เดือน เทียบกับค่าแรงขั้นต่ำวันละ 300+ บาท\n"
-     "   บอทตอบลูกค้าแทน 24 ชม. — คุ้มกว่าเยอะ\n\n"
-     "2️⃣ ถูกกว่าเจ้าตลาด ได้ครบกว่า\n"
-     "   เจ้าอื่นเริ่ม 500฿/เดือน (ZWIZ/Chatme) — เรา 490 ถูกกว่า\n"
-     "   ได้บอทตอบคีย์เวิร์ด + เก็บข้อมูลลง Google Sheets อัตโนมัติ\n\n"
-     "3️⃣ ทำไมเป็นรายเดือน\n"
-     "   Facebook/LINE เปลี่ยนหน้าตาบ่อย → ต้องมีคนอัปเดตดูแล\n"
-     "   รายเดือน = ค่าดูแล/อัปเดตรวม ไม่ต้องจ่ายก้อนใหญ่ เริ่มเบา ๆ\n\n"
-     "4️⃣ ไม่อยากผูกเดือน? มีขายขาด\n"
-     "   ถาม \"ขายขาด\" → จ่ายครั้งเดียว 15,000–25,000 บาท\n\n"
-     "ดูทั้ง 4 ระดับ ถาม \"ราคาบอท\" ได้เลยจ๊ะ 💕"),
+     "🛍️ ร้านป้าเข็มเน้นบริการแนะนำสินค้า Shopee Affiliate 100% จ้า ป้าช่วยค้นหาของดีให้ฟรี ไม่มีค่าใช้จ่ายจ๊ะ"),
+    (WHY_490_KWS, "🛍️ ร้านป้าเข็มค้นหาสินค้าและแนะนำดีลจาก Shopee ฟรี 100% ไม่มีค่าบริการจ๊ะ"),
     (("เฉพาะshopee", "ใช้เฉพาะ", "ใช้กับshopee", "ลาซาด้า", "lazada", "ติ๊กต็อก", "แพลตฟอร์มอื่น"),
-     "🛒 ใช้กับแพลตฟอร์มไหนจ๊ะ:\n"
-     "🟡 Lean (490) = ใช้ได้ทุกแพลตฟอร์ม (Lazada/TikTok/ร้านอาหาร/คลินิก) แค่แก้คำตอบในชีท\n"
-     "🟢 Starter+ (990+) = ส่วนขายสินค้าผูกกับ Shopee Affiliate (ลิงก์/ค่าคอม/เช็คลิงก์ตายทำไว้ให้ Shopee)\n"
-     "อยากใช้ Lazada/TikTok กับ Starter+ = งานพัฒนาเพิ่ม (ไม่ใช่แค่ตั้งค่า) จ๊ะ"),
+     "🛒 ป้าเข็มคัดสรรสินค้าจาก Shopee เป็นหลักจ้า เพื่อให้มั่นใจว่าเป็นของแท้ มีการรับประกัน และมีโค้ดส่วนลดคุ้มๆ เสมอจ๊ะ"),
     (("ไฟล์สินค้า", "ไฟล์csv", "csv", "คอลัมน์", "ลิงก์สินค้า", "ลิงก์ข้อเสนอ"),
      "📋 ไฟล์สินค้า = CSV (เปิดใน Excel/Google ชีท) มี 9 คอลัมน์ แต่จำเป็นแค่ 2 จ๊ะ:\n"
      "① ชื่อสินค้า → บอทใช้ค้นหา\n"
      "② ลิงก์ข้อเสนอ → ลิงก์ affiliate (ระบบตรวจก่อนโชว์)\n\n"
      "สลับลำดับ/ลบ/เพิ่มคอลัมน์ได้อิสระ (อ่านตามชื่อคอลัมน์ ไม่ใช่ตำแหน่ง) มีเทมเพลต sample-products.csv ให้แล้วจ๊ะ"),
     (("ฟีเจอร์เสริม", "addon", "add-on", "ฟีเจอร์เพิ่ม"),
-     "➕ ฟีเจอร์เสริม (บวกเพิ่มจากแพ็กเกจ) จ๊ะ:\n"
-     "• เปลี่ยนแบรนด์ (ชื่อ/เสียง/โลโก้) +2,500\n"
-     "• แยกฐานข้อมูล +1,500\n"
-     "• LINE OA เพิ่ม +1,000\n"
-     "• เพจ Facebook เพิ่ม +500\n"
-     "• สร้างคอนเทนต์ AI +500\n"
-     "• Support เร่งด่วน +500\n\n"
-     "ฟีเจอร์ที่รวมในแพ็กเกจแล้วไม่คิดซ้ำนะจ๊ะ"),
+     "✨ ร้านป้าเข็มมีระบบช่วยค้นหาสินค้า เปรียบเทียบราคา และจำความชอบของคุณลูกค้าฟรี ครบจบในตัวจ้า 💕"),
     (("ค่าบริการไลน์", "ไลน์แพ็กเกจ"),
-     "💬 ค่า LINE OA (555 บาท/เดือน) = ลูกค้าเจ้าของร้านจ่ายตรง LINE เองจ๊ะ\n"
-     "ค่าคลาวด์ (Render + Supabase) ใช้ฟรีทั้งคู่ — แอดมินไม่เก็บค่าส่วนนี้\n"
-     "ราคาแพ็กเกจที่จ่าย = ค่าซอฟต์แวร์ล้วน ๆ ถาม \"ราคาบอท\" ดูรายละเอียดได้เลยจ๊ะ"),
+     "💬 ลูกค้าใช้งานค้นหาสินค้ากับร้านป้าเข็มผ่าน LINE ฟรี 100% ไม่มีค่าบริการใดๆ ทั้งสิ้นจ้า 😊"),
     (("เชื่อถือ", "น่าเชื่อ", "ไว้ใจ", "โกง", "มิจฉาชีพ", "หลอกลวง", "เชื่อได้ไหม", "โดนหลอก"),
      "🤝 ร้านป้าเข็มคือร้านจริง ไม่ใช่สแกมจ๊ะ:\n"
      "• ป้าเข็มเป็นนายหน้า Shopee (ลิงก์ affiliate แท้) ลูกค้ากดซื้อ = จ่ายที่แอป Shopee โดยตรง\n"
@@ -1665,41 +1497,10 @@ BOT_MANUAL_SECTIONS = [
      "💰 ป้าเข็มไม่ตั้งราคาสินค้าและไม่บวกเพิ่มจ๊ะ — ราคาสุดท้ายยึดตามที่ Shopee แสดงหลังเลือกสินค้า/คูปอง\n"
      "ป้าเข็มเป็นนายหน้า — ได้ค่าคอมจาก Shopee/แบรนด์ ไม่เก็บเพิ่มจากลูกค้า\n"
      "กดซื้อไปที่แอป Shopee จ่ายตามราคาร้านค้าโดยตรงเลยจ๊ะ"),
-    (BUILD_TIME_KWS,
-     "⏱️ ระยะเวลาทำบอทให้แม่ค้า จ๊ะ:\n"
-     "• 🟡 Lean 490 — 1 วัน (ตั้งค่าไฟล์เดียว + ส่งคู่มือ)\n"
-     "• 🟢 Starter 990 — 2-3 วัน (สินค้า + คีย์ AI + เช็กลิงก์)\n"
-     "• 🔵 Business 1,990 — 5 วัน (+ โพสต์ FB + เรดาร์ + แดชบอร์ด)\n"
-     "• 🟣 White-Label 4,990 — 1-2 สัปดาห์ (เปลี่ยนแบรนด์ + ฐานข้อมูลแยก)\n"
-     "• 🟠 ขายขาด — 2-3 สัปดาห์ (ติดตั้ง + ตั้งค่าให้ครบทั้งระบบ)\n\n"
-     "ยิ่งแพ็กเกจสูง ฟีเจอร์ยิ่งเยอะ ใช้เวลาเพิ่มตาม — เริ่มเร็วสุด 1 วัน (Lean)\n\n"
-     "⏳ เริ่มนับวันเมื่อยืนยันสั่งทำ + จ่ายเดือนแรกครบแล้วนะจ๊ะ (ขายขาด = จ่ายมัดจำ 50% ครบ) "
-     "จ่ายครบวันไหน นับจากวันนั้นเลย ไม่ต้องถามซ้ำจ๊ะ\n"
-     "⏳ ระยะเวลาอาจบวกลบ 1–2 วันตามคิวงานช่วงนั้นนะจ๊ะ 💕"),
-    (PACKAGE_KWS,
-     "💼 แพ็กเกจร้านป้าเข็ม มี 4 ระดับจ๊ะ:\n\n"
-     "🟡 Lean 490/เดือน — บอทง่าย ตอบคีย์เวิร์ด + เก็บข้อมูลลง Google Sheets (ไม่มี AI/DB)\n"
-     "🟢 Starter 990/เดือน — บอทตอบแชท: ค้นหา/แนะนำสินค้า + ลิงก์สั่งซื้อ (สินค้า ≤300 ตัว, แชท 5,000/เดือน)\n"
-     "🔵 Business 1,990/เดือน — บอทรันเองทั้งวงจร: + Facebook auto-post + หาคนอยากซื้ออัตโนมัติ + แจ้งราคาตก + ของใหม่ + แดชบอร์ด (สินค้า/แชทไม่จำกัด)\n"
-     "🟣 White-Label 4,990/เดือน — Business + เปลี่ยนชื่อ/เสียง/โลโก้ + แยกฐานข้อมูล + custom domain + support เร็วสุด\n\n"
-     "สนใจแพ็กเกจไหน ติดต่อเจ้าของร้านได้เลยจ๊ะ 💕"),
-    (RENT_VS_BUYOUT_KWS,
-     "🧾 รายเดือน กับ ขายขาด ต่างกันแบบนี้จ๊ะ:\n\n"
-     "🔁 แพ็กเกจรายเดือน (490/990/1,990/4,990) = เช่าใช้\n"
-     "• จ่ายเดือนแรกก่อนเริ่ม แล้วจ่ายต่อทุกเดือน\n"
-     "• ป้าเข็มดูแล + อัปเดตระบบให้ตลอด (FB/LINE เปลี่ยนยังไงก็ตามให้)\n"
-     "• อยากหยุดเมื่อไหร่ก็หยุดได้ ไม่ผูก\n\n"
-     "🟠 ขายขาด (15,000–25,000) = ซื้อเป็นของตัวเอง\n"
-     "• จ่ายครั้งเดียวจบ ไม่มีรายเดือน\n"
-     "• รวมติดตั้ง + ตั้งค่าให้ครบทั้งระบบ\n"
-     "• เหมาะร้านที่อยากจบทีเดียว ไม่ผูกเดือน\n\n"
-     "สรุป: รายเดือน = เช่าใช้ จ่ายเบา ๆ ให้ป้าเข็มดูแล · ขายขาด = ซื้อขาด จ่ายก้อนเดียวจบ\n\n"
-     "ถาม \"ราคาบอท\" ดูรายละเอียด/ราคาได้เลยจ๊ะ 💕"),
-    (PERPETUAL_KWS,
-     "🟠 ขายขาด (ซื้อครั้งเดียว) จ๊ะ:\n"
-     "• ค่าติดตั้ง + ตั้งค่า 15,000–25,000 บาท (จ่ายครั้งเดียว ไม่มีรายเดือน)\n"
-     "• ค่า LINE OA + คลาวด์ = ลูกค้าจ่ายเอง (ตามปกติ)\n\n"
-     "เหมาะร้านที่ไม่อยากผูกเดือน — ถาม \"ราคาบอท\" ดูแบบรายเดือน 4 ระดับได้ด้วยจ๊ะ 💕"),
+    (BUILD_TIME_KWS, "⏱️ บอทป้าเข็มพร้อมบริการค้นหาสินค้าและตอบคำถามตลอด 24 ชั่วโมงแบบเรียลไทม์จ้า ไม่ต้องรอคิวเลยนะคะ 😊"),
+    (PACKAGE_KWS, "🛍️ ร้านป้าเข็มเป็นร้านแนะนำสินค้า Shopee Affiliate จ้า ไม่มีจำหน่ายระบบบอทแล้วนะคะ อยากได้สินค้าตัวไหนบอกป้าได้เลยจ๊ะ 💕"),
+    (RENT_VS_BUYOUT_KWS, "🛍️ ร้านป้าเข็มให้บริการแนะนำสินค้า Shopee ฟรี ไม่มีระบบเช่าหรือขายบอทแล้วจ้า ลูกค้าช้อปได้สบายใจเลยนะคะ 💕"),
+    (PERPETUAL_KWS, "🛍️ ร้านป้าเข็มให้บริการแนะนำสินค้า Shopee ฟรี ไม่มีระบบขายขาดหรือเช่าบอทแล้วจ้า ช้อปของดีดีลคุ้มได้ตลอด 24 ชม. จ๊ะ 💕"),
     (("มาตรฐานการบริการ", "มาตรฐานบริการ", "บริการลูกค้า", "ประสบการณ์ลูกค้า",
       "ขั้นตอนการบริการ", "การบริการ", "บริการดี", "บริการ", "ห้าขั้นตอน", "5ขั้นตอน"),
      "💛 ป้าเข็มดูแลลูกค้าตามมาตรฐาน 5 ขั้นตอนจ๊ะ:\n\n"
@@ -1734,7 +1535,7 @@ INSTALL_REPLY_CUSTOMER = (
     "แค่กดแอดไลน์ร้าน แล้วพิมพ์ชื่อสินค้า/ถามได้ทันที "
     "(มือถือ คอม แท็บเล็ต ใช้ได้หมด ไม่ต้องลงแอปเพิ่ม ไม่มีค่าใช้จ่าย)\n\n"
     "ลองพิมพ์ \"ค้นสินค้า\" หรือชื่อที่อยากได้ เช่น \"หูฟังไม่เกิน 300\" ได้เลยจ๊ะ 😊\n\n"
-    "💻 อยากได้บอทไปเปิดร้านเอง? ถาม \"ราคาบอท\" ดูราคาได้เลยจ๊ะ"
+    "🛍️ ช้อปของดี ของแท้ ดีลลดคุ้มๆ ได้ตลอด 24 ชม. จ๊ะ"
 )
 INSTALL_REPLY_OWNER = (
     "🛠️ อยากเปิดร้านด้วยบอทป้าเข็ม? สมัครแพ็กเกจก่อน (990/1,990/4,990) แล้วเตรียม 4 อย่าง:\n"
@@ -1864,36 +1665,26 @@ def package_flex_card() -> FlexSendMessage:
 
 
 def is_package_request(text: str) -> bool:
-    """ลูกค้าถามแพ็กเกจ/ราคาบอท? → ตอบสรุปย่อ + ปุ่มเลือกทีละแพ็กเกจ"""
+    """ลูกค้าถามเรื่องซื้อบอท/เช่าบอท? → ตอบชี้แจงว่าไม่มีจำหน่ายบอทแล้ว"""
     t = (text or "").strip().lower().replace(" ", "")
-    # "ค่าบริการไลน์"/"ไลน์แพ็กเกจ" = ค่า LINE OA (section แยก) ไม่ใช่แพ็กเกจบอท
     if "ค่าบริการไลน์" in t or "ไลน์แพ็กเกจ" in t:
         return False
-    return any(k in t for k in PACKAGE_KWS)
+    return any(k in t for k in ("ราคาบอท", "เช่าบอท", "ซื้อบอท", "สมัครบอท", "อยากได้บอท", "แพ็กเกจบอท"))
 
 
 def package_summary_text() -> str:
-    """สรุปย่อ 5 แพ็กเกจ — ลูกค้าถาม 'ราคาบอท' เห็นราคาครบ แล้วแตะดูรายละเอียดทีละตัว (ไม่ทิ้งการ์ดเต็มทันที)"""
+    """ชี้แจงเมื่อมีผู้ถามเรื่องบอท — บอทป้าเข็มเป็นผู้ช่วยช้อป Shopee Affiliate 100%"""
     return (
-        "💼 แพ็กเกจร้านป้าเข็ม มี 5 ทางเลือกจ๊ะ:\n\n"
-        "🟡 Lean 490฿/เดือน\n"
-        "🟢 Starter 990฿/เดือน\n"
-        "🔵 Business 1,990฿/เดือน\n"
-        "🟣 White-Label 4,990฿/เดือน\n"
-        "🟠 ขายขาด 15,000–25,000฿ (จ่ายครั้งเดียว)\n\n"
-        "แตะแพ็กเกจที่สนใจด้านล่าง ดูรายละเอียด + ระยะเวลาทำ + ยอดจ่ายได้เลยจ๊ะ 👇"
+        "🤗 ร้านป้าเข็มเป็นร้านแนะนำสินค้าและดีลพิเศษจาก Shopee จ้า 💕\n\n"
+        "ปัจจุบันไม่มีจำหน่ายระบบบอทแล้วนะคะ ป้าเข็มเน้นช่วยคุณลูกค้าค้นหาของแท้ "
+        "และเปรียบเทียบดีลราคาพิเศษจาก Shopee โดยตรงฟรี 100% จ้า\n\n"
+        "พิมพ์ชื่อสินค้าที่กำลังมองหา หรือแตะปุ่มด้านล่างได้เลยนะจ๊ะ 😊"
     )
 
 
 def package_summary_quick_reply() -> QuickReply:
-    """ปุ่ม 5 แพ็กเกจรายตัว — แตะ → 'ยอด <key>' → ตอบรายละเอียดตัวนั้น (ไม่ทิ้งการ์ดเต็มทันที)"""
-    return QuickReply(items=[
-        QuickReplyButton(action=MessageAction(label="🟡 Lean", text="ยอด lean")),
-        QuickReplyButton(action=MessageAction(label="🟢 Starter", text="ยอด starter")),
-        QuickReplyButton(action=MessageAction(label="🔵 Business", text="ยอด business")),
-        QuickReplyButton(action=MessageAction(label="🟣 White-Label", text="ยอด whitelabel")),
-        QuickReplyButton(action=MessageAction(label="🟠 ขายขาด", text="ยอด ขายขาด")),
-    ])
+    """ปุ่มลัดนำทางกลับสู่การช้อปปิ้ง"""
+    return quick_reply_items()
 
 
 # หัวข้อที่ตอบละเอียดเฉพาะเจ้าของร้าน/คนอยากเปิดร้านเอง — ลูกค้าทั่วไปถาม → ตอบสั้นชี้ทางแทน
@@ -3149,15 +2940,14 @@ _pending_leave: dict = {}      # โหมดฝากคำถาม ("ฝา�
 PENDING_QUESTION_TTL_MIN = 30          # รอคำถามได้ 30 นาที แล้วคืนโหมดปกติ
 # ปุ่ม "คุยกับป้าเข็ม" — แนะนำตัวบอท (ทำอะไรได้บ้าง) + เข้าเรื่องราคา/แพ็กเกจ
 # (5 ขั้นตอนโชว์แล้วตอน "สวัสดี"/แอดเพื่อน ไม่ซ้ำที่นี่ — คนกดปุ่มนี้ส่วนใหญ่สนใจตัวบอท)
-CHAT_BOT_PHRASES = ("คุยกับป้าเข็ม", "คุยกับแม่เข็ม")
+CHAT_BOT_PHRASES = ("คุยกับป้าเข็ม", "คุยกับแม่เข็ม", "ถามได้ทุกเรื่อง", "ถามอะไรก็ได้", "ปรึกษาป้าเข็ม")
 CHAT_BOT_PROMPT = (
-    "🤗 ป้าเข็มเป็นบอทไลน์ช่วยแม่ค้าขายของอัตโนมัติจ๊ะ:\n\n"
-    "• ค้นหา/แนะนำสินค้า + ลิงก์ค่าคอม\n"
-    "• ตอบแชทลูกค้า 24 ชม. + จำความชอบ (PDPA ปลอดภัย)\n"
-    "• โพสต์ Facebook หาคนซื้อ (Business ขึ้นไป)\n"
-    "• FAQ อัตโนมัติ + ฝากคำถามให้เจ้าของตอบทีหลัง\n\n"
-    "💰 มี 5 แพ็กเกจ เริ่ม 490฿/เดือน — แตะปุ่ม \"ราคาบอท/แพ็กเกจ\" ด้านล่างได้เลยจ๊ะ 👇\n\n"
-    "หรือพิมพ์ชื่อสินค้า/คำถามให้ป้าช่วยได้เลยนะคะ 😊"
+    "💡 สวัสดีจ้าลูก! ป้าเข็ม AI ตอบแทนได้ทุกเรื่องแล้วนะลูก 💕\n\n"
+    "ถามป้าได้หมดเลย ไม่ว่าจะเป็น:\n"
+    "• 🧠 ถามความรู้ทั่วไป, ปรึกษาปัญหาชีวิต, งานบ้าน, ไอที, สุขภาพเบื้องต้น\n"
+    "• 🔍 หาของใช้ แนะนำวิธีเลือกซื้อสินค้าของแท้ใน Shopee หรือเปรียบเทียบราคา\n"
+    "• 🔥 ดูของฮิตขายดี พิมพ์ \"สินค้าขายดี\"\n\n"
+    "พิมพ์คำถามหรือเรื่องที่สงสัยส่งมาหาป้าได้เลยจ้า ป้าเข็มพร้อมตอบ 24 ชม. นะลูก 😊"
 )
 # ปุ่ม "ฝากคำถาม" — ฝากรายละเอียดไว้ แล้วเจ้าของร้านตอบทีหลัง (ไม่ตอบทันที)
 LEAVE_MESSAGE_PROMPT = (
@@ -3245,7 +3035,7 @@ def _notify_owner_question(user, question: str) -> None:
             f"• ✍️ ตอบกลับผ่าน LINE: /ตอบ {uid} <ข้อความ>\n"
             f"━━━━━━━━━━━━━━━━━━"
         )
-        _send_telegram(text, throttle_key=f"cust_q_{uid}", cooldown_seconds=60)
+        _send_telegram(text)
         if "mock" not in LINE_ACCESS_TOKEN.lower():
             line_bot_api.push_message(ADMIN_LINE_USER_ID, TextSendMessage(text=text))
     except Exception as e:
@@ -3478,20 +3268,12 @@ def message_text(event):
                 intent = 'new'
             elif is_package_request(normalized_text):
                 reply = TextSendMessage(text=package_summary_text(),
-                                        quick_reply=package_summary_quick_reply())
+                                        quick_reply=quick_reply_items())
                 intent = 'manual'
             elif is_bot_manual_request(normalized_text):
-                # คำถามคู่มือ (ติดตั้ง/คืนเงิน/ค่าคอม/โค้ด...) → ตอบจากคู่มือเฉพาะส่วน
-                # ไม่ปล่อยไป web search (เคยตอบขยะยาวนอกเรื่องตอนถามผ่านเมนูฝากคำถาม)
-                _track_bot_purchase(db, line_user_id, normalized_text)
+                # คำถามคู่มือ (คืนเงิน/ค่าคอม/โค้ด...) → ตอบจากคู่มือเฉพาะส่วน
                 reply = _manual_reply_messages(normalized_text, is_owner)
-                intent = 'manual'
-                if _wants_code_buttons(normalized_text):
-                    reply = reply + [_github_button_card()] if isinstance(reply, list) else [reply, _github_button_card()]
-                elif package_payment_key(normalized_text):
-                    q = _queue_number(db, line_user_id)
-                    if q is not None:
-                        reply = _append_queue_line(reply, q)
+                intent = 'manual' 
             elif any(m in normalized_text for m in STORE_QUESTION_MARKERS):
                 # เรื่องร้าน/สั่งซื้อ/ราคา/ชำระเงิน (ที่ไม่ใช่คำถามคู่มือตรงๆ) → ตอบวิธีจัดการเอง
                 reply = TextSendMessage(text=STORE_QUESTION_SELF_SERVICE)
@@ -3626,131 +3408,17 @@ def message_text(event):
             reply = TextSendMessage(text=LEAVE_MESSAGE_PROMPT,
                                     quick_reply=quick_reply_items())
             intent = 'human'
-        elif is_customer_queue_request(normalized_text):
-            # ลูกค้าเช็คคิว/ระยะเวลาทำของตัวเอง ("คิวของฉัน")
-            reply = TextSendMessage(text=customer_queue_text(db, line_user_id))
-            intent = 'manual'
         elif is_package_request(normalized_text):
-            # ถามแพ็กเกจ/ราคาบอท → สรุปย่อ + ปุ่มเลือกทีละแพ็กเกจ (ไม่ทิ้งการ์ดเต็มทันที)
-            _notify_owner_payment_intent(user, "ดูราคาแพ็กเกจบอท")
             reply = TextSendMessage(text=package_summary_text(),
-                                    quick_reply=package_summary_quick_reply())
+                                    quick_reply=quick_reply_items())
             intent = 'manual'
         elif is_bot_manual_request(normalized_text):
-            # คำถามคู่มือ (ค้น/เทียบ/จำ/พัสดุ/ติดตั้ง...) = ตอบจากคู่มือเท่านั้น ไม่ AI เดา
-            _track_bot_purchase(db, line_user_id, normalized_text)
-            if is_bot_payment_request(normalized_text) or package_payment_key(normalized_text):
-                _notify_owner_payment_intent(user, normalized_text)
+            # คำถามคู่มือ (ค้น/เทียบ/จำ/พัสดุ...) = ตอบจากคู่มือเท่านั้น ไม่ AI เดา
             reply = _manual_reply_messages(normalized_text, is_owner)
-            intent = 'manual'
-            # ถามติดตั้ง/โค้ด → แนบปุ่มเปิด GitHub + คู่มือ (แตะได้ ไม่ต้องก๊อปลิงก์)
-            if _wants_code_buttons(normalized_text):
-                reply = reply + [_github_button_card()] if isinstance(reply, list) else [reply, _github_button_card()]
-            elif package_payment_key(normalized_text):
-                q = _queue_number(db, line_user_id)
-                if q is not None:
-                    reply = _append_queue_line(reply, q)
+            intent = 'manual' 
         elif is_owner and normalized_text in ADMIN_STATS_CMDS:
             reply = TextSendMessage(text=admin_customer_stats(db))
             intent = 'admin'
-        elif any(k in normalized_text for k in ("เปิดไพ่", "ไพ่ยิปซี", "ไพ่ทาโรต์", "ทาโรต์", "ยิปซี", "ดูดวง", "เซลติกครอส")):
-            # 🔮 ไพ่ยิปซีแท้ ผังเซลติกครอส 10 ใบ ดั้งเดิมแท้ — ป้าเข็ม
-            from app.services.product_cards import (
-                tarot_invitation_card, tarot_reading_card, tarot_reading_carousel,
-                tarot_celtic_cross_summary_card
-            )
-            extracted_nums = TarotSessionManager.extract_tarot_numbers(normalized_text)
-            if len(extracted_nums) >= 10:
-                # ส่งมาครบ 10 เลขในคำสั่งเดียว
-                TarotSessionManager.clear_session(line_user_id)
-                rid = TarotSessionManager.save_reading(db, line_user_id, extracted_nums[:10])
-                reply = tarot_celtic_cross_summary_card(rid, extracted_nums[:10])
-                intent = 'tarot_celtic_cross'
-            elif len(extracted_nums) == 1:
-                # ส่งมา 1 เลขเดี่ยว
-                TarotSessionManager.clear_session(line_user_id)
-                reply = tarot_reading_card(extracted_nums[0])
-                intent = 'tarot_reveal_1'
-            else:
-                # เข้าสู่โหมดเซลติกครอส 10 ใบ เริ่มต้น session รอรับตัวเลข
-                TarotSessionManager.start_session(line_user_id, target_count=10)
-                intro_msg = TextSendMessage(
-                    text="🔮 [ศาสตร์เปิดดวงใหญ่ 10 ใบ — The Celtic Cross]\n"
-                         "━━━━━━━━━━━━━━━━━━\n"
-                         "🎴 ป้าเข็มล้างพลังงาน สับไพ่ 78 ใบ และกรีดคว่ำหน้าเรียงพัด 1 ถึง 78 ไว้ตรงหน้าท่านแล้วค่ะ\n\n"
-                         "✨ เทคนิคการเลือกตามจิตสัมผัส:\n"
-                         "ตัวเลข 1 ถึง 78 ไม่ใช่เลขตายตัว แต่คือ “ตำแหน่งไพ่บนโต๊ะทำนาย” จิตใต้สำนึกของท่านจะดึงดูดไพ่ที่ตรงกับชะตาชีวิตขึ้นมาเอง\n\n"
-                         "👉 วิธีเลือกไพ่ 10 ใบ (พิมพ์ตามตัวอย่างนี้ได้เลยจ้า):\n"
-                         "พิมพ์ตัวเลขตำแหน่งไพ่ 1 ถึง 78 มา 10 ตัว เว้นวรรค เช่น:\n"
-                         "5 12 21 34 45 52 60 67 71 78\n\n"
-                         "━━━━━━━━━━━━━━━━━━\n"
-                         "🕯️ หรือจะค่อยๆ พิมพ์ส่งทีละเลข ป้าเข็มก็นับผังให้จนครบ 10 ใบเช่นกันค่ะ ✨"
-                )
-                reply = [intro_msg, tarot_invitation_card()]
-                intent = 'tarot_pick'
-        elif TarotSessionManager.get_session(line_user_id) is not None:
-            # กำลังอยู่ใน Session สะสมตัวเลขไพ่ยิปซีเซลติกครอส 10 ใบ
-            from app.services.product_cards import (
-                tarot_reading_card, tarot_reading_carousel, tarot_celtic_cross_summary_card
-            )
-            extracted_nums = TarotSessionManager.extract_tarot_numbers(normalized_text)
-            if extracted_nums:
-                session = TarotSessionManager.get_session(line_user_id)
-                current_nums = session["numbers"]
-                for n in extracted_nums:
-                    if n not in current_nums and len(current_nums) < 10:
-                        current_nums.append(n)
-                
-                count = len(current_nums)
-                if count >= 10:
-                    # ครบ 10 ใบสมบูรณ์แบบ -> บันทึกลงฐานข้อมูลและส่งการ์ดผังเซลติกครอสพร้อมวิดีโอ
-                    TarotSessionManager.clear_session(line_user_id)
-                    rid = TarotSessionManager.save_reading(db, line_user_id, current_nums[:10])
-                    reply = tarot_celtic_cross_summary_card(rid, current_nums[:10])
-                    intent = 'tarot_celtic_cross'
-                else:
-                    # นำจิตสู่ตำแหน่งถัดไปอย่างสุขุม นิ่ง สงบ
-                    next_pos_name = CELTIC_CROSS_POSITIONS[count]
-                    nums_str = ", ".join(str(x) for x in current_nums)
-                    reply = TextSendMessage(
-                        text=f"✨ [บันทึกไพ่แล้ว {count}/10 ใบ]: ({nums_str})\n"
-                             f"━━━━━━━━━━━━━━━━━━\n"
-                             f"🕯️ ตำแหน่งต่อไป: “{next_pos_name}”\n"
-                             f"• ตั้งจิตนึกถึงเรื่องนี้ แล้วพิมพ์เลข 1 ถึง 78 ส่งต่อมาได้เลยจ้ะ"
-                    )
-                    intent = 'tarot_accumulate'
-            else:
-                # พิมพ์ข้อความอื่นที่ไม่ใช่ตัวเลข -> เคลียร์ session แล้วส่งต่อไปคำนวณตามปกติ
-                TarotSessionManager.clear_session(line_user_id)
-                if parse_product_code(normalized_text) is not None:
-                    prod_id = parse_product_code(normalized_text)
-                    p_reply = handle_direct_product_code(db, user, prod_id, is_owner=is_owner)
-                    if p_reply:
-                        reply = p_reply
-                        intent = 'product_code'
-                    else:
-                        reply = TextSendMessage(text=f"ขออภัยจ้า ไม่พบสินค้ารหัส {prod_id} ในระบบ หรือสินค้าอาจหมดชั่วคราว ลองพิมพ์ค้นหาชื่อสินค้าแทนได้นะคะ 😊",
-                                                quick_reply=quick_reply_items())
-                        intent = 'product_code'
-        elif (
-            # ตรวจสอบกรณีพิมพ์ 10 ตัวเลขพร้อมกัน เช่น "1 5 12 23 34 45 56 67 71 78"
-            len(TarotSessionManager.extract_tarot_numbers(normalized_text)) >= 10
-            and not normalized_text.lower().startswith(("รหัส", "code", "item", "id", "#"))
-        ):
-            from app.services.product_cards import tarot_celtic_cross_summary_card
-            nums = TarotSessionManager.extract_tarot_numbers(normalized_text)
-            rid = TarotSessionManager.save_reading(db, line_user_id, nums[:10])
-            reply = tarot_celtic_cross_summary_card(rid, nums[:10])
-            intent = 'tarot_celtic_cross'
-        elif (
-            # ตรวจสอบกรณีพิมพ์ 3 ตัวเลขพร้อมกัน เช่น "7 24 55"
-            len(TarotSessionManager.extract_tarot_numbers(normalized_text)) >= 3
-            and not normalized_text.lower().startswith(("รหัส", "code", "item", "id", "#"))
-        ):
-            from app.services.product_cards import tarot_reading_carousel
-            nums = TarotSessionManager.extract_tarot_numbers(normalized_text)
-            reply = tarot_reading_carousel(nums[:3])
-            intent = 'tarot_reveal_3'
         elif parse_product_code(normalized_text) is not None:
             # รหัสสินค้าตรงตัวจากคลิป (เช่น "รหัส 1628", "code 1628") -> ส่งการ์ดสินค้าชิ้นนั้นทันทีใน 0.1 วิ
             prod_id = parse_product_code(normalized_text)
@@ -3769,6 +3437,10 @@ def message_text(event):
         elif normalized_text == "อันดับขายดี":
             reply = handle_top_sellers(db, user, is_owner=is_owner)
             intent = 'top'
+        elif is_fish_product_query(normalized_text):
+            # สินค้าของตัวเองโดยตรง (ปลาแดดเดียว ป้าเข็ม คัดพิเศษ) -> ส่งการ์ดสั่งซื้อตรงทันที
+            reply = build_direct_fish_card()
+            intent = 'direct_fish'
         elif is_deal_query(normalized_text):
             # สั่งถามสินค้าแนะนำ — ตอบการ์ด 3 อันดับตามคะแนน AI
             reply = handle_today_deals(db, user, is_owner=is_owner)
@@ -3886,46 +3558,87 @@ def sticker_text(event):
 
 @handler.add(MessageEvent, message=ImageMessage)
 def image_slip(event):
-    """ลูกค้าส่งรูปสลิปโอนเงิน → ดาวน์โหลดเก็บหลักฐาน + สถานะรอยืนยัน + แจ้งเจ้าของ
-    (เดิมบอทไม่มี handler ImageMessage → รูปสลิปถูกทิ้งเงียบ ๆ)"""
+    """ลูกค้าส่งรูปภาพ -> ใช้ AI Vision ตรวจสอบว่าเป็นสลิปโอนเงินจริงหรือไม่ ก่อนอัปโหลดและแจ้งเตือน"""
     line_user_id = event.source.user_id
-    db = SessionLocal()
-    try:
-        user = get_or_create_line_user(db, line_user_id)
-        purchase = _active_purchase(db, line_user_id)
-        if not purchase:
-            # ยังไม่มีคำสั่งซื้อค้าง → ชี้ทางให้แตะสนใจแพ็กเกจก่อน (ไม่ดาวน์โหลด/ไม่เก็บขยะ)
-            reply = TextSendMessage(text=SLIP_REPLY_NO_ORDER)
-        else:
-            try:
-                data, content_type = _download_slip(event.message.id)
-            except _SlipTooLarge:
-                reply = TextSendMessage(text=SLIP_REPLY_TOO_LARGE)
-            except Exception as e:
-                logger.warning(f"slip download failed: {e}")
-                reply = TextSendMessage(text=SLIP_REPLY_ERROR)
-            else:
-                ocr = extract_slip_info(data, content_type)  # best-effort — ล้มไม่บล็อก flow
-                expected = _expected_amount(purchase.package_key)
-                slip = models.BotPurchaseSlip(line_user_id=line_user_id, content=data,
-                                              content_type=content_type, size_bytes=len(data))
-                db.add(slip)
-                db.flush()  # ได้ slip.id สำหรับทำลิงก์เปิดดูสลิป
-                purchase.status = "paid_pending"
-                purchase.slip_url = slip_view_url(slip.id)
-                purchase.amount = ocr.get("amount")
-                purchase.ref_no = ocr.get("ref_no")
-                db.commit()
-                _notify_owner_slip(user, purchase, len(data), content_type,
-                                   expected=expected,
-                                   matched=amount_matches(purchase.amount, expected))
-                reply = TextSendMessage(text=SLIP_REPLY_WITH_ORDER)
-    except Exception as e:
-        logger.error(f"Error processing slip image: {e}")
-        reply = TextSendMessage(text=SLIP_REPLY_ERROR)
-    finally:
-        db.close()
+    message_id = event.message.id
+    slip_url = None
+    vision = {"is_slip": False, "category": "other", "amount": None, "bank": None, "ref_no": None, "description": "รูปภาพทั่วไป"}
 
+    try:
+        if "mock" not in LINE_ACCESS_TOKEN.lower():
+            content_resp = line_bot_api.get_message_content(message_id)
+            img_bytes = content_resp.content
+            vision = verify_and_extract_slip(img_bytes, "image/jpeg")
+
+            if vision.get("is_slip"):
+                supa_url = settings.SUPABASE_URL or "https://usqhvujqmnxqrdoovvnp.supabase.co"
+                supa_key = (
+                    settings.SUPABASE_SECRET_KEY
+                    or settings.SUPABASE_PUBLISHABLE_KEY
+                    or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzcWh2dWpxbW54cXJkb292dm5wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyOTc4NjAsImV4cCI6MjA2OTg3Mzg2MH0.3kCGGAe1OoSJ_SCN_NDSdnKep1hXIMgMxR1lBd_i2eI"
+                )
+                upload_target = f"{supa_url}/storage/v1/object/slips/line_{message_id}.jpg"
+                resp = httpx.post(
+                    upload_target,
+                    headers={
+                        "apikey": supa_key,
+                        "Authorization": f"Bearer {supa_key}",
+                        "Content-Type": "image/jpeg",
+                    },
+                    content=img_bytes,
+                    timeout=15.0,
+                )
+                if resp.status_code in (200, 201):
+                    slip_url = f"{supa_url}/storage/v1/object/public/slips/line_{message_id}.jpg"
+    except Exception as e:
+        logger.error(f"Image slip verification/upload error: {e}")
+
+    if not vision.get("is_slip"):
+        desc = vision.get("description") or "รูปภาพทั่วไป"
+        _send_telegram(
+            f"📸 [ลูกค้าส่งรูปภาพทั่วไปใน LINE OA — ไม่ใช่สลิปโอนเงิน]\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"• 🆔 LINE UID: {line_user_id}\n"
+            f"• 🔍 AI ตรวจพบเป็น: {desc} (หมวด: {vision.get('category') or 'other'})\n"
+            f"• ⏰ เวลา: {_fmt_bkk(datetime.datetime.utcnow())} น.\n"
+            f"━━━━━━━━━━━━━━━━━━"
+        )
+        reply = TextSendMessage(
+            text=f"📸 แอดมินได้รับรูปภาพของคุณลูกค้าแล้วค่ะ\n"
+                 f"(🔍 ระบบ AI ตรวจพบว่าเป็น: {desc} — ไม่ใช่สลิปโอนเงินธนาคารนะคะ 😊)\n\n"
+                 f"• หากต้องการสั่งซื้อปลาสลิดแดดเดียว หรือสอบถามข้อมูล พิมพ์แจ้งในแชทนี้ได้เลยค่ะ\n"
+                 f"• หากต้องการแจ้งโอนเงิน กรุณาโอนเข้า ธ.กรุงไทย 038-0-25363-1 (นายจีรวัฒน์ พลอาจ) แล้วส่งภาพ 'สลิปโอนเงินที่มีรายการโอนสำเร็จและยอดเงินชัดเจน' เข้ามาอีกครั้งนะคะ 🙏💕",
+            quick_reply=quick_reply_items()
+        )
+        _send_reply(event.reply_token, reply, label="image_non_slip")
+        return
+
+    amt_txt = f"{vision['amount']} บาท" if vision.get("amount") else "ไม่ระบุ"
+    bank_txt = f" ({vision['bank']})" if vision.get("bank") else ""
+    ref_txt = f"• 🔢 เลขอ้างอิง: {vision['ref_no']}\n" if vision.get("ref_no") else ""
+    admin_msg = (
+        f"🧾 [ยืนยันสลิปโอนเงินจริงจาก LINE OA ✅] 🐟\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"• 🆔 LINE UID: {line_user_id}\n"
+        f"• 💵 ยอดในสลิป (AI OCR): {amt_txt}{bank_txt}\n"
+        f"{ref_txt}"
+        f"• ⏰ เวลา: {_fmt_bkk(datetime.datetime.utcnow())} น.\n"
+    )
+    if slip_url:
+        admin_msg += f"• 🖼️ ดูรูปสลิป: {slip_url}\n"
+    admin_msg += (
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"👉 ตรวจสอบในระบบหลังบ้าน: https://watt29.github.io/pakhem-shop/admin.html"
+    )
+    _send_telegram(admin_msg)
+
+    reply = TextSendMessage(
+        text=f"✅ ป้าเข็มตรวจสอบสลิปโอนเงินจริงเรียบร้อยแล้วจ้า! 🙏💕\n"
+             f"• 💵 ยอดเงินที่ตรวจพบ: {amt_txt}{bank_txt}\n"
+             f"{ref_txt}\n"
+             f"แอดมินกำลังจัดเตรียมปลาสดใหม่ซีลสูญญากาศส่งให้ทันทีนะคะ 🥰",
+        quick_reply=quick_reply_items()
+    )
     _send_reply(event.reply_token, reply, label="image_slip")
 
 
@@ -3960,7 +3673,7 @@ def follow_event(event):
             f"• ⏰ เวลา: {_fmt_bkk(datetime.datetime.utcnow())} น.\n"
             f"━━━━━━━━━━━━━━━━━━"
         )
-        _send_telegram(admin_msg, throttle_key=f"new_follow_{line_user_id}", cooldown_seconds=300)
+        _send_telegram(admin_msg)
     except Exception as e:
         logger.error(f"Follow welcome error: {e}")
     finally:
