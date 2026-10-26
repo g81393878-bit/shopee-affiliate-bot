@@ -1366,6 +1366,7 @@
     let selectedSlipChecking = false;
     let selectedSlipInvalidReason = null;
     let selectedSlipOcrText = '';
+    let selectedSlipAmount = 0;
 
     function compressSlipForVision(dataUrl, maxDim = 850) {
       return new Promise((resolve) => {
@@ -1398,6 +1399,7 @@
       selectedSlipChecking = true;
       selectedSlipInvalidReason = null;
       selectedSlipOcrText = '';
+      selectedSlipAmount = 0;
 
       const box = document.getElementById('slipPreviewBox');
       const nameEl = document.getElementById('slipFileName');
@@ -1407,7 +1409,7 @@
       nameEl.style.color = '#1e40af';
       nameEl.innerText = '⏳ กำลังตรวจสอบรูปสลิปด้วย AI...';
       statusEl.style.color = '#1d4ed8';
-      statusEl.innerText = 'กำลังอ่านข้อมูลธนาคารและยอดเงินโอน...';
+      statusEl.innerText = 'กำลังอ่านข้อมูลธนาคาร ชื่อผู้รับ และยอดเงินโอน...';
       box.style.display = 'flex';
       document.getElementById('slipUploadTrigger').style.display = 'none';
 
@@ -1442,26 +1444,39 @@
             statusEl.innerText = 'AI ตรวจพบเป็น: ' + selectedSlipInvalidReason + ' (กรุณากดลบแล้วเลือกภาพใบเสร็จสลิปโอนเงินที่มีรายการโอนสำเร็จนะคะ)';
             return;
           }
-          if (vision && vision.is_slip && vision.reject_reason) {
-            selectedSlipFile = null;
-            selectedSlipInvalidReason = vision.reject_reason;
-            box.style.borderColor = '#fca5a5';
-            box.style.background = '#fef2f2';
-            nameEl.style.color = '#b91c1c';
-            nameEl.innerText = '⚠️ สลิปไม่ผ่านการตรวจสอบค่ะ!';
-            statusEl.style.color = '#dc2626';
-            statusEl.innerText = vision.reject_reason + ' (กรุณาตรวจสอบสลิปอีกครั้งนะคะ)';
-            return;
-          }
           if (vision && vision.is_slip) {
+            selectedSlipAmount = Number(vision.amount) || 0;
+            if (vision.is_underpaid || (selectedSlipAmount > 0 && selectedSlipAmount < expectedPay - 0.5)) {
+              const diff = Math.round((expectedPay - selectedSlipAmount) * 100) / 100;
+              selectedSlipFile = null;
+              selectedSlipInvalidReason = 'ยอดโอนน้อยกว่าราคาสินค้า (โอนมา ' + selectedSlipAmount.toLocaleString() + ' บาท • ยังขาดอีก ' + diff.toLocaleString() + ' บาท จากยอดชำระ ' + expectedPay.toLocaleString() + ' บาท)';
+              box.style.borderColor = '#fca5a5';
+              box.style.background = '#fef2f2';
+              nameEl.style.color = '#b91c1c';
+              nameEl.innerText = '⚠️ ยอดเงินในสลิปน้อยกว่าราคาสินค้าค่ะ!';
+              statusEl.style.color = '#dc2626';
+              statusEl.innerText = selectedSlipInvalidReason + ' — กรุณาโอนให้ครบยอดหรือแนบสลิปที่ถูกต้องนะคะ';
+              return;
+            }
+            if (vision.reject_reason) {
+              selectedSlipFile = null;
+              selectedSlipInvalidReason = vision.reject_reason;
+              box.style.borderColor = '#fca5a5';
+              box.style.background = '#fef2f2';
+              nameEl.style.color = '#b91c1c';
+              nameEl.innerText = '⚠️ สลิปไม่ผ่านการตรวจสอบค่ะ!';
+              statusEl.style.color = '#dc2626';
+              statusEl.innerText = vision.reject_reason + ' (กรุณาตรวจสอบสลิปอีกครั้งนะคะ)';
+              return;
+            }
             const amtStr = vision.amount ? Number(vision.amount).toLocaleString() + ' บาท' : '';
-            selectedSlipOcrText = [AI ยืนยันสลิปจริงครบ 5 ชั้น: ];
+            selectedSlipOcrText = '[AI ยืนยันสลิปจริงครบ 5 ชั้น: ' + amtStr + (vision.bank ? ' ' + vision.bank : '') + (vision.receiver_name ? ' -> ' + vision.receiver_name : '') + (vision.ref_no ? ' Ref:' + vision.ref_no : '') + ']';
             box.style.borderColor = '#6ee7b7';
             box.style.background = '#ffffff';
             nameEl.style.color = '#065f46';
             nameEl.innerText = '✅ ตรวจสอบสลิปโอนเงินจริงสำเร็จ (ครบ 5 ชั้น)!';
             statusEl.style.color = '#059669';
-            statusEl.innerText = ยอดโอน:  • ผู้รับ: นายจีรวัฒน์ พลอาจ;
+            statusEl.innerText = 'ยอดโอน: ' + amtStr + ' • ผู้รับ: นายจีรวัฒน์ พลอาจ' + (vision.ref_no ? ' (Ref: ' + vision.ref_no + ')' : '');
             return;
           }
         } catch (err) {
@@ -1483,6 +1498,7 @@
       selectedSlipChecking = false;
       selectedSlipInvalidReason = null;
       selectedSlipOcrText = '';
+      selectedSlipAmount = 0;
       document.getElementById('slipFileInput').value = '';
       document.getElementById('slipPreviewBox').style.display = 'none';
       document.getElementById('slipUploadTrigger').style.display = 'block';
@@ -1619,12 +1635,19 @@
         return;
       }
       if (currentPayment === 'TRANSFER' && selectedSlipInvalidReason) {
-        alert('❌ รูปที่แนบไม่ใช่สลิปโอนเงินค่ะ (AI ตรวจพบเป็น: ' + selectedSlipInvalidReason + ')\nกรุณาเปลี่ยนรูปเป็นสลิปโอนเงินธนาคารที่ถูกต้องก่อนกดยืนยันสั่งซื้อนะคะ 🙏');
+        alert('⚠️ สลิปที่แนบไม่ผ่านการตรวจสอบค่ะ:\n' + selectedSlipInvalidReason + '\n\nกรุณาตรวจสอบหรือแนบสลิปโอนเงินที่ถูกต้องก่อนกดยืนยันสั่งซื้อนะคะ 🙏');
         isSubmitting = false;
         return;
       }
 
       const p = PRODUCTS.find(x => x.sku === currentSelectedSku) || PRODUCTS[0];
+      const checkTotalPay = getOrderTotalPay(p);
+      if (currentPayment === 'TRANSFER' && selectedSlipAmount > 0 && selectedSlipAmount < checkTotalPay - 0.5) {
+        const diffAmt = Math.round((checkTotalPay - selectedSlipAmount) * 100) / 100;
+        alert('⚠️ ยอดเงินในสลิปน้อยกว่าราคาสินค้าที่เลือกค่ะ!\n• ยอดในสลิป: ' + selectedSlipAmount.toLocaleString() + ' บาท\n• ยอดแพ็กเกจที่ต้องชำระ: ' + checkTotalPay.toLocaleString() + ' บาท\n• ยังขาดอีก: ' + diffAmt.toLocaleString() + ' บาท\n\nกรุณาแนบสลิปที่มียอดโอนครบถ้วน หรือเลือกแพ็กเกจให้ตรงกับยอดโอนนะคะ 🙏');
+        isSubmitting = false;
+        return;
+      }
       const btn = document.getElementById('submitBtn');
       btn.disabled = true;
       btn.innerText = selectedSlipFile ? 'กำลังอัปโหลดสลิป... ⏳' : 'กำลังส่งออเดอร์... ⏳';
