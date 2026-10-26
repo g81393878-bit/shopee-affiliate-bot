@@ -1074,12 +1074,16 @@
                 <!-- Transfer Bank Info & Slip Upload Box (Appears when TRANSFER selected) -->
         <div id="transferDetailsBox" style="display:none; background:#f0fdf4; border:1.5px dashed #10b981; border-radius:12px; padding:16px; margin-top:12px;">
           <div style="font-weight:700; color:#065f46; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
-            <span>💳 บัญชีรับโอนเงิน (พร้อมเพย์)</span>
+            <span>💳 บัญชีรับโอนเงิน (ธนาคารกรุงไทย)</span>
           </div>
-          <div style="background:#ffffff; border-radius:8px; padding:10px 14px; font-size:0.9rem; margin-bottom:12px; border:1px solid #d1fae5;">
-            <div><b>พร้อมเพย์ (PromptPay):</b> <span style="font-family:monospace; font-size:1.05rem; color:#047857; font-weight:700;">081-456-7890</span></div>
-            <div><b>ชื่อบัญชี:</b> ร้านป้าเข็ม คัดพิเศษ (บจก. ป้าเข็มฟู้ดส์)</div>
-            <div style="margin-top:4px; font-size:0.85rem; color:#047857;">ยอดที่ต้องโอน: <b id="transferExactAmount" style="font-size:1.1rem; color:#b91c1c;">550 บาท</b></div>
+          <div style="background:#ffffff; border-radius:8px; padding:12px 14px; font-size:0.92rem; margin-bottom:12px; border:1px solid #d1fae5; line-height:1.65;">
+            <div><b>ธนาคาร:</b> <span style="color:#0284c7; font-weight:700;">ธนาคารกรุงไทย (Krungthai)</span> <span style="font-size:0.82rem; color:#475569;">(ออมทรัพย์ • สาขาท่าพระ)</span></div>
+            <div style="display:flex; align-items:center; flex-wrap:wrap; gap:8px;">
+              <span><b>เลขที่บัญชี:</b> <span id="bankAccNum" style="font-family:monospace; font-size:1.12rem; color:#047857; font-weight:800; letter-spacing:0.5px;">038-0-25363-1</span></span>
+              <button type="button" id="copyBankBtn" onclick="navigator.clipboard.writeText('0380253631'); this.innerText='✅ คัดลอกเลขบัญชีแล้ว!'; setTimeout(()=>this.innerText='📋 คัดลอกเลขบัญชี', 2200);" style="background:#e0f2fe; color:#0369a1; border:1px solid #7dd3fc; border-radius:6px; padding:2px 8px; font-size:0.78rem; font-weight:700; cursor:pointer;">📋 คัดลอกเลขบัญชี</button>
+            </div>
+            <div><b>ชื่อบัญชี:</b> <span style="font-weight:700; color:#0f172a;">นายจีรวัฒน์ พลอาจ</span></div>
+            <div style="margin-top:4px; font-size:0.88rem; color:#047857;">ยอดที่ต้องโอน: <b id="transferExactAmount" style="font-size:1.12rem; color:#b91c1c;">550 บาท</b></div>
           </div>
 
           <div style="margin-top:8px;">

@@ -20,6 +20,12 @@
 4. **หลีกเลี่ยงการ Commit คุกกี้และข้อมูลส่วนตัว (Secret Privacy)**:
    - ห้ามทำการแอดไฟล์ `fb_cookies.json` หรือไฟล์ `.env` ที่มีข้อมูลคุกกี้เซสชันของแอดมินเข้าสู่ระบบ Git และต้องมีรายชื่อพวกมันอยู่ใน `.gitignore` เสมอ
 
+5. **ซิงค์และ Push ขึ้นหน้าเว็บจริง (`watt29/pakhem-shop` GitHub Pages) อัตโนมัติทุกครั้งที่มีการแก้ไขหน้าร้านหรือรูปภาพ (Mandatory Auto-Sync & Live Storefront Deploy)**:
+   - ทุกครั้งที่มีการแก้ไข `backend/app/static/fish.html`, `backend/app/static/admin.html`, หรือเพิ่ม/เปลี่ยนไฟล์รูปภาพใน `backend/app/static/` เอเจนต์ AI **ต้องทำการซิงค์ไฟล์และ Push ขึ้น GitHub Pages (`D:\pakhem-shop-web` -> `https://github.com/watt29/pakhem-shop.git`) ทันทีทุกครั้งโดยไม่ต้องรอให้ผู้ใช้ทวงถาม**:
+     1. คัดลอก `backend/app/static/fish.html` ไปทับทั้ง `D:\pakhem-shop-web\fish.html` และ `D:\pakhem-shop-web\index.html` (พร้อมคัดลอกไฟล์รูปภาพ `.jpg`/`.png` ที่เพิ่มหรือแก้ไขทั้งหมด)
+     2. รัน `git -C "D:\pakhem-shop-web" add ... && git -C "D:\pakhem-shop-web" commit -m "..." && git -C "D:\pakhem-shop-web" push origin main`
+     3. อัปเดตเลข Cache-buster (`?v=...`) บนชื่อไฟล์รูปภาพใน HTML และตรวจสอบ `HTTP 200 OK` บนหน้าเว็บจริง `https://watt29.github.io/pakhem-shop/` เสมอ เพื่อให้หน้าเว็บจริงเปลี่ยนทันที 100%
+
 ## Skills Index (บังคับอ่านก่อนทำงาน — ใช้สกิลนำทางทุกฟีเจอร์)
 
 สกิลอยู่ใน `.agents/skills/<name>/SKILL.md` — ก่อนแตะฟีเจอร์ใด อ่านสกิลของฟีเจอร์นั้นก่อน (มีกับดักที่เจอจริง + ไฟล์ + เทสต์):
@@ -57,26 +63,50 @@
 8. **ยิง 4 แพลตฟอร์มพร้อมกัน 100% (Simultaneous 4-Channel Multi-Broadcast)**:
    - การโพสต์วิดีโอต้องยิงพร้อมกันครบ **4 แพลตฟอร์มทุก 30 นาที**: Facebook 3 เพจ (ป้าเข็ม 1, 2, 3) + YouTube Shorts (ช่อง Anda `@regency1229`)
    - โมดูล `youtube_uploader.py` และ `uploader.py` ต้องรองรับประเภทข้อมูลพาธไฟล์ทั้ง `Path` และ `str` เสมอ และแจ้งเตือนสรุปลิงก์ทั้ง 4 แพลตฟอร์มเข้า LINE เจ้าของร้านทุกรอบ
-9. **สถาปัตยกรรมธุรกิจคู่ขนาน (Dual-Engine Business Model in LINE OA)**:
-   - บอท LINE OA (`@137gsref`) ต้องรองรับ 2 ธุรกิจอย่างกลมกลืน:
-     - 🛍️ **Shopee Affiliate Shopping:** ค้นหาสินค้าจากคลัง 2,471 ชิ้น, รับรหัสสินค้าตรงตัว (`รหัส {id}`), ตอบคำถามจากคลิป (`ของในคลิป`), ส่งการ์ด Flex พร้อมปุ่มซื้อ Shopee
-     - 🤖 **AI Bot SaaS Sales:** แพ็กเกจขายบอท 5 ระดับ (🟡 Lean 490฿ · 🟢 Starter 990฿ · 🔵 Business 1,990฿ · 🟣 White-Label 4,990฿ · 🟠 ซื้อขาด 15,000–25,000฿) + พร้อมเพย์ `0935325959` + ธนาคารกรุงไทย `038-025-3631` (จีรวัฒน์ พลอาจ) + ระบบตรวจรับรูปภาพสลิป
+9. **ระบบผู้ช่วยช้อปปิ้ง Shopee Affiliate 100% เต็มรูปแบบ (100% Dedicated Shopee Affiliate Assistant)**:
+   - บอท LINE OA (`@137gsref`) ทำหน้าที่เป็นผู้ช่วยช้อปปิ้งออนไลน์อัจฉริยะ 100% (ถอดถอนระบบขายบอท SaaS ออกถาวร):
+     - 🛍️ **Shopee Affiliate Shopping:** ค้นหาสินค้าจากคลัง 1,903+ ชิ้น, รับรหัสสินค้าตรงตัวจากคลิป (`รหัส {id}`), ตอบคำถามจากคลิป (`ของในคลิป`), ส่งการ์ด Flex พร้อมปุ่มซื้อ Shopee ทันที
+     - 💬 **ผู้ช่วยคุยและบริการ:** ปรึกษา แนะนำของแท้ เช็คโปรโมชั่น ช่วยเทียบสินค้า และฝากคำถามถึงร้านค้าได้ตลอด 24 ชม.
 10. **ระบบ Serverless Webhook บน Google Apps Script (Always-On Zero-Cost Webhook)**:
     - ตัวรับ Webhook หลักของ LINE OA รันผ่าน `tools/shopee_pakhem_bot.gs` บน Google Cloud โดยตรงเพื่อหลีกเลี่ยงข้อจำกัดชั่วโมงของ Render คิวรี่ฐานข้อมูล Supabase REST API และประมวลผล Groq AI Multi-Key 7 Keys ตลอด 24 ชม. ฟรีถาวร
-12. **การจัดการ Multi-Channel YouTube Shorts & Google OAuth 403 Fix**:
-    - สถาปัตยกรรมรองรับหลายช่องคู่ขนาน (`youtube_token.json`, `youtube_token_2.json`, `youtube_token_3.json`, ...) และตรวจจับ Handle ของช่องอัตโนมัติ
-    - **ปัญหาที่พบบ่อย (OAuth 403 `access_denied` / App not verified)**:
-      - **สาเหตุ**: Google Cloud Console อยู่ในสถานะ `Testing` และยังไม่ได้เพิ่มอีเมลเจ้าของช่องลงในรายชื่อผู้ทดสอบ
-      - **วิธีแก้**: ไปที่ Google Cloud Console > `APIs & Services` > `OAuth consent screen` > เลื่อนไปที่ `Test users` > กด `+ ADD USERS` > ใส่อีเมล (เช่น `regency2919@gmail.com`) แล้วกด `SAVE` จะล็อกอินผ่านฉลุย 100%
+12. **การถอดถอนและลบความจำระบบ YouTube Shorts อย่างถาวร (YouTube Shorts Decommissioned & Memory Purged)**:
+    - **สถานะ:** ถอดถอนระบบ YouTube Shorts ออกจากระบบถาวรตามคำสั่งผู้ใช้
+    - **การล้างความจำ (Memory Purged):** ลบประวัติการโพสต์ (`posted_youtube_history.json`), โทเค็นทั้งหมด, สถิติช่อง, และสคริปต์ ออกจากรันไทม์และหน่วยความจำของระบบอย่างสิ้นเชิง โดยย้ายสำรองเข้า `artifacts/youtube_archive/`
+    - ระบบโฟกัสเฉพาะ Facebook Reels (2 เพจ), TikTok, และ Shopee Affiliate 100% ไม่ยิงและไม่จำ YouTube Shorts อีกต่อไป
 13. **ศูนย์บัญชาการ Telegram Commander & การปกป้องโควต้า LINE OA (Zero-Cost 100% Unlimited Telegram Ops)**:
-    - การแจ้งเตือนระบบหลังบ้านและข้อมูลลูกค้าทั้งหมด (รายงาน Reels ทุก 30 นาที, สรุปสุขภาพ VPS, ลูกค้าใหม่, สลิปโอนเงิน, สั่งซื้อแพ็กเกจ, ฝากคำถาม) ต้องวิ่งเข้า **Telegram Commander (`@pakhem_commander_bot`, Chat ID: `6734965582`)** ผ่าน `tools/telegram_notifier.py` และ `tools/telegram_commander.py` ตลอด 24 ชม. ฟรีถาวร ไม่จำกัดจำนวนครั้ง
+    - การแจ้งเตือนระบบหลังบ้านและข้อมูลลูกค้าทั้งหมด (รายงาน Reels ทุก 30 นาที, สรุปสุขภาพ VPS, ลูกค้าใหม่, สลิปโอนเงิน, สั่งซื้อแพ็กเกจ, ฝากคำถาม) ต้องวิ่งเข้า **Telegram Commander (`@pakhem_fish_bot`, Chat ID: `6734965582`)** ผ่าน `tools/telegram_notifier.py` และ `tools/telegram_commander.py` ตลอด 24 ชม. ฟรีถาวร ไม่จำกัดจำนวนครั้ง
     - **ห้ามใช้ LINE OA Push Message สำหรับงานหลังบ้านเด็ดขาด** เพื่อสงวนโควต้าฟรี 300 ข้อความ/เดือนของ LINE Official Account ไว้คุยและขายของกับลูกค้า 100%
     - รองรับคำสั่งควบคุมระยะไกล: `/status` (เช็คสด), `/post` (ยิงคลิปด่วน), `/produce` (ผลิตคลิป 3 ตัว), `/stock` (ดูคลัง), `/reply <uid> <msg>` (ตอบแชทลูกค้า LINE จาก Telegram ได้โดยตรง)
 14. **มาตรฐานการรายงานผลและข้อมูลจริง 100% (Strict Factual Verification & Clean Bullet Format)**:
     - **ห้ามมโน ห้ามคาดเดาข้อมูลเองเด็ดขาด**: ตัวเลข สถิติ เวลา และสถานะระบบต้องผ่านการตรวจสอบจาก Process, Database, หรือ API จริงเสมอ
     - **การจัดรูปแบบรายงาน**: ต้องขึ้นต้นด้วยหัวข้อสำคัญชัดเจน ใช้สัญลักษณ์ Bullet Points (`•`, `📌`, `👉`, `🟢`, `📊`), เว้นวรรคสบายตา ไม่รก ไม่ยาวเป็นพืด อ่านจบเข้าใจทันทีใน 5 วินาที
-15. **กฎเหล็กการเชื่อมต่อฐานข้อมูล Supabase Production (No SQLite Fallback)**:
-    - ค่า `DATABASE_URL` ใน `backend/.env` ทั้งบนเครื่องและบน VPS ต้องเป็น **Supabase PostgreSQL Transaction Pooler** (`aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres`) เสมอ ห้าม fallback เป็น SQLite ว่างเปล่าเด็ดขาด เพราะสินค้าจริง 2,472 รายการอยู่ที่ Supabase เท่านั้น
+15. **กฎเหล็กโครงสร้างการจัดเก็บและคลังฐานข้อมูลสินค้า (Master Catalog Architecture & Forensic Data Storage Protocol)**:
+    - **ฐานข้อมูลหลักระบบจริง (Production Ground Truth)**:
+      - ค่า `DATABASE_URL` ใน `backend/.env` ทั้งบนเครื่องและบน VPS ต้องเป็น **Supabase PostgreSQL Transaction Pooler** (`aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres`) เสมอ ห้าม fallback เป็น SQLite ว่างเปล่าเด็ดขาด
+      - ตารางหลักคือ `products` บันทึกสินค้าจริงไม่ซ้ำกัน **1,903 รายการ** แบ่งเป็น 9 หมวดหมู่อย่างเป็นระเบียบ:
+        • ของใช้ในบ้าน: 522 รายการ
+        • ความงาม: 443 รายการ
+        • ไอที: 358 รายการ
+        • เครื่องใช้ไฟฟ้า: 225 รายการ
+        • สุขภาพ: 120 รายการ
+        • สัตว์เลี้ยง: 98 รายการ
+        • ของสะสม: 88 รายการ
+        • เครื่องครัว: 46 รายการ
+        • ยานยนต์: 3 รายการ
+    - **แหล่งเก็บข้อมูลต้นฉบับในเครื่อง (Local Master Archives)**:
+      - **ฐานข้อมูล SQLite ต้นฉบับ**: `backend/sim_db.db` (ขนาด 892 KB) มีสินค้าต้นฉบับ 1,686 รายการ
+      - **ไฟล์ Shopee Export CSV**: อยู่ในโฟลเดอร์ `D:\สินค้า\` และ `D:\` มีประวัติสินค้าส่งออกแท้จาก Shopee Affiliate
+      - **ไฟล์สำรองถาวรระดับ Golden Snapshot**:
+        • `artifacts/backup_products_safe.json` (1.14 MB - ครบ 1,903 รายการ)
+        • `artifacts/backup_products_safe.csv` (720 KB - ครบ 1,903 รายการ)
+    - **สคริปต์กู้คืนและซิงค์ข้อมูลมาตรฐาน (Official Master Ingest Tool)**:
+      - คำสั่ง: `python tools/restore_from_sim_db.py`
+      - ทำหน้าที่รวบรวมข้อมูลจาก `sim_db.db` และ CSVs ทั้งหมดบน `D:\` กรองรายการซ้ำ (Deduplication) 100% จัดหมวดหมู่ 9 หมวด และซิงค์ `products_id_seq` ให้ตรงกับ MAX(id)
+    - **กฎเหล็กห้ามลบสินค้าเด็ดขาด (Strict Anti-Purge / Zero-Delete Rule)**:
+      - **ห้ามรัน `check-links --delete` หรือคำสั่ง `DELETE FROM products` เด็ดขาด** เพราะระบบตรวจเช็คอัตโนมัติอาจถูก Shopee Anti-Bot บล็อก (HTTP 403/404 ชั่วคราว) ทำให้เข้าใจผิดว่าลิงก์ตาย หากสงสัยให้ปรับเป็น `link_status = 'suspect'` เท่านั้น ห้ามลบข้อมูลออกจากฐานข้อมูล
+    - **รูปภาพและ Hotlink Protection**:
+      - ภาพสินค้าต้องเป็น Shopee Official CDN (`https://down-th.img.susercontent.com/file/...`)
+      - หน้าเว็บ `backend/app/static/shop.html` ต้องใส่ `<meta name="referrer" content="no-referrer">` และ `referrerpolicy="no-referrer"` ในแท็ก `<img>` เสมอ ป้องกันการโดนบล็อก 403 Forbidden
 16. **ระบบรับรหัสสินค้าตรงตัวจากคลิป YouTube Shorts / Reels (Pure Digit & Prefix Recognition)**:
     - ฟังก์ชัน `parse_product_code` ต้องรองรับตัวเลขล้วน 1-5 หลัก (เช่น `86`, `447`, `1628`) และตัวเลขผสมคำสุภาพ (`86 ครับ`, `86 ค่ะ`) เพื่อให้ตรงกับป้ายพิกัดท้ายคลิป และส่งการ์ดสินค้าชิ้นนั้นทันทีใน 0.1 วินาที
 17. **ระบบเฝ้าระวังและซิงค์ LINE Webhook อัตโนมัติ (Tunnel Watchdog Auto-Sync)**:
@@ -97,9 +127,13 @@
       - `docs/manual/02_YOUTUBE_SHORTS_SETUP.md`: YouTube Shorts 6 ช่องหมุนเวียน Round-Robin + วิธีแก้ OAuth 403
       - `docs/manual/03_TIKTOK_MULTI_ACCOUNT.md`: TikTok Multi-Account Rotation
       - `docs/manual/04_FACEBOOK_PAGES_REELS.md`: Facebook Pages 3 เพจ + Long-Lived Token 60 วัน
-      - `docs/manual/05_LINE_OA_AND_SAAS.md`: LINE OA ป้าเข็ม, การ์ด Flex, ขาย SaaS 5 แพ็กเกจ, ตรวจสลิป
+      - `docs/manual/05_LINE_OA_AND_SAAS.md`: LINE OA ป้าเข็ม, การ์ด Flex, ผู้ช่วยช้อปปิ้ง Shopee 100%
       - `docs/manual/06_TELEGRAM_COMMANDER.md`: ศูนย์บัญชาการ Telegram Commander + คำสั่งด่วนระยะไกล
       - `docs/manual/07_TROUBLESHOOTING_AND_RECOVERY.md`: ตารางแก้ปัญหาฉุกเฉินทุกแพลตฟอร์ม + One-Click Reset
+      - `docs/manual/13_POLL_BATTLE_REELS_GUIDE.md`: มาตรฐานการผลิตคลิปเปรียบเทียบสินค้า 2 ชิ้น (Poll / Battle Reels 9:16)
+      - `docs/manual/14_SHOPEE_AFFILIATE_AI_VIDEO_SOP.md`: คู่มือมาตรฐาน 5 ขั้นตอนผลิตวิดีโอ & สคริปต์ AI สำหรับ Shopee Affiliate (Shopee Video & Multi-Platform)
+      - `docs/manual/15_PURGE_PAGE_POSTS_GUIDE.md`: คู่มือและเครื่องมือล้างโพสต์บน Facebook Page ทั้งหมดตามความประสงค์ (On-Demand Purge Tool)
+      - `docs/manual/16_SHOPEE_VIDEO_SAFETY_AND_ANTI_BAN_GUIDE.md`: คู่มือความปลอดภัยสูงสุด ป้องกัน 8 สาเหตุบัญชี/คลิปถูกแบน และเกราะป้องกัน 5 ชั้น
 22. **กฎเหล็กภาพถ่ายจริง 10000000% (Strict 100% Real Authentic Photography Policy)**:
     - ทุกวิดีโอต้องใช้ **ภาพถ่ายจริงระดับความคมชัดสูง (Real Authentic HD Photography)** เท่านั้น ห้ามใช้ภาพการ์ตูน AI, ภาพวาด หรือภาพมโนเด็ดขาด
     - **ข่าวด่วน & ดารา**: ต้องดึงภาพถ่ายจริงจากช่างภาพสำนักข่าวต้นสังกัด (BBC World News, ไทยรัฐ) ที่ผูกตรงกับบทความนั้น 100%
@@ -178,6 +212,19 @@
         - **ห้ามให้ Error ของ TikTok กระทบระบบหลักเด็ดขาด**: ใน `system_runner.py` การโพสต์ TikTok ต้องถูกห่อหุ้มด้วย `try/except` ป้องกันไม่ให้ส่งผลต่อการบรอดแคสต์ Facebook Reels (3 เพจ) และ YouTube Shorts (6 ช่อง)
         - **การซิงค์วิดีโอลงมือถือผ่าน ADB**: ใช้โมดูล `tools/tiktok_mobile_sync.py` ในการดาวน์โหลดคลิป 9:16 HD จาก VPS (`reels_uploader/pending_videos`) เข้าสู่อุปกรณ์มือถือ Android จริงผ่าน ADB (`/sdcard/Movies/`) พร้อมยิง Intent `MEDIA_SCANNER_SCAN_FILE` เพื่อให้ไฟล์ขึ้น Gallery บนมือถือเตรียมพร้อมสำหรับโพสต์ผ่านแอป TikTok แท้ 100% หมดปัญหายอดวิวเป็น 0 (Shadowban)
         - **การบันทึกอีเมลบัญชี YouTube ทั้ง 6 ช่อง**: ต้องรักษารายชื่ออีเมลเจ้าของช่องทั้ง 6 ช่องในคู่มือ `docs/manual/02_YOUTUBE_SHORTS_SETUP.md` ให้เป็นปัจจุบันเสมอเพื่อป้องกันปัญหา Token หมดอายุแล้วไม่ทราบอีเมลล็อกอิน
+    33. **มาตรฐานการผลิตคลิปเปรียบเทียบสินค้า 2 ชิ้น (Strict Same-Item Poll / Battle Reels Standard)**:
+        - **จับคู่เฉพาะสินค้าชนิดเดียวกันเป๊ะๆ 100%**: ห้ามจับคู่ข้ามชนิดเด็ดขาด ต้องใช้ `SAME_ITEM_CLUSTERS` คีย์เวิร์ดตระกูลเดียวกันเป๊ะๆ (เช่น หูฟังบลูทูธ vs หูฟังบลูทูธ, กระติกน้ำ vs แก้วน้ำ, พัดลม vs พัดลม)
+        - **ระบบขจัดคำขยะโฆษณาและตัดคำซ้ำ**: กรองคำขยะ `ถูกที่สุด`, `ใบกำกับภาษี`, `ขั้นต่ำ...` ออก 100% และตัดคำซ้ำซ้อนด้วย `simplify_product_name()`
+        - **เสียงพากย์สปีดปกติและสรรพนามตรงเพศ 100%**: ใช้ Edge TTS `rate="+0%"` (ไม่เร่งสปีด) หากใช้เสียงผู้ชาย (`th-TH-NiwatNeural`) คำลงท้ายทั้งหมดต้องเป็น "ครับ/นะครับ" 100% ห้ามหลุด "ค่ะ/นะคะ" เด็ดขาด
+        - **เว้น Safe Zone กึ่งกลางจอ**: เว้นพื้นที่กึ่งกลาง Canvas 9:16 (Y=980..1380) สำหรับแปะสติกเกอร์โหวต Native บน TikTok/Reels/Shorts
+        - **นโยบาย Evergreen ไร้ตัวเลขราคา**: ไม่พูดและไม่แสดงราคาบนคลิปเด็ดขาด และใส่รหัสสินค้าปิดการขายผ่าน LINE OA (`@137gsref`) ทันที (ดูคู่มือฉบับเต็มที่ `docs/manual/13_POLL_BATTLE_REELS_GUIDE.md`)
+    34. **มาตรฐานระบบคลังสินค้า Shopee และการจัดการภาพแท้ (Shopee Product Catalog & Authentic CDN Image Architecture)**:
+        - **ฐานข้อมูลจริงบน Supabase Cloud (Ground-Truth Database)**: ฐานข้อมูลสินค้าจริงอยู่ที่ Supabase PostgreSQL Transaction Pooler (`products` table) มีสินค้าจริงมากกว่า 563 รายการ ห้ามนำสินค้าซ้ำ (Duplicate Names) เข้าสู่ระบบเด็ดขาด
+        - **การซิงค์ Sequence Primary Key (Auto-Increment Sequence Sync)**: หากพบข้อผิดพลาด `duplicate key value violates unique constraint "products_pkey"` เอเจนต์ AI ต้องแก้ไขทันทีด้วยคำสั่ง `SELECT setval(pg_get_serial_sequence('products', 'id'), COALESCE(MAX(id), 1)) FROM products;`
+        - **ระบบดึงภาพแท้ Shopee Official CDN (Strict 100% Authentic CDN Images)**: ห้ามใช้ภาพมโนหรือภาพ Unsplash ในคลังสินค้าอีกต่อไป ต้องใช้โมดูล `tools/shopee_image_harvester.py` และ `backend/app/services/shopee_image_service.py` ซึ่งค้นหาและสกัดรูปภาพความคมชัดสูงจาก `https://down-th.img.susercontent.com/file/...` เท่านั้น
+        - **เกราะป้องกันการบล็อกรูปภาพ (Shopee CDN Hotlink Bypass)**: หน้าร้าน `backend/app/static/shop.html` ต้องมี `<meta name="referrer" content="no-referrer">` และแท็กรูปภาพต้องใส่ `referrerpolicy="no-referrer"` เสมอ ป้องกันปัญหา CDN บล็อกการแสดงผล (403 Forbidden)
+        - **การจัดหมวดหมู่และตัวกรองอัจฉริยะ (Smart Category & Strict Anti-Duplicate Guard)**: ตัวกรองหมวดหมู่หน้าร้านต้องจับคู่ครอบคลุมทั้งคำว่า `ของใช้ในบ้าน` และ `ของใช้บ้าน` รวมถึงคีย์เวิร์ดเฉพาะทาง (ที่นอน, โซฟา, ปลั๊ก, สวิตช์, ถุงสูญญากาศ, พัดลม, สัตว์เลี้ยง) และต้องมี `seenNames` Set กรองสินค้าซ้ำระดับ Client-side เสมอ
+        - **การขยายคลังสู่เป้าหมาย 2,472 รายการ (Scalable Architecture)**: หน้าร้านและ API รองรับการนำเข้าไฟล์ CSV เพิ่มเติมผ่าน `tools/product_pipeline.py import-csv <path>` โดยระบบไม่จำกัดจำนวน และป้ายหัวเว็บต้องแสดงตัวเลขสินค้าจริงแบบ Dynamic (`${allProducts.length} รายการ`) เสมอ (ดูคู่มือฉบับเต็มที่ `docs/manual/17_SHOPEE_CATALOG_AND_IMAGE_HARVESTER_GUIDE.md`)
 
 **API/Admin:** `products-and-links` (สินค้า API + link policy) · `admin-dashboard` (/admin + cookie) · `cron-jobs` (ทุก cron + CRON_TOKEN)
 
