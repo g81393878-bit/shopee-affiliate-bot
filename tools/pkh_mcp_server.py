@@ -381,3 +381,125 @@ if __name__ == "__main__":
         server.run(transport="stdio")
     else:
         server.run(transport=transport, host=host, port=port)
+
+
+# ==============================================================================
+# Facebook Messenger Sentinel & Order Auditor Tools (Zero-Hallucination MCP)
+# ==============================================================================
+
+@app.tool()
+async def pkh_check_inbox(limit: int = 5) -> str:
+    """ตรวจสอบกล่องข้อความ Facebook Messenger ล่าสุด ดึงประวัติแชท ลูกค้าที่ทักมา และรูปภาพแนบ"""
+    fb_token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN")
+    page_id = os.getenv("FACEBOOK_PAGE_ID", "1307380735783361")
+    if not fb_token:
+        return _err(RuntimeError("Missing FACEBOOK_PAGE_ACCESS_TOKEN"))
+    try:
+        url = f"https://graph.facebook.com/v21.0/{page_id}/conversations"
+        params = {
+            "fields": "id,updated_time,participants,messages.limit(2){message,from,created_time,attachments}",
+            "limit": limit,
+            "access_token": fb_token,
+        }
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url, params=params)
+            data = resp.json()
+            results = []
+            for conv in data.get("data", []):
+                parts = [p.get("name") for p in conv.get("participants", {}).get("data", []) if "ป้าเข็ม" not in p.get("name", "")]
+                customer_name = parts[0] if parts else "ไม่ระบุชื่อ"
+                msgs = conv.get("messages", {}).get("data", [])
+                last_msg = msgs[0] if msgs else {}
+                sender = last_msg.get("from", {}).get("name", "Unknown")
+                text = last_msg.get("message", "")
+                att = last_msg.get("attachments", {}).get("data", [])
+                results.append({
+                    "thread_id": conv.get("id"),
+                    "customer_name": customer_name,
+                    "last_sender": sender,
+                    "last_message": text,
+                    "has_attachments": len(att) > 0,
+                    "updated_time": conv.get("updated_time"),
+                })
+            return _ok({"count": len(results), "conversations": results})
+    except Exception as e:
+        return _err(e)
+
+
+@app.tool()
+async def pkh_audit_order_status() -> str:
+    """ตรวจสอบสถานะออเดอร์ล่าสุดจากฐานข้อมูล direct_orders พร้อมยอดเงิน วิธีชำระ และที่อยู่จัดส่ง"""
+    try:
+        data = await _request("GET", "/api/orders/recent")
+        return _ok(data)
+    except Exception:
+        # Fallback to direct supabase query
+        try:
+            import psycopg2
+            from psycopg2.extras import RealDictCursor
+            from dotenv import dotenv_values
+            cfg = dotenv_values("backend/.env")
+            db_url = cfg.get("DATABASE_URL")
+            if not db_url:
+                return _err(RuntimeError("Missing DATABASE_URL"))
+            conn = psycopg2.connect(db_url)
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("""
+                SELECT id, order_code, customer_name, phone, address, package_name, price, payment_method, status, created_at
+                FROM direct_orders
+                ORDER BY id DESC LIMIT 5;
+            """)
+            rows = cur.fetchall()
+            conn.close()
+            # Convert decimal and datetime
+            clean_rows = []
+            for r in rows:
+                clean_r = dict(r)
+                if clean_r.get("price"):
+                    clean_r["price"] = float(clean_r["price"])
+                if clean_r.get("created_at"):
+                    clean_r["created_at"] = str(clean_r["created_at"])
+                clean_rows.append(clean_r)
+            return _ok({"recent_orders": clean_rows})
+        except Exception as e2:
+            return _err(e2)
+
+
+@app.tool()
+async def pkh_send_customer_message(recipient_id: str, message_text: str) -> str:
+    """ส่งข้อความคอนเฟิร์มหรือตอบคำถามลูกค้า Facebook Messenger โดยตรงผ่าน Meta Graph API"""
+    fb_token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN")
+    if not fb_token:
+        return _err(RuntimeError("Missing FACEBOOK_PAGE_ACCESS_TOKEN"))
+    try:
+        url = "https://graph.facebook.com/v21.0/me/messages"
+        payload = {
+            "recipient": {"id": recipient_id},
+            "message": {"text": message_text}
+        }
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(url, params={"access_token": fb_token}, json=payload)
+            if resp.status_code == 200:
+                return _ok({"status": "success", "recipient_id": recipient_id, "response": resp.json()})
+            else:
+                return _err(RuntimeError(f"Facebook Graph API Error {resp.status_code}: {resp.text}"))
+    except Exception as e:
+        return _err(e)
+
+
+
+@server.tool(annotations=_RO)
+async def pkh_verify_order_address_and_fraud(
+    address: Annotated[str, Field(description="ที่อยู่จัดส่งของลูกค้า (บ้านเลขที่ ถนน/ซอย ตำบล อำเภอ จังหวัด รหัสไปรษณีย์)")],
+    phone: Annotated[str, Field(description="เบอร์โทรศัพท์ 10 หลักของลูกค้า")] = "",
+    customer_name: Annotated[str, Field(description="ชื่อลูกค้า")] = "",
+) -> str:
+    """ตรวจสอบพิกัดที่อยู่จัดส่ง 77 จังหวัด (7,498 ตำบล / 928 อำเภอ / รหัสไปรษณีย์) และคัดกรองมิจฉาชีพผ่าน MCP"""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from order_fraud_guard import verify_thai_address_77_provinces, analyze_order_fraud_risk
+        geo = verify_thai_address_77_provinces(address)
+        fraud = analyze_order_fraud_risk(name=customer_name, phone=phone, address=address)
+        return _ok({"address_verification": geo, "fraud_check": fraud})
+    except Exception as e:
+        return _err(e)

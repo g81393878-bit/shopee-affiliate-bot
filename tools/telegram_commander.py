@@ -41,7 +41,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("TelegramCommander")
 ICT = timezone(timedelta(hours=7))
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8648538339:AAGDjwjHlrYRj-g3XrqZ_nAxfJV0S-d3yfk")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8939151149:AAGrVkCv0xZrlvtRPO8mzelOYsp5ah5M13U")
 TELEGRAM_CHAT_ID = str(os.getenv("TELEGRAM_CHAT_ID", "6734965582")).strip()
 
 
@@ -126,8 +126,11 @@ def setup_bot_commands():
     commands = [
         {"command": "menu", "description": "👑 เปิดแผงควบคุมหลัก"},
         {"command": "status", "description": "📊 เช็คสถานะระบบสด"},
+        {"command": "osint", "description": "🔍 ส่องคู่แข่ง FB Marketplace"},
+        {"command": "unmask", "description": "💳 ปลดล็อคชื่อจริงเบอร์โทร (PromptPay)"},
+        {"command": "keyword", "description": "🎯 ขุดคำค้นหา & คำพิมพ์ผิด (SEO)"},
+        {"command": "fraud", "description": "🛡️ ตรวจความเสี่ยงออเดอร์ & COD"},
         {"command": "post", "description": "🚀 สั่งโพสต์คลิปทันที"},
-        {"command": "tarot", "description": "🔮 ผลิตคลิปดูดวงเซลติกครอส 10 ใบ"},
         {"command": "sheet", "description": "📈 ดูชีทยอดวิว & สถิติ"},
         {"command": "sync", "description": "🔄 ซิงค์ยอดวิวชีทสด"},
         {"command": "produce", "description": "🏭 ผลิตคลิปเพิ่ม 3 ตัว"},
@@ -155,8 +158,12 @@ def get_main_menu_markup() -> dict:
                 {"text": "🚀 สั่งโพสต์คลิปทันที", "callback_data": "cmd_post"}
             ],
             [
-                {"text": "🔮 ผลิตคลิปดูดวง 10 ใบ", "callback_data": "cmd_tarot"},
-                {"text": "📦 ดูคลังวิดีโอ", "callback_data": "cmd_stock"}
+                {"text": "🔍 ส่องคู่แข่ง OSINT", "callback_data": "cmd_osint_help"},
+                {"text": "💳 ปลดล็อคชื่อเบอร์", "callback_data": "cmd_unmask_help"}
+            ],
+            [
+                {"text": "🎯 ขุดคำค้นหา SEO", "callback_data": "cmd_keyword_help"},
+                {"text": "🛡️ ตรวจออเดอร์เสี่ยง", "callback_data": "cmd_fraud_help"}
             ],
             [
                 {"text": "📈 ดูชีทยอดวิว", "callback_data": "cmd_sheet"},
@@ -164,6 +171,9 @@ def get_main_menu_markup() -> dict:
             ],
             [
                 {"text": "🏭 ผลิตคลิปเพิ่ม 3 ตัว", "callback_data": "cmd_produce"},
+                {"text": "📦 ดูคลังวิดีโอ", "callback_data": "cmd_stock"}
+            ],
+            [
                 {"text": "🔄 รีสตาร์ทบอท VPS", "callback_data": "cmd_restart"}
             ]
         ]
@@ -175,9 +185,11 @@ def get_persistent_keyboard_markup() -> dict:
     return {
         "keyboard": [
             [{"text": "📊 เช็คสถานะสด"}, {"text": "🚀 สั่งโพสต์คลิปทันที"}],
-            [{"text": "🔮 ทำคลิปดูดวง 10 ใบ"}, {"text": "📦 ดูคลังวิดีโอ"}],
+            [{"text": "🔍 ส่องคู่แข่ง OSINT"}, {"text": "💳 ปลดล็อคชื่อเบอร์"}],
+            [{"text": "🎯 ขุดคำค้นหา SEO"}, {"text": "🛡️ ตรวจออเดอร์เสี่ยง"}],
             [{"text": "📈 ดูชีทยอดวิว"}, {"text": "🔄 ซิงค์ยอดวิวชีท"}],
-            [{"text": "🏭 ผลิตคลิปเพิ่ม 3 ตัว"}, {"text": "🔄 รีสตาร์ทบอท VPS"}]
+            [{"text": "🏭 ผลิตคลิปเพิ่ม 3 ตัว"}, {"text": "📦 ดูคลังวิดีโอ"}],
+            [{"text": "🔄 รีสตาร์ทบอท VPS"}]
         ],
         "resize_keyboard": True,
         "is_persistent": True
@@ -222,10 +234,8 @@ def execute_status_command() -> str:
         f"  • 📈 ยอดโพสต์วันนี้: {today_count} รอบ\n"
         f"  • ⏱️ ความถี่โพสต์: หมุนเวียนอัตโนมัติ 24 ชม.\n\n"
         f"🟢 สถานะบริการ & เครือข่าย:\n"
-        f"  • 🎬 โรงงานผลิตคลิป (Pre-buffer): 🟢 ออนไลน์\n"
-        f"  • ⚫ TikTok Studio: 🟢 4 บัญชีหมุนเวียน\n"
+        f"  • 🎬 โรงงานผลิตคลิป (Pre-buffer): 🟢 ออนไลน์ (100% Autopilot)\n"
         f"  • 📍 Facebook Reels: 🟢 ออนไลน์ (2 เพจพร้อมยิง)\n"
-        f"  • 🔴 YouTube Shorts: 🟢 ปกติ (หมุนเวียน 6 ช่อง)\n"
         f"  • 🧠 Groq AI Multi-Key: 🟢 7 Keys Failover\n\n"
         f"📦 สถานะคลังคลิป:\n"
         f"  • สต็อกรอโพสต์: {pending_count} คลิป\n\n"
@@ -239,14 +249,14 @@ def execute_status_command() -> str:
 
 
 def execute_post_command():
-    """สั่งโพสต์คลิปทันทีในเธรดแยก (TikTok-Led Unified Broadcast)"""
+    """สั่งโพสต์คลิปทันทีในเธรดแยก (Facebook Reels Master Broadcast)"""
     def _run():
-        send_tg_message("🚀 [กำลังเริ่มกระบวนการโพสต์ด่วน 3 แพลตฟอร์ม]\nบอทกำลังคัดเลือกคลิปและซิงค์ขึ้น TikTok Studio + FB Reels + YouTube Shorts ทันทีครับ...")
+        send_tg_message("🚀 [กำลังเริ่มกระบวนการโพสต์ด่วน Facebook Reels]\nบอทกำลังคัดเลือกคลิปและยิงขึ้น Facebook Reels (2 เพจ) ทันทีครับ...")
         try:
             from system_runner import execute_unified_broadcast
             res = execute_unified_broadcast(force=True)
             if res.get("success"):
-                send_tg_message(f"✅ [คำสั่งโพสต์ด่วนเสร็จสิ้น 100%]\n• 🎬 คลิป: {res.get('video')}\n• กระจายครบ TikTok, Facebook Reels, YouTube Shorts เรียบร้อยแล้วครับ")
+                send_tg_message(f"✅ [คำสั่งโพสต์ด่วนเสร็จสิ้น 100%]\n• 🎬 คลิป: {res.get('video')}\n• เผยแพร่ขึ้น Facebook Reels (2 เพจ) เรียบร้อยแล้วครับ")
             else:
                 send_tg_message(f"⚠️ [ผลการโพสต์ด่วน]\n• {res.get('error', 'ไม่สามารถโพสต์ได้ในรอบนี้')}")
         except Exception as e:
@@ -272,7 +282,7 @@ def execute_sheet_command() -> str:
 def execute_refresh_metrics_command():
     """สั่งอัปเดตสถิติยอดวิวยอดไลก์ลง Google Sheets สดๆ ในเธรดแยก"""
     def _run():
-        send_tg_message("🔄 [กำลังดึงสถิติยอดวิว & ยอดไลก์สด]\nระบบกำลังคิวรี่ YouTube Data API v3 และ Meta Graph API ทุกคลิป กรุณารอสักครู่...")
+        send_tg_message("🔄 [กำลังดึงสถิติยอดวิว & ยอดไลก์สด]\nระบบกำลังคิวรี่ Meta Graph API ทุกคลิป กรุณารอสักครู่...")
         try:
             from update_sheet_metrics import update_all_metrics_in_sheet, get_sheet_summary
             count = update_all_metrics_in_sheet()
@@ -300,38 +310,27 @@ def execute_produce_command():
     threading.Thread(target=_run, daemon=True).start()
 
 
-def execute_tarot_command(chat_id=None):
-    """สั่งเรนเดอร์และอัปโหลดคลิปดูดวงเซลติกครอส 10 ใบ เข้า YouTube Shorts + Facebook 2 เพจ"""
-    def _run():
-        send_tg_message("🔮 [กำลังเริ่มผลิตคลิปไพ่ยิปซีเซลติกครอส 10 ใบ]\nบอทกำลังสร้างภาพไพ่ Rider-Waite HD + เสียงพากย์ป้าเข็ม และส่งขึ้น YouTube Shorts + Facebook 2 เพจ...", target_chat_id=chat_id)
-        try:
-            from render_tarot_video import render_celtic_cross_video, upload_to_youtube, upload_to_facebook_pages, update_reading_video_url
-            info = render_celtic_cross_video()
-            if info:
-                yt_url = upload_to_youtube(info["video_path"], info["title"], info["caption"])
-                fb_res = upload_to_facebook_pages(info["video_path"], info["title"], info["caption"])
-                if yt_url:
-                    update_reading_video_url(info["reading_id"], yt_url)
-                
-                msg = (
-                    f"🎉 [ผลิตและเผยแพร่คลิปดูดวงสำเร็จ 100%!]\n"
-                    f"━━━━━━━━━━━━━━━━━━\n"
-                    f"• 🔮 คำทำนาย: {info['reading_id']}\n"
-                    f"• 🎬 หน้าเว็บเครื่องเล่น: {info['tunnel_url']}/tarot/reading/{info['reading_id']}\n"
-                )
-                if yt_url:
-                    msg += f"• 🔴 YouTube Shorts: {yt_url}\n"
-                if fb_res:
-                    for fb in fb_res:
-                        msg += f"• 🔵 Facebook เพจ {fb['page_index']}: {fb['url']}\n"
-                msg += "━━━━━━━━━━━━━━━━━━"
-                send_tg_message(msg, target_chat_id=chat_id)
-            else:
-                send_tg_message("⚠️ ผลิตคลิปดูดวงไม่สำเร็จ (ตรวจสอบ log)", target_chat_id=chat_id)
-        except Exception as e:
-            send_tg_message(f"❌ ผลิตคลิปดูดวงล้มเหลว: {e}", target_chat_id=chat_id)
 
-    threading.Thread(target=_run, daemon=True).start()
+def execute_orders_command() -> str:
+    """สรุปคำสั่งซื้อสินค้าของตัวเอง (ปลาแดดเดียว) ล่าสุด"""
+    try:
+        from app.db import SessionLocal
+        from app.models import DirectOrder
+        db = SessionLocal()
+        orders = db.query(DirectOrder).order_by(DirectOrder.id.desc()).limit(10).all()
+        db.close()
+        if not orders:
+            return "📦 ยังไม่มีคำสั่งซื้อสินค้าตัวเองในระบบค่ะ"
+        lines = [f"🐟 **[รายการคำสั่งซื้อปลาแดดเดียวล่าสุด {len(orders)} ออเดอร์]**", "━━━━━━━━━━━━━━━━━━━"]
+        for o in orders:
+            dt = o.created_at.strftime("%d/%m %H:%M") if o.created_at else ""
+            lines.append(f"• `{o.order_code}` | **{o.customer_name}** ({o.phone})")
+            lines.append(f"  📦 {o.package_name} | 💰 {float(o.price):,.0f}฿ ({o.payment_method})")
+            lines.append(f"  📍 {o.address[:40]}... [{o.status}] ({dt})")
+            lines.append("")
+        return "\n".join(lines).strip()
+    except Exception as e:
+        return f"⚠️ เกิดข้อผิดพลาดในการดึงออเดอร์: {e}"
 
 
 def execute_stock_command() -> str:
@@ -376,6 +375,179 @@ def execute_line_reply(user_id: str, reply_text: str) -> str:
         return f"❌ ไม่สามารถส่งข้อความถึงลูกค้าได้: {e}"
 
 
+def execute_osint_command(target: str) -> str:
+    """ประมวลผลคำสั่ง OSINT ส่อง Facebook Marketplace คู่แข่ง & SOCMINT Deep Links"""
+    clean_target = (target or "").strip()
+    if not clean_target or clean_target in ("/osint", "ส่องคู่แข่ง", "osint"):
+        return (
+            "🔍 [วิธีใช้งาน OSINT ส่องคู่แข่ง Facebook Marketplace]\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            "📖 ตามหลักการ OSINT แม้เป้าหมายจะล็อกโปรไฟล์ แต่ Marketplace Profile จะเปิดเป็นสาธารณะเสมอ!\n\n"
+            "👉 **รูปแบบคำสั่ง:**\n"
+            "`/osint <Facebook User ID หรือ Profile URL>`\n\n"
+            "👉 **ตัวอย่าง:**\n"
+            "• `/osint 1000123456789`\n"
+            "• `/osint https://facebook.com/marketplace/profile/1000123456789`\n"
+            "• `/osint https://facebook.com/username`\n"
+            "━━━━━━━━━━━━━━━━━━"
+        )
+    try:
+        from app.services.osint_intelligence import analyze_facebook_marketplace_competitor
+        res = analyze_facebook_marketplace_competitor(clean_target)
+        if res.get("status") != "success":
+            return f"⚠️ {res.get('message', 'ไม่สามารถวิเคราะห์เป้าหมายได้')}"
+        
+        uid = res.get("target_identifier")
+        url = res.get("marketplace_profile_url")
+        
+        msg = (
+            f"🔍 [ผลการวิเคราะห์ OSINT — Facebook Marketplace]\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"🎯 เป้าหมาย: `{uid}`\n"
+            f"🔗 ลิงก์ตรง: {url}\n\n"
+            f"💡 **ข้อแนะนำสำคัญ:** เมื่อเปิดลิงก์ให้กดเลือกแท็บ **'All Listings'** เพื่อดูสินค้าที่เคยขายไปแล้วทั้งหมด\n\n"
+            f"📋 **จุดตรวจเช็คสำคัญ (Forensic OSINT):**\n"
+            f"• 📦 ดูสินค้าปัจจุบัน vs สินค้าที่ขายแล้ว เพื่อวิเคราะห์สินค้าขายดี\n"
+            f"• 📉 สังเกตป้ายลดราคา เพื่อคำนวณ Margin และต้นทุนคู่แข่ง\n"
+            f"• 📍 ดูพิกัดจัดส่ง เพื่อระบุรัศมีทำเลจริงของคู่แข่ง\n"
+            f"• 📅 ดูปีที่เปิดบัญชี เพื่อเช็คว่าเป็นร้านค้าจริงหรือบัญชีอวตาร\n\n"
+            f"⚔️ **กลยุทธ์แก้เกม:**\n"
+            f"• จัดเซ็ตแถมอุปกรณ์เสริมแทนการตัดราคาตรงๆ\n"
+            f"• ชูจุดขาย 'มีสต็อกพร้อมส่งด่วนใน 24 ชม.'\n"
+            f"• เพิ่มป้าย 'ของแท้ 100% มีประกันศูนย์ไทย'\n"
+            f"━━━━━━━━━━━━━━━━━━"
+        )
+        return msg
+    except Exception as e:
+        return f"❌ เกิดข้อผิดพลาดในการวิเคราะห์ OSINT: {e}"
+
+
+def execute_unmask_command(phone: str) -> str:
+    """ประมวลผลคำสั่งถอดรหัสตัวตนเบอร์โทรศัพท์ (PromptPay Real-Name Unmasking)"""
+    clean_phone = (phone or "").strip()
+    if not clean_phone or clean_phone in ("/unmask", "ปลดล็อคเบอร์", "unmask", "💳 ปลดล็อคชื่อเบอร์"):
+        return (
+            "💳 [วิธีใช้งาน ปลดล็อคชื่อจริงเจ้าของเบอร์ (PromptPay Unmasking)]\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            "📖 ใช้มาตรฐาน PromptPay EMVCo ดึงชื่อ-นามสกุลจริงผ่านแอปธนาคารไทยทันที!\n\n"
+            "👉 **รูปแบบคำสั่ง:**\n"
+            "`/unmask <หมายเลขโทรศัพท์>`\n\n"
+            "👉 **ตัวอย่าง:**\n"
+            "• `/unmask 0935325959`\n"
+            "• `/unmask 081-234-5678`\n"
+            "━━━━━━━━━━━━━━━━━━"
+        )
+    try:
+        from app.services.osint_intelligence import unmask_phone_identity
+        res = unmask_phone_identity(clean_phone)
+        if res.get("status") != "success":
+            return f"⚠️ {res.get('message', 'ไม่สามารถตรวจสอบเบอร์ได้')}"
+        
+        dashed = res.get("dashed_format")
+        carrier = res.get("carrier")
+        warning = res.get("threat_warning")
+        line_url = res.get("line_add_url")
+        digits = res.get("digits_only")
+        
+        msg = (
+            f"💳 [ผลการตรวจสอบเบอร์โทรศัพท์ & ถอดรหัสตัวตน]\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"📞 หมายเลข: `{dashed}`\n"
+            f"📡 เครือข่าย: {carrier}\n"
+        )
+        if warning:
+            msg += f"\n{warning}\n"
+            
+        msg += (
+            f"\n🎯 **วิธีดูชื่อจริง-นามสกุลจริงเจ้าของเบอร์:**\n"
+            f"1. คัดลอกเลขพร้อมเพย์ด้านล่างไปใส่ในแอปธนาคาร (โอนพร้อมเพย์ 1 สตางค์ หรือแกล้งกดโอน):\n"
+            f"`{digits}`\n"
+            f"2. หน้าจอแอปธนาคาร (K-Plus, SCB, Krungthai) จะแสดง **ชื่อจริง-นามสกุลจริง** ทันที!\n\n"
+            f"💬 ส่องโปรไฟล์ LINE: {line_url}\n"
+            f"🛡️ ตรวจประวัติคนโกง: https://www.blacklistseller.com/search_results?q={digits}\n"
+            f"━━━━━━━━━━━━━━━━━━"
+        )
+        return msg
+    except Exception as e:
+        return f"❌ เกิดข้อผิดพลาดในการตรวจสอบ: {e}"
+
+
+def execute_keyword_command(query: str) -> str:
+    """ประมวลผลขุดคำค้นหาจริง Google Autocomplete & คำพิมพ์ผิด (SEO Intelligence)"""
+    clean_q = (query or "").strip()
+    if not clean_q or clean_q in ("/keyword", "คีย์เวิร์ด", "ขุดคำค้นหา", "keyword", "🎯 ขุดคำค้นหา SEO"):
+        return (
+            "🎯 [วิธีใช้งาน ขุดคำค้นหา & คำพิมพ์ผิด (SEO Intelligence)]\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            "📖 ดึงคำค้นหาจริงสดๆ จาก Google Suggest เพื่อหาคำค้นยอดฮิตและคำที่คนพิมพ์ผิดบ่อย\n\n"
+            "👉 **รูปแบบคำสั่ง:**\n"
+            "`/keyword <คำค้นหา>`\n\n"
+            "👉 **ตัวอย่าง:**\n"
+            "• `/keyword หูฟังบลูทูธ`\n"
+            "• `/keyword หม้อทอดไร้น้ำมัน`\n"
+            "━━━━━━━━━━━━━━━━━━"
+        )
+    try:
+        from app.services.osint_intelligence import analyze_keyword_intelligence
+        res = analyze_keyword_intelligence(clean_q)
+        if res.get("status") != "success":
+            return f"⚠️ {res.get('message', 'ไม่สามารถค้นหาได้')}"
+        
+        suggs = res.get("live_suggestions", [])
+        typos = res.get("common_misspellings", [])
+        intents = res.get("search_intents", [])
+        
+        msg = (
+            f"🎯 [รายงานคำค้นหา & SEO Intelligence: “{clean_q}”]\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"📊 **เจตนาการค้นหา (Intent):**\n"
+            + "\n".join(f"  • {i}" for i in intents) + "\n\n"
+            f"🔥 **คำค้นหาจริงบน Google (Autocomplete):**\n"
+            + ("\n".join(f"  {idx}. {s}" for idx, s in enumerate(suggs[:6], 1)) if suggs else "  • ไม่พบคำค้นหาเพิ่มเติม") + "\n\n"
+            f"✍️ **คำที่คนมักพิมพ์ผิด (ดักทราฟฟิก Long-tail SEO):**\n"
+            + ("  • " + ", ".join(typos[:6]) if typos else "  • ครอบคลุมรูปศัพท์มาตรฐานแล้ว") + "\n\n"
+            f"🎬 **Hook 3 วินาทีแนะนำ:**\n"
+            f"“ใครที่กำลังหา {clean_q} แนะนำดูคลิปนี้ก่อนตัดสินใจ!”\n"
+            f"━━━━━━━━━━━━━━━━━━"
+        )
+        return msg
+    except Exception as e:
+        return f"❌ เกิดข้อผิดพลาดในการดึงคีย์เวิร์ด: {e}"
+
+
+def execute_fraud_command(order_text: str) -> str:
+    """ประมวลผลตรวจจับความเสี่ยงออเดอร์และการฉ้อโกง (Order Fraud Guard & COD Screener)"""
+    clean_text = (order_text or "").strip()
+    if not clean_text or clean_text in ("/fraud", "ตรวจโกง", "เช็คออเดอร์", "fraud", "🛡️ ตรวจออเดอร์เสี่ยง"):
+        try:
+            from order_fraud_guard import build_all_orders_fraud_report
+            return build_all_orders_fraud_report()
+        except Exception as e:
+            return f"❌ ไม่สามารถดึงรายงานตรวจออเดอร์ได้: {e}"
+    try:
+        from order_fraud_guard import analyze_order_fraud_risk, format_fraud_guard_telegram_block
+        import re as _re
+        m_phone = _re.search(r"0\d[-\d\s]{7,12}", clean_text)
+        phone_val = m_phone.group(0) if m_phone else ""
+        addr_val = clean_text.replace(phone_val, "").strip() if phone_val else clean_text
+        chk = analyze_order_fraud_risk(
+            name="ตรวจสอบรายบุคคล",
+            phone=phone_val or clean_text,
+            address=addr_val,
+            payment_method="COD",
+        )
+        digits = _re.sub(r"\D", "", chk.get("phone_formatted") or "")
+        return (
+            f"🛡️ [ผลการตรวจสอบมิจฉาชีพ & ความเสี่ยง COD]\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"{format_fraud_guard_telegram_block(chk)}\n"
+            f"🔗 เช็ค BlacklistSeller: https://www.blacklistseller.com/search_results?q={digits}\n"
+            f"━━━━━━━━━━━━━━━━━━"
+        )
+    except Exception as e:
+        return f"❌ เกิดข้อผิดพลาดในการตรวจสอบความเสี่ยง: {e}"
+
+
 def handle_telegram_update(update: dict):
     """ประมวลผล Update จาก Telegram อย่างปลอดภัยและครบถ้วน"""
     admin_id = os.getenv("TELEGRAM_CHAT_ID") or TELEGRAM_CHAT_ID
@@ -403,8 +575,6 @@ def handle_telegram_update(update: dict):
             send_tg_message(execute_status_command(), target_chat_id=chat_id)
         elif data == "cmd_post":
             execute_post_command()
-        elif data == "cmd_tarot":
-            execute_tarot_command(chat_id=chat_id)
         elif data == "cmd_sheet":
             send_tg_message(execute_sheet_command(), target_chat_id=chat_id)
         elif data == "cmd_refresh_metrics":
@@ -413,6 +583,14 @@ def handle_telegram_update(update: dict):
             execute_produce_command()
         elif data == "cmd_stock":
             send_tg_message(execute_stock_command(), target_chat_id=chat_id)
+        elif data == "cmd_osint_help":
+            send_tg_message(execute_osint_command(""), target_chat_id=chat_id)
+        elif data == "cmd_unmask_help":
+            send_tg_message(execute_unmask_command(""), target_chat_id=chat_id)
+        elif data == "cmd_keyword_help":
+            send_tg_message(execute_keyword_command(""), target_chat_id=chat_id)
+        elif data == "cmd_fraud_help":
+            send_tg_message(execute_fraud_command(""), target_chat_id=chat_id)
         elif data == "cmd_restart":
             send_tg_message("🔄 กำลังสั่งรีสตาร์ทบอทบน VPS...", target_chat_id=chat_id)
             def _restart():
@@ -452,11 +630,28 @@ def handle_telegram_update(update: dict):
         elif lower in ("/status", "สถานะ", "status", "เช็คระบบ", "📊 เช็คสถานะสด") or "เช็คสถานะ" in lower:
             send_tg_message(execute_status_command(), target_chat_id=chat_id)
 
+        elif lower.startswith("/osint") or lower.startswith("/ส่องคู่แข่ง") or lower in ("🔍 ส่องคู่แข่ง osint", "ส่องคู่แข่ง", "osint"):
+            parts = text.split(maxsplit=1)
+            target = parts[1].strip() if len(parts) > 1 else ""
+            send_tg_message(execute_osint_command(target), target_chat_id=chat_id)
+
+        elif lower.startswith("/unmask") or lower.startswith("/ปลดล็อคเบอร์") or lower in ("💳 ปลดล็อคชื่อเบอร์", "ปลดล็อคเบอร์", "unmask"):
+            parts = text.split(maxsplit=1)
+            target = parts[1].strip() if len(parts) > 1 else ""
+            send_tg_message(execute_unmask_command(target), target_chat_id=chat_id)
+
+        elif lower.startswith("/keyword") or lower.startswith("/คีย์เวิร์ด") or lower.startswith("/ขุด") or lower in ("🎯 ขุดคำค้นหา seo", "ขุดคำค้นหา", "คีย์เวิร์ด", "keyword"):
+            parts = text.split(maxsplit=1)
+            target = parts[1].strip() if len(parts) > 1 else ""
+            send_tg_message(execute_keyword_command(target), target_chat_id=chat_id)
+
+        elif lower.startswith("/fraud") or lower.startswith("/ตรวจโกง") or lower.startswith("/เช็คโกง") or lower in ("🛡️ ตรวจออเดอร์เสี่ยง", "ตรวจโกง", "fraud"):
+            parts = text.split(maxsplit=1)
+            target = parts[1].strip() if len(parts) > 1 else ""
+            send_tg_message(execute_fraud_command(target), target_chat_id=chat_id)
+
         elif lower in ("/post", "โพสต์", "post", "ยิงคลิป", "🚀 สั่งโพสต์คลิปทันที") or "สั่งโพสต์" in lower:
             execute_post_command()
-
-        elif lower in ("/tarot", "/ไพ่", "ดูดวง", "ไพ่ยิปซี", "🔮 ทำคลิปดูดวง 10 ใบ", "ทำคลิปดูดวง") or "คลิปดูดวง" in lower:
-            execute_tarot_command(chat_id=chat_id)
 
         elif lower in ("/sheet", "/stats", "/ชีท", "/สถิติ", "/views", "sheet", "ชีท", "ยอดวิว", "📈 ดูชีทยอดวิว") or "ดูชีท" in lower:
             send_tg_message(execute_sheet_command(), target_chat_id=chat_id)
@@ -480,6 +675,13 @@ def handle_telegram_update(update: dict):
                 except Exception as e:
                     send_tg_message(f"⚠️ ผลิตคลิปโพลล้มเหลว: {e}")
             threading.Thread(target=_run_battle, daemon=True).start()
+
+        elif lower in ("/ads", "/report", "/fish", "รายงาน", "โฆษณา", "ยอดขาย", "สถิติแอด", "📈 เช็คแอด & ยอดขาย") or "เช็คแอด" in lower:
+            try:
+                from ads_report_bot import build_ads_report_message
+                send_tg_message(build_ads_report_message(), target_chat_id=chat_id)
+            except Exception as e:
+                send_tg_message(f"❌ ดึงข้อมูลรายงานล้มเหลว: {e}", target_chat_id=chat_id)
 
         elif lower in ("/stock", "สต็อก", "คลัง", "stock", "📦 ดูคลังวิดีโอ") or "คลัง" in lower:
             send_tg_message(execute_stock_command(), target_chat_id=chat_id)
@@ -544,7 +746,11 @@ def run_telegram_commander_loop():
         logger.warning("Telegram Bot token not set. Commander disabled.")
         return
 
-    # 1. ตั้งค่า Bot Commands เมนูทางการ
+    # 1. ตั้งค่า Bot Commands เมนูทางการ และล้าง Webhook ค้าง (ป้องกัน HTTP 409 Conflict)
+    try:
+        urllib.request.urlopen(f"https://api.telegram.org/bot{token}/deleteWebhook?drop_pending_updates=true", timeout=10)
+    except Exception:
+        pass
     setup_bot_commands()
 
     logger.info("🤖 เริ่มต้นระบบ PaKhem Commander Polling Loop (24/7 Controller)...")
@@ -590,8 +796,12 @@ def run_telegram_commander_loop():
                         except Exception as e_h:
                             logger.error(f"❌ Error handling telegram update: {e_h}", exc_info=True)
         except Exception as e:
-            logger.warning(f"⚠️ Telegram polling error: {e}")
-            time.sleep(3)
+            if "409" in str(e):
+                logger.debug("ℹ️ Telegram polling conflict (409): another instance active. Backing off 15s...")
+                time.sleep(15)
+            else:
+                logger.warning(f"⚠️ Telegram polling error: {e}")
+                time.sleep(3)
         time.sleep(0.5)
 
 
