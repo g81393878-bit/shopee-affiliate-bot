@@ -1,864 +1,1098 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ป้าเข็ม Admin</title>
-<style>
-:root { --red:#E74C3C; --green:#27AE60; --gray:#666; --light:#f5f5f5; --border:#ddd; }
-* { box-sizing:border-box; }
-body { font-family:'Leelawadee UI',Tahoma,sans-serif; margin:0; background:var(--light); color:#222; }
-header { background:#fff; border-bottom:1px solid var(--border); padding:10px 20px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
-header h1 { font-size:18px; margin:0; color:var(--red); }
-nav { display:flex; gap:8px; flex:1; }
-nav button { border:1px solid var(--border); background:#fff; padding:6px 14px; border-radius:20px; cursor:pointer; font-size:14px; }
-nav button.active { background:var(--red); color:#fff; border-color:var(--red); }
-#logout { border:1px solid var(--border); background:#fff; padding:6px 12px; border-radius:20px; cursor:pointer; }
-main { max-width:1100px; margin:20px auto; padding:0 16px; }
-.hidden { display:none !important; }
-/* login */
-#login { max-width:360px; margin:80px auto; background:#fff; border:1px solid var(--border); border-radius:12px; padding:32px; text-align:center; }
-#login h2 { color:var(--red); margin-top:0; }
-#login input { width:100%; padding:10px; border:1px solid var(--border); border-radius:8px; font-size:16px; margin:12px 0; }
-#login button { width:100%; padding:10px; background:var(--red); color:#fff; border:none; border-radius:8px; font-size:16px; cursor:pointer; }
-#login .err { color:var(--red); font-size:13px; min-height:18px; }
-/* stats */
-.cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:20px; }
-.card { background:#fff; border:1px solid var(--border); border-radius:10px; padding:14px; }
-.card .num { font-size:26px; font-weight:bold; color:var(--red); }
-.card .lbl { font-size:13px; color:var(--gray); }
-.card.green .num { color:var(--green); }
-section.panel { background:#fff; border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:20px; }
-section.panel h3 { margin:0 0 12px; font-size:15px; }
-table { width:100%; border-collapse:collapse; font-size:13px; }
-th,td { padding:8px 6px; border-bottom:1px solid var(--light); text-align:left; vertical-align:top; }
-th { color:var(--gray); font-weight:normal; white-space:nowrap; }
-.badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:bold; }
-.ok { background:#E8F8F0; color:var(--green); }
-.dead { background:#FDECEA; color:var(--red); }
-.suspect,.unknown,.none { background:#FEF9E7; color:#B7950B; }
-/* products */
-.filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
-.filters input,.filters select { padding:8px; border:1px solid var(--border); border-radius:8px; font-size:14px; }
-.filters input { flex:1; min-width:200px; }
-.pager { display:flex; align-items:center; gap:10px; justify-content:center; margin-top:12px; font-size:13px; color:var(--gray); }
-.pager button { padding:5px 12px; border:1px solid var(--border); background:#fff; border-radius:6px; cursor:pointer; }
-.pager button:disabled { opacity:.4; cursor:default; }
-a.edit { color:#2E86C1; cursor:pointer; text-decoration:underline; }
-a.del { color:var(--red); cursor:pointer; text-decoration:underline; margin-left:8px; }
-/* modal */
-.modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.4); display:flex; align-items:center; justify-content:center; z-index:10; }
-.modal { background:#fff; border-radius:12px; padding:20px; width:min(520px,94vw); max-height:88vh; overflow:auto; }
-.modal h3 { margin:0 0 12px; color:var(--red); }
-.modal label { display:block; font-size:13px; color:var(--gray); margin:10px 0 4px; }
-.modal input,.modal select { width:100%; padding:8px; border:1px solid var(--border); border-radius:8px; font-size:14px; }
-.modal .actions { display:flex; gap:10px; margin-top:16px; }
-.modal .actions button { flex:1; padding:9px; border:none; border-radius:8px; font-size:14px; cursor:pointer; }
-#saveBtn { background:var(--red); color:#fff; }
-#cancelBtn { background:#eee; color:#333; }
-.url-box { font-size:11px; color:var(--gray); word-break:break-all; background:var(--light); padding:6px; border-radius:6px; margin-top:10px; }
-/* radar */
-.posted { background:#E8F8F0; color:var(--green); }
-.ignored { background:#F2F3F4; color:var(--gray); }
-.failed { background:#FDECEA; color:var(--red); }
-.cooldown-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px; }
-.cooldown-card { background:#fff; border:1px solid var(--border); border-radius:10px; padding:14px; }
-.cooldown-card h4 { margin:0 0 8px; font-size:14px; }
-.cooldown-card .time { font-size:22px; font-weight:bold; }
-.cooldown-card .sub { font-size:12px; color:var(--gray); margin-top:4px; }
-.cooldown-card.avail { border-left:4px solid var(--green); }
-.cooldown-card.locked { border-left:4px solid var(--red); }
-.progress-bar { background:var(--border); border-radius:6px; height:8px; overflow:hidden; margin:6px 0; }
-.progress-fill { height:100%; border-radius:6px; transition:width .4s; }
-.stat-banner { display:flex; gap:10px; align-items:center; background:#fff; border:1px solid var(--border); border-radius:10px; padding:12px 16px; margin-bottom:14px; flex-wrap:wrap; }
-.stat-banner .big { font-size:24px; font-weight:bold; color:var(--red); }
-.stat-banner .lbl { font-size:13px; color:var(--gray); }
-.stat-banner .sep { width:1px; height:40px; background:var(--border); }
-.caption-box { font-size:12px; background:var(--light); padding:6px 8px; border-radius:6px; max-height:60px; overflow:hidden; cursor:pointer; transition:max-height .3s; white-space:pre-wrap; word-break:break-word; }
-.caption-box.open { max-height:300px; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบจัดการหลังบ้าน | ป้าเข็ม คัดพิเศษ (Admin Dashboard)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #c2410c;
+      --primary-hover: #9a3412;
+      --accent: #059669;
+      --bg: #f1f5f9;
+      --card-bg: #ffffff;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --border: #cbd5e1;
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Prompt', sans-serif; }
+    body { background: var(--bg); color: var(--text); padding-bottom: 60px; }
+    
+    header {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      padding: 14px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .brand { font-size: 1.2rem; font-weight: 700; color: var(--primary); text-decoration: none; display: flex; align-items: center; gap: 8px; }
+    nav { display: flex; gap: 8px; flex-wrap: wrap; }
+    nav button {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: #334155;
+      transition: all 0.15s;
+    }
+    nav button.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+    .shop-link {
+      background: #059669;
+      color: #fff;
+      padding: 8px 14px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 0.88rem;
+      font-weight: 600;
+    }
+
+    .container { max-width: 1100px; margin: 20px auto; padding: 0 16px; }
+    .panel { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .panel-header h2 { font-size: 1.25rem; font-weight: 700; color: #1e293b; }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+    th { background: #f8fafc; font-weight: 600; color: #475569; }
+    tr:hover { background: #f8fafc; }
+    
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge.pending { background: #fef3c7; color: #92400e; }
+    .badge.confirmed { background: #dcfce7; color: #166534; }
+    
+    /* Stats Row */
+    .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px; }
+    .stat-card { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; text-align: center; }
+    .stat-card .num { font-size: 1.8rem; font-weight: 700; color: var(--primary); }
+    .stat-card .lbl { font-size: 0.82rem; color: var(--text-muted); }
+
+    .btn-action {
+      padding: 5px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 0.8rem;
+      text-decoration: none;
+      color: #1e293b;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .btn-action.green { background: #059669; color: #fff; border-color: #059669; font-weight: 600; }
+
+    /* Tabs Content */
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Toast Notification */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #1e293b;
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      animation: fadeIn 0.2s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .status-select {
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      background: #fff;
+      cursor: pointer;
+    }
+    .status-select.pending { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+    .status-select.confirmed { background: #e0f2fe; color: #0369a1; border-color: #bae6fd; }
+    .status-select.shipped { background: #dbeafe; color: #1e40af; border-color: #bfdbfe; }
+    .status-select.delivered { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+    .status-select.cancelled { background: #f1f5f9; color: #64748b; border-color: #cbd5e1; }
+
+    .tracking-input {
+      padding: 4px 6px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 0.8rem;
+      width: 110px;
+    }
+    .tracking-save-btn {
+      padding: 3px 6px;
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.75rem;
+    }
+    .tracking-save-btn:hover { background: #e2e8f0; }
+
+  </style>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 </head>
 <body>
 
-<div id="login" class="hidden">
-  <h2>🛍️ ป้าเข็ม Admin</h2>
-  <div class="err" id="loginErr"></div>
-  <input type="password" id="pw" placeholder="รหัสผ่านแอดมิน" autocomplete="current-password">
-  <button id="loginBtn">เข้าสู่ระบบ</button>
-</div>
-
-<div id="app" class="hidden">
   <header>
-    <h1>🛍️ ป้าเข็ม Admin</h1>
+    <a href="#" class="brand">🐟 ป้าเข็ม Admin Dashboard</a>
     <nav>
-      <button id="tabStats" class="active" onclick="showTab('stats')">📊 สถิติ</button>
-      <button id="tabProducts" onclick="showTab('products')">📦 สินค้า</button>
-      <button id="tabRadar" onclick="showTab('radar')">📡 Radar Feed</button>
-      <button id="tabCooldown" onclick="showTab('cooldown')">⏰ Cooldown</button>
-      <button id="tabSlips" onclick="showTab('slips')">💰 สลิป</button>
-      <button id="tabReels" onclick="showTab('reels')">🎬 Reels</button>
-      <button id="tabBriefs" onclick="showTab('briefs')">📝 Briefs</button>
+      <button class="active" onclick="switchTab('orders', this)">📦 ออเดอร์ลูกค้า (สด)</button>
+      <button onclick="switchTab('benchmarks', this)">📊 ราคากลาง 12 เกรด</button>
+      <button onclick="switchTab('suppliers', this)">🏭 แหล่งผลิต & คู่ค้า (6)</button>
+      <button onclick="switchTab('scripts', this)">💬 สคริปต์เจรจาโรงงาน</button>
+      <button onclick="switchTab('strategy', this)">⚖️ สต๊อก VS Dropship</button>
     </nav>
-    <button id="logout">ออกจากระบบ</button>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <a href="fish_label_print.html" target="_blank" class="shop-link" style="background:#d97706;">🏷️ พิมพ์สติกเกอร์ติดถุง</a>
+      <a href="fish.html" target="_blank" class="shop-link">🛍️ เปิดหน้าร้าน</a>
+      <button onclick="handleAdminLogout()" style="background:#fee2e2; color:#991b1b; border:1px solid #fecaca; padding:8px 12px; border-radius:8px; font-size:0.85rem; font-weight:600; cursor:pointer;">🚪 ออกจากระบบ</button>
+    </div>
   </header>
 
-  <main>
-    <!-- สถิติ -->
-    <div id="viewStats">
-      <div class="cards" id="statCards"></div>
-      <section class="panel">
-        <h3>🔌 Shopee API <span id="shopeeStatus" class="badge none">กำลังตรวจสอบ…</span></h3>
-        <div id="shopeeBody" style="font-size:13px;color:var(--gray)">…</div>
-        <div class="filters" style="margin-top:10px">
-          <input id="shopeeQ" placeholder="🔍 ค้นสินค้าจากคลัง Shopee API (ต้องตั้งค่า API ก่อน)" onkeydown="if(event.key==='Enter')shopeeSearch()">
-          <button onclick="shopeeSearch()">ค้น</button>
-        </div>
-        <div id="shopeeResults"></div>
-      </section>
-      <section class="panel">
-        <h3>💬 LINE Push Quota <span id="quotaBadge" class="badge none">กำลังตรวจสอบ…</span></h3>
-        <div id="quotaBody" style="font-size:13px;color:var(--gray)">…</div>
-      </section>
-      <section class="panel">
-        <h3>🔥 หมวดที่มีสินค้ามากสุด</h3>
-        <table><thead><tr><th>หมวด</th><th>จำนวน</th></tr></thead><tbody id="catRows"></tbody></table>
-      </section>
-      <section class="panel">
-        <h3>🏆 ขายดี 5 อันดับ</h3>
-        <table><thead><tr><th>#</th><th>สินค้า</th><th>ราคา</th><th>ยอดขาย</th><th>คอม</th></tr></thead><tbody id="topRows"></tbody></table>
-      </section>
-      <section class="panel">
-        <h3>🆕 เข้าใหม่ล่าสุด</h3>
-        <table><thead><tr><th>#</th><th>สินค้า</th><th>หมวด</th><th>ราคา</th></tr></thead><tbody id="newRows"></tbody></table>
-      </section>
-      <section class="panel" style="grid-column: 1 / -1;">
-        <h3>📊 ส่งสถิติ Facebook Insights ให้ AI เรียนรู้</h3>
-        <p style="font-size:12px; color:var(--gray); margin-top:0;">คัดลอกข้อความสถิติเชิงลึก (Reels/Post Insights เช่น ยอดเข้าถึง, กลุ่มอายุผู้รับชม, เวลาที่หลุดรับชม) วางลงในกล่องด้านล่างนี้เพื่อให้ AI นำไปวิเคราะห์เพื่อพัฒนาบอทแบบเรียลไทม์</p>
-        <textarea id="insightsText" placeholder="วางข้อความสถิติจาก Facebook Insights ที่นี่..." style="width:100%; height:120px; padding:10px; border:1px solid var(--border); border-radius:8px; font-family:sans-serif; font-size:13px; resize:vertical;"></textarea>
-        <button onclick="submitInsights()" style="margin-top:10px; padding:8px 16px; background:var(--red); color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:14px;">🧠 ส่งให้ AI ประมวลผลและเรียนรู้</button>
-        <div id="insightsResult" style="margin-top:12px; font-size:13px; white-space:pre-wrap; word-break:break-word; line-height:1.4;"></div>
-      </section>
-    </div>
+  <main class="container">
 
-    <!-- สินค้า -->
-    <div id="viewProducts" class="hidden">
-      <div class="filters">
-        <input id="fq" placeholder="🔍 ค้นชื่อ/หมวดสินค้า..." oninput="debouncedLoad()">
-        <select id="fcat" onchange="loadProducts()"><option value="">ทุกหมวด</option></select>
-        <select id="fstatus" onchange="loadProducts()">
-          <option value="">ทุกสถานะ</option>
-          <option value="ok">ok — ขายได้</option>
-          <option value="dead">dead — ลิงก์ตาย</option>
-          <option value="suspect">suspect — สงสัย</option>
-          <option value="unknown">unknown</option>
-          <option value="none">none</option>
-        </select>
-        <select id="fsort" onchange="loadProducts()">
-          <option value="new">ใหม่สุด</option>
-          <option value="sales">ยอดขาย</option>
-          <option value="price">ราคา</option>
-          <option value="score">คะแนน AI</option>
-        </select>
-        <button id="addBtn" onclick="openAdd()">➕ เพิ่มสินค้า</button>
+    <!-- Tab 1: Orders -->
+    <div id="tab-orders" class="tab-content active">
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="num" id="statOrderCount">0</div>
+          <div class="lbl">ออเดอร์ทั้งหมด</div>
+        </div>
+        <div class="stat-card">
+          <div class="num" style="color:var(--accent);" id="statRevenue">0 ฿</div>
+          <div class="lbl">ยอดขายรวม</div>
+        </div>
+        <div class="stat-card">
+          <div class="num" style="color:#d97706;" id="statPending">0</div>
+          <div class="lbl">รอจัดส่ง (Pending)</div>
+        </div>
       </div>
+
       <section class="panel">
-        <table>
-          <thead><tr><th>ID</th><th>สินค้า</th><th>หมวด</th><th>ราคา</th><th>ยอดขาย</th><th>คอม</th><th>คะแนน</th><th>สถานะ</th><th></th></tr></thead>
-          <tbody id="prodRows"></tbody>
-        </table>
-        <div class="pager">
-          <button id="prevBtn" onclick="page(-1)">← ก่อนหน้า</button>
-          <span id="pageInfo"></span>
-          <button id="nextBtn" onclick="page(1)">ถัดไป →</button>
+        <div class="panel-header">
+          <h2>📦 รายการสั่งซื้อปลาแดดเดียว (Supabase PostgreSQL Realtime)</h2>
+          <div style="display:flex; gap:8px;">
+            <button onclick="batchPrintShippingSlips()" class="btn-action" style="background:#0369a1; color:#fff; border-color:#0369a1; font-weight:600;">🖨️ พิมพ์ใบปะหน้าทั้งหมด (Batch)</button>
+            <button onclick="exportColdChainCSV()" class="btn-action" style="background:#059669; color:#fff; border-color:#059669; font-weight:600;">📥 ส่งออก CSV รถเย็น</button>
+            <button onclick="loadOrders()" class="btn-action">🔄 รีเฟรชออเดอร์</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>รหัสออเดอร์</th>
+                <th>วันที่/เวลา</th>
+                <th>สินค้า</th>
+                <th>ยอดเงิน</th>
+                <th>วิธีชำระ</th>
+                <th>ลูกค้า & โทร</th>
+                <th>ที่อยู่จัดส่ง</th>
+                <th>สถานะ (1-Click)</th>
+                <th>เลขพัสดุรถเย็น</th>
+                <th>การจัดการ</th>
+              </tr>
+            </thead>
+            <tbody id="ordersTbody">
+              <tr><td colspan="9" style="text-align:center; padding:20px; color:var(--text-muted);">กำลังโหลดข้อมูลจากฐานข้อมูล…</td></tr>
+            </tbody>
+          </table>
         </div>
       </section>
     </div>
 
-    <!-- Radar Feed -->
-    <div id="viewRadar" class="hidden">
-      <div class="stat-banner" id="radarBanner">
-        <div><div class="big" id="radarPostedToday">…</div><div class="lbl">โพสต์วันนี้</div></div>
-        <div class="sep"></div>
-        <div><div class="big" id="radarRemaining">…</div><div class="lbl">เหลือวันนี้</div></div>
-        <div class="sep"></div>
-        <div><div class="big" id="radarTotal">…</div><div class="lbl">รวมทั้งหมด</div></div>
-        <div style="margin-left:auto"><button onclick="loadRadarFeed()" style="padding:7px 16px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer">🔄 รีเฟรช</button></div>
-      </div>
+    <!-- Tab 2: Benchmarks -->
+    <div id="tab-benchmarks" class="tab-content">
       <section class="panel">
-        <table>
-          <thead><tr><th>เวลา</th><th>สถานะ</th><th>Keyword</th><th>หมวด</th><th>Score</th><th>สินค้าแนะนำ</th><th>แคปชั่นป้าเข็ม</th><th>ต้นทาง</th></tr></thead>
-          <tbody id="radarRows"></tbody>
-        </table>
-        <div class="pager">
-          <button id="radarPrev" onclick="radarPage(-1)">← ก่อนหน้า</button>
-          <span id="radarPageInfo"></span>
-          <button id="radarNext" onclick="radarPage(1)">ถัดไป →</button>
+        <div class="panel-header">
+          <h2>📊 ฐานข้อมูลราคากลางและโครงสร้างกำไรต่อกล่อง (12 เกรดยอดนิยม)</h2>
+          <span style="font-size:0.85rem; color:var(--text-muted);">* อ้างอิงตลาดไท, บางบ่อ, สิงห์บุรี, ตากใบ, และ Shopee/Lazada</span>
+        </div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>ชนิดปลา & ไซส์</th>
+                <th>ราคาส่งตลาด (บ./กก.)</th>
+                <th>ราคาปลีกออนไลน์ (บ./กก.)</th>
+                <th>ต้นทุนแพ็ค+เจล</th>
+                <th>ค่าส่ง Flash</th>
+                <th>ราคาขายแนะนำ</th>
+                <th>กำไรสุทธิ (บ.)</th>
+                <th>แหล่งอ้างอิง</th>
+                <th>ฉลาก มผช.</th>
+              </tr>
+            </thead>
+            <tbody id="benchmarksTbody">
+              <!-- Populated via JS -->
+            </tbody>
+          </table>
         </div>
       </section>
     </div>
 
-    <!-- Cooldown Monitor -->
-    <div id="viewCooldown" class="hidden">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-        <h2 style="margin:0;font-size:16px">⏰ สถานะ Cooldown แต่ละหมวดหมู่</h2>
-        <button onclick="loadCooldown()" style="padding:7px 16px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer">🔄 รีเฟรช</button>
-      </div>
-      <section class="panel" style="margin-bottom:16px">
-        <h3 style="color:var(--red)">🔒 ติด Cooldown (โพสต์ไม่ได้)</h3>
-        <div class="cooldown-grid" id="lockedGrid"><div style="color:var(--gray);font-size:13px">กำลังโหลด…</div></div>
-      </section>
+    <!-- Tab 3: Suppliers -->
+    <div id="tab-suppliers" class="tab-content">
       <section class="panel">
-        <h3 style="color:var(--green)">✅ พร้อมโพสต์ได้</h3>
-        <div class="cooldown-grid" id="availGrid"><div style="color:var(--gray);font-size:13px">กำลังโหลด…</div></div>
-      </section>
-      <div style="font-size:12px;color:var(--gray);text-align:center;margin-top:8px" id="cooldownUpdated"></div>
-    </div>
-
-    <!-- Reels Uploader -->
-    <div id="viewReels" class="hidden">
-      <div class="stat-banner" id="reelsBanner">
-        <div><div class="big" id="reelsQueueCount">…</div><div class="lbl">รอโพสต์ (คลิป)</div></div>
-        <div class="sep"></div>
-        <div><div class="big" id="reelsPostedToday">…</div><div class="lbl">โพสต์วันนี้ / วัน</div></div>
-        <div class="sep"></div>
-        <div><div class="big" id="reelsNextPost" style="font-size:18px">…</div><div class="lbl">โพสต์ถัดไป</div></div>
-        <div class="sep"></div>
-        <div><div class="big" id="reelsSpacing" style="font-size:18px">…</div><div class="lbl">Spacing</div></div>
-        <div style="margin-left:auto;display:flex;gap:8px">
-          <button id="reelsPostNow" onclick="postReelsNow()" style="padding:7px 16px;border:1px solid var(--red);border-radius:8px;background:var(--red);color:#fff;cursor:pointer">▶️ โพสต์คลิปถัดไปทันที</button>
-          <button onclick="loadReels()" style="padding:7px 16px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer">🔄 รีเฟรช</button>
+        <div class="panel-header">
+          <h2>🏭 แหล่งผลิตและฟาร์มต้นทางในระบบ (6 แหล่งผลิตแท้)</h2>
+          <span style="font-size:0.85rem; color:var(--text-muted);">* มีเงื่อนไข MOQ และช่องทางติดต่อพร้อมเจรจา</span>
         </div>
-      </div>
-      <section class="panel">
-        <h3>📥 คิวรอโพสต์ (FIFO)</h3>
-        <table><thead><tr><th>#</th><th>คลิป</th><th>ขนาด</th><th>รอมา</th><th>แคปชั่น</th></tr></thead>
-        <tbody id="reelsQueueRows"></tbody></table>
-      </section>
-      <section class="panel">
-        <h3>✅ โพสต์ล่าสุด (10)</h3>
-        <table><thead><tr><th>คลิป</th><th>ขนาด</th><th>โพสต์เมื่อ</th></tr></thead>
-        <tbody id="reelsPostedRows"></tbody></table>
-      </section>
-      <section class="panel">
-        <h3>📜 Log ล่าสุด <span id="reelsLogState" style="font-size:12px;color:var(--gray)"></span></h3>
-        <pre id="reelsLog" style="background:var(--light);padding:10px;border-radius:8px;font-size:12px;max-height:320px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin:0"></pre>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>ชื่อแหล่งผลิต/ฟาร์ม</th>
+                <th>จังหวัด/พื้นที่</th>
+                <th>ชนิดปลาที่ส่ง</th>
+                <th>โมเดล</th>
+                <th>ขั้นต่ำ (MOQ)</th>
+                <th>สูญญากาศ?</th>
+                <th>รถเย็น?</th>
+                <th>ช่องทางติดต่อ</th>
+              </tr>
+            </thead>
+            <tbody id="suppliersTbody">
+              <!-- Populated via JS -->
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
 
-    <!-- Creative Briefs -->
-    <div id="viewBriefs" class="hidden">
-      <div class="stat-banner" id="briefsBanner">
-        <div><div class="big" id="briefsTotal">…</div><div class="lbl">สินค้ามี Brief</div></div>
-        <div class="sep"></div>
-        <div style="margin-left:auto;display:flex;gap:8px">
-          <button id="briefsGenBtn" onclick="generateBriefFromSelect()" style="padding:7px 16px;border:1px solid var(--red);border-radius:8px;background:var(--red);color:#fff;cursor:pointer">🤖 สร้าง Brief ใหม่</button>
-          <button onclick="loadBriefs()" style="padding:7px 16px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer">🔄 รีเฟรช</button>
+    <!-- Tab 4: Scripts -->
+    <div id="tab-scripts" class="tab-content">
+      <section class="panel">
+        <div class="panel-header">
+          <h2>💬 สคริปต์ข้อความสำหรับทักสอบถามราคาส่งโรงงาน (กดปุ่มคัดลอกได้ทันที)</h2>
         </div>
-      </div>
-      <section class="panel" style="margin-bottom:14px">
-        <h3>🔍 ดู Brief ของสินค้า</h3>
-        <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
-          <input id="briefsProductId" type="number" min="1" placeholder="Product ID" style="width:140px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px">
-          <button onclick="loadBriefsByProduct()" style="padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;font-size:14px">🔎 ค้น</button>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:16px;">
+          
+          <div style="background:#f8fafc; border:1px solid var(--border); border-radius:10px; padding:16px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+              <strong>📱 รูปแบบที่ 1: แบบสั้น (Facebook / LINE)</strong>
+              <span class="badge confirmed">ยอดนิยม</span>
+            </div>
+            <p id="sCasual" style="font-size:0.88rem; line-height:1.6; background:#fff; padding:12px; border:1px solid #cbd5e1; border-radius:8px; white-space:pre-wrap;">สวัสดีครับ สนใจสอบถามราคาส่งปลาแดดเดียวครับ พอดีกำลังเปิดหน้าร้านขายปลีกออนไลน์ อยากทราบเงื่อนไขการเปิดบิล/รับไปขายต่อครับ
+1. มีเรทราคาส่งขั้นต่ำกี่กิโลกรัม / กี่แพ็คครับ?
+2. สินค้าซีลสูญญากาศและแช่แข็งมาให้พร้อมขายเลยไหมครับ?
+3. มีบริการจัดส่งรถห้องเย็นให้ด้วยไหมครับ?
+4. มีบริการจัดส่งในนามตัวแทน (Dropship) ด้วยไหมครับ?
+รบกวนขอแคตตาล็อกสินค้าและรายการราคาส่งด้วยนะครับ ขอบคุณครับ</p>
+            <button onclick="copyText('sCasual', this)" class="btn-action green" style="width:100%; justify-content:center; padding:10px; margin-top:10px;">
+              📋 คัดลอกข้อความแบบสั้น
+            </button>
+          </div>
+
+          <div style="background:#f8fafc; border:1px solid var(--border); border-radius:10px; padding:16px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+              <strong>🏢 รูปแบบที่ 2: แบบเป็นทางการ (ขอใบเสนอราคา)</strong>
+              <span class="badge" style="background:#e0f2fe; color:#0369a1;">Official</span>
+            </div>
+            <p id="sFormal" style="font-size:0.88rem; line-height:1.6; background:#fff; padding:12px; border:1px solid #cbd5e1; border-radius:8px; white-space:pre-wrap;">เรียน ทีมงาน / ผู้จัดการฝ่ายขาย
+
+ดิฉัน/กระผม จากแบรนด์ ป้าเข็ม คัดพิเศษ มีความสนใจนำผลิตภัณฑ์ปลาแดดเดียวของทางโรงงานไปจัดจำหน่ายผ่านช่องทางออนไลน์และหน้าร้านเดลิเวอรีครับ
+
+จึงใคร่ขอรบกวนสอบถามรายละเอียดเงื่อนไขการเป็นคู่ค้า/ตัวแทนจำหน่ายราคาส่ง ดังนี้ครับ:
+1. รายการสินค้าและเรทราคาส่ง (ปลาสลิด, ปลาช่อน, ปลานิล, ปลาดุก, หมึกแดดเดียว)
+2. เงื่อนไขขั้นต่ำ (MOQ) ในการสั่งซื้อต่อครั้ง
+3. รูปแบบบรรจุภัณฑ์ (เป็นถุงซีลสูญญากาศ Food Grade หรือไม่ และสามารถติดแบรนด์ได้หรือไม่)
+4. การจัดส่งและการรักษาความเย็น (รถ Cold Chain หรือพัสดุเก็บความเย็น)
+5. คำแนะนำการเก็บรักษาและอายุสินค้า
+
+หากมีเอกสารแนะนำสินค้า แคตตาล็อก หรือเรทราคา รบกวนส่งให้ทางแชตนี้ได้เลยนะครับ ขอบคุณครับ</p>
+            <button onclick="copyText('sFormal', this)" class="btn-action green" style="width:100%; justify-content:center; padding:10px; margin-top:10px;">
+              📋 คัดลอกข้อความทางการ
+            </button>
+          </div>
+
         </div>
       </section>
-      <div id="briefsResult"></div>
     </div>
 
-    <!-- สลิปโอนเงิน (ขายบอท) -->
-    <div id="viewSlips">
-      <div class="filters" style="margin-bottom:16px">
-        <select id="slipStatus" onchange="loadSlips(1)">
-          <option value="">ทุกสถานะ</option>
-          <option value="interested">สนใจ</option>
-          <option value="paid_pending">รอยืนยัน</option>
-          <option value="confirmed">ยืนยันแล้ว</option>
-          <option value="cancelled">ยกเลิก</option>
-        </select>
-        <input id="slipQ" placeholder="🔍 หา userId / แพ็กเกจ" style="width:220px"
-               onkeydown="if(event.key==='Enter')loadSlips(1)">
-        <button onclick="loadSlips(1)">ค้น</button>
-        <span id="slipTotal" style="color:var(--gray);font-size:13px"></span>
+    <!-- Tab 5: Strategy -->
+    <div id="tab-strategy" class="tab-content">
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(340px, 1fr)); gap:16px;">
+        <section class="panel">
+          <div class="panel-header">
+            <h2>⚖️ สต๊อกสินค้า VS ดร็อปชิป (Dropship)</h2>
+          </div>
+          <table>
+            <thead>
+              <tr><th>หัวข้อ</th><th>สต๊อกสินค้าเอง</th><th>ดร็อปชิป (Dropship)</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><b>เงินลงทุน</b></td><td>ต้องซื้อส่งล่วงหน้า</td><td><b style="color:var(--accent);">ไม่ต้องลงทุนซื้อก่อน</b></td></tr>
+              <tr><td><b>กำไร/กล่อง</b></td><td><b style="color:var(--accent);">กำไรสูงกว่า (50-120 บ.)</b></td><td>กำไร 20-40 บ. (คอมมิชชั่น)</td></tr>
+              <tr><td><b>ติดแบรนด์ป้าเข็ม</b></td><td><b style="color:var(--accent);">ติดฉลาก มผช. ได้ 100%</b></td><td>ใช้แพ็คของโรงงาน</td></tr>
+              <tr><td><b>ตู้แช่แข็ง</b></td><td>ต้องมีตู้แช่ (-18°C)</td><td><b style="color:var(--accent);">ไม่ต้องมีตู้แช่</b></td></tr>
+              <tr><td><b>ความเสี่ยงค้าง</b></td><td>มีความเสี่ยงหากขายช้า</td><td><b style="color:var(--accent);">ไร้ความเสี่ยง 100%</b></td></tr>
+              <tr><td><b>การแพ็ค/ส่ง</b></td><td>แพ็คใส่ฟอยล์ซองฟอยล์เก็บความเย็นเอง</td><td><b style="color:var(--accent);">โรงงานส่งตรงถึงบ้านลูกค้า</b></td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2>✅ 5 Checklist สำคัญก่อนสั่งโรงงาน</h2>
+          </div>
+          <ul style="font-size:0.9rem; line-height:1.8; padding-left:20px; color:#334155;">
+            <li><b>1. ความสะอาด & ความเค็ม:</b> ไม่ใส่ดินประสิว/สารกันบูด ล้างคาวสะอาด เค็มพอดี 3%</li>
+            <li><b>2. ถุงสูญญากาศ (Vacuum Seal):</b> หนา 160-190 ไมครอน ซีลแน่น ไม่มีฟองอากาศ</li>
+            <li><b>3. การรักษาความเย็น:</b> ขนส่งรถเย็น หรือแพ็คกล่องโฟม+ซองฟอยล์เก็บความเย็น เก็บความเย็นได้เกิน 24 ชม.</li>
+            <li><b>4. การรับประกัน & เคลม:</b> หากถุงรั่วหรือสินค้าเสียหายระหว่างทาง โรงงานเคลมเปลี่ยนทันที</li>
+            <li><b>5. ความสม่ำเสมอของไซส์:</b> ไซส์ปลาต้องได้มาตรฐาน ไม่ปนปลาตัวเล็กมามากเกินไป</li>
+          </ul>
+        </section>
       </div>
-      <section class="panel">
-        <table>
-          <thead><tr>
-            <th>#</th><th>ลูกค้า</th><th>แพ็กเกจ</th><th>ยอดจากสลิป (OCR)</th><th>Ref No</th>
-            <th>สถานะ</th><th>สลิป</th><th>แจ้งโอน</th>
-          </tr></thead>
-          <tbody id="slipRows"></tbody>
-        </table>
-        <div class="filters" style="margin-top:12px">
-          <button onclick="slipPage(-1)">‹ ก่อนหน้า</button>
-          <span id="slipPageInfo"></span>
-          <button onclick="slipPage(1)">ถัดไป ›</button>
-        </div>
-      </section>
     </div>
+
   </main>
-</div>
 
-<!-- modal แก้สินค้า -->
-<div class="modal-bg hidden" id="modalBg">
-  <div class="modal">
-    <h3>✏️ แก้สินค้า #<span id="mId"></span></h3>
-    <label>ชื่อสินค้า</label><input id="mName">
-    <label>หมวด</label><input id="mCat" list="catList"><datalist id="catList"></datalist>
-    <label>ราคา (฿)</label><input id="mPrice" type="number" step="0.01" min="0">
-    <label>ค่านายหน้า (฿)</label><input id="mComm" type="number" step="0.01" min="0">
-    <label>ยอดขาย</label><input id="mSales" type="number" min="0">
-    <label>คะแนน AI (0-100)</label><input id="mScore" type="number" min="0" max="100">
-    <label>เรตติ้ง (0-5)</label><input id="mRating" type="number" step="0.1" min="0" max="5">
-    <label>สถานะลิงก์</label>
-    <select id="mStatus">
-      <option value="ok">ok — ขายได้</option>
-      <option value="dead">dead — ลิงก์ตาย</option>
-      <option value="suspect">suspect — สงสัย</option>
-      <option value="unknown">unknown</option>
-      <option value="none">none</option>
-    </select>
-    <div class="url-box" id="mUrl"></div>
-    <div class="actions">
-      <button id="saveBtn" onclick="saveProduct()">💾 บันทึก</button>
-      <button id="cancelBtn" onclick="closeModal()">ยกเลิก</button>
-    </div>
-  </div>
-</div>
+  <script>
+    const SUPA_URL = 'https://usqhvujqmnxqrdoovvnp.supabase.co/rest/v1';
+    const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzcWh2dWpxbW54cXJkb292dm5wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyOTc4NjAsImV4cCI6MjA2OTg3Mzg2MH0.3kCGGAe1OoSJ_SCN_NDSdnKep1hXIMgMxR1lBd_i2eI';
 
-<!-- modal เพิ่มสินค้า -->
-<div class="modal-bg hidden" id="addBg">
-  <div class="modal">
-    <h3>➕ เพิ่มสินค้า</h3>
-    <label>ชื่อสินค้า *</label><input id="aName" placeholder="เช่น กระติกน้ำ ESKIMO 2 ลิตร">
-    <label>ลิงก์ affiliate (s.shopee.co.th) *</label><input id="aUrl" placeholder="https://s.shopee.co.th/...">
-    <label>หมวด</label><input id="aCat" list="catList" placeholder="เช่น แก้วน้ำ / หูฟัง">
-    <label>ราคา (฿)</label><input id="aPrice" type="number" step="0.01" min="0" value="0">
-    <label>ค่านายหน้า (฿)</label><input id="aComm" type="number" step="0.01" min="0" value="0">
-    <label>ยอดขาย</label><input id="aSales" type="number" min="0" value="0">
-    <label>เรตติ้ง (0-5)</label><input id="aRating" type="number" step="0.1" min="0" max="5" value="0">
-    <div class="actions">
-      <button id="addSaveBtn" onclick="addProduct()">💾 บันทึก (ตรวจลิงก์อัตโนมัติ)</button>
-      <button id="addCancelBtn" onclick="closeAdd()">ยกเลิก</button>
-    </div>
-  </div>
-</div>
+    const BENCHMARKS_DATA = [
+      { type: 'ปลาสลิด จัมโบ้ (5-6 ตัว/กก.)', ws: '190 - 220 ฿', ret: '280 - 320 ฿', pkg: '18.40 ฿', ship: '42 ฿', sale: '340 ฿', prof: '+71.10 ฿', src: 'บางบ่อ / สุพรรณบุรี', sku: 'SKU-SLID-JB-1KG' },
+      { type: 'ปลาสลิด กลาง (7-8 ตัว/กก.)', ws: '150 - 180 ฿', ret: '240 - 270 ฿', pkg: '18.40 ฿', ship: '42 ฿', sale: '290 ฿', prof: '+57.35 ฿', src: 'บางบ่อ / ตลาดไท', sku: 'SKU-SLID-MD-1KG' },
+      { type: 'ปลาสลิด เล็ก (9-12 ตัว/กก.)', ws: '100 - 140 ฿', ret: '160 - 190 ฿', pkg: '15.10 ฿', ship: '38 ฿', sale: '160 ฿', prof: '+42.00 ฿', src: 'สุพรรณบุรี / ปากน้ำ', sku: 'SKU-SLID-MD-500G' },
+      { type: 'หมึกไข่แดดเดียว ปากน้ำปราณ', ws: '380 - 430 ฿', ret: '490 - 560 ฿', pkg: '17.40 ฿', ship: '38 ฿', sale: '340 ฿', prof: '+81.10 ฿', src: 'ปากน้ำปราณบุรี / แม่กลอง', sku: 'SKU-SQUID-EG-500G' },
+      { type: 'ปลาหลดแดดเดียว ธรรมชาติ', ws: '360 - 420 ฿', ret: '520 - 650 ฿', pkg: '17.40 ฿', ship: '38 ฿', sale: '350 ฿', prof: '+95.85 ฿', src: 'ลุ่มน้ำเจ้าพระยา / อ่างทอง', sku: 'SKU-LOD-NAT-500G' },
+      { type: 'ปลาช่อนแม่ลา บั้งเนื้อ (1kg)', ws: '200 - 230 ฿', ret: '280 - 330 ฿', pkg: '19.10 ฿', ship: '42 ฿', sale: '360 ฿', prof: '+74.90 ฿', src: 'สิงห์บุรี แม่ลา / สุพรรณฯ', sku: 'SKU-CHON-MD-1KG' },
+      { type: 'ปลากุเลาแดดเดียว สูตรตากใบ', ws: '300 - 360 ฿', ret: '420 - 490 ฿', pkg: '18.40 ฿', ship: '42 ฿', sale: '480 ฿', prof: '+87.60 ฿', src: 'ตากใบ นราธิวาส', sku: 'SKU-KULAO-TB-1KG' },
+      { type: 'ปลานิลผีเสื้อ กึ่งไร้ก้าง (1kg)', ws: '120 - 150 ฿', ret: '160 - 200 ฿', pkg: '18.40 ฿', ship: '42 ฿', sale: '260 ฿', prof: '+58.10 ฿', src: 'ลุ่มน้ำเจ้าพระยา / ตลาดไท', sku: 'SKU-NIL-FL-1KG' },
+      { type: 'ปลาดุกหั่นท่อนแว่น (1kg)', ws: '140 - 170 ฿', ret: '180 - 220 ฿', pkg: '18.40 ฿', ship: '42 ฿', sale: '280 ฿', prof: '+57.60 ฿', src: 'ฉะเชิงเทรา / อยุธยา', sku: 'SKU-DUK-CT-1KG' },
+      { type: 'ปลาสวายแล่ชิ้นเนื้อล้วน (1kg)', ws: '120 - 150 ฿', ret: '160 - 190 ฿', pkg: '18.40 ฿', ship: '42 ฿', sale: '250 ฿', prof: '+53.35 ฿', src: 'ลุ่มน้ำแม่กลอง / ป่าโมก', sku: 'SKU-SWAI-SL-1KG' },
+      { type: 'ปลาอินทรีสเต๊กพรีเมียม (1kg)', ws: '480 - 550 ฿', ret: '650 - 800 ฿', pkg: '20.00 ฿', ship: '42 ฿', sale: '650 ฿', prof: '+150.00 ฿', src: 'กุยบุรี ประจวบฯ / มหาชัย', sku: 'SKU-SLID-MD-1KG' },
+      { type: 'ปลาสลิด ชุดครอบครัว 2kg', ws: '330 ฿ / 2kg', ret: '550 - 680 ฿', pkg: '23.80 ฿', ship: '55 ฿', sale: '550 ฿', prof: '+127.45 ฿', src: 'บางบ่อ / ดอนเจดีย์', sku: 'SKU-SLID-MD-2KG' }
+    ];
 
-<script>
-const $ = id => document.getElementById(id);
-let state = { page: 1, perPage: 25, editingId: null, debounce: null };
+    const SUPPLIERS_DATA = [
+      { name: 'กลุ่มวิสาหกิจปลาสลิดบางบ่อแท้', loc: 'สมุทรปราการ (อ.บางบ่อ)', type: 'ปลาสลิด จัมโบ้ / กลาง / เล็ก', model: 'BOTH', moq: '10 กก.', vac: '✅ ซีล', cold: '✅ มีรถเย็น', contact: 'เพจ: ปลาสลิดบางบ่อแท้ ต้นตำรับ' },
+      { name: 'ฟาร์มปลาและศูนย์กระจายสินค้าสุพรรณบุรี', loc: 'สุพรรณบุรี (ดอนเจดีย์/สองพี่น้อง)', type: 'ปลาสลิด, ปลาช่อน, ปลานิล', model: 'STOCK', moq: '20 กก.', vac: '✅ ซีล', cold: '✅ มีรถเย็น', contact: 'LINE: @suphanfishfarm' },
+      { name: 'โรงงานแปรรูปปลาช่อนแม่ลาโบราณ', loc: 'สิงห์บุรี (อ.บางระจัน)', type: 'ปลาช่อนแดดเดียว แล่บั้งเนื้อ', model: 'BOTH', moq: '5 กก.', vac: '✅ ซีล', cold: '✅ มีรถเย็น', contact: 'เพจ: ปลาช่อนแม่ลาของแท้สิงห์บุรี' },
+      { name: 'กลุ่มวิสาหกิจประมงเรือไดหมึกปากน้ำปราณ', loc: 'ประจวบคีรีขันธ์ (ปากน้ำปราณ)', type: 'หมึกแดดเดียว, หมึกไข่แดดเดียว', model: 'BOTH', moq: '5 กก.', vac: '✅ ซีล', cold: '✅ มีรถเย็น', contact: 'LINE: @pranburisquid' },
+      { name: 'กลุ่มแปรรูปปลากุเลาเค็มตากใบ OTOP 5 ดาว', loc: 'นราธิวาส (อ.ตากใบ)', type: 'ปลากุเลาแดดเดียว เค็มน้อย', model: 'STOCK', moq: '5 กก.', vac: '✅ ซีล', cold: '✅ มีรถเย็น', contact: 'เพจ: ปลากุเลาตากใบแท้ OTOP 5 ดาว' },
+      { name: 'แพปลาประมงพื้นบ้านกุยบุรี มหาชัย', loc: 'ประจวบฯ / สมุทรสาคร', type: 'ปลาอินทรีย์สเต๊ก, ปลาทูแดดเดียว', model: 'STOCK', moq: '10 กก.', vac: '✅ ซีล', cold: '✅ มีรถเย็น', contact: 'LINE: @kuiburifish' }
+    ];
 
-async function api(url, opts) {
-  const r = await fetch(url, opts);
-  if (r.status === 401) {
-    if (!$('app').classList.contains('hidden')) location.reload();
-    throw new Error("unauth");
-  }
-  if (!r.ok) { const j = await r.json().catch(()=>({})); throw new Error(j.detail || j.error || r.status); }
-  return r.json();
-}
-
-// ---- login ----
-async function init() {
-  try {
-    await api('/api/admin/session');
-    $('login').classList.add('hidden');
-    $('app').classList.remove('hidden');
-    loadStats(); loadCategories(); loadProducts(); loadShopeeStatus(); loadQuota();
-  } catch (e) {
-    if (e.message === 'unauth') { $('app').classList.add('hidden'); $('login').classList.remove('hidden'); }
-  }
-}
-$('loginBtn').onclick = async () => {
-  $('loginErr').textContent = '';
-  try {
-    const fd = new FormData(); fd.append('password', $('pw').value);
-    await api('/admin/login', { method: 'POST', body: fd });
-    location.reload();
-  } catch (e) { $('loginErr').textContent = e.message; }
-};
-$('pw').addEventListener('keydown', e => { if (e.key === 'Enter') $('loginBtn').click(); });
-$('logout').onclick = () => { fetch('/admin/logout', { method: 'POST' }).then(() => location.reload()); };
-
-// ---- tabs ----
-function showTab(t) {
-  ['stats','products','radar','cooldown','slips','reels','briefs'].forEach(n => {
-    $('view' + n.charAt(0).toUpperCase() + n.slice(1)).classList.toggle('hidden', t !== n);
-    $('tab'  + n.charAt(0).toUpperCase() + n.slice(1)).classList.toggle('active', t === n);
-  });
-  if (t === 'stats')    { loadStats(); loadShopeeStatus(); loadQuota(); }
-  if (t === 'radar')    { loadRadarFeed(); }
-  if (t === 'cooldown') { loadCooldown(); }
-  if (t === 'slips')    { loadSlips(1); }
-  if (t === 'reels')    { loadReels(); }
-  if (t === 'briefs')   { loadBriefs(); }
-}
-
-// ---- Reels Uploader ----
-function _fmtSize(mb) { return mb ? mb.toFixed(1) + ' MB' : '-'; }
-function _fmtAge(min) {
-  if (min == null) return '-';
-  if (min < 60) return Math.round(min) + ' นาที';
-  const h = Math.floor(min / 60);
-  if (h < 24) return h + ' ชม. ' + Math.round(min % 60) + ' นาที';
-  return Math.round(h / 24) + ' วัน';
-}
-async function postReelsNow() {
-  if (!confirm('โพสต์คลิปถัดไปทันที (ข้าม pacing) จริงไหม?\n\n- ยังนับโควต้า 30 คลิป/วัน\n- รัน background — กดรีเฟรชดูผล')) return;
-  const btn = $('reelsPostNow');
-  btn.disabled = true;
-  btn.textContent = '⏳ กำลังโพสต์…';
-  try {
-    const r = await api('/api/admin/reels/post-now', { method: 'POST' });
-    alert(r.message);
-  } catch (e) { alert(e.message); }
-  btn.disabled = false;
-  btn.textContent = '▶️ โพสต์คลิปถัดไปทันที';
-  loadReels();
-}
-async function loadReels() {
-  try {
-    const d = await api('/api/admin/reels-status');
-    const st = d.state;
-    const mp = d.manual_post || {};
-    $('reelsQueueCount').textContent = d.queue.length;
-    // ปุ่มโพสต์ทันที: ปิดเมื่อคิวว่าง หรือกำลังโพสต์อยู่
-    const pn = $('reelsPostNow');
-    if (mp.running) { pn.disabled = true; pn.textContent = '⏳ กำลังโพสต์…'; }
-    else { pn.disabled = d.queue.length === 0; pn.textContent = '▶️ โพสต์คลิปถัดไปทันที'; }
-    $('reelsPostedToday').textContent = `${st.posts_today} / ${st.max_per_day}`;
-    $('reelsSpacing').textContent = `${st.spacing_hours} ชม.`;
-    if (d.queue.length === 0) {
-      $('reelsNextPost').textContent = '—';
-    } else if (st.pacing_ready) {
-      $('reelsNextPost').textContent = 'พร้อมโพสต์';
-      $('reelsNextPost').style.color = 'var(--green)';
-    } else {
-      $('reelsNextPost').textContent = `ใน ${st.next_post_in_min} นาที`;
-      $('reelsNextPost').style.color = '';
+    function switchTab(tabId, btn) {
+      document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-' + tabId).classList.add('active');
+      if (tabId === 'orders') loadOrders();
     }
-    $('reelsQueueRows').innerHTML = d.queue.map((v, i) => `
-      <tr>
-        <td>${i+1}</td>
-        <td>${esc(v.name)}</td>
-        <td>${_fmtSize(v.size_mb)}</td>
-        <td>${_fmtAge(v.age_min)}</td>
-        <td>${v.is_product ? '<span class="badge ok">สินค้า</span>' : '<span class="badge none">แนะนำป้าเข็ม</span>'}</td>
-      </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--gray);padding:20px">ไม่มีคลิปรอโพสต์ 🎉</td></tr>';
-    $('reelsPostedRows').innerHTML = d.posted.map(v => `
-      <tr>
-        <td>${esc(v.name)}</td>
-        <td>${_fmtSize(v.size_mb)}</td>
-        <td>${v.posted_at ? new Date(v.posted_at).toLocaleString('th-TH') : '-'}</td>
-      </tr>`).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--gray);padding:20px">ยังไม่เคยโพสต์</td></tr>';
-    $('reelsLog').textContent = d.log_tail.join('\n') || '(ยังไม่มี log — รอ Task Scheduler รัน uploader.py รอบถัดไป)';
-    $('reelsLogState').textContent = d.log_file_exists ? '' : '(ยังไม่มีไฟล์ log)';
-    const last = st.last_posted_at ? `โพสต์ล่าสุด: ${new Date(st.last_posted_at).toLocaleString('th-TH')}` : 'ยังไม่เคยโพสต์';
-    $('reelsLogState').textContent += (d.log_file_exists ? ' · ' : '') + last;
-    // ผลโพสต์มือครั้งล่าสุด (post-now)
-    const mr = mp.last;
-    if (mr && mr.finished_at) {
-      const ok = mr.exit_code === 0;
-      const line = mr.output_tail && mr.output_tail.length
-        ? mr.output_tail[mr.output_tail.length - 1] : '';
-      $('reelsLogState').textContent += ` · โพสต์มือ: ${ok ? '✅ สำเร็จ' : '❌ ล้ม'} (exit ${mr.exit_code})`;
-      if (line && !line.includes('ยังไม่ถึงเวลา')) {
-        $('reelsLog').textContent = line + '\n\n--- รายละเอียด ---\n' + $('reelsLog').textContent;
+
+    let cachedOrders = [];
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastMsg').innerText = msg;
+      toast.style.display = 'flex';
+      setTimeout(() => { toast.style.display = 'none'; }, 2500);
+    }
+
+    async function loadOrders() {
+      const tbody = document.getElementById('ordersTbody');
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:20px;">กำลังโหลดข้อมูลล่าสุด…</td></tr>';
+      try {
+        const res = await fetch(`${SUPA_URL}/direct_orders?order=id.desc&limit=100`, {
+          headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
+        });
+        const orders = await res.json();
+        cachedOrders = orders;
+        
+        document.getElementById('statOrderCount').innerText = orders.length;
+        const totalRev = orders.reduce((sum, o) => sum + (parseFloat(o.price) || 0), 0);
+        document.getElementById('statRevenue').innerText = totalRev.toLocaleString() + ' ฿';
+        const pendingCount = orders.filter(o => o.status === 'PENDING').length;
+        document.getElementById('statPending').innerText = pendingCount;
+
+        if (orders.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:20px; color:var(--text-muted);">ยังไม่มีออเดอร์ในระบบ</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = orders.map(o => {
+          const statusClass = (o.status || 'PENDING').toLowerCase();
+          return `
+          <tr>
+            <td><b>${o.order_code}</b></td>
+            <td><small style="color:var(--text-muted);">${new Date(o.created_at).toLocaleString('th-TH')}</small></td>
+            <td><b>${o.product_name || o.package_name || '-'}</b></td>
+            <td><b style="color:var(--primary);">${parseFloat(o.price).toLocaleString()} ฿</b></td>
+            <td>
+              <span class="badge ${o.payment_method === 'COD' ? 'pending' : 'confirmed'}">${o.payment_method}</span>
+              ${o.slip_url ? `<br><button onclick="viewSlipImage('${o.slip_url}', '${o.order_code}', ${o.id})" class="btn-action" style="background:#ecfdf5; color:#065f46; border-color:#a7f3d0; font-size:0.75rem; padding:2px 6px; margin-top:4px;">🧾 สลิป</button>` : ''}
+            </td>
+            <td><b>${o.customer_name}</b><br><small style="color:var(--text-muted);">📞 ${o.phone}</small></td>
+            <td><small style="max-width:220px; display:inline-block;">${o.address}${o.note ? `<br><span style="color:#d97706;">📝 ${o.note}</span>` : ''}</small></td>
+            <td>
+              <select class="status-select ${statusClass}" onchange="updateOrderStatus(${o.id}, this.value, this)">
+                <option value="PENDING" ${o.status === 'PENDING' ? 'selected' : ''}>🟡 รอจัดส่ง (Pending)</option>
+                <option value="CONFIRMED" ${o.status === 'CONFIRMED' ? 'selected' : ''}>🔵 ยืนยันแล้ว (Confirmed)</option>
+                <option value="SHIPPED" ${o.status === 'SHIPPED' ? 'selected' : ''}>🚚 ส่งรถเย็นแล้ว (Shipped)</option>
+                <option value="DELIVERED" ${o.status === 'DELIVERED' ? 'selected' : ''}>🟢 สำเร็จ (Delivered)</option>
+                <option value="CANCELLED" ${o.status === 'CANCELLED' ? 'selected' : ''}>⚪ ยกเลิก (Cancelled)</option>
+              </select>
+            </td>
+            <td>
+              <div style="display:flex; gap:4px; align-items:center;">
+                <input type="text" id="track-${o.id}" class="tracking-input" placeholder="กรอกเลขพัสดุ..." value="${o.tracking_number || ''}" onkeydown="if(event.key==='Enter') saveTracking(${o.id})">
+                <button onclick="saveTracking(${o.id})" class="tracking-save-btn" title="บันทึกเลขพัสดุ + ปรับสถานะเป็นส่งแล้ว">💾</button>
+                <button onclick="copyTrackingNotice(${o.id})" class="tracking-save-btn" title="คัดลอกข้อความแจ้งเลขพัสดุส่งให้ลูกค้า">📋</button>
+              </div>
+            </td>
+            <td>
+              <button onclick="printShippingSlip(${o.id})" class="btn-action green" style="padding:4px 8px; font-size:0.75rem;">📦 ใบปะหน้า</button>
+            </td>
+          </tr>
+        `;
+        }).join('');
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; color:red; padding:20px;">โหลดข้อมูลไม่สำเร็จ: ${e.message}</td></tr>`;
       }
-    } else if (mp.running) {
-      $('reelsLogState').textContent += ' · ⏳ กำลังโพสต์มือ…';
     }
-  } catch (e) {
-    $('reelsQueueRows').innerHTML = `<tr><td colspan="5" style="color:var(--red)">${esc(e.message)}</td></tr>`;
-  }
-}
 
-// ---- สลิป (ขายบอท) ----
-let slipState = { page: 1, pages: 1, total: 0 };
-const SLIP_STATUS_CLS = { interested:'', paid_pending:'none', confirmed:'ok', cancelled:'dead' };
-
-async function loadSlips(page) {
-  try {
-    const st = $('slipStatus').value, q = $('slipQ').value.trim();
-    const url = `/api/admin/purchases?page=${page || 1}&per_page=25&status=${encodeURIComponent(st)}&q=${encodeURIComponent(q)}`;
-    const s = await api(url);
-    slipState = { page: s.page, pages: s.pages, total: s.total };
-    $('slipTotal').textContent = `ทั้งหมด ${s.total.toLocaleString()} รายการ`;
-    $('slipPageInfo').textContent = `หน้า ${s.page} / ${s.pages}`;
-    $('slipRows').innerHTML = s.items.map((r, i) => {
-      const amount = r.amount ? `฿${esc(r.amount)}` : '<span style="color:var(--gray)">—</span>';
-      const ref = esc(r.ref_no || '—');
-      const img = r.slip_id
-        ? `<a href="/api/admin/slips/${r.slip_id}/image" target="_blank" title="เปิดสลิปเต็มขนาด"><img src="/api/admin/slips/${r.slip_id}/image" style="height:52px;border-radius:6px;border:1px solid var(--border)" alt="สลิป"></a>`
-        : '<span style="color:var(--gray)">ไม่มีรูป</span>';
-      const paid = r.paid_at ? new Date(r.paid_at).toLocaleString('th-TH', { dateStyle:'short', timeStyle:'short' }) : '—';
-      return `<tr><td>${(slipState.page-1)*25 + i + 1}</td>` +
-        `<td>${esc(r.customer)}<br><span style="color:var(--gray)">${esc(r.line_user_id)}</span></td>` +
-        `<td>${esc(r.package)}</td><td>${amount}</td><td>${esc(ref)}</td>` +
-        `<td><span class="badge ${SLIP_STATUS_CLS[r.status] || ''}">${esc(r.status_label)}</span></td>` +
-        `<td>${img}</td><td>${paid}</td></tr>`;
-    }).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--gray)">ยังไม่มีรายการ</td></tr>';
-  } catch (e) { alert(e.message); }
-}
-
-function slipPage(d) {
-  const nx = slipState.page + d;
-  if (nx >= 1 && nx <= slipState.pages) loadSlips(nx);
-}
-
-// ---- stats ----
-async function loadStats() {
-  try {
-    const s = await api('/api/admin/stats');
-    const t = s.totals;
-    $('statCards').innerHTML = [
-      ['สินค้าทั้งหมด', t.total, ''],
-      ['ขายได้ (ok)', t.sellable, 'green'],
-      ['ซ่อน (suspect)', t.hidden, ''],
-      ['ลิงก์ตาย', t.dead, ''],
-      ['ยังไม่มีคอนเทนต์', t.no_content, ''],
-      ['ลูกค้า', t.users, 'green'],
-      ['คุย 24 ชม.', s.today.chats, 'green'],
-      ['ค้น 24 ชม. (คน)', s.today.searchers, 'green'],
-      ['ทวงถาม 24 ชม.', s.today.wismo, ''],
-    ].map(([l, n, cls]) => `<div class="card ${cls}"><div class="num">${n}</div><div class="lbl">${l}</div></div>`).join('');
-    $('catRows').innerHTML = s.by_category.map(c => `<tr><td>${c.category}</td><td>${c.count}</td></tr>`).join('');
-    $('topRows').innerHTML = s.top_sellers.map((p, i) => `<tr><td>${i+1}</td><td>${esc(p.name)}</td><td>฿${p.price.toLocaleString()}</td><td>${p.sales.toLocaleString()}</td><td>฿${p.commission.toLocaleString()}</td></tr>`).join('');
-    $('newRows').innerHTML = s.newest.map((p, i) => `<tr><td>${i+1}</td><td>${esc(p.name)}</td><td>${esc(p.category || '')}</td><td>฿${p.price.toLocaleString()}</td></tr>`).join('');
-  } catch (e) { alert(e.message); }
-}
-
-// ---- shopee api ----
-async function loadShopeeStatus() {
-  try {
-    const s = await api('/api/admin/shopee-api/status');
-    const badge = $('shopeeStatus');
-    if (s.configured) {
-      badge.textContent = 'พร้อม';
-      badge.className = 'badge ok';
-      $('shopeeBody').innerHTML = '✅ ตั้งค่าแล้ว — ค้นสินค้าจากคลัง Shopee ได้เลย (พิมพ์คำค้นแล้วกด ค้น)';
-    } else {
-      badge.textContent = 'รออนุมัติ';
-      badge.className = 'badge none';
-      $('shopeeBody').textContent = '⏳ ' + s.message;
+    async function updateOrderStatus(orderId, newStatus, selectEl) {
+      try {
+        const res = await fetch(`${SUPA_URL}/direct_orders?id=eq.${orderId}`, {
+          method: 'PATCH',
+          headers: {
+            'apikey': SUPA_KEY,
+            'Authorization': 'Bearer ' + SUPA_KEY,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({ status: newStatus })
+        });
+        if (res.ok) {
+          showToast(`อัปเดตสถานะเป็น "${newStatus}" สำเร็จ!`);
+          if (selectEl) {
+            selectEl.className = 'status-select ' + newStatus.toLowerCase();
+          }
+          // Update stat counters locally
+          const target = cachedOrders.find(x => x.id === orderId);
+          if (target) target.status = newStatus;
+          const pendingCount = cachedOrders.filter(o => o.status === 'PENDING').length;
+          document.getElementById('statPending').innerText = pendingCount;
+        } else {
+          alert('ไม่สามารถอัปเดตสถานะได้');
+        }
+      } catch (e) {
+        alert('เกิดข้อผิดพลาด: ' + e.message);
+      }
     }
-  } catch (e) { /* ignore */ }
-}
-async function loadQuota() {
-  try {
-    const q = await api('/api/admin/quota');
-    const badge = $('quotaBadge');
-    const body = $('quotaBody');
-    if (!q.checked) {
-      badge.textContent = 'ไม่ทราบ';
-      badge.className = 'badge none';
-      body.textContent = '⏳ ' + (q.note || 'ตรวจ quota ไม่ได้');
-      return;
+
+    async function saveTracking(orderId) {
+      const input = document.getElementById('track-' + orderId);
+      const tracking = input ? input.value.trim() : '';
+      const payload = tracking ? { tracking_number: tracking, status: 'SHIPPED' } : { tracking_number: tracking };
+      try {
+        const res = await fetch(`${SUPA_URL}/direct_orders?id=eq.${orderId}`, {
+          method: 'PATCH',
+          headers: {
+            'apikey': SUPA_KEY,
+            'Authorization': 'Bearer ' + SUPA_KEY,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          const target = cachedOrders.find(x => x.id === orderId);
+          if (target) {
+            target.tracking_number = tracking;
+            if (tracking) target.status = 'SHIPPED';
+          }
+          if (tracking) {
+            if (target) {
+              fetch('https://script.google.com/macros/s/AKfycbxHAfBm0V67wkiXb1dlAFNbG3NQudcN35zuQ3xjFo0FRHY2ja8TB3-Xj0l_xOWxeF404Q/exec', {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({
+                  action: 'notify_tracking',
+                  order_id: orderId,
+                  order_code: target.order_code,
+                  tracking_number: tracking,
+                  customer_name: target.customer_name,
+                  package_name: target.package_name || target.product_name,
+                  note: target.note || ''
+                })
+              }).catch(() => {});
+            }
+            copyTrackingNotice(orderId, true);
+            loadOrders();
+          } else {
+            showToast('ล้างเลขพัสดุเรียบร้อย!');
+          }
+        } else {
+          alert('ไม่สามารถบันทึกเลขพัสดุได้');
+        }
+      } catch (e) {
+        alert('เกิดข้อผิดพลาด: ' + e.message);
+      }
     }
-    const pct = Math.min(100, Math.round(q.used / q.limit * 100));
-    if (q.blocked) { badge.textContent = 'หมดแล้ว!'; badge.className = 'badge dead'; }
-    else if (q.warning) { badge.textContent = 'ใกล้หมด'; badge.className = 'badge none'; }
-    else { badge.textContent = 'ปกติ'; badge.className = 'badge ok'; }
-    body.innerHTML =
-      '<div style="margin:6px 0"><div style="background:var(--border);border-radius:6px;height:10px;overflow:hidden">' +
-        '<div style="width:' + pct + '%;height:100%;background:' + (q.warning ? '#B7950B' : 'var(--green)') + '"></div>' +
-      '</div></div>' +
-      'ใช้แล้ว <b>' + q.used.toLocaleString() + '</b> / ' + q.limit.toLocaleString() + ' ข้อความ (' + pct + '%)' +
-      ' — เหลือ <b>' + q.remaining.toLocaleString() + '</b>' + (q.warning ? ' (ต่ำกว่าเกณฑ์เตือน ' + q.warn_left + ')' : '') +
-      '<br><span style="font-size:12px">push (ต้อนรับ/แจ้งราคาลง/re-engage/รายงาน) นับ quota — reply ไม่นับ · ' +
-      '<a href="https://manager.line.biz" target="_blank">ตรวจที่ LINE OA Manager</a></span>';
-  } catch (e) { /* ignore */ }
-}
-async function shopeeSearch() {
-  const q = $('shopeeQ').value.trim();
-  if (!q) { $('shopeeResults').textContent = ''; return; }
-  $('shopeeResults').innerHTML = 'กำลังค้น…';
-  try {
-    const fd = new FormData();
-    fd.append('keyword', q);
-    fd.append('limit', '10');
-    const d = await api('/api/admin/shopee-api/search', { method: 'POST', body: fd });
-    $('shopeeResults').innerHTML = d.items.map(n => `
-      <div style="padding:8px 0;border-bottom:1px solid var(--light);font-size:13px">
-        <div><b>${esc(n.name)}</b> · ฿${(n.price_min||0).toLocaleString()}–${(n.price_max||0).toLocaleString()}</div>
-        <div style="color:var(--gray)">คอม ${esc(n.commission_rate||'-')} · ขาย ${(n.sales||0).toLocaleString()} · ${esc(n.shop_name||'')}</div>
-      </div>`).join('') || '<div style="color:var(--gray)">ไม่พบรายการ</div>';
-  } catch (e) { $('shopeeResults').innerHTML = `<div style="color:var(--red)">${esc(e.message)}</div>`; }
-}
 
-// ---- products ----
-async function loadCategories() {
-  try {
-    const cats = await api('/api/admin/categories');
-    $('fcat').innerHTML = '<option value="">ทุกหมวด</option>' + cats.map(c => `<option value="${esc(c.category)}">${esc(c.category)} (${c.count})</option>`).join('');
-    $('catList').innerHTML = cats.map(c => `<option value="${esc(c.category)}">`).join('');
-  } catch (e) { /* ignore */ }
-}
-function debouncedLoad() { clearTimeout(state.debounce); state.debounce = setTimeout(loadProducts, 300); }
-function page(d) { state.page = Math.max(1, state.page + d); loadProducts(); }
+    function copyTrackingNotice(orderId, fromSave = false) {
+      const o = cachedOrders.find(x => x.id === orderId);
+      if (!o) return;
+      const input = document.getElementById('track-' + orderId);
+      const trk = (input && input.value.trim()) || o.tracking_number || '-';
+      const msg =
+        `🚚 แจ้งเลขพัสดุจัดส่งปลาสลิดแดดเดียว ป้าเข็ม คัดพิเศษ ค่ะ ✨\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `🔖 รหัสคำสั่งซื้อ: ${o.order_code}\n` +
+        `👤 คุณลูกค้า: ${o.customer_name}\n` +
+        `📦 รายการ: ${o.package_name || o.product_name}\n` +
+        `🔢 เลขพัสดุ: ${trk}\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `❄️ แพ็กซองฟอยล์เก็บความเย็น ส่งออกให้เรียบร้อยแล้วค่ะ เมื่อได้รับสินค้าแล้วแนะนำให้นำเข้าช่องฟรีซ (≤ -18°C) ทันทีนะคะ ขอบพระคุณที่อุดหนุนป้าเข็มค่ะ 🙏🐟`;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(msg).catch(() => {});
+      }
+      showToast(fromSave
+        ? `✅ บันทึกเลขพัสดุ ${trk} (ปรับสถานะส่งแล้ว) + คัดลอกข้อความแจ้งลูกค้าแล้ว!`
+        : `📋 คัดลอกข้อความแจ้งเลขพัสดุ ${trk} เรียบร้อย! กดวางส่งในแชทได้เลย`);
+    }
 
-async function loadProducts() {
-  try {
-    state.page = state.page || 1;
-    const params = new URLSearchParams({
-      q: $('fq').value.trim(), cat: $('fcat').value, status: $('fstatus').value,
-      sort: $('fsort').value, page: state.page, per_page: state.perPage,
-    });
-    const d = await api('/api/admin/products?' + params.toString());
-    $('prodRows').innerHTML = d.items.map(p => `
-      <tr>
-        <td>${p.id}</td>
-        <td>${esc(p.name)}</td>
-        <td>${esc(p.category)}</td>
-        <td>฿${p.price.toLocaleString()}</td>
-        <td>${p.sales_count.toLocaleString()}</td>
-        <td>฿${p.commission.toLocaleString()}</td>
-        <td>${p.ai_score}</td>
-        <td><span class="badge ${p.link_status}">${p.link_status}</span></td>
-        <td><a class="edit" onclick="openEdit(${p.id})">แก้</a><a class="del" onclick="delProduct(${p.id})">ลบ</a></td>
-      </tr>`).join('');
-    $('pageInfo').textContent = `หน้า ${d.page}/${d.pages} · ${d.total} รายการ`;
-    $('prevBtn').disabled = d.page <= 1;
-    $('nextBtn').disabled = d.page >= d.pages;
-    window._rowsCache = d.items;  // ใช้ใน edit modal
-  } catch (e) { alert(e.message); }
-}
+    function printShippingSlip(orderId) {
+      const o = cachedOrders.find(x => x.id === orderId);
+      if (!o) return;
 
-// ---- edit / delete ----
-async function openEdit(id) {
-  try {
-    const d = await api(`/api/admin/products?q=&page=1&per_page=1`);
-    // ดึงรายการที่ต้องการ: โหลดหน้าปัจจุบันหาชื่อไม่ได้ — ดึงจากตารางที่โชว์อยู่แทน
-    const row = window._rowsCache && window._rowsCache.find(r => r.id === id);
-    if (!row) return alert('ไม่พบสินค้าในหน้าที่แสดง — ค้นหาเพื่อเจอตัวนี้ก่อน');
-    state.editingId = id;
-    $('mId').textContent = id;
-    $('mName').value = row.name; $('mCat').value = row.category;
-    $('mPrice').value = row.price; $('mComm').value = row.commission;
-    $('mSales').value = row.sales_count; $('mScore').value = row.ai_score;
-    $('mRating').value = row.rating; $('mStatus').value = row.link_status;
-    $('mUrl').textContent = row.affiliate_url || '';
-    $('modalBg').classList.remove('hidden');
-  } catch (e) { alert(e.message); }
-}
-async function saveProduct() {
-  const fd = new FormData();
-  fd.append('name', $('mName').value);
-  fd.append('category', $('mCat').value);
-  fd.append('price', $('mPrice').value);
-  fd.append('commission', $('mComm').value);
-  fd.append('sales_count', $('mSales').value);
-  fd.append('ai_score', $('mScore').value);
-  fd.append('rating', $('mRating').value);
-  fd.append('link_status', $('mStatus').value);
-  try {
-    await api(`/api/admin/products/${state.editingId}`, { method: 'POST', body: fd });
-    closeModal(); loadProducts();
-  } catch (e) { alert(e.message); }
-}
-async function delProduct(id) {
-  if (!confirm(`ลบสินค้า #${id} จริงไหม? (ลบแล้วกู้คืนไม่ได้)`)) return;
-  try { await api(`/api/admin/products/${id}`, { method: 'DELETE' }); loadProducts(); loadStats(); }
-  catch (e) { alert(e.message); }
-}
-function closeModal() { $('modalBg').classList.add('hidden'); }
-$('modalBg').onclick = e => { if (e.target === $('modalBg')) closeModal(); };
+      const w = window.open('', '_blank', 'width=520,height=650');
+      const now = new Date();
+      const printDate = now.toLocaleDateString('th-TH') + ' ' + now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+      const isCod = (o.payment_method || '').toUpperCase() === 'COD';
 
-// ---- add product ----
-function openAdd() { $('addBg').classList.remove('hidden'); }
-function closeAdd() { $('addBg').classList.add('hidden'); }
-$('addBg').onclick = e => { if (e.target === $('addBg')) closeAdd(); };
-async function addProduct() {
-  const fd = new FormData();
-  fd.append('name', $('aName').value);
-  fd.append('affiliate_url', $('aUrl').value);
-  fd.append('category', $('aCat').value);
-  fd.append('price', $('aPrice').value);
-  fd.append('commission', $('aComm').value);
-  fd.append('sales_count', $('aSales').value);
-  fd.append('rating', $('aRating').value);
-  try {
-    await api('/api/admin/products', { method: 'POST', body: fd });
-    closeAdd();
-    ['aName','aUrl','aCat'].forEach(id => $(id).value = '');
-    ['aPrice','aComm','aSales','aRating'].forEach(id => $(id).value = '0');
-    loadProducts(); loadStats(); loadCategories();
-    alert('✅ เพิ่มสินค้าแล้ว');
-  } catch (e) { alert(e.message); }
-}
-function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+      w.document.write(`
+        <!DOCTYPE html>
+        <html lang="th">
+        <head>
+          <meta charset="UTF-8">
+          <title>ใบปะหน้าพัสดุส่งด่วนรถเย็น - ${o.order_code}</title>
+          <style>
+            @page { size: 100mm 150mm; margin: 4mm; }
+            * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Prompt', sans-serif; }
+            body { padding: 4mm; width: 100%; color: #000; }
+            .slip-box { border: 2px solid #000; border-radius: 8px; padding: 4mm; height: 100%; display: flex; flex-direction: column; justify-content: space-between; }
+            .carrier-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 3mm; margin-bottom: 3mm; }
+            .carrier-logo { font-size: 13pt; font-weight: 700; color: #000; }
+            .carrier-badge { background: #000; color: #fff; padding: 2px 8px; font-size: 8pt; font-weight: 700; border-radius: 4px; }
+            .section { margin-bottom: 3mm; padding-bottom: 3mm; border-bottom: 1px dashed #666; font-size: 9pt; }
+            .section-title { font-size: 7.5pt; color: #555; text-transform: uppercase; font-weight: 600; margin-bottom: 1mm; }
+            .recipient-name { font-size: 13pt; font-weight: 700; }
+            .recipient-phone { font-size: 15pt; font-weight: 800; letter-spacing: 0.5px; }
+            .recipient-address { font-size: 9.5pt; line-height: 1.4; margin-top: 1mm; }
+            .item-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin: 2mm 0; }
+            .item-table th, .item-table td { padding: 2mm; border: 1px solid #999; text-align: left; }
+            .item-table th { background: #f0f0f0; }
+            .cod-alert { border: 2.5px dashed #b91c1c; background: #fef2f2; color: #991b1b; padding: 3mm; text-align: center; border-radius: 6px; margin: 2mm 0; }
+            .cod-amount { font-size: 17pt; font-weight: 800; }
+            .paid-alert { border: 2px solid #059669; background: #ecfdf5; color: #065f46; padding: 3mm; text-align: center; border-radius: 6px; font-size: 11pt; font-weight: 700; margin: 2mm 0; }
+            .cold-warn { background: #e0f2fe; border: 1px solid #0284c7; color: #0369a1; padding: 2mm; border-radius: 4px; font-size: 8pt; font-weight: 700; text-align: center; margin-top: 2mm; }
+            .slip-footer { display: flex; justify-content: space-between; align-items: flex-end; font-size: 7pt; color: #555; margin-top: 2mm; }
+          </style>
+        </head>
+        <body onload="window.print()">
+          <div class="slip-box">
+            <div>
+              <div class="carrier-header">
+                <div>
+                  <div class="carrier-logo">🚚 บริการส่งด่วนรถเย็น (Cold Chain)</div>
+                  <div style="font-size:7.5pt; color:#444;">Inter Express Logistics / IEL (-18°C)</div>
+                </div>
+                <div class="carrier-badge">คุมอุณหภูมิ</div>
+              </div>
 
-// ---- Radar Feed ----
-let radarState = { page: 1, perPage: 20 };
-function radarPage(d) { radarState.page = Math.max(1, radarState.page + d); loadRadarFeed(); }
-async function loadRadarFeed() {
-  const offset = (radarState.page - 1) * radarState.perPage;
-  try {
-    const d = await api(`/api/admin/radar/feed?limit=${radarState.perPage}&offset=${offset}`);
-    $('radarPostedToday').textContent = d.posted_today;
-    $('radarRemaining').textContent = d.remaining_today;
-    $('radarTotal').textContent = d.total;
-    const total = d.total;
-    const pages = Math.max(1, Math.ceil(total / radarState.perPage));
-    $('radarPageInfo').textContent = `หน้า ${radarState.page}/${pages} · ${total} รายการ`;
-    $('radarPrev').disabled = radarState.page <= 1;
-    $('radarNext').disabled = radarState.page >= pages;
-    $('radarRows').innerHTML = d.feed.map(ev => {
-      const t = ev.sent_at ? new Date(ev.sent_at).toLocaleString('th-TH') : '-';
-      const statusBadge = `<span class="badge ${ev.status}">${{posted:'✅ โพสต์แล้ว', ignored:'⏭ ข้าม', failed:'❌ ผิดพลาด'}[ev.status]||ev.status}</span>`;
-      const prod = ev.matched_product;
-      const prodCell = prod
-        ? `<a href="${esc(prod.affiliate_url)}" target="_blank" style="color:var(--red);text-decoration:none">🛍 ${esc(prod.name?.slice(0,40))}</a><br><span style="font-size:11px;color:var(--gray)">฿${(prod.price||0).toLocaleString()} · ขาย ${(prod.sales_count||0).toLocaleString()}</span>`
-        : '<span style="color:var(--gray)">—</span>';
-      const lead = ev.source_lead;
-      const leadCell = lead?.fb_post_url
-        ? `<a href="${esc(lead.fb_post_url)}" target="_blank" style="font-size:12px">${esc(lead.author_name||'')}<br>${esc((lead.post_text_snippet||'').slice(0,50))}…</a>`
-        : (lead?.post_text_snippet ? esc(lead.post_text_snippet.slice(0,60)) : '—');
-      const caption = ev.ai_comment_draft ? `<div class="caption-box" onclick="this.classList.toggle('open')">${esc(ev.ai_comment_draft)}</div>` : '—';
-      return `<tr>
-        <td style="white-space:nowrap;font-size:12px">${t}</td>
-        <td>${statusBadge}</td>
-        <td>${esc(ev.product_keyword||'-')}</td>
-        <td><span style="font-size:12px">${esc(ev.product_category||'-')}</span></td>
-        <td><b>${ev.demand_score!=null?ev.demand_score:'-'}</b></td>
-        <td>${prodCell}</td>
-        <td>${caption}</td>
-        <td>${leadCell}</td>
-      </tr>`;
-    }).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--gray);padding:30px">ยังไม่มีดีลที่โพสต์</td></tr>';
-  } catch (e) { $('radarRows').innerHTML = `<tr><td colspan="8" style="color:var(--red)">${esc(e.message)}</td></tr>`; }
-}
+              <div class="section">
+                <div class="section-title">ผู้ส่ง (Sender):</div>
+                <div style="font-size:9pt; font-weight:600;">🐟 ร้านปลาสลิดแดดเดียวสุพรรณบุรีแท้ ป้าเข็ม คัดพิเศษ</div>
+                <div style="font-size:8pt; color:#444;">LINE OA: @137gsref | watt29.github.io/pakhem-shop/fish.html</div>
+              </div>
 
-// ---- Cooldown Monitor ----
-async function loadCooldown() {
-  $('lockedGrid').innerHTML = '<div style="color:var(--gray);font-size:13px">กำลังโหลด…</div>';
-  $('availGrid').innerHTML  = '<div style="color:var(--gray);font-size:13px">กำลังโหลด…</div>';
-  try {
-    const d = await api('/api/admin/radar/cooldown');
-    const ch = d.cooldown_hours;
-    function makeCard(cat, locked) {
-      if (locked) {
-        const pct = Math.min(100, Math.round((ch - cat.remaining_hours) / ch * 100));
-        const avail = new Date(cat.available_at).toLocaleString('th-TH');
-        return `<div class="cooldown-card locked">
-          <h4>🔒 ${esc(cat.category)}</h4>
-          <div class="time" style="color:var(--red)">${cat.remaining_hours} ชม.</div>
-          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:var(--border)"></div></div>
-          <div class="sub">โพสต์ได้อีกครั้ง: ${avail}</div>
-        </div>`;
+              <div class="section">
+                <div class="section-title">ผู้รับพัสดุ (Recipient):</div>
+                <div class="recipient-name">คุณ ${o.customer_name}</div>
+                <div class="recipient-phone">📞 ${o.phone}</div>
+                <div class="recipient-address">📍 ${o.address}</div>
+                ${o.note ? `<div style="font-size:8pt; color:#b45309; margin-top:1mm;"><b>โน้ต:</b> ${o.note}</div>` : ''}
+              </div>
+
+              <div style="margin: 2mm 0;">
+                <table class="item-table">
+                  <thead>
+                    <tr>
+                      <th>รายการสินค้า</th>
+                      <th style="width:70px; text-align:right;">ยอดเงิน</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><b>${o.product_name || o.package_name}</b><br><small style="color:#666;">รหัส: ${o.order_code}</small></td>
+                      <td style="text-align:right; font-weight:700;">${parseFloat(o.price).toLocaleString()} ฿</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              ${isCod ? `
+                <div class="cod-alert">
+                  <div style="font-size:9pt; font-weight:700; text-transform:uppercase;">⚠️ พัสดุเก็บเงินปลายทาง (COD)</div>
+                  <div class="cod-amount">ยอดเก็บเงิน: ${parseFloat(o.price).toLocaleString()} บาท</div>
+                  <div style="font-size:7.5pt;">(กรุณาเรียกเก็บเงินสด หรือสแกนพร้อมเพย์ก่อนส่งมอบพัสดุ)</div>
+                </div>
+              ` : `
+                <div class="paid-alert">
+                  <div>✅ ชำระเงินเรียบร้อยแล้ว (ไม่ต้องเก็บเงิน)</div>
+                  <div style="font-size:8pt; font-weight:normal;">โอนเงินผ่านระบบ / Shopee Pay แล้ว</div>
+                </div>
+              `}
+
+              <div class="cold-warn">
+                ❄️ อาหารสดแช่แข็ง ห้ามวางตากแดด ส่งรถเย็นควบคุมอุณหภูมิตลอดเส้นทาง
+              </div>
+            </div>
+
+            <div class="slip-footer">
+              <div>พิมพ์เมื่อ: ${printDate} | ระบบอัตโนมัติ ป้าเข็ม</div>
+              <div style="font-weight:700; font-size:8pt;">${o.tracking_number ? `TRACK: ${o.tracking_number}` : o.order_code}</div>
+            </div>
+          </div>
+        
+</body>
+        </html>
+      `);
+      w.document.close();
+    }
+
+    function exportColdChainCSV() {
+      if (!cachedOrders || cachedOrders.length === 0) {
+        alert('ยังไม่มีข้อมูลออเดอร์สำหรับส่งออก');
+        return;
+      }
+
+      // UTF-8 BOM so Thai characters open cleanly in MS Excel
+      let csvContent = "\uFEFF";
+      csvContent += "รหัสคำสั่งซื้อ,วันที่สั่ง,ชื่อผู้รับ,เบอร์โทรศัพท์,ที่อยู่จัดส่ง,รายการสินค้า,ยอดเงิน (บาท),วิธีชำระเงิน,สถานะ,เลขพัสดุรถเย็น,โน้ต\n";
+
+      cachedOrders.forEach(o => {
+        const row = [
+          `"${(o.order_code || '').replace(/"/g, '""')}"`,
+          `"${new Date(o.created_at).toLocaleString('th-TH').replace(/"/g, '""')}"`,
+          `"${(o.customer_name || '').replace(/"/g, '""')}"`,
+          `"${(o.phone || '').replace(/"/g, '""')}"`,
+          `"${(o.address || '').replace(/"/g, '""')}"`,
+          `"${(o.product_name || o.package_name || '').replace(/"/g, '""')}"`,
+          `"${parseFloat(o.price) || 0}"`,
+          `"${(o.payment_method || '').replace(/"/g, '""')}"`,
+          `"${(o.status || '').replace(/"/g, '""')}"`,
+          `"${(o.tracking_number || '').replace(/"/g, '""')}"`,
+          `"${(o.note || '').replace(/"/g, '""')}"`
+        ];
+        csvContent += row.join(',') + "\n";
+      });
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const dateStr = new Date().toISOString().slice(0, 10);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `InterExpress_Orders_${dateStr}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast('ดาวน์โหลดไฟล์ CSV เรียบร้อย!');
+    }
+
+    function renderBenchmarks() {
+      const tbody = document.getElementById('benchmarksTbody');
+      tbody.innerHTML = BENCHMARKS_DATA.map(b => `
+        <tr>
+          <td><b>${b.type}</b></td>
+          <td><b>${b.ws}</b></td>
+          <td>${b.ret}</td>
+          <td>${b.pkg}</td>
+          <td>${b.ship}</td>
+          <td><b style="color:#0369a1;">${b.sale}</b></td>
+          <td><b style="color:var(--accent);">${b.prof}</b></td>
+          <td><small style="color:var(--text-muted);">${b.src}</small></td>
+          <td><button onclick="printSticker('${b.type}', '${b.sku}')" class="btn-action green">🖨️ พิมพ์ฉลาก</button></td>
+        </tr>
+      `).join('');
+    }
+
+    function renderSuppliers() {
+      const tbody = document.getElementById('suppliersTbody');
+      tbody.innerHTML = SUPPLIERS_DATA.map(s => `
+        <tr>
+          <td><b>${s.name}</b></td>
+          <td>${s.loc}</td>
+          <td>${s.type}</td>
+          <td><span class="badge ${s.model === 'BOTH' ? 'confirmed' : 'pending'}">${s.model}</span></td>
+          <td>${s.moq}</td>
+          <td>${s.vac}</td>
+          <td>${s.cold}</td>
+          <td><small style="color:#334155;">${s.contact}</small></td>
+        </tr>
+      `).join('');
+    }
+
+    function copyText(id, btn) {
+      const text = document.getElementById(id).innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        const orig = btn.innerText;
+        btn.innerText = '✅ คัดลอกสำเร็จแล้ว!';
+        setTimeout(() => { btn.innerText = orig; }, 2000);
+      });
+    }
+
+    function printSticker(name, sku) {
+      const w = window.open('', '_blank', 'width=450,height=350');
+      const now = new Date();
+      const mfg = now.toLocaleDateString('th-TH');
+      const bbd = new Date(now.getTime() + 180*24*60*60*1000).toLocaleDateString('th-TH');
+      w.document.write(`
+        <!DOCTYPE html>
+        <html lang="th">
+        <head>
+          <meta charset="UTF-8">
+          <title>ฉลากสินค้า มผช. - ${name}</title>
+          <style>
+            @page { size: 80mm 55mm; margin: 0; }
+            body { font-family: 'Prompt', sans-serif; margin: 0; padding: 3mm; width: 80mm; height: 55mm; box-sizing: border-box; }
+            .box { border: 1.5px solid #000; border-radius: 4px; height: 100%; padding: 2mm; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; }
+            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #000; padding-bottom: 1mm; }
+            .title { font-size: 11pt; font-weight: 700; }
+            .tag { font-size: 6.5pt; border: 0.8px solid #000; padding: 1px 3px; }
+            .name { font-size: 10pt; font-weight: 700; margin: 1.5mm 0; }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1mm; font-size: 6.5pt; line-height: 1.25; background: #f8f8f8; padding: 1mm; }
+            .footer { display: flex; justify-content: space-between; align-items: flex-end; font-size: 6pt; border-top: 0.8px solid #000; padding-top: 1mm; }
+          </style>
+        </head>
+        <body onload="window.print()">
+          <div class="box">
+            <div class="header">
+              <span class="title">🐟 ป้าเข็ม คัดพิเศษ</span>
+              <span class="tag">มผช. ๒๙๘/๒๕๔๙</span>
+            </div>
+            <div class="name">${name}</div>
+            <div class="grid">
+              <div>• ส่วนประกอบ: เนื้อปลา 97%, เกลือ 3%<br>• ไม่ใส่วัตถุกันเสีย / ไม่เจือสี</div>
+              <div>• แช่ฟรีซ -18°C ได้นาน 6 เดือน<br>• ต้องทำให้สุกก่อนบริโภค</div>
+            </div>
+            <div class="footer">
+              <div>ผลิต: ${mfg} | ควรบริโภคก่อน: ${bbd}<br>ผู้จัดจำหน่าย: แบรนด์ป้าเข็ม (LINE: @137gsref)</div>
+              <div><b>${sku}</b></div>
+            </div>
+          </div>
+        <div id="toast"><span>✅</span> <span id="toastMsg">บันทึกสำเร็จ</span></div>
+</body>
+        </html>
+      `);
+      w.document.close();
+    }
+
+
+    // Admin PIN Security Gate
+    const ADMIN_PIN = "8899";
+
+    function checkAuth() {
+      const isAuth = sessionStorage.getItem('pakhem_admin_auth') === 'true';
+      const gate = document.getElementById('adminAuthGate');
+      if (isAuth) {
+        if (gate) gate.style.display = 'none';
+        loadOrders();
+        renderBenchmarks();
+        renderSuppliers();
       } else {
-        const last = cat.last_posted_at ? new Date(cat.last_posted_at).toLocaleString('th-TH') : '-';
-        return `<div class="cooldown-card avail">
-          <h4>✅ ${esc(cat.category)}</h4>
-          <div class="time" style="color:var(--green)">พร้อมโพสต์</div>
-          <div class="sub">ครั้งล่าสุด: ${last}</div>
-        </div>`;
+        if (gate) {
+          gate.style.display = 'flex';
+          setTimeout(() => {
+            const input = document.getElementById('adminPinInput');
+            if (input) input.focus();
+          }, 200);
+        }
       }
     }
-    $('lockedGrid').innerHTML = d.categories_on_cooldown.length
-      ? d.categories_on_cooldown.map(c => makeCard(c, true)).join('')
-      : '<div style="color:var(--green);font-size:13px;padding:8px">ไม่มีหมวดใดติด Cooldown 🎉</div>';
-    $('availGrid').innerHTML = d.categories_available.length
-      ? d.categories_available.map(c => makeCard(c, false)).join('')
-      : '<div style="color:var(--gray);font-size:13px;padding:8px">ยังไม่มีประวัติการโพสต์</div>';
-    $('cooldownUpdated').textContent = `อัปเดตล่าสุด: ${new Date().toLocaleString('th-TH')} · Cooldown ${ch} ชม./หมวด`;
-  } catch (e) { $('lockedGrid').innerHTML = `<div style="color:var(--red)">${esc(e.message)}</div>`; }
-}
 
-// ---- Creative Briefs ----
-let briefsState = { cache: {} };
+    function handleAdminLogin(e) {
+      e.preventDefault();
+      const input = document.getElementById('adminPinInput');
+      const err = document.getElementById('pinErrorMsg');
+      if (!input) return;
 
-async function loadBriefs() {
-  $('briefsResult').innerHTML = '<div style="color:var(--gray);font-size:13px">พิมพ์ Product ID แล้วกด 🔎 เพื่อดู Brief</div>';
-  try {
-    const s = await api('/api/admin/stats');
-    $('briefsTotal').textContent = s.totals?.sellable || 0;
-  } catch (e) { $('briefsTotal').textContent = '?'; }
-}
-
-async function loadBriefsByProduct() {
-  const id = parseInt($('briefsProductId').value);
-  if (!id || id < 1) return alert('กรุณาใส่ Product ID');
-  const box = $('briefsResult');
-  box.innerHTML = '<div style="color:var(--gray)">กำลังโหลด…</div>';
-  try {
-    const d = await api(`/api/creative-briefs/product/${id}`);
-    briefsState.cache[id] = d;
-    box.innerHTML = `<div style="margin-bottom:12px;font-size:14px"><b>📝 Brief ของสินค้า #${d.product_id}</b> — ${esc(d.product_name)} · สร้างเมื่อ ${new Date(d.generated_at).toLocaleString('th-TH')}</div>` +
-      d.perspectives.map(p => _renderBriefCard(p, d.product_id)).join('');
-  } catch (e) {
-    if (e.message.includes('404') || e.message.includes('ไม่พบ')) {
-      box.innerHTML = `<div style="padding:20px;text-align:center;color:var(--gray)">ยังไม่มี Brief สำหรับสินค้า #${id}<br><span style="font-size:13px">กดปุ่ม 🤖 สร้าง Brief ใหม่ หรือใส่ ID ถูกต้อง</span></div>`;
-    } else {
-      box.innerHTML = `<div style="color:var(--red)">${esc(e.message)}</div>`;
+      if (input.value.trim() === ADMIN_PIN) {
+        sessionStorage.setItem('pakhem_admin_auth', 'true');
+        err.style.display = 'none';
+        document.getElementById('adminAuthGate').style.display = 'none';
+        showToast('🔓 เข้าสู่ระบบแอดมินสำเร็จ!');
+        loadOrders();
+        renderBenchmarks();
+        renderSuppliers();
+      } else {
+        err.style.display = 'block';
+        input.value = '';
+        input.focus();
+      }
     }
-  }
-}
 
-function _renderBriefCard(p, productId) {
-  const pLabel = {problem_solution:'🔧 แก้ปัญหา', review:'⭐ รีวิว', education:'📚 ให้ความรู้'}[p.perspective] || p.perspective;
-  const confColor = p.ai_confidence >= 70 ? 'var(--green)' : p.ai_confidence >= 50 ? '#B7950B' : 'var(--red)';
-  return `<section class="panel" style="border-left:4px solid ${confColor};margin-bottom:12px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <h3 style="margin:0">${pLabel}</h3>
-      <span style="font-size:12px;color:var(--gray)">🎯 ${p.ai_confidence}% confidence · ${p.video_duration || '15-30s'} · ${p.format_type || 'vertical_video'}</span>
+    function handleAdminLogout() {
+      if (confirm('คุณต้องการออกจากระบบจัดการหลังบ้านใช่หรือไม่?')) {
+        sessionStorage.removeItem('pakhem_admin_auth');
+        window.location.reload();
+      }
+    }
+
+    // Init with Security Check
+    checkAuth();
+  
+    let activeSlipOrderId = null;
+
+    function viewSlipImage(url, orderCode, orderId) {
+      activeSlipOrderId = orderId;
+      document.getElementById('slipModalImg').src = url;
+      document.getElementById('slipModalTitle').innerText = '🧾 สลิป: ' + orderCode;
+      document.getElementById('slipViewerModal').style.display = 'flex';
+    }
+
+    function closeSlipModal() {
+      document.getElementById('slipViewerModal').style.display = 'none';
+      activeSlipOrderId = null;
+    }
+
+    async function confirmSlipOrder() {
+      if (!activeSlipOrderId) return;
+      await updateOrderStatus(activeSlipOrderId, 'CONFIRMED');
+      closeSlipModal();
+      showToast('✅ ยืนยันสลิปและปรับสถานะเป็น CONFIRMED เรียบร้อย!');
+    }
+
+  
+    function batchPrintShippingSlips() {
+      const pendingOrders = cachedOrders.filter(o => o.status === 'PENDING' || o.status === 'CONFIRMED');
+      if (pendingOrders.length === 0) {
+        alert('ไม่มีออเดอร์ที่อยู่ในสถานะ "รอจัดส่ง" หรือ "ยืนยันแล้ว" สำหรับพิมพ์ใบปะหน้าค่ะ');
+        return;
+      }
+
+      const w = window.open('', '_blank', 'width=540,height=750');
+      const now = new Date();
+      const printDate = now.toLocaleDateString('th-TH') + ' ' + now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+
+      let slipsHtml = '';
+      pendingOrders.forEach((o, idx) => {
+        const isCod = (o.payment_method || '').toUpperCase() === 'COD';
+        const barcodeVal = o.tracking_number || o.order_code;
+        const svgId = `barcode-svg-${idx}`;
+
+        slipsHtml += `
+          <div class="slip-box" style="page-break-after: always; margin-bottom: 20px;">
+            <div>
+              <div class="carrier-header">
+                <div>
+                  <div class="carrier-logo">🚚 บริการส่งด่วนรถเย็น (Cold Chain)</div>
+                  <div style="font-size:7.5pt; color:#444;">Inter Express Logistics / IEL (-18°C)</div>
+                </div>
+                <div class="carrier-badge">คุมอุณหภูมิ</div>
+              </div>
+
+              <div class="section">
+                <div class="section-title">ผู้ส่ง (Sender):</div>
+                <div style="font-size:9pt; font-weight:600;">🐟 ร้านปลาสลิดแดดเดียวสุพรรณบุรีแท้ ป้าเข็ม คัดพิเศษ</div>
+                <div style="font-size:8pt; color:#444;">LINE OA: @137gsref | watt29.github.io/pakhem-shop/fish.html</div>
+              </div>
+
+              <div class="section">
+                <div class="section-title">ผู้รับพัสดุ (Recipient):</div>
+                <div class="recipient-name">คุณ ${o.customer_name}</div>
+                <div class="recipient-phone">📞 ${o.phone}</div>
+                <div class="recipient-address">📍 ${o.address}</div>
+                ${o.note ? `<div style="font-size:8pt; color:#b45309; margin-top:1mm;"><b>โน้ต:</b> ${o.note}</div>` : ''}
+              </div>
+
+              <div style="margin: 2mm 0;">
+                <table class="item-table">
+                  <thead>
+                    <tr>
+                      <th>รายการสินค้า</th>
+                      <th style="width:70px; text-align:right;">ยอดเงิน</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><b>${o.product_name || o.package_name}</b><br><small style="color:#666;">รหัส: ${o.order_code}</small></td>
+                      <td style="text-align:right; font-weight:700;">${parseFloat(o.price).toLocaleString()} ฿</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              ${isCod ? `
+                <div class="cod-alert">
+                  <div style="font-size:9pt; font-weight:700; text-transform:uppercase;">⚠️ พัสดุเก็บเงินปลายทาง (COD)</div>
+                  <div class="cod-amount">ยอดเก็บเงิน: ${parseFloat(o.price).toLocaleString()} บาท</div>
+                  <div style="font-size:7.5pt;">(กรุณาเรียกเก็บเงินสด หรือสแกนพร้อมเพย์ก่อนส่งมอบพัสดุ)</div>
+                </div>
+              ` : `
+                <div class="paid-alert">
+                  <div>✅ ชำระเงินเรียบร้อยแล้ว (ไม่ต้องเก็บเงิน)</div>
+                  <div style="font-size:8pt; font-weight:normal;">โอนเงินผ่านระบบ / พร้อมเพย์แล้ว</div>
+                </div>
+              `}
+
+              <!-- Barcode Container -->
+              <div style="text-align:center; margin: 3mm 0;">
+                <svg id="${svgId}"></svg>
+              </div>
+
+              <div class="cold-warn">
+                ❄️ อาหารสดแช่แข็ง ห้ามวางตากแดด ส่งรถเย็นควบคุมอุณหภูมิตลอดเส้นทาง
+              </div>
+            </div>
+
+            <div class="slip-footer">
+              <div>ใบที่ ${idx+1}/${pendingOrders.length} | พิมพ์เมื่อ: ${printDate}</div>
+              <div style="font-weight:700; font-size:8pt;">${barcodeVal}</div>
+            </div>
+          </div>
+        `;
+      });
+
+      // Script to render all barcodes in the print popup
+      let barcodeInitScript = `
+        <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
+        <script>
+          window.onload = function() {
+            const barcodes = ${JSON.stringify(pendingOrders.map((o, idx) => ({ id: `barcode-svg-${idx}`, val: o.tracking_number || o.order_code })))};
+            barcodes.forEach(b => {
+              try {
+                JsBarcode("#" + b.id, b.val, { format: "CODE128", width: 1.8, height: 38, displayValue: true, fontSize: 11 });
+              } catch(e) {}
+            });
+            setTimeout(() => { window.print(); }, 400);
+          };
+        <\/script>
+      `;
+
+      w.document.write(`
+        <!DOCTYPE html>
+        <html lang="th">
+        <head>
+          <meta charset="UTF-8">
+          <title>พิมพ์ใบปะหน้าชุด (${pendingOrders.length} ใบ) - ป้าเข็ม คัดพิเศษ</title>
+          <style>
+            @page { size: 100mm 150mm; margin: 4mm; }
+            * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Prompt', sans-serif; }
+            body { padding: 4mm; width: 100%; color: #000; }
+            .slip-box { border: 2px solid #000; border-radius: 8px; padding: 4mm; height: 142mm; display: flex; flex-direction: column; justify-content: space-between; page-break-after: always; }
+            .carrier-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 2mm; margin-bottom: 2mm; }
+            .carrier-logo { font-size: 12pt; font-weight: 700; color: #000; }
+            .carrier-badge { background: #000; color: #fff; padding: 2px 8px; font-size: 8pt; font-weight: 700; border-radius: 4px; }
+            .section { margin-bottom: 2mm; padding-bottom: 2mm; border-bottom: 1px dashed #666; font-size: 8.5pt; }
+            .section-title { font-size: 7.5pt; color: #555; text-transform: uppercase; font-weight: 600; margin-bottom: 1mm; }
+            .recipient-name { font-size: 13pt; font-weight: 700; }
+            .recipient-phone { font-size: 15pt; font-weight: 800; letter-spacing: 0.5px; }
+            .recipient-address { font-size: 9pt; line-height: 1.35; margin-top: 1mm; }
+            .item-table { width: 100%; border-collapse: collapse; font-size: 8pt; margin: 2mm 0; }
+            .item-table th, .item-table td { padding: 1.5mm; border: 1px solid #999; text-align: left; }
+            .item-table th { background: #f0f0f0; }
+            .cod-alert { border: 2.5px dashed #b91c1c; background: #fef2f2; color: #991b1b; padding: 2.5mm; text-align: center; border-radius: 6px; margin: 2mm 0; }
+            .cod-amount { font-size: 16pt; font-weight: 800; }
+            .paid-alert { border: 2px solid #059669; background: #ecfdf5; color: #065f46; padding: 2.5mm; text-align: center; border-radius: 6px; font-size: 10pt; font-weight: 700; margin: 2mm 0; }
+            .cold-warn { background: #e0f2fe; border: 1px solid #0284c7; color: #0369a1; padding: 1.5mm; border-radius: 4px; font-size: 7.5pt; font-weight: 700; text-align: center; }
+            .slip-footer { display: flex; justify-content: space-between; align-items: flex-end; font-size: 7pt; color: #555; }
+          </style>
+          ${barcodeInitScript}
+        </head>
+        <body>
+          ${slipsHtml}
+        </body>
+        </html>
+      `);
+      w.document.close();
+    }
+
+  </script>
+
+  <!-- Admin Security PIN Modal / Gate -->
+  <div id="adminAuthGate" style="position:fixed; top:0; left:0; width:100%; height:100%; background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%); z-index:99999; display:flex; justify-content:center; align-items:center; padding:16px;">
+    <div style="background:#ffffff; border-radius:16px; padding:32px 28px; width:100%; max-width:380px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.5); text-align:center;">
+      <div style="font-size:3rem; margin-bottom:12px;">🔒</div>
+      <h2 style="font-size:1.35rem; font-weight:700; color:#0f172a; margin-bottom:6px;">ระบบจัดการหลังบ้าน</h2>
+      <p style="font-size:0.85rem; color:#64748b; margin-bottom:20px;">เฉพาะเจ้าของร้าน ป้าเข็ม คัดพิเศษ เท่านั้น<br>(ข้อมูลลูกค้าและออเดอร์มีความปลอดภัยสูง)</p>
+      
+      <form onsubmit="handleAdminLogin(event)">
+        <div style="margin-bottom:16px;">
+          <input type="password" id="adminPinInput" placeholder="กรอกรหัส PIN แอดมิน..." style="width:100%; padding:14px; border:2px solid #cbd5e1; border-radius:10px; font-size:1.1rem; text-align:center; letter-spacing:4px; font-weight:700; outline:none;" required autofocus>
+        </div>
+        <div id="pinErrorMsg" style="color:#ef4444; font-size:0.85rem; margin-bottom:12px; display:none; font-weight:600;">
+          ❌ รหัส PIN ไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง
+        </div>
+        <button type="submit" style="width:100%; padding:14px; background:#c2410c; color:#fff; border:none; border-radius:10px; font-size:1rem; font-weight:700; cursor:pointer; box-shadow:0 4px 12px rgba(194,65,12,0.3);">
+          🔓 เข้าสู่ระบบหลังบ้าน
+        </button>
+      </form>
+      <div style="margin-top:20px; font-size:0.75rem; color:#94a3b8;">
+        รหัสเริ่มต้น: <b>8899</b> (เปลี่ยนได้ในโค้ด)
+      </div>
     </div>
-    <div style="margin-bottom:8px">
-      <div style="font-weight:bold;font-size:15px;color:var(--red)">Hook: ${esc(p.hook)}</div>
+  </div>
+
+
+  <!-- Slip Viewer Modal -->
+  <div id="slipViewerModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.8); z-index:999999; justify-content:center; align-items:center; padding:16px;">
+    <div style="background:#fff; border-radius:16px; width:100%; max-width:440px; max-height:90vh; overflow-y:auto; padding:20px; box-shadow:0 25px 50px rgba(0,0,0,0.4); text-align:center;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">
+        <h3 style="font-size:1.1rem; color:#0f172a; font-weight:700;" id="slipModalTitle">🧾 รูปสลิปโอนเงิน</h3>
+        <button onclick="closeSlipModal()" style="background:none; border:none; font-size:1.4rem; cursor:pointer; color:#64748b;">×</button>
+      </div>
+      <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:8px; margin-bottom:14px;">
+        <img id="slipModalImg" src="" alt="สลิปโอนเงิน" style="width:100%; max-height:480px; object-fit:contain; border-radius:6px;">
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button id="slipConfirmBtn" onclick="confirmSlipOrder()" class="btn-action green" style="flex:1; padding:10px; font-size:0.9rem; justify-content:center;">✅ ยอดตรง ยืนยันออเดอร์</button>
+        <button onclick="closeSlipModal()" class="btn-action" style="padding:10px 16px; font-size:0.9rem;">ปิด</button>
+      </div>
     </div>
-    <div style="margin-bottom:8px;white-space:pre-wrap;font-size:13px;line-height:1.5;background:var(--light);padding:10px;border-radius:8px">${esc(p.script_body)}</div>
-    <div style="margin-bottom:8px"><b>CTA:</b> ${esc(p.cta)}</div>
-    <div class="caption-box" onclick="this.classList.toggle('open')" style="margin-bottom:8px"><b>แคปชัน:</b> ${esc(p.caption)}</div>
-    <div style="margin-bottom:4px;font-size:12px"><b>🎯 กลุ่มเป้าหมาย:</b> ${esc(p.target_behavior)}</div>
-    <div style="margin-bottom:4px;font-size:12px"><b>🖼️ Thumbnail:</b> ${esc(p.thumbnail_prompt)}</div>
-    <div style="font-size:12px;color:var(--gray)">${(p.hashtags||[]).map(t => '#' + esc(t)).join(' ')}</div>
-  </section>`;
-}
+  </div>
 
-async function generateBriefFromSelect() {
-  const id = parseInt($('briefsProductId').value);
-  if (!id || id < 1) return alert('ใส่ Product ID ก่อนกดสร้าง Brief');
-  if (!confirm(`สร้าง Creative Brief 3 มุมมองสำหรับสินค้า #${id}?\n\n(จะลบ Brief เก่าถ้ามี)`)) return;
-  const btn = $('briefsGenBtn');
-  btn.disabled = true; btn.textContent = '⏳ กำลังสร้าง…';
-  try {
-    const r = await api('/api/creative-briefs/generate', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({product_id: id})
-    });
-    alert(`✅ สร้าง Brief สำเร็จ! ${r.perspectives.length} มุมมอง`);
-    loadBriefsByProduct();
-  } catch (e) { alert('❌ ' + e.message); }
-  btn.disabled = false; btn.textContent = '🤖 สร้าง Brief ใหม่';
-}
 
-async function submitInsights() {
-  const txt = $('insightsText').value.trim();
-  if(!txt) return alert('กรุณาวางข้อความสถิติ');
-  $('insightsResult').style.color = 'var(--gray)';
-  $('insightsResult').textContent = 'กำลังส่งวิเคราะห์...';
-  try {
-    const res = await api('/api/admin/facebook-radar/insights/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ insights_text: txt })
-    });
-    $('insightsText').value = '';
-    const recs = res.parsed_metrics.recommendations || [];
-    $('insightsResult').style.color = 'var(--green)';
-    $('insightsResult').innerHTML = `✅ วิเคราะห์เสร็จสิ้น!<br>
-• ยอดเข้าถึง: ${res.parsed_metrics.views || 0} ครั้ง<br>
-• ผู้ชมหลัก: ${res.parsed_metrics.main_age_group || '-'} (${res.parsed_metrics.main_gender || '-'})<br>
-• จุดตกของคนดู: วินาทีที่ ${res.parsed_metrics.drop_off_seconds || '-'}<br><br>
-💡 คำแนะนำ AI:<br>${recs.map(r => `• ${esc(r)}`).join('<br>')}`;
-    loadStats();
-  } catch(e) { 
-    $('insightsResult').style.color = 'var(--red)';
-    $('insightsResult').textContent = 'Error: ' + e.message; 
-  }
-}
-
-init();
-</script>
 </body>
 </html>

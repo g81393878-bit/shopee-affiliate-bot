@@ -44,6 +44,16 @@ _RECENT_SLIPS: dict[str, dict] = {}
 _RECENT_CONTEXT: dict[str, dict] = {}
 
 
+def _get_page_label(page_id: str = "") -> str:
+    """คืนชื่อเพจภาษาไทยให้ชัดเจนว่ามาจากเพจไหน"""
+    pid = str(page_id or "").strip()
+    if pid == "1323469404180656":
+        return "เพจ 2: ครัวแม่บ้าน ชี้เป้าของอร่อย (1323469404180656)"
+    if pid == "1307380735783361":
+        return "เพจ 1: ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้ (1307380735783361)"
+    return f"เพจป้าเข็ม ({pid})" if pid else "เพจ 1: ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้"
+
+
 def _get_page_token(page_id: str = "") -> str:
     """เลือก Page Access Token ให้ตรงกับเพจที่ลูกค้าทักเข้ามา (เพจ 1 หรือ เพจ 2)"""
     if page_id == "1323469404180656" and FACEBOOK_PAGE_2_ACCESS_TOKEN:
@@ -336,8 +346,9 @@ def _save_order_to_supabase(
     payment_method: str,
     sender: str = "",
     extra_note: str = "",
+    page_id: str = "",
 ) -> bool:
-    """บันทึกออเดอร์ใหม่จาก Facebook ลง Supabase direct_orders พร้อมติดแท็ก [FB_ID:...] เพื่อแจ้งเลขพัสดุอัตโนมัติ"""
+    """บันทึกออเดอร์ใหม่จาก Facebook ลง Supabase direct_orders พร้อมติดแท็ก [FB_ID:...] และชื่อเพจเพื่อแจ้งเลขพัสดุอัตโนมัติ"""
     if not SUPABASE_URL or not SUPABASE_KEY:
         return False
     try:
@@ -347,7 +358,8 @@ def _save_order_to_supabase(
             "Content-Type": "application/json",
             "Prefer": "return=minimal",
         }
-        note_str = f"สั่งซื้อผ่าน Facebook Messenger [FB_ID:{sender}] {extra_note}".strip() if sender else "สั่งซื้อผ่าน Facebook Messenger"
+        page_label = _get_page_label(page_id)
+        note_str = f"สั่งซื้อผ่าน Facebook ({page_label}) [FB_ID:{sender}] {extra_note}".strip() if sender else f"สั่งซื้อผ่าน Facebook ({page_label})"
         payload = {
             "order_code": order_code,
             "product_name": "ปลาสลิดแดดเดียว ไซส์จัมโบ้ 5-7 ตัว/กก. ป้าเข็ม คัดพิเศษ",
@@ -435,8 +447,10 @@ def _handle_event(event: dict, page_id: str = "") -> None:
 
     MENU_SHORT = (
         "🐟 ปลาสลิดแดดเดียว ป้าเข็ม (สุพรรณแท้ ไซส์จัมโบ้ 5-7 ตัว/กก.)\n"
-        "ทอดกรอบนอกนุ่มใน เค็มน้อย 3% แพ็กซองฟอยล์+เจลเย็นทุกกล่อง\n\n"
-        "📦 โปรโมชั่นพิเศษ (เลือกโอนส่งฟรี หรือ เก็บเงินปลายทาง ได้เลยค่ะ):\n"
+        "✅ สูตรเค็มน้อย 3% เนื้อล้วนตัดหัวแล้ว ไม่เค็มปี๋ ไร้สารกันบูด 0%\n"
+        "✅ เก็บเงินปลายทางได้ รอรับของหน้าบ้านค่อยจ่ายเงิน\n"
+        "✅ รับประกันเสีย/มีกลิ่น เคลมชุดใหม่ฟรี 100% ทันที (ส่งจากอยุธยา 1 วันถึง แพ็กซองฟอยล์เก็บความเย็น)\n\n"
+        "📦 โปรโมชั่นพิเศษ:\n"
         "• พิมพ์ 1 : ชุด 450–500 กรัม (ประมาณ 3–4 ตัว) = โอน 390.- ส่งฟรี! | ปลายทาง 410.-\n"
         "• พิมพ์ 2 : ชุดขายดี 900–1,000 กรัม (ประมาณ 5–7 ตัว) = โอน 550.- ส่งฟรี! | ปลายทาง 570.- ⭐\n"
         "• พิมพ์ 3 : ชุดคุ้ม 1.8–2.0 กิโลกรัม (ประมาณ 10–14 ตัว) = โอน 1,090.- ส่งฟรีรถห้องเย็น!\n\n"
@@ -499,6 +513,7 @@ def _handle_event(event: dict, page_id: str = "") -> None:
                             )
                             _send_telegram_alert(
                                 f"💳 [ลูกค้าส่งสลิปผูกกับออเดอร์ #{ocode} สำเร็จ!]\n"
+                                f"🏠 เพจ: {_get_page_label(page_id)}\n"
                                 f"👤 Facebook: `{sender}`\n"
                                 f"📦 รายการ: {opkg}\n"
                                 f"💰 ยอดในสลิป: {amt_disp} บาท ({'ชื่อผู้รับตรง ✅' if receiver_ok else '⚠️ โปรดตรวจชื่อผู้รับในสลิป!'})\n"
@@ -527,6 +542,7 @@ def _handle_event(event: dict, page_id: str = "") -> None:
                         amt_str_tg = f"{amt_val:,.0f}" if amt_val > 0 else amt
                         _send_telegram_alert(
                             f"💳 [ลูกค้าส่งสลิปโอนเงิน — รอแจ้งที่อยู่จัดส่ง!]\n"
+                            f"🏠 เพจ: {_get_page_label(page_id)}\n"
                             f"👤 Facebook: `{sender}`\n"
                             f"💰 ยอดในสลิป: {amt_str_tg} บาท ({'ชื่อผู้รับตรง ✅' if receiver_ok else '⚠️ โปรดตรวจชื่อผู้รับในสลิป!'})\n"
                             f"🖼️ รูปสลิป: {img_url}\n"
@@ -535,11 +551,11 @@ def _handle_event(event: dict, page_id: str = "") -> None:
                         return
                     elif cat == "address" or any(k in ocr_text for k in ["อำเภอ", "จังหวัด", "ถนน", "ตำบล", "โทร", "ปลายทาง"]):
                         text = ocr_text
-                        _send_telegram_alert(f"📦 [ลูกค้าส่งรูปจดที่อยู่จัดส่ง!]\n👤 Facebook: `{sender}`\n🖼️ รูป: {img_url}\n📝 ที่อยู่ที่อ่านได้:\n{ocr_text}")
+                        _send_telegram_alert(f"📦 [ลูกค้าส่งรูปจดที่อยู่จัดส่ง!]\n🏠 เพจ: {_get_page_label(page_id)}\n👤 Facebook: `{sender}`\n🖼️ รูป: {img_url}\n📝 ที่อยู่ที่อ่านได้:\n{ocr_text}")
                         break
                     else:
                         _reply_to_facebook(sender, f"ได้รับรูปภาพเรียบร้อยค่ะ 🙏\n\n{MENU_SHORT}", DEFAULT_QUICK_REPLIES, page_id=page_id)
-                        _send_telegram_alert(f"📸 [ลูกค้าส่งรูปภาพทั่วไป]\n👤 Facebook: `{sender}`\n🖼️ รูป: {img_url}")
+                        _send_telegram_alert(f"📸 [ลูกค้าส่งรูปภาพทั่วไป]\n🏠 เพจ: {_get_page_label(page_id)}\n👤 Facebook: `{sender}`\n🖼️ รูป: {img_url}")
                         return
 
     if not text:
@@ -574,7 +590,7 @@ def _handle_event(event: dict, page_id: str = "") -> None:
             _RECENT_CONTEXT[sender] = {"pkg": "500g", "pay": "cod", "ts": time.time()}
             _reply_to_facebook(
                 sender,
-                "✅ รับชุดพอดีมื้อ 500 กรัม (ประมาณ 3-4 ตัว) แบบเก็บเงินปลายทาง (COD) ยอดรวม 410 บาท (รวมส่งแพ็กฟอยล์เจลเย็นแล้ว จ่ายเงินหน้าบ้านตอนรับของได้เลยค่ะ) 🚚❄️\n\n"
+                "✅ รับชุดพอดีมื้อ 500 กรัม (ประมาณ 3-4 ตัว) แบบเก็บเงินปลายทาง (COD) ยอดรวม 410 บาท (รวมส่งแพ็กฟอยล์ซองฟอยล์เก็บความเย็นแล้ว จ่ายเงินหน้าบ้านตอนรับของได้เลยค่ะ) 🚚❄️\n\n"
                 "👉 รบกวนพิมพ์แจ้ง 'ชื่อ - ที่อยู่จัดส่ง - เบอร์โทรศัพท์' ในแชทนี้ได้เลยนะคะ เดี๋ยวทางร้านล็อกคิวแพ็กส่งรอบสดใหม่ให้ทันทีค่ะ 😊",
                 page_id=page_id,
             )
@@ -585,7 +601,7 @@ def _handle_event(event: dict, page_id: str = "") -> None:
             _RECENT_CONTEXT[sender] = {"pkg": "1kg", "pay": "cod", "ts": time.time()}
             _reply_to_facebook(
                 sender,
-                "✅ รับชุดขายดี 1 กิโลกรัม (ประมาณ 5-7 ตัว) แบบเก็บเงินปลายทาง (COD) ยอดรวม 570 บาท (รวมส่งแพ็กฟอยล์เจลเย็นแล้ว จ่ายเงินหน้าบ้านตอนรับของได้เลยค่ะ) ⭐🚚❄️\n\n"
+                "✅ รับชุดขายดี 1 กิโลกรัม (ประมาณ 5-7 ตัว) แบบเก็บเงินปลายทาง (COD) ยอดรวม 570 บาท (รวมส่งแพ็กฟอยล์ซองฟอยล์เก็บความเย็นแล้ว จ่ายเงินหน้าบ้านตอนรับของได้เลยค่ะ) ⭐🚚❄️\n\n"
                 "👉 รบกวนพิมพ์แจ้ง 'ชื่อ - ที่อยู่จัดส่ง - เบอร์โทรศัพท์' ในแชทนี้ได้เลยนะคะ เดี๋ยวทางร้านล็อกคิวแพ็กส่งรอบสดใหม่ให้ทันทีค่ะ 😊",
                 page_id=page_id,
             )
@@ -657,7 +673,7 @@ def _handle_event(event: dict, page_id: str = "") -> None:
             _reply_to_facebook(
                 sender,
                 "✅ สั่งแบบเก็บเงินปลายทาง (COD) รับของหน้าบ้านก่อนจ่ายเงินได้เลยค่ะ 🚚❄️\n\n"
-                "📦 เลือกชุดเก็บเงินปลายทาง (รวมค่าส่งแพ็กซองฟอยล์+เจลเย็นแล้ว):\n"
+                "📦 เลือกชุดเก็บเงินปลายทาง (รวมค่าส่งแพ็กซองฟอยล์เก็บความเย็นแล้ว):\n"
                 "• พิมพ์ 1 : ชุดพอดีมื้อ 450–500 กรัม (ประมาณ 3–4 ตัว) = 410 บาท (จากราคาโอน 390.- + ค่าปลายทาง 20.-)\n"
                 "• พิมพ์ 2 : ชุดขายดี 900–1,000 กรัม (ประมาณ 5–7 ตัว) = 570 บาท ⭐ (จากราคาโอน 550.- + ค่าปลายทาง 20.-)\n\n"
                 "👉 รับชุดไหน พิมพ์เลข 1 หรือ 2 (หรือแจ้ง ชื่อ - ที่อยู่ - เบอร์โทรศัพท์) ตอบกลับในแชทนี้ได้เลยนะคะ 😊",
@@ -739,6 +755,7 @@ def _handle_event(event: dict, page_id: str = "") -> None:
             payment_method,
             sender=sender,
             extra_note=extra_note,
+            page_id=page_id,
         )
 
         reply_msg = (
@@ -753,9 +770,11 @@ def _handle_event(event: dict, page_id: str = "") -> None:
         if is_transfer and not pending_slip:
             reply_msg += "\n\n💡 (หากโอนเงินแล้ว รบกวนส่งรูปสลิปแนบในแชทนี้ได้เลยนะคะ 🏦 ธ.กรุงไทย 038-0-25363-1 นายจีรวัฒน์ พลอาจ)"
 
+        page_label = _get_page_label(page_id)
         _reply_to_facebook(sender, reply_msg, page_id=page_id)
         _send_telegram_alert(
             f"🐟 [ออเดอร์ใหม่จาก Facebook!] 🔔\n"
+            f"🏠 เพจ: {page_label}\n"
             f"🔖 รหัส: {order_code}\n"
             f"📞 เบอร์: {phone}\n"
             f"📦 สินค้า: {pkg_name}\n"
@@ -768,21 +787,23 @@ def _handle_event(event: dict, page_id: str = "") -> None:
     # 3. ลูกค้าทิ้งเฉพาะเบอร์โทร ให้โทรกลับ
     if phone_match and not has_address and len(text) <= 35:
         phone = phone_match.group(0)
+        page_label = _get_page_label(page_id)
         _reply_to_facebook(sender, f"ได้รับเบอร์โทร {phone} เรียบร้อยค่ะ 🙏 เดี๋ยวเจ้าหน้าที่รีบโทรติดต่อกลับไปนะคะ\n(หรือพิมพ์ชื่อ-ที่อยู่ สั่งเก็บเงินปลายทางในแชทนี้ได้เลยค่ะ 😊)", page_id=page_id)
-        _send_telegram_alert(f"📞 [ลูกค้าทิ้งเบอร์ให้โทรกลับ!]\n👤 Facebook: `{sender}`\n📱 เบอร์: **`{phone}`**\n💬 ข้อความ: \"{text}\"")
+        _send_telegram_alert(f"📞 [ลูกค้าทิ้งเบอร์ให้โทรกลับ!]\n🏠 เพจ: {page_label}\n👤 Facebook: `{sender}`\n📱 เบอร์: **`{phone}`**\n💬 ข้อความ: \"{text}\"")
         return
 
     # 4. ลูกค้าพิมพ์ ยืนยัน / ตกลง
     if lower_text in ("ตกลง", "ยืนยัน", "ตกลงค่ะ", "ตกลงครับ", "ยืนยันค่ะ", "ยืนยันครับ", "ok", "โอเค"):
+        page_label = _get_page_label(page_id)
         _reply_to_facebook(sender, "ขอบพระคุณค่ะ 🙏 ทางร้านล็อกคิวเตรียมจัดส่งรอบสดใหม่ให้เรียบร้อยแล้วนะคะ เมื่อพัสดุออกเดินทางจะแจ้งให้ทราบค่ะ 😊", page_id=page_id)
-        _send_telegram_alert(f"✅ [ลูกค้ายืนยันออเดอร์แล้ว!]\n👤 Facebook: `{sender}`")
+        _send_telegram_alert(f"✅ [ลูกค้ายืนยันออเดอร์แล้ว!]\n🏠 เพจ: {page_label}\n👤 Facebook: `{sender}`")
         return
 
     # 5. ขอเลขบัญชี / โอนเงิน / จ่ายเงินเลย
     if qr_payload == "QR_BANK_INFO" or any(k in lower_text for k in ["เลขบัญชี", "ขอเลขบัญชี", "โอนเงิน", "เลขที่บัญชี", "บัญชีธนาคาร", "โอนจ่าย", "จ่ายเงิน", "พร้อมเพย์", "โอนส่งฟรี"]):
         _RECENT_CONTEXT[sender] = {"pkg": _RECENT_CONTEXT.get(sender, {}).get("pkg"), "pay": "transfer", "ts": time.time()}
         bank_msg = (
-            "✅ โอนเงินล่วงหน้า จัดส่งด่วนแพ็กซองฟอยล์+เจลเย็น ฟรีทุกชุดค่ะ 🚚❄️\n\n"
+            "✅ โอนเงินล่วงหน้า จัดส่งด่วนแพ็กซองฟอยล์เก็บความเย็น ฟรีทุกชุดค่ะ 🚚❄️\n\n"
             "🏦 ธนาคารกรุงไทย (Krungthai)\n"
             "• เลขที่บัญชี: 038-0-25363-1\n"
             "• ชื่อบัญชี: นายจีรวัฒน์ พลอาจ\n\n"
@@ -802,7 +823,7 @@ def _handle_event(event: dict, page_id: str = "") -> None:
 
     # 7. ถามเรื่องค่าส่ง / ปลายทาง / ส่งกี่วัน
     if any(k in lower_text for k in ["ส่งยังไง", "ส่งฟรีไหม", "ค่าส่ง", "ปลายทาง", "เก็บเงินปลายทาง", "cod", "กี่วัน", "ส่งวันไหน"]):
-        _reply_to_facebook(sender, f"🚚 โอนเงินส่งฟรีทุกชุดค่ะ (มีเก็บเงินปลายทาง COD +20.-)\nแพ็กเจลเย็นส่งถึงหน้าบ้านใน 1-2 วันค่ะ\n\n{MENU_SHORT}", DEFAULT_QUICK_REPLIES, page_id=page_id)
+        _reply_to_facebook(sender, f"🚚 โอนเงินส่งฟรีทุกชุดค่ะ (มีเก็บเงินปลายทาง COD +20.-)\nแพ็กซองฟอยล์เก็บความเย็นส่งถึงหน้าบ้านใน 1-2 วันค่ะ\n\n{MENU_SHORT}", DEFAULT_QUICK_REPLIES, page_id=page_id)
         return
 
     # 8. ทักทายทั่วไป หรือข้อความอื่นๆ -> ส่งเมนูสั้น กระชับ ทันที

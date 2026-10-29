@@ -14,6 +14,40 @@
 
 ## 1. งานที่ทำแล้ว (ล่าสุด)
 
+- 2026-10-29 [จัดทำแผนแม่บท 6 เสาหลัก (Master Plan) ไว้บนสุดของ `AGENTS.md`, `CLAUDE.md`, `HANDOFF.md` และ `.agents/skills/facebook-page-automation/SKILL.md` เพื่อให้ AI ทุกตัวรับทราบตรงกัน 100%]:
+  1. **แก้ไขปัญหาไฟล์ `AGENTS.md` ยาวเกินจนถูกตัดท้าย (Context Truncation Fix)**: ย้าย **แผนแม่บทระบบทั้งหมด 6 เสาหลัก (โหมดธุรกิจปลาสลิดแดดเดียวป้าเข็ม 100%)** ขึ้นมาไว้บรรทัดที่ 1 ของ `AGENTS.md` และสร้าง `CLAUDE.md` เพื่อให้ AI ทุกตัว (Antigravity, Claude Code, Cursor, Codebuff) เห็นกฎเหล็กปลาสลิดป้าเข็มทันทีตั้งแต่เริ่มแชทโดยไม่โดนตัดทอน
+  2. **ย้ำกฎเหล็กห้ามปนเนื้อหา Shopee บนเพจ Facebook ป้าเข็ม**: เพจที่ 1 (`1307380735783361`) และเพจที่ 2 (`1323469404180656`) โฟกัสเฉพาะ **"ปลาสลิดแดดเดียวสุพรรณแท้ ป้าเข็ม คัดพิเศษ"** 100% เท่านั้น (ลบโพสต์ที่ปนเนื้อหา Shopee ออกทั้ง 2 เพจและโพสต์ภาพการจัดส่งปลาสลิดป้าเข็มใหม่เรียบร้อย: `1307380735783361_122123452371443245` และ `1323469404180656_122123597295462775`)
+
+- 2026-10-26 [24/7 Autonomous Customer Response + Auto-Tracking Push + Clean Label + Hermes AI Fish Analytics]:
+  1. **ระบบตอบคอมเมนต์เพจ Facebook + ทัก Inbox ส่วนตัว 24/7 (`tools/fb_comment_responder.py`)**:
+     - กด Like คอมเมนต์ลูกค้า + ตอบกลับสาธารณะใต้คอมเมนต์ + ทักเสนอโปรโมชั่นเข้า Messenger Inbox ส่วนตัว (`Private Reply API`) อัตโนมัติทุก 30 วินาที
+     - แก้บั๊ก `sys.stdout is None` เมื่อรันผ่าน `pythonw.exe` ใน `fb_comment_responder.py` และ `reels_uploader/uploader.py`
+     - ลงทะเบียน Windows Startup (`PaKhem_FB_AutoComment.vbs`) และ Windows Task Scheduler (`PaKhem_FB_AutoComment_24x7` ทุก 5 นาที พร้อม `FileLock`) ให้ทำงานอัตโนมัติ 100% โดยไม่ต้องกดรันเอง
+  2. **ระบบแจ้งเลขพัสดุกลับหาลูกค้าอัตโนมัติ (`admin.html`, `shopee_pakhem_bot.gs`, `fb_comment_responder.py`)**:
+     - เมื่อแอดมินกรอกเลขพัสดุในหน้า `admin.html` แล้วกดบันทึก ระบบจะเปลี่ยนสถานะเป็น `SHIPPED` และส่งแจ้งเลขพัสดุเข้า LINE OA (`[LINE_UID:...]`) หรือ Facebook Messenger (`[FB_ID:...]`) ของลูกค้าคนนั้นโดยอัตโนมัติ
+  3. **อัปเกรดหน้าร้าน `fish.html` และระบบพิมพ์สติกเกอร์ติดถุง `fish_label_print.html` (ซิงค์ขึ้น `watt29.github.io/pakhem-shop` แล้ว)**:
+     - เพิ่มข้อมูลฉลาก Clean Label (เนื้อปลาสลิดสุพรรณแท้ 97% + เกลือสมุทรธรรมชาติ 3% + ไร้สารกันบูด/ฟอร์มาลีน/ผงชูรส 0%) และมาตรฐานควบคุมอุณหภูมิ 4 ขั้นตอน (ตากแดด >37°C 1 วัน + แช่แข็ง ≤-18°C ≥12 ชม.)
+     - ถอดข้อความเสนอบริการ "แบบทอดกรอบพร้อมทาน" ออกตามคำสั่งเจ้าของร้าน (จำหน่ายเฉพาะแบบดิบแดดเดียวเท่านั้น)
+  4. **ต่อยอดสมองกล Hermes AI วิเคราะห์ยอดสั่งซื้อปลาสลิด (`backend/app/services/hermes_brain.py`, `tools/hermes_brain.py`, `MARKET_MEMORY.md`)**:
+     - เพิ่ม `gather_fish_order_stats(db, hours=48)` วิเคราะห์ตาราง `direct_orders` (ยอดสั่งซื้อรวม, รายได้รวม, แพ็กเกจขายดี `500g`/`1kg`/`2kg`, สัดส่วน `TRANSFER` vs `COD`, และช่องทางสั่งซื้อ)
+     - อัปเดต `hermes_skills` (`fish_focus_package`, `fish_marketing_strategy`) และผูก `_run_hermes_learning_cycle()` เข้ากับเธรด `fb_comment_responder.py` ให้รันอัตโนมัติทุก 6 ชั่วโมง
+     - เพิ่มเกราะ `PYTEST_RUNNING=1` ใน `backend/app/config.py` และ `backend/tests/conftest.py` ป้องกัน `pytest` เขียนข้อมูลเทสต์ทับฐานข้อมูลจริงบน Supabase (เทสต์ `test_hermes_brain.py` ผ่านครบ 25/25 ข้อ)
+
+- 2026-10-24 [Master Catalog Architecture & Forensic Data Recovery 1,903 Products]:
+  1. กู้คืนคลังสินค้าแท้ 100% จากฐานข้อมูลต้นฉบับ `backend/sim_db.db` (1,686 รายการ) + CSVs 18 ไฟล์ใน `D:\สินค้า\` และ `D:\` (289 รายการ) นำเข้าสู่ Supabase PostgreSQL รวมเป็น **1,903 รายการ (0 duplicates)**
+  2. จัดกลุ่ม 9 หมวดหมู่อย่างเป็นระเบียบ: ของใช้ในบ้าน 522 รายการ (กู้คืนครบถ้วน), ความงาม 443, ไอที 358, เครื่องใช้ไฟฟ้า 225, สุขภาพ 120, สัตว์เลี้ยง 98, ของสะสม 88, เครื่องครัว 46, ยานยนต์ 3
+  3. บันทึกกฎเหล็ก Rule 15 ใน `AGENTS.md` และสร้างคู่มือ `docs/manual/17_SHOPEE_CATALOG_AND_IMAGE_HARVESTER_GUIDE.md` ระบุตำแหน่งจัดเก็บ 4 ชั้น (Supabase Cloud, Local `sim_db.db`, Raw CSVs `D:\สินค้า`, Golden Snapshots `artifacts/backup_products_safe.json` 1.14 MB และ `.csv` 720 KB)
+  4. ตั้งกฎเหล็ก Strict Zero-Delete Policy: ห้ามรัน `check-links --delete` หรือ `DELETE FROM products` เด็ดขาดเพื่อป้องกัน Shopee Anti-Bot ส่ง 403 แล้วระบบลบสินค้าจริงทิ้ง
+  5. พัฒนาสคริปต์กู้คืนและซิงค์มาตรฐาน: `python tools/restore_from_sim_db.py` สำหรับ AI ทุกตัวใช้ซิงค์ข้อมูลให้ตรงกันโดยไม่ทำให้ข้อมูลพังหรือซ้ำซ้อน
+  6. ดึงภาพแท้ Shopee Official CDN ต่อเนื่องผ่าน `tools/shopee_image_harvester.py` พร้อมเกราะ `<meta name="referrer" content="no-referrer">` ป้องกัน Hotlink 403 บน `shop.html` และ API `/api/products` เสิร์ฟสินค้าครบ 1,903 รายการ
+
+
+- 2026-09-18 นำ D:/Codex/Android มาใช้ร่วม: เพิ่ม android_runtime.py/android_station.json/android_station.py และ ANDROID_TIKTOK.bat; ใช้ ADB/scrcpy เดิม ระบุ Samsung R8YL3259LKZ. ตรวจ/เปิด TikTok จริงผ่าน adapter สำเร็จ, คิว Local 3 mp4. เพิ่ม hash history แยกบัญชี atomic+lock, guard legacy/unknown, เปลี่ยน mobile main ใช้ Local+caption sidecar, ยกเลิก fallback โพสต์ซ้ำและบันทึกสำเร็จลวง; daemon หยุดเมื่อไม่ยืนยันผล. ยังไม่เริ่มโพสต์จริง: ต้อง verify gallery exact-file และ receipt ก่อน unattended. รายละเอียด CASE_STUDY_ANDROID_AUTOMATION_READINESS.md. ไม่แก้โปรเจกต์ PhoneBot/แอปดูแลครอบครัว.
+
+- ผลชุดรวมรอบ Android 2026-09-18: PYTHONPATH=project+backend, 1315 passed / 2 failed ใน test_line_bot.py (package FAQ hijack และ Business delivery-time); ไม่ commit/push. เทสต์เฉพาะ Android 5 passed.
+
+- 2026-09-18 Android TikTok (งานค้าง): ผู้ใช้เลือก Samsung SM-X135G/R8YL3259LKZ; ตรวจหน้าโปรไฟล์จริงพบ @healthgooddeals. แก้ tools/tiktok_adb_auto_poster.py เฉพาะ ADB resolution/error handling, device selection และยกเลิกการลบคลิปส่วนตัว. Offline unittest 5 passed. ยังไม่เปิด daemon/ไม่โพสต์; รอคำตอบบัญชีและคิวคลิป และต้องแก้ gallery selection/account guard/การยืนยันผลจริงก่อนเริ่ม. รายละเอียด docs/manual/CASE_STUDY_ANDROID_AUTOMATION_READINESS.md. ไฟล์ poster มีงานเดิมค้างก่อนรอบนี้; ห้าม commit รวบงานคนอื่น. ยังไม่ได้ซิงค์ Google Docs.
+
 - ขยาย Trends Local: Hook 33 แบบ/11 หมวด, จัดอันดับประโยคจาก keyword/title/category/ตำแหน่ง, รวม Google Trends กับ RSS ไทย 8 แหล่งแบบ fail-isolated, ใช้ publisher summary เมื่อหน้าอ่านไม่ได้และมีหลักฐานครบ 2 ประโยค, เก็บเหตุผล retry. Live พบ 47 candidate และ RSS summary ใช้ได้ 9 เรื่อง (Beartai/The Standard); cooldown เดิมทำให้รอบทดลองไม่เข้าคิว. Tests 1263 passed; restart runner สำเร็จ PID 22184 และทุกเธรด active.
 
 - เพิ่มวงจรเรียนรู้ผลงาน Local ที่ `tools/performance_learner.py`: อ่าน `performance_logs` จาก Supabase, คำนวณ CTR/Conversion/EPC/confidence, เขียนคะแนน atomic ให้ product selector อ่านทุกชั่วโมง และรายงาน Telegram วันละครั้ง 20:00. Live DB ปัจจุบันมี performance product 0 รายการ จึงรายงานตามจริงและใช้ base score ต่อ. Tests 1259 passed; restart runner สำเร็จ PID 8412 และ learner ทำงานแล้ว.
@@ -71,7 +105,7 @@
   ② ใช้ Gradient ไล่เฉดสีระดับพรีเมียม (Coral Orange Flame, Royal Amber Gold, Cyber Emerald Teal)
   ③ ประกอบด้วย 3 การ์ดลอย 3 มิติ:
      - การ์ด 1: `🔍 ค้นหาสินค้า` (Badge: 🔥 ค้นหาของแท้ & ดีลลด / CTA: แตะเพื่อค้นหาทันที ›)
-     - การ์ด 2: `💼 บอทรายเดือน` (Badge: ⚡️ เริ่มต้น 490.- / เดือน / CTA: ดูแพ็กเกจ & ราคาบอท ›)
+     - การ์ด 2: `🎬 สินค้าในคลิป` (Badge: 🎬 ส่องพิกัดจากคลิป & Reels / CTA: ดูสินค้าในคลิป ›)
      - การ์ด 3: `💬 คุยกับป้าเข็ม` (Badge: 🟢 ออนไลน์ตอบไว 24 ชม. / CTA: ทักแชทคุยกับป้าเข็ม ›)
   ④ ดาวน์โหลดและเรนเดอร์ด้วยฟอนต์ `Prompt-Bold` และ `Prompt-Medium` จาก Google Fonts คมชัดทุกขนาดหน้าจอ
   ⑤ อัปโหลดและเปิดใช้งานเป็น Default Rich Menu บน LINE OA เรียบร้อยแล้ว (`richmenu-423b8bb8cbbb3c4743bce13aff475555`)
