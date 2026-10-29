@@ -1804,9 +1804,9 @@
 
         <div style="border-radius:12px; overflow:hidden; border:1px solid #e2e8f0; background:#f8fafc;">
 
-          <img src="fish_vacuum_tray.jpg?v=2" alt="แพ็คซีลสูญญากาศ PA/PE" style="width:100%; height:155px; object-fit:cover; display:block;" loading="lazy">
+          <img src="pakhem_vacuum_pack_branded.jpg?v=20261030_3" alt="ถุงซีลสูญญากาศ ตราป้าเข็ม คัดพิเศษ" style="width:100%; height:155px; object-fit:cover; display:block;" loading="lazy">
 
-          <div style="padding:8px 10px; font-size:0.8rem; font-weight:600; color:#334155; text-align:center;">❄️ ซีลสูญญากาศ PA/PE มาตรฐานญี่ปุ่น</div>
+          <div style="padding:8px 10px; font-size:0.8rem; font-weight:600; color:#334155; text-align:center;">❄️ ซีลสูญญากาศ ตราป้าเข็ม คัดพิเศษ</div>
 
         </div>
 
@@ -1818,6 +1818,16 @@
 
         </div>
 
+      </div>
+
+      <div style="margin-top:14px; background:#fffbeb; border:1.5px solid #fde68a; border-radius:14px; padding:14px;">
+        <div style="font-size:0.92rem; font-weight:700; color:#92400e; text-align:center; margin-bottom:10px;">
+          🏷️ สติกเกอร์ฉลากมาตรฐาน Clean Label บนถุงซีลสูญญากาศ (เนื้อปลาแท้ 97% • เกลือสมุทร 3% • ไร้สารกันบูด 0%)
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; align-items:center;">
+          <img src="pakhem_vacuum_pack_branded.jpg?v=20261030_3" alt="แพ็กเกจถุงซีลสูญญากาศ ปลาสลิดป้าเข็ม" style="width:100%; border-radius:10px; border:1px solid #fcd34d;" loading="lazy">
+          <img src="pakhem_vacuum_bag_sticker.jpg?v=20261030_3" alt="สติกเกอร์บนถุงซีล ปลาสลิดป้าเข็ม" style="width:100%; max-height:340px; object-fit:contain; background:#fff; border-radius:10px; border:1px solid #fcd34d;" loading="lazy">
+        </div>
       </div>
 
     </section>
@@ -2197,11 +2207,27 @@
 
 
         <div class="form-group">
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px; margin-bottom:6px;">
+            <label for="custAddress" style="margin-bottom:0;">📍 ที่อยู่จัดส่ง (มีตัวช่วยนำทาง ไม่ต้องพิมพ์ยาว) *</label>
+            <button type="button" id="btnGpsAutoFill" onclick="fillAddressFromGPS()" style="background:#0284c7; color:#fff; border:none; border-radius:99px; padding:5px 12px; font-size:0.78rem; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:4px; box-shadow:0 2px 6px rgba(2,132,199,0.25);">
+              📍 ดึงตำแหน่งปัจจุบัน (ไม่ต้องพิมพ์จังหวัด/อำเภอเอง)
+            </button>
+          </div>
 
-          <label for="custAddress">ที่อยู่จัดส่งโดยละเอียด *</label>
+          <!-- ตัวช่วยพิมพ์แค่ บ้านเลขที่ + รหัสไปรษณีย์ 5 หลัก -->
+          <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:8px; margin-bottom:8px; background:#f8fafc; padding:10px; border-radius:10px; border:1px solid #cbd5e1;">
+            <div>
+              <span style="font-size:0.76rem; font-weight:600; color:#475569; display:block; margin-bottom:3px;">1️⃣ บ้านเลขที่ / หมู่ / ซอย</span>
+              <input type="text" id="quickHouseNo" class="form-control" placeholder="เช่น 99/1 หมู่ 2" style="padding:8px 10px; font-size:0.88rem;" oninput="syncQuickAddressHelper()">
+            </div>
+            <div>
+              <span style="font-size:0.76rem; font-weight:600; color:#475569; display:block; margin-bottom:3px;">2️⃣ รหัสไปรษณีย์ 5 หลัก (เติมจังหวัดอัตโนมัติ)</span>
+              <input type="tel" id="quickZipCode" class="form-control" placeholder="เช่น 10900, 72000" maxlength="5" style="padding:8px 10px; font-size:0.88rem;" oninput="handleQuickZipLookup(this.value)">
+            </div>
+            <div id="zipAutoResultHint" style="grid-column: 1 / -1; font-size:0.78rem; color:#059669; font-weight:600; display:none;"></div>
+          </div>
 
-          <textarea id="custAddress" class="form-control" rows="3" placeholder="บ้านเลขที่, ถนน/ซอย, ตำบล, อำเภอ, จังหวัด, รหัสไปรษณีย์" required></textarea>
-
+          <textarea id="custAddress" class="form-control" rows="3" placeholder="ที่อยู่จัดส่งเต็ม (ระบบจะช่วยเติมให้อัตโนมัติเมื่อกดปุ่มดึงตำแหน่ง หรือกรอกรหัสไปรษณีย์ด้านบนค่ะ)" required></textarea>
         </div>
 
 
@@ -2229,7 +2255,22 @@
               • ขอสงวนสิทธิ์จัดส่งหลังจากได้รับชำระเงินเต็มจำนวนแล้ว<br>
               • ไม่สามารถใช้บริการเก็บเงินปลายทางได้ เนื่องจากเป็นรูปแบบการจัดส่งเฉพาะสำหรับพื้นที่ดังกล่าว
             </div>
-            <div style="font-size:0.8rem; color:#047857;">💚 ทางร้านให้ความสำคัญกับคุณภาพสินค้าและความมั่นใจของลูกค้าทุกออเดอร์ ก่อนยืนยันคำสั่งซื้อ ทางร้านจะแจ้งวิธีจัดส่ง ระยะเวลาโดยประมาณ และยอดชำระให้ทราบอย่างชัดเจนค่ะ ขอบคุณที่ไว้วางใจเลือกซื้อปลาสลิดจากทางร้านนะคะ 🙏</div>
+            <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:8px 10px; margin-bottom:6px; font-size:0.83rem; color:#1e3a8a;">
+              <b>🏦 บัญชีสำหรับโอนชำระเงิน (กรณีโอนเงินส่งฟรี / พื้นที่ที่ไม่มีเก็บเงินปลายทาง)</b><br>
+              • <b>ธนาคารกรุงไทย (สาขาท่าพระ)</b> | เลขที่บัญชี: <b style="color:#b91c1c; font-size:0.92rem;">038-0-25363-1</b> | ชื่อบัญชี: <b>นายจีรวัฒน์ พลอาจ</b>
+            </div>
+            <div style="font-size:0.8rem; color:#047857; margin-bottom:8px;">💚 ทางร้านให้ความสำคัญกับคุณภาพสินค้าและความมั่นใจของลูกค้าทุกออเดอร์ ก่อนยืนยันคำสั่งซื้อ ทางร้านจะแจ้งวิธีจัดส่ง ระยะเวลาโดยประมาณ และยอดชำระให้ทราบอย่างชัดเจนค่ะ ขอบคุณที่ไว้วางใจเลือกซื้อปลาสลิดจากทางร้านนะคะ 🙏</div>
+            <div style="background:#ecfdf5; border:1.5px solid #10b981; border-radius:10px; padding:10px 12px; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+              <div style="flex:1; min-width:200px;">
+                <div style="font-weight:800; color:#065f46; font-size:0.9rem;">🟢 สั่งซื้อ / ส่งสลิป / เช็กพัสดุผ่าน LINE ง่ายๆ คลิกเดียว!</div>
+                <div style="font-size:0.78rem; color:#047857; margin:2px 0 6px;">ไม่ต้องพิมพ์ค้นหา กดปุ่มสีเขียวหรือสแกน QR Code เพื่อแอด LINE <b>@137gsref</b> ได้เลยค่ะ</div>
+                <a href="https://line.me/R/ti/p/@137gsref" target="_blank" style="display:inline-flex; align-items:center; gap:6px; background:#06c755; color:#fff; font-weight:800; font-size:0.86rem; padding:8px 14px; border-radius:8px; text-decoration:none; box-shadow:0 2px 6px rgba(6,199,85,0.3);">💬 กดแอด LINE ป้าเข็ม (@137gsref)</a>
+              </div>
+              <a href="https://line.me/R/ti/p/@137gsref" target="_blank" style="text-align:center; background:#fff; border:1px solid #a7f3d0; border-radius:8px; padding:4px 6px; text-decoration:none;">
+                <img src="line_qr_137gsref.png?v=20261030" alt="QR แอด LINE @137gsref" style="width:68px; height:68px; display:block; margin:0 auto;">
+                <span style="display:block; font-size:0.65rem; font-weight:700; color:#059669;">สแกนแอด LINE</span>
+              </a>
+            </div>
           </div>
         </div>
 
@@ -2389,11 +2430,12 @@
 
         <!-- Transfer Bank Info & Slip Upload Box (Appears when TRANSFER selected) -->
 
-        <div id="transferDetailsBox" style="display:none; background:#f0fdf4; border:1.5px dashed #10b981; border-radius:12px; padding:16px; margin-top:12px;">
+        <div id="transferDetailsBox" style="display:block; background:#f0fdf4; border:1.5px dashed #10b981; border-radius:12px; padding:16px; margin-top:12px;">
 
-          <div style="font-weight:700; color:#065f46; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+          <div style="font-weight:700; color:#065f46; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">
 
-            <span>💳 บัญชีรับโอนเงิน (ธนาคารกรุงไทย)</span>
+            <span>💳 สแกน QR พร้อมเพย์ หรือโอนเข้าบัญชีธนาคารกรุงไทย</span>
+            <span style="background:#d1fae5; color:#065f46; font-size:0.75rem; padding:2px 8px; border-radius:99px;">สแกนได้ทุกธนาคาร • ฟรีค่าธรรมเนียม</span>
 
           </div>
 
@@ -2412,6 +2454,14 @@
             <div><b>ชื่อบัญชี:</b> <span style="font-weight:700; color:#0f172a;">นายจีรวัฒน์ พลอาจ</span></div>
 
             <div style="margin-top:4px; font-size:0.88rem; color:#047857;">ยอดที่ต้องโอน: <b id="transferExactAmount" style="font-size:1.12rem; color:#b91c1c;">550 บาท</b></div>
+
+            <div style="text-align:center; margin-top:12px; padding-top:12px; border-top:1px dashed #cbd5e1;">
+              <img src="krungthai_promptpay_qr.png?v=20261030" alt="QR พร้อมเพย์ กรุงไทย นายจีรวัฒน์ พลอาจ" style="max-width:230px; width:100%; border-radius:10px; border:1.5px solid #bae6fd; box-shadow:0 4px 12px rgba(2,132,199,0.12); display:block; margin:0 auto;">
+              <div style="margin-top:8px; display:flex; justify-content:center; gap:8px; flex-wrap:wrap;">
+                <a href="krungthai_promptpay_qr.png?v=20261030" download="PromptPay_Krungthai_Pakhem.png" style="background:#0284c7; color:#ffffff; text-decoration:none; padding:5px 12px; border-radius:8px; font-size:0.8rem; font-weight:700; display:inline-flex; align-items:center; gap:5px;">💾 บันทึกรูป QR สแกนจ่ายในแอปธนาคาร</a>
+              </div>
+              <div style="font-size:0.78rem; color:#475569; margin-top:5px;">รองรับการสแกนจ่ายผ่านแอปทุกธนาคาร (Thai QR Payment / PromptPay)</div>
+            </div>
 
           </div>
 
@@ -2664,6 +2714,196 @@
     ];
 
 
+
+
+    // === Guided Address Navigation Helpers (GPS + Zip Auto-Fill + Auto-Save Customer Info) ===
+    let lastAutoAreaText = '';
+
+    function syncQuickAddressHelper() {
+      const house = (document.getElementById('quickHouseNo')?.value || '').trim();
+      const zip = (document.getElementById('quickZipCode')?.value || '').trim();
+      const addrEl = document.getElementById('custAddress');
+      if (!addrEl) return;
+      if (house || lastAutoAreaText || zip) {
+        const parts = [];
+        if (house) parts.push('บ้านเลขที่ ' + house);
+        if (lastAutoAreaText) parts.push(lastAutoAreaText);
+        if (zip && (!lastAutoAreaText || !lastAutoAreaText.includes(zip))) parts.push(zip);
+        addrEl.value = parts.join(' ');
+      }
+    }
+
+    async function handleQuickZipLookup(zipVal) {
+      const cleanZip = (zipVal || '').replace(/\D/g, '').slice(0, 5);
+      const zipInput = document.getElementById('quickZipCode');
+      if (zipInput && zipInput.value !== cleanZip) zipInput.value = cleanZip;
+      const hintEl = document.getElementById('zipAutoResultHint');
+      if (cleanZip.length !== 5) {
+        if (hintEl) hintEl.style.display = 'none';
+        syncQuickAddressHelper();
+        return;
+      }
+      if (hintEl) {
+        hintEl.style.display = 'block';
+        hintEl.innerText = '⏳ กำลังค้นหา ตำบล/อำเภอ/จังหวัด จากรหัสไปรษณีย์ ' + cleanZip + '...';
+      }
+      try {
+        const res = await fetch('https://nominatim.openstreetmap.org/search?postalcode=' + cleanZip + '&country=Thailand&format=json&addressdetails=1&accept-language=th&limit=1');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.length > 0) {
+            const a = data[0].address || {};
+            const sub = a.suburb || a.tambon || a.village || a.town || a.quarter || '';
+            const dist = a.city_district || a.amphoe || a.county || a.municipality || a.city || '';
+            const prov = a.state || a.province || a.city || '';
+            const areaParts = [];
+            if (sub) areaParts.push(sub);
+            if (dist && dist !== sub) areaParts.push(dist);
+            if (prov && prov !== dist) areaParts.push('จ.' + prov.replace(/^จังหวัด/, ''));
+            areaParts.push(cleanZip);
+            lastAutoAreaText = areaParts.join(' ');
+            if (hintEl) {
+              hintEl.innerText = '✅ เติมพื้นที่อัตโนมัติแล้ว: ' + lastAutoAreaText + ' (พิมพ์แค่บ้านเลขที่ด้านซ้ายได้เลยค่ะ)';
+            }
+            syncQuickAddressHelper();
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('Zip lookup error:', e);
+      }
+      if (hintEl) hintEl.style.display = 'none';
+      syncQuickAddressHelper();
+    }
+
+    function fillAddressFromGPS() {
+      const btn = document.getElementById('btnGpsAutoFill');
+      const hintEl = document.getElementById('zipAutoResultHint');
+      if (!navigator.geolocation) {
+        alert('อุปกรณ์ของคุณไม่รองรับการดึงพิกัด กรุณาพิมพ์รหัสไปรษณีย์ 5 หลักแทนนะคะ');
+        return;
+      }
+      if (btn) {
+        btn.disabled = true;
+        btn.innerText = '⏳ กำลังดึงที่อยู่จาก GPS...';
+      }
+      navigator.geolocation.getCurrentPosition(async function(pos) {
+        try {
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          const res = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lon + '&addressdetails=1&accept-language=th');
+          if (res.ok) {
+            const data = await res.json();
+            const a = data.address || {};
+            const road = a.road || a.soi || '';
+            const sub = a.suburb || a.tambon || a.village || a.quarter || '';
+            const dist = a.city_district || a.amphoe || a.county || a.municipality || '';
+            const prov = a.state || a.province || a.city || '';
+            const zip = a.postcode || '';
+            const areaParts = [];
+            if (road) areaParts.push(road);
+            if (sub) areaParts.push(sub);
+            if (dist && dist !== sub) areaParts.push(dist);
+            if (prov && prov !== dist) areaParts.push('จ.' + prov.replace(/^จังหวัด/, ''));
+            if (zip) {
+              areaParts.push(zip);
+              const zipEl = document.getElementById('quickZipCode');
+              if (zipEl) zipEl.value = zip;
+            }
+            lastAutoAreaText = areaParts.join(' ');
+            syncQuickAddressHelper();
+            if (hintEl) {
+              hintEl.style.display = 'block';
+              hintEl.innerText = '📍 ดึงเขตพื้นที่จาก GPS สำเร็จแล้วค่ะ! กรอกเพิ่มแค่ [บ้านเลขที่] ช่องที่ 1 ได้เลยจ้า';
+            }
+            document.getElementById('quickHouseNo')?.focus();
+          }
+        } catch (err) {
+          console.warn('GPS reverse geocode error:', err);
+        } finally {
+          if (btn) {
+            btn.disabled = false;
+            btn.innerText = '✅ ดึงตำแหน่งสำเร็จ (กดเพื่ออัปเดต)';
+          }
+        }
+      }, function() {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerText = '📍 ดึงตำแหน่งปัจจุบัน (ไม่ต้องพิมพ์จังหวัด/อำเภอเอง)';
+        }
+        alert('กรุณากดอนุญาตตำแหน่งที่ตั้ง หรือพิมพ์รหัสไปรษณีย์ 5 หลักเพื่อให้ระบบเติมจังหวัดอัตโนมัติค่ะ');
+      }, { enableHighAccuracy: true, timeout: 10000 });
+    }
+
+
+    // โหลดข้อมูลชื่อ-เบอร์โทร-ที่อยู่เดิม และอ่านค่าหมุดแผนที่จาก LINE (?map_addr=...&pkg=...&pay=...)
+    window.addEventListener('DOMContentLoaded', function() {
+      try {
+        const savedName = localStorage.getItem('pakhem_cust_name');
+        const savedPhone = localStorage.getItem('pakhem_cust_phone');
+        const savedAddr = localStorage.getItem('pakhem_cust_addr');
+        if (savedName && document.getElementById('custName') && !document.getElementById('custName').value) {
+          document.getElementById('custName').value = savedName;
+        }
+        if (savedPhone && document.getElementById('custPhone') && !document.getElementById('custPhone').value) {
+          document.getElementById('custPhone').value = savedPhone;
+        }
+        if (savedAddr && document.getElementById('custAddress') && !document.getElementById('custAddress').value) {
+          document.getElementById('custAddress').value = savedAddr;
+        }
+        ['custName', 'custPhone', 'custAddress'].forEach(function(id, idx) {
+          const el = document.getElementById(id);
+          const key = ['pakhem_cust_name', 'pakhem_cust_phone', 'pakhem_cust_addr'][idx];
+          if (el) {
+            el.addEventListener('change', function() {
+              try { localStorage.setItem(key, el.value.trim()); } catch(e) {}
+            });
+          }
+        });
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const paramUid = urlParams.get('uid');
+        if (paramUid) {
+          try { localStorage.setItem('pakhem_line_uid', paramUid.trim()); } catch(e) {}
+        }
+        const paramName = urlParams.get('name');
+        if (paramName && document.getElementById('custName')) {
+          document.getElementById('custName').value = paramName.trim();
+        }
+        const paramPhone = urlParams.get('phone');
+        if (paramPhone && document.getElementById('custPhone')) {
+          document.getElementById('custPhone').value = paramPhone.trim();
+        }
+        const paramPkg = urlParams.get('pkg');
+        if (paramPkg && typeof selectProduct === 'function') {
+          setTimeout(function() { selectProduct(paramPkg); }, 150);
+        }
+        const paramPay = urlParams.get('pay');
+        if (paramPay === 'COD' && typeof selectPayment === 'function') {
+          setTimeout(function() { selectPayment('COD'); }, 200);
+        } else if (paramPay === 'COLD_TRUCK' && typeof selectShippingMode === 'function') {
+          setTimeout(function() { selectShippingMode('COLD_TRUCK'); }, 200);
+        }
+        const mapAddr = urlParams.get('map_addr');
+        if (mapAddr) {
+          lastAutoAreaText = mapAddr.trim();
+          const addrBox = document.getElementById('custAddress');
+          if (addrBox) addrBox.value = lastAutoAreaText;
+          const hintEl = document.getElementById('zipAutoResultHint');
+          if (hintEl) {
+            hintEl.style.display = 'block';
+            hintEl.innerText = '📍 ดึงที่อยู่จากหมุดแผนที่ LINE แล้ว: ' + lastAutoAreaText + ' (กรอกเพิ่มแค่ บ้านเลขที่ ช่องที่ 1 และ เบอร์โทร ได้เลยค่ะ!)';
+          }
+          setTimeout(function() {
+            const houseEl = document.getElementById('quickHouseNo');
+            if (houseEl) {
+              houseEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              houseEl.focus();
+            }
+          }, 350);
+        }
+      } catch (e) {}
+    });
 
     let currentSelectedSku = 'SKU-SLID-MD-1KG';
 
@@ -3799,7 +4039,9 @@
 
         : `[🧊 ส่งด่วนแพ็กซองฟอยล์เก็บความเย็น]`;
 
-      const combinedNote = [shipLabel, selectedSlipOcrText, note].filter(Boolean).join(' ');
+      const savedLineUid = (new URLSearchParams(window.location.search).get('uid') || localStorage.getItem('pakhem_line_uid') || '').trim();
+      const lineUidTag = savedLineUid ? `[LINE_UID:${savedLineUid}]` : '';
+      const combinedNote = [shipLabel, selectedSlipOcrText, note, lineUidTag].filter(Boolean).join(' ');
 
 
 
@@ -3828,6 +4070,7 @@
         note: combinedNote,
 
         slip_url: uploadedSlipUrl,
+        line_uid: savedLineUid || null,
 
         fbc: window.pkfFbc || localStorage.getItem('pkf_fbc') || null,
 

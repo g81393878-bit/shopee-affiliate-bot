@@ -288,9 +288,10 @@ PAKHEM_CUSTOM_AUDIENCES = [
 
 
 def run_ads_guard(
-    max_cpc_thb: float = 2.50,
+    max_cpc_thb: float = 8.00,
     min_spend_for_stoploss: float = 150.0,
-    max_cost_per_msg_thb: float = 90.0,
+    max_cost_per_msg_thb: float = 85.0,
+    max_ad_zero_msg_spend_thb: float = 80.0,
 ) -> dict:
     """
     ยามเฝ้างบโฆษณาและซิงค์กลุ่มเป้าหมายอัตโนมัติ 100% (Zero-Touch Automated Ads Guard):
@@ -306,7 +307,7 @@ def run_ads_guard(
         return result
 
     try:
-        # 0. Auto-Audience Injection: ตรวจทุก Active AdSet หากยังไม่มี Custom Audience 6 กลุ่ม ให้ผูกอัตโนมัติทันที
+        # 0. Auto-Age Guard: ตรวจทุก Active AdSet ให้ล็อกอายุ 40-65 ปี โดยไม่บังคับยัด Custom Audience ที่ติดสถานะคนน้อยเกินไป (Error 300/433)
         r_adsets = httpx.get(
             f"https://graph.facebook.com/v21.0/{FB_AD_ACCOUNT_ID}/adsets",
             params={"access_token": FB_ADS_TOKEN, "fields": "id,name,status,targeting"},
@@ -317,12 +318,10 @@ def run_ads_guard(
                 if aset.get("status") != "ACTIVE":
                     continue
                 tgt = aset.get("targeting") or {}
-                existing_ca = tgt.get("custom_audiences") or []
-                existing_ids = {str(x.get("id")) for x in existing_ca if isinstance(x, dict)}
-                needed_ids = {x["id"] for x in PAKHEM_CUSTOM_AUDIENCES}
-                if not needed_ids.issubset(existing_ids):
-                    tgt["custom_audiences"] = PAKHEM_CUSTOM_AUDIENCES
-                    tgt["age_min"] = max(int(tgt.get("age_min") or 40), 40)
+                cur_age_min = int(tgt.get("age_min") or 18)
+                if cur_age_min < 40:
+                    tgt["age_min"] = 40
+                    tgt["age_max"] = 65
                     tgt["targeting_automation"] = {"advantage_audience": 0}
                     ru = httpx.post(
                         f"https://graph.facebook.com/v21.0/{aset['id']}",
@@ -334,12 +333,6 @@ def run_ads_guard(
                     )
                     if ru.status_code == 200:
                         result["upgraded_adsets"].append(aset["id"])
-                        send_telegram_alert(
-                            f"🎯 [Auto-Audience Sync — ผูกกลุ่มเป้าหมายอัตโนมัติ!]\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                            f"📌 ชุดโฆษณาใหม่: {(aset.get('name') or '')[:45]}\n"
-                            f"✅ บอทผูก Custom Audience 4 กลุ่ม + Lookalike 1% 2 กลุ่ม + Advantage+ AI ให้เรียบร้อยอัตโนมัติครับ!"
-                        )
         r_camp = httpx.get(
             f"https://graph.facebook.com/v21.0/{FB_AD_ACCOUNT_ID}/campaigns",
             params={
@@ -437,6 +430,47 @@ def run_ads_guard(
                         f"{reason_line}\n"
                         f"✅ บอทสั่งหยุด (PAUSE) แคมเปญนี้ให้ทันทีเพื่อเซฟงบโฆษณาครับ"
                     )
+
+            # 3. ตรวจระดับชิ้นงานโฆษณา (Ad-Level Stop-Loss): หากชิ้นงานไหนในแคมเปญทักแชท กินเงิน >= 80฿ แล้วได้ 0 แชท สั่งปิดชิ้นงานนั้นทันทีเพื่อดันงบไปตัวที่ได้แชทจริง
+            if is_msg_camp and not should_pause:
+                r_ads = httpx.get(
+                    f"https://graph.facebook.com/v21.0/{cid}/ads",
+                    params={
+                        "access_token": FB_ADS_TOKEN,
+                        "fields": "id,name,status,effective_status,insights.date_preset(last_7d){spend,clicks,cpc,actions}",
+                    },
+                    timeout=12.0,
+                )
+                if r_ads.status_code == 200:
+                    ad_list = (r_ads.json() or {}).get("data", [])
+                    active_ads = [a for a in ad_list if a.get("status") == "ACTIVE"]
+                    # ปิดเฉพาะเมื่อยังมีแอดตัวอื่นวิ่งอยู่ (ไม่ให้แคมเปญดับทั้งหมดถ้าเหลือตัวสุดท้ายที่เพิ่งเทส) หรือถ้ากินเกิน 80฿ แล้ว 0 แชท
+                    for ad_obj in active_ads:
+                        ad_id = ad_obj.get("id")
+                        ad_name = (ad_obj.get("name") or "")[:40]
+                        ad_ins = ((ad_obj.get("insights") or {}).get("data") or [{}])[0]
+                        ad_spend = float(ad_ins.get("spend") or 0.0)
+                        ad_cpc = float(ad_ins.get("cpc") or 0.0)
+                        ad_msgs = sum(
+                            int(a.get("value") or 0)
+                            for a in (ad_ins.get("actions") or [])
+                            if a.get("action_type") == "onsite_conversion.messaging_conversation_started_7d"
+                        )
+                        if ad_spend >= max_ad_zero_msg_spend_thb and ad_msgs == 0:
+                            r_pa = httpx.post(
+                                f"https://graph.facebook.com/v21.0/{ad_id}",
+                                data={"access_token": FB_ADS_TOKEN, "status": "PAUSED"},
+                                timeout=10.0,
+                            )
+                            if r_pa.status_code == 200:
+                                result["paused_stoploss"].append({"id": ad_id, "name": ad_name, "spend": ad_spend, "cpc": ad_cpc, "messages": 0})
+                                send_telegram_alert(
+                                    f"🛑 [Ad-Level Stop-Loss — ปิดชิ้นงานโฆษณาที่กินเงินฟรี 0 แชท!]\n"
+                                    f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                                    f"🎬 ชิ้นงาน: {ad_name} ({ad_id})\n"
+                                    f"💸 ใช้เงินไป: {ad_spend:,.2f}฿ | 💬 ทักแชท: 0 แชท (CPC {ad_cpc:.2f}฿)\n"
+                                    f"✅ สั่ง PAUSE ชิ้นงานนี้เพื่อให้ระบบเทงบไปที่คลิปที่มีคนทักแชทจริงครับ"
+                                )
     except Exception:
         pass
 

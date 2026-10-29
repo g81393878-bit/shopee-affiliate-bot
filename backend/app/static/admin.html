@@ -162,7 +162,7 @@
     .tracking-save-btn:hover { background: #e2e8f0; }
 
   </style>
-<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js" defer></script>
 </head>
 <body>
 
@@ -170,13 +170,14 @@
     <a href="#" class="brand">🐟 ป้าเข็ม Admin Dashboard</a>
     <nav>
       <button class="active" onclick="switchTab('orders', this)">📦 ออเดอร์ลูกค้า (สด)</button>
+      <button onclick="switchTab('accounting', this)">💰 ระบบบัญชี & กำไรขาดทุน</button>
       <button onclick="switchTab('benchmarks', this)">📊 ราคากลาง 12 เกรด</button>
       <button onclick="switchTab('suppliers', this)">🏭 แหล่งผลิต & คู่ค้า (6)</button>
       <button onclick="switchTab('scripts', this)">💬 สคริปต์เจรจาโรงงาน</button>
       <button onclick="switchTab('strategy', this)">⚖️ สต๊อก VS Dropship</button>
     </nav>
     <div style="display:flex; gap:8px; align-items:center;">
-      <a href="fish_label_print.html" target="_blank" class="shop-link" style="background:#d97706;">🏷️ พิมพ์สติกเกอร์ติดถุง</a>
+      <a href="fish_label_print.html?v=20261030_3" target="_blank" class="shop-link" style="background:#d97706;">📦 พิมพ์ใบแนบในกล่อง / สติกเกอร์</a>
       <a href="fish.html" target="_blank" class="shop-link">🛍️ เปิดหน้าร้าน</a>
       <button onclick="handleAdminLogout()" style="background:#fee2e2; color:#991b1b; border:1px solid #fecaca; padding:8px 12px; border-radius:8px; font-size:0.85rem; font-weight:600; cursor:pointer;">🚪 ออกจากระบบ</button>
     </div>
@@ -227,7 +228,134 @@
               </tr>
             </thead>
             <tbody id="ordersTbody">
-              <tr><td colspan="9" style="text-align:center; padding:20px; color:var(--text-muted);">กำลังโหลดข้อมูลจากฐานข้อมูล…</td></tr>
+              <tr><td colspan="10" style="text-align:center; padding:20px; color:var(--text-muted);">กำลังโหลดข้อมูลจากฐานข้อมูล…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>💬 ลูกค้าทักแชท / คอมเมนต์สนใจล่าสุด (รอแจ้งชื่อ-ที่อยู่ / ปิดการขาย)</h2>
+          <button onclick="loadLeads()" class="btn-action">🔄 รีเฟรชรายชื่อ</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>เวลาที่ทัก</th>
+                <th>ช่องทาง</th>
+                <th>ชื่อลูกค้า</th>
+                <th>ข้อความ / ความสนใจ</th>
+                <th>สถานะบอท</th>
+                <th>เปิดดูแชท / โพสต์</th>
+              </tr>
+            </thead>
+            <tbody id="leadsTbody">
+              <tr><td colspan="6" style="text-align:center; padding:20px; color:var(--text-muted);">กำลังโหลดรายชื่อลูกค้าที่ทักแชท…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <!-- Tab: Accounting & P&L -->
+    <div id="tab-accounting" class="tab-content">
+      <div class="stats-row" style="grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));">
+        <div class="stat-card">
+          <div class="num" style="color:#059669;" id="accStatIncome">0 ฿</div>
+          <div class="lbl">💵 รายรับจริง (รับเงินแล้ว)</div>
+        </div>
+        <div class="stat-card">
+          <div class="num" style="color:#d97706;" id="accStatReceivable">0 ฿</div>
+          <div class="lbl">⏳ รอเก็บเงินปลายทาง (COD)</div>
+        </div>
+        <div class="stat-card">
+          <div class="num" style="color:#b91c1c;" id="accStatCogs">0 ฿</div>
+          <div class="lbl">🐟 ต้นทุนปลา+แพ็ก+ส่ง (COGS)</div>
+        </div>
+        <div class="stat-card">
+          <div class="num" style="color:#dc2626;" id="accStatOpex">0 ฿</div>
+          <div class="lbl">📢 ค่าแอด & ดำเนินงาน (OPEX)</div>
+        </div>
+        <div class="stat-card">
+          <div class="num" style="color:#0284c7;" id="accStatCapex">0 ฿</div>
+          <div class="lbl">🏢 สินทรัพย์ถาวร/ตู้แช่ (CAPEX)</div>
+        </div>
+        <div class="stat-card" style="border:2px solid #059669; background:#f0fdf4;">
+          <div class="num" style="color:#059669;" id="accStatNetProfit">0 ฿</div>
+          <div class="lbl">💎 กำไร/ขาดทุนสุทธิดำเนินงาน</div>
+        </div>
+      </div>
+
+      <section class="panel" style="background:#f8fafc;">
+        <div class="panel-header" style="margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+          <h2>➕ บันทึกรายจ่าย / ต้นทุนใหม่ (ซิงค์เข้า Telegram @pakhem_fish_bot อัตโนมัติ)</h2>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="button" onclick="sendAccountingSummaryToTelegram()" class="btn-action" style="background:#0088cc; color:#fff; border-color:#0088cc; font-weight:600;">📲 ส่งสรุปงบเข้า Telegram ทันที</button>
+            <a href="https://t.me/pakhem_fish_bot" target="_blank" class="btn-action" style="background:#0f172a; color:#fff; border-color:#0f172a; font-weight:600;">🤖 เปิดบอท Telegram (@pakhem_fish_bot)</a>
+            <a href="https://docs.google.com/spreadsheets/d/1gpuHGAJwt-Vq9WKfwjnCySWz_DqtTzKI91Eg_RNCLIE/edit" target="_blank" class="btn-action" style="background:#059669; color:#fff; border-color:#059669; font-weight:600;">📊 เปิด Google Sheets</a>
+            <a href="https://drive.google.com/drive/folders/1nY59jT4e90X2hHq-m1fSH8FCXQVLAOds" target="_blank" class="btn-action" style="background:#0284c7; color:#fff; border-color:#0284c7; font-weight:600;">📁 เปิด Google Drive</a>
+          </div>
+        </div>
+        <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:8px 12px; margin-bottom:12px; font-size:0.82rem; color:#1e3a8a;">
+          🤖 <b>เชื่อมต่อ Telegram 2 ทางอัตโนมัติ:</b> พิมพ์บันทึกรายจ่ายในแชท Telegram <a href="https://t.me/pakhem_fish_bot" target="_blank" style="color:#0284c7; font-weight:700;">@pakhem_fish_bot</a> ได้เลย (เช่น พิมพ์ <code>ค่าปลา 3000</code>, <code>ค่าแอด 200</code>, <code>ค่าถุงซีล 500</code>) รายการจะวิ่งเข้าตารางนี้ทันที หรือกรอกในฟอร์มด้านล่างก็จะเด้งแจ้งเตือนเข้า Telegram ทันทีค่ะ!
+        </div>
+        <form onsubmit="handleAddExpense(event)" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:10px; align-items:end;">
+          <div>
+            <label style="display:block; font-size:0.8rem; font-weight:600; margin-bottom:4px; color:#334155;">หมวดหมู่ค่าใช้จ่าย:</label>
+            <select id="expCategory" style="width:100%; padding:9px; border:1px solid var(--border); border-radius:8px; font-size:0.88rem; background:#fff;" required>
+              <option value="FISH">🐟 ค่าปลาสลิด / วัตถุดิบ (5110)</option>
+              <option value="PACKAGING">📦 ค่าถุงซีล / ซองฟอยล์ / กล่อง (5120)</option>
+              <option value="SHIPPING">🚚 ค่าจัดส่งพัสดุ / รถเย็น (5130)</option>
+              <option value="ADS">📢 ค่าโฆษณา Facebook Ads (5210)</option>
+              <option value="ASSET">🏢 ซื้ออุปกรณ์ / ตู้แช่แข็ง (สินทรัพย์ 1510)</option>
+              <option value="TRAVEL">⛽ ค่าน้ำมัน / เดินทางขนส่ง (5220)</option>
+              <option value="UTILITIES">⚡ ค่าไฟตู้แช่ / น้ำ / อินเทอร์เน็ต (5230)</option>
+              <option value="OTHER">📝 ค่าใช้จ่ายจิปาถะอื่นๆ (5290)</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block; font-size:0.8rem; font-weight:600; margin-bottom:4px; color:#334155;">จำนวนเงิน (บาท):</label>
+            <input type="number" id="expAmount" step="0.01" min="1" placeholder="เช่น 500" style="width:100%; padding:9px; border:1px solid var(--border); border-radius:8px; font-size:0.88rem;" required>
+          </div>
+          <div>
+            <label style="display:block; font-size:0.8rem; font-weight:600; margin-bottom:4px; color:#334155;">รายละเอียดรายการ:</label>
+            <input type="text" id="expDesc" placeholder="เช่น ค่าปลาสลิดล็อตใหม่ / ค่าแอดเพจ" style="width:100%; padding:9px; border:1px solid var(--border); border-radius:8px; font-size:0.88rem;" required>
+          </div>
+          <div>
+            <label style="display:block; font-size:0.8rem; font-weight:600; margin-bottom:4px; color:#334155;">วันที่ทำรายการ:</label>
+            <input type="date" id="expDate" style="width:100%; padding:9px; border:1px solid var(--border); border-radius:8px; font-size:0.88rem;">
+          </div>
+          <div>
+            <button type="submit" class="btn-action green" style="width:100%; justify-content:center; padding:10px; font-size:0.9rem;">💾 บันทึกรายจ่าย</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>📑 สมุดบัญชีรายวันทั่วไป (General Ledger — ยอดขาย & รายจ่ายทั้งหมด)</h2>
+          <div style="display:flex; gap:8px;">
+            <button onclick="exportAccountingLedgerCSV()" class="btn-action" style="background:#059669; color:#fff; border-color:#059669; font-weight:600;">📥 ดาวน์โหลด Excel (CSV)</button>
+            <button onclick="loadAccounting()" class="btn-action">🔄 รีเฟรชงบบัญชี</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>รหัสรายการ</th>
+                <th>วันที่</th>
+                <th>ประเภท</th>
+                <th>รหัสบัญชี / หมวดหมู่</th>
+                <th>รายละเอียด</th>
+                <th style="text-align:right;">จำนวนเงิน (บาท)</th>
+                <th style="text-align:center;">จัดการ</th>
+              </tr>
+            </thead>
+            <tbody id="ledgerTbody">
+              <tr><td colspan="7" style="text-align:center; padding:20px; color:var(--text-muted);">กำลังโหลดข้อมูลสมุดบัญชี…</td></tr>
             </tbody>
           </table>
         </div>
@@ -382,6 +510,48 @@
 
   </main>
 
+  <div id="toast"><span>✅</span> <span id="toastMsg">บันทึกสำเร็จ</span></div>
+
+  <!-- Admin Security PIN Modal / Gate -->
+  <div id="adminAuthGate" style="position:fixed; top:0; left:0; width:100%; height:100%; background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%); z-index:99999; display:none; justify-content:center; align-items:center; padding:16px;">
+    <div style="background:#ffffff; border-radius:16px; padding:32px 28px; width:100%; max-width:380px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.5); text-align:center;">
+      <div style="font-size:3rem; margin-bottom:12px;">🔒</div>
+      <h2 style="font-size:1.35rem; font-weight:700; color:#0f172a; margin-bottom:6px;">ระบบจัดการหลังบ้าน</h2>
+      <p style="font-size:0.85rem; color:#64748b; margin-bottom:20px;">เฉพาะเจ้าของร้าน ป้าเข็ม คัดพิเศษ เท่านั้น<br>(ข้อมูลลูกค้าและออเดอร์มีความปลอดภัยสูง)</p>
+      <form onsubmit="handleAdminLogin(event)">
+        <div style="margin-bottom:16px;">
+          <input type="password" id="adminPinInput" placeholder="กรอกรหัส PIN แอดมิน..." style="width:100%; padding:14px; border:2px solid #cbd5e1; border-radius:10px; font-size:1.1rem; text-align:center; letter-spacing:4px; font-weight:700; outline:none;" required autofocus>
+        </div>
+        <div id="pinErrorMsg" style="color:#ef4444; font-size:0.85rem; margin-bottom:12px; display:none; font-weight:600;">
+          ❌ รหัส PIN ไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง
+        </div>
+        <button type="submit" style="width:100%; padding:14px; background:#c2410c; color:#fff; border:none; border-radius:10px; font-size:1rem; font-weight:700; cursor:pointer; box-shadow:0 4px 12px rgba(194,65,12,0.3);">
+          🔓 เข้าสู่ระบบหลังบ้าน
+        </button>
+      </form>
+      <div style="margin-top:20px; font-size:0.75rem; color:#94a3b8;">
+        รหัสเริ่มต้น: <b>8899</b> (เปลี่ยนได้ในโค้ด)
+      </div>
+    </div>
+  </div>
+
+  <!-- Slip Viewer Modal -->
+  <div id="slipViewerModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.8); z-index:999999; justify-content:center; align-items:center; padding:16px;">
+    <div style="background:#fff; border-radius:16px; width:100%; max-width:440px; max-height:90vh; overflow-y:auto; padding:20px; box-shadow:0 25px 50px rgba(0,0,0,0.4); text-align:center;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">
+        <h3 style="font-size:1.1rem; color:#0f172a; font-weight:700;" id="slipModalTitle">🧾 รูปสลิปโอนเงิน</h3>
+        <button onclick="closeSlipModal()" style="background:none; border:none; font-size:1.4rem; cursor:pointer; color:#64748b;">×</button>
+      </div>
+      <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:8px; margin-bottom:14px;">
+        <img id="slipModalImg" src="" alt="สลิปโอนเงิน" style="width:100%; max-height:480px; object-fit:contain; border-radius:6px;">
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button id="slipConfirmBtn" onclick="confirmSlipOrder()" class="btn-action green" style="flex:1; padding:10px; font-size:0.9rem; justify-content:center;">✅ ยอดตรง ยืนยันออเดอร์</button>
+        <button onclick="closeSlipModal()" class="btn-action" style="padding:10px 16px; font-size:0.9rem;">ปิด</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const SUPA_URL = 'https://usqhvujqmnxqrdoovvnp.supabase.co/rest/v1';
     const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzcWh2dWpxbW54cXJkb292dm5wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyOTc4NjAsImV4cCI6MjA2OTg3Mzg2MH0.3kCGGAe1OoSJ_SCN_NDSdnKep1hXIMgMxR1lBd_i2eI';
@@ -416,13 +586,16 @@
       btn.classList.add('active');
       document.getElementById('tab-' + tabId).classList.add('active');
       if (tabId === 'orders') loadOrders();
+      if (tabId === 'accounting') loadAccounting();
     }
 
     let cachedOrders = [];
 
     function showToast(msg) {
       const toast = document.getElementById('toast');
-      document.getElementById('toastMsg').innerText = msg;
+      const msgEl = document.getElementById('toastMsg');
+      if (!toast || !msgEl) return;
+      msgEl.innerText = msg;
       toast.style.display = 'flex';
       setTimeout(() => { toast.style.display = 'none'; }, 2500);
     }
@@ -431,10 +604,23 @@
       const tbody = document.getElementById('ordersTbody');
       tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:20px;">กำลังโหลดข้อมูลล่าสุด…</td></tr>';
       try {
-        const res = await fetch(`${SUPA_URL}/direct_orders?order=id.desc&limit=100`, {
-          headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
+        const res = await fetch(`${SUPA_URL}/rpc/get_admin_orders`, {
+          method: 'POST',
+          headers: {
+            'apikey': SUPA_KEY,
+            'Authorization': 'Bearer ' + SUPA_KEY,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ pin: ADMIN_PIN })
         });
-        const orders = await res.json();
+        const data = await res.json();
+        if (!Array.isArray(data)) {
+          throw new Error(data.message || 'ไม่สามารถดึงข้อมูลออเดอร์ได้');
+        }
+        const orders = data.map(o => ({
+          ...o,
+          status: (o.status || 'PENDING').toUpperCase()
+        }));
         cachedOrders = orders;
         
         document.getElementById('statOrderCount').innerText = orders.length;
@@ -450,6 +636,7 @@
 
         tbody.innerHTML = orders.map(o => {
           const statusClass = (o.status || 'PENDING').toLowerCase();
+          const isCod = (o.payment_method || '').toUpperCase().includes('COD');
           return `
           <tr>
             <td><b>${o.order_code}</b></td>
@@ -457,7 +644,7 @@
             <td><b>${o.product_name || o.package_name || '-'}</b></td>
             <td><b style="color:var(--primary);">${parseFloat(o.price).toLocaleString()} ฿</b></td>
             <td>
-              <span class="badge ${o.payment_method === 'COD' ? 'pending' : 'confirmed'}">${o.payment_method}</span>
+              <span class="badge ${isCod ? 'pending' : 'confirmed'}">${o.payment_method}</span>
               ${o.slip_url ? `<br><button onclick="viewSlipImage('${o.slip_url}', '${o.order_code}', ${o.id})" class="btn-action" style="background:#ecfdf5; color:#065f46; border-color:#a7f3d0; font-size:0.75rem; padding:2px 6px; margin-top:4px;">🧾 สลิป</button>` : ''}
             </td>
             <td><b>${o.customer_name}</b><br><small style="color:var(--text-muted);">📞 ${o.phone}</small></td>
@@ -466,7 +653,7 @@
               <select class="status-select ${statusClass}" onchange="updateOrderStatus(${o.id}, this.value, this)">
                 <option value="PENDING" ${o.status === 'PENDING' ? 'selected' : ''}>🟡 รอจัดส่ง (Pending)</option>
                 <option value="CONFIRMED" ${o.status === 'CONFIRMED' ? 'selected' : ''}>🔵 ยืนยันแล้ว (Confirmed)</option>
-                <option value="SHIPPED" ${o.status === 'SHIPPED' ? 'selected' : ''}>🚚 ส่งรถเย็นแล้ว (Shipped)</option>
+                <option value="SHIPPED" ${o.status === 'SHIPPED' ? 'selected' : ''}>🚚 จัดส่งแล้ว (Shipped)</option>
                 <option value="DELIVERED" ${o.status === 'DELIVERED' ? 'selected' : ''}>🟢 สำเร็จ (Delivered)</option>
                 <option value="CANCELLED" ${o.status === 'CANCELLED' ? 'selected' : ''}>⚪ ยกเลิก (Cancelled)</option>
               </select>
@@ -487,26 +674,63 @@
       } catch (e) {
         tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; color:red; padding:20px;">โหลดข้อมูลไม่สำเร็จ: ${e.message}</td></tr>`;
       }
+      loadLeads();
+    }
+
+    async function loadLeads() {
+      const tbody = document.getElementById('leadsTbody');
+      if (!tbody) return;
+      try {
+        const res = await fetch(`${SUPA_URL}/rpc/get_admin_leads`, {
+          method: 'POST',
+          headers: {
+            'apikey': SUPA_KEY,
+            'Authorization': 'Bearer ' + SUPA_KEY,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ pin: ADMIN_PIN })
+        });
+        const leads = await res.json();
+        if (!Array.isArray(leads) || leads.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:16px; color:var(--text-muted);">ยังไม่มีรายการทักแชท/คอมเมนต์</td></tr>';
+          return;
+        }
+        const filtered = leads.filter(l => l.sender_name !== 'ครัวแม่บ้าน ชี้เป้าของอร่อย' && l.sender_name !== 'ป้าเข็ม ขายของ' && l.sender_name !== 'ป้าเข็ม ชี้เป้า');
+        tbody.innerHTML = filtered.slice(0, 25).map(l => {
+          const isInbox = (l.platform || '').includes('Messenger') || (l.comment_id || '').startsWith('INBOX_');
+          const linkUrl = (l.post_id && l.post_id.startsWith('http')) ? l.post_id : `https://www.facebook.com/${l.post_id || ''}`;
+          return `
+            <tr>
+              <td><small style="color:var(--text-muted);">${new Date(l.created_at).toLocaleString('th-TH')}</small></td>
+              <td><span class="badge ${isInbox ? 'confirmed' : 'pending'}">${isInbox ? '💌 แชทเพจ' : '💬 คอมเมนต์'}</span></td>
+              <td><b>${l.sender_name || '-'}</b>${l.phone ? `<br><small>📞 ${l.phone}</small>` : ''}</td>
+              <td>${l.message || '-'}</td>
+              <td><span class="badge confirmed">${l.private_replied ? '✅ บอทตอบแล้ว' : '⏳ รอตอบ'}</span></td>
+              <td><a href="${linkUrl}" target="_blank" class="btn-action" style="font-size:0.75rem;">🔗 เปิดดูแชท/โพสต์</a></td>
+            </tr>
+          `;
+        }).join('');
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:red; padding:16px;">โหลดรายชื่อไม่สำเร็จ: ${e.message}</td></tr>`;
+      }
     }
 
     async function updateOrderStatus(orderId, newStatus, selectEl) {
       try {
-        const res = await fetch(`${SUPA_URL}/direct_orders?id=eq.${orderId}`, {
-          method: 'PATCH',
+        const res = await fetch(`${SUPA_URL}/rpc/update_admin_order`, {
+          method: 'POST',
           headers: {
             'apikey': SUPA_KEY,
             'Authorization': 'Bearer ' + SUPA_KEY,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=minimal'
+            'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ status: newStatus })
+          body: JSON.stringify({ pin: ADMIN_PIN, p_id: orderId, p_status: newStatus })
         });
         if (res.ok) {
           showToast(`อัปเดตสถานะเป็น "${newStatus}" สำเร็จ!`);
           if (selectEl) {
             selectEl.className = 'status-select ' + newStatus.toLowerCase();
           }
-          // Update stat counters locally
           const target = cachedOrders.find(x => x.id === orderId);
           if (target) target.status = newStatus;
           const pendingCount = cachedOrders.filter(o => o.status === 'PENDING').length;
@@ -522,17 +746,16 @@
     async function saveTracking(orderId) {
       const input = document.getElementById('track-' + orderId);
       const tracking = input ? input.value.trim() : '';
-      const payload = tracking ? { tracking_number: tracking, status: 'SHIPPED' } : { tracking_number: tracking };
+      const newStatus = tracking ? 'SHIPPED' : null;
       try {
-        const res = await fetch(`${SUPA_URL}/direct_orders?id=eq.${orderId}`, {
-          method: 'PATCH',
+        const res = await fetch(`${SUPA_URL}/rpc/update_admin_order`, {
+          method: 'POST',
           headers: {
             'apikey': SUPA_KEY,
             'Authorization': 'Bearer ' + SUPA_KEY,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=minimal'
+            'Content-Type': 'application/json'
           },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({ pin: ADMIN_PIN, p_id: orderId, p_status: newStatus, p_tracking: tracking })
         });
         if (res.ok) {
           const target = cachedOrders.find(x => x.id === orderId);
@@ -599,7 +822,7 @@
       const w = window.open('', '_blank', 'width=520,height=650');
       const now = new Date();
       const printDate = now.toLocaleDateString('th-TH') + ' ' + now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-      const isCod = (o.payment_method || '').toUpperCase() === 'COD';
+      const isCod = (o.payment_method || '').toUpperCase().includes('COD');
 
       w.document.write(`
         <!DOCTYPE html>
@@ -644,7 +867,7 @@
               <div class="section">
                 <div class="section-title">ผู้ส่ง (Sender):</div>
                 <div style="font-size:9pt; font-weight:600;">🐟 ร้านปลาสลิดแดดเดียวสุพรรณบุรีแท้ ป้าเข็ม คัดพิเศษ</div>
-                <div style="font-size:8pt; color:#444;">LINE OA: @137gsref | watt29.github.io/pakhem-shop/fish.html</div>
+                <div style="font-size:8pt; color:#222;">ต.เสาธง อ.บางปะหัน จ.พระนครศรีอยุธยา 13220 | โทรผู้ส่ง: 093-532-5959</div><div style="font-size:7.5pt; color:#555;">LINE OA: @137gsref | watt29.github.io/pakhem-shop/</div>
               </div>
 
               <div class="section">
@@ -676,7 +899,10 @@
                 <div class="cod-alert">
                   <div style="font-size:9pt; font-weight:700; text-transform:uppercase;">⚠️ พัสดุเก็บเงินปลายทาง (COD)</div>
                   <div class="cod-amount">ยอดเก็บเงิน: ${parseFloat(o.price).toLocaleString()} บาท</div>
-                  <div style="font-size:7.5pt;">(กรุณาเรียกเก็บเงินสด หรือสแกนพร้อมเพย์ก่อนส่งมอบพัสดุ)</div>
+                  <div style="font-size:8pt; font-weight:700; color:#1e293b; background:#fff; border:1px solid #fca5a5; border-radius:4px; padding:1.5mm; margin-top:1.5mm;">
+                    🏦 โอนชำระปลายทาง: <b>ธ.กรุงไทย (สาขาท่าพระ)</b><br>
+                    เลขที่บัญชี: <b style="font-size:9.5pt; color:#b91c1c;">038-0-25363-1</b> | ชื่อบัญชี: <b>นายจีรวัฒน์ พลอาจ</b>
+                  </div>
                 </div>
               ` : `
                 <div class="paid-alert">
@@ -739,6 +965,271 @@
       link.click();
       document.body.removeChild(link);
       showToast('ดาวน์โหลดไฟล์ CSV เรียบร้อย!');
+    }
+
+
+
+    const GAS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbxHAfBm0V67wkiXb1dlAFNbG3NQudcN35zuQ3xjFo0FRHY2ja8TB3-Xj0l_xOWxeF404Q/exec';
+
+    function notifyTelegramAccounting(messageText) {
+      fetch(GAS_WEBHOOK_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'notify_accounting',
+          message: messageText
+        })
+      }).catch(() => {});
+    }
+
+    function sendAccountingSummaryToTelegram() {
+      const inc = document.getElementById('accStatIncome').innerText;
+      const rec = document.getElementById('accStatReceivable').innerText;
+      const cogs = document.getElementById('accStatCogs').innerText;
+      const opex = document.getElementById('accStatOpex').innerText;
+      const capex = document.getElementById('accStatCapex').innerText;
+      const net = document.getElementById('accStatNetProfit').innerText;
+      const msg =
+        `📊 [สรุปงบกำไรขาดทุนสด — ส่งจากหน้าเว็บ Admin] 🐟\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `💵 รายรับจริง (รับเงินแล้ว): ${inc}\n` +
+        `⏳ รอเก็บเงินปลายทาง (COD): ${rec}\n` +
+        `🐟 ต้นทุนปลา+แพ็ก+ส่ง (COGS): ${cogs}\n` +
+        `📢 ค่าแอด & ดำเนินงาน (OPEX): ${opex}\n` +
+        `🏢 สินทรัพย์ถาวร/ตู้แช่ (CAPEX): ${capex}\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `💎 กำไร/ขาดทุนสุทธิดำเนินงาน: ${net}\n` +
+        `🌐 เปิดตารางสมุดบัญชี: https://watt29.github.io/pakhem-shop/admin.html#accounting`;
+      notifyTelegramAccounting(msg);
+      showToast('📲 ส่งสรุปงบกำไรขาดทุนเข้า Telegram (@pakhem_fish_bot) เรียบร้อยแล้ว!');
+    }
+
+    let cachedLedger = [];
+
+    const ACC_CATEGORY_LABELS = {
+      'FISH': '🐟 ค่าปลาสลิด/วัตถุดิบ (5110)',
+      'PACKAGING': '📦 ค่าถุงซีล/ฟอยล์/กล่อง (5120)',
+      'SHIPPING': '🚚 ค่าขนส่ง/รถเย็น (5130)',
+      'ADS': '📢 ค่าโฆษณา Facebook Ads (5210)',
+      'ASSET': '🏢 สินทรัพย์ถาวร/อุปกรณ์ (1510)',
+      'TRAVEL': '⛽ ค่าน้ำมัน/เดินทาง (5220)',
+      'UTILITIES': '⚡ ค่าไฟ/สาธารณูปโภค (5230)',
+      'AR_COD': '⏳ ลูกหนี้รอเก็บเงินปลายทาง (1210)',
+      'SALES': '💵 รายได้จากการขายปลาสลิด (4100)',
+      'OTHER': '📝 ค่าใช้จ่ายจิปาถะ (5290)'
+    };
+
+    async function loadAccounting() {
+      const tbody = document.getElementById('ledgerTbody');
+      if (!tbody) return;
+      const dateInput = document.getElementById('expDate');
+      if (dateInput && !dateInput.value) {
+        dateInput.value = new Date().toISOString().slice(0, 10);
+      }
+      try {
+        const res = await fetch(`${SUPA_URL}/rpc/get_admin_ledger`, {
+          method: 'POST',
+          headers: {
+            'apikey': SUPA_KEY,
+            'Authorization': 'Bearer ' + SUPA_KEY,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ pin: ADMIN_PIN })
+        });
+        const rows = await res.json();
+        if (!Array.isArray(rows)) {
+          throw new Error(rows.message || 'ไม่สามารถดึงสมุดบัญชีได้');
+        }
+        cachedLedger = rows;
+
+        let totalIncome = 0;
+        let totalReceivable = 0;
+        let totalCogs = 0;
+        let totalOpex = 0;
+        let totalCapex = 0;
+
+        rows.forEach(r => {
+          const amt = parseFloat(r.amount) || 0;
+          const ttype = (r.transaction_type || '').toUpperCase();
+          const cat = (r.category || '').toUpperCase();
+          const code = String(r.account_code || '');
+
+          if (ttype === 'INCOME') {
+            totalIncome += amt;
+          } else if (ttype === 'RECEIVABLE' || cat === 'AR_COD' || code === '1210') {
+            totalReceivable += amt;
+          } else if (cat === 'ASSET' || code === '1510') {
+            totalCapex += amt;
+          } else if (cat === 'FISH' || cat === 'PACKAGING' || cat === 'SHIPPING' || code === '5110' || code === '5120' || code === '5130') {
+            totalCogs += amt;
+          } else {
+            totalOpex += amt;
+          }
+        });
+
+        const netProfit = totalIncome - totalCogs - totalOpex;
+        document.getElementById('accStatIncome').innerText = totalIncome.toLocaleString('th-TH') + ' ฿';
+        document.getElementById('accStatReceivable').innerText = totalReceivable.toLocaleString('th-TH') + ' ฿';
+        document.getElementById('accStatCogs').innerText = '-' + totalCogs.toLocaleString('th-TH') + ' ฿';
+        document.getElementById('accStatOpex').innerText = '-' + totalOpex.toLocaleString('th-TH') + ' ฿';
+        document.getElementById('accStatCapex').innerText = totalCapex.toLocaleString('th-TH') + ' ฿';
+
+        const netEl = document.getElementById('accStatNetProfit');
+        netEl.innerText = (netProfit >= 0 ? '+' : '') + netProfit.toLocaleString('th-TH') + ' ฿';
+        netEl.style.color = netProfit >= 0 ? '#059669' : '#dc2626';
+
+        if (rows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:var(--text-muted);">ยังไม่มีรายการในสมุดบัญชี</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = rows.map(r => {
+          const amt = parseFloat(r.amount) || 0;
+          const ttype = (r.transaction_type || '').toUpperCase();
+          const cat = (r.category || '').toUpperCase();
+          const isExp = (r.transaction_id || '').startsWith('EXP-');
+          const expId = isExp ? parseInt(r.transaction_id.replace('EXP-', ''), 10) : null;
+
+          let badgeHtml = '';
+          let amtColor = '#0f172a';
+          let amtPrefix = '';
+          if (ttype === 'INCOME') {
+            badgeHtml = '<span class="badge confirmed">💵 รายรับจริง</span>';
+            amtColor = '#059669';
+            amtPrefix = '+';
+          } else if (ttype === 'RECEIVABLE') {
+            badgeHtml = '<span class="badge pending">⏳ รอรับเงิน COD</span>';
+            amtColor = '#d97706';
+          } else if (cat === 'ASSET') {
+            badgeHtml = '<span class="badge" style="background:#e0f2fe; color:#0369a1;">🏢 สินทรัพย์ถาวร</span>';
+            amtColor = '#0284c7';
+          } else {
+            badgeHtml = '<span class="badge" style="background:#fee2e2; color:#991b1b;">📤 รายจ่าย/ต้นทุน</span>';
+            amtColor = '#dc2626';
+            amtPrefix = '-';
+          }
+
+          const catLabel = ACC_CATEGORY_LABELS[cat] || `${cat} (${r.account_code || ''})`;
+          return `
+            <tr>
+              <td><b>${r.reference_no || r.transaction_id}</b></td>
+              <td>${r.entry_date || '-'}</td>
+              <td>${badgeHtml}</td>
+              <td><small style="font-weight:600; color:#334155;">${catLabel}</small></td>
+              <td>${r.description || '-'}</td>
+              <td style="text-align:right; font-weight:700; color:${amtColor};">${amtPrefix}${amt.toLocaleString('th-TH', {minimumFractionDigits: 2})} ฿</td>
+              <td style="text-align:center;">
+                ${expId ? `<button onclick="deleteExpenseItem(${expId}, '${(r.description || '').replace(/'/g, '')}')" class="tracking-save-btn" style="color:#dc2626;" title="ลบรายการนี้">🗑️</button>` : '<small style="color:#94a3b8;">ออเดอร์</small>'}
+              </td>
+            </tr>
+          `;
+        }).join('');
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:red; padding:20px;">โหลดข้อมูลบัญชีไม่สำเร็จ: ${e.message}</td></tr>`;
+      }
+    }
+
+    async function handleAddExpense(e) {
+      e.preventDefault();
+      const cat = document.getElementById('expCategory').value;
+      const amt = parseFloat(document.getElementById('expAmount').value);
+      const desc = document.getElementById('expDesc').value.trim();
+      const dt = document.getElementById('expDate').value || new Date().toISOString().slice(0, 10);
+      if (!amt || amt <= 0 || !desc) return;
+
+      try {
+        const res = await fetch(`${SUPA_URL}/rpc/add_admin_expense`, {
+          method: 'POST',
+          headers: {
+            'apikey': SUPA_KEY,
+            'Authorization': 'Bearer ' + SUPA_KEY,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            pin: ADMIN_PIN,
+            p_category: cat,
+            p_amount: amt,
+            p_description: desc,
+            p_date: dt
+          })
+        });
+        if (res.ok) {
+          document.getElementById('expAmount').value = '';
+          document.getElementById('expDesc').value = '';
+          showToast(`✅ บันทึกรายจ่าย "${desc}" (${amt.toLocaleString()} ฿) + แจ้ง Telegram แล้ว!`);
+          const catLabel = ACC_CATEGORY_LABELS[cat] || cat;
+          notifyTelegramAccounting(
+            `📝 [บันทึกรายจ่ายจากหน้าเว็บ Admin]\n` +
+            `━━━━━━━━━━━━━━━━━━\n` +
+            `📂 หมวดหมู่: ${catLabel}\n` +
+            `💬 รายการ: ${desc}\n` +
+            `💵 จำนวนเงิน: ${amt.toLocaleString('th-TH')} บาท\n` +
+            `📅 วันที่: ${dt}\n` +
+            `🌐 ดูงบบัญชีสด: https://watt29.github.io/pakhem-shop/admin.html#accounting`
+          );
+          loadAccounting();
+        } else {
+          alert('ไม่สามารถบันทึกรายจ่ายได้');
+        }
+      } catch (err) {
+        alert('เกิดข้อผิดพลาด: ' + err.message);
+      }
+    }
+
+    async function deleteExpenseItem(expId, desc) {
+      if (!confirm(`ต้องการลบรายการ "${desc}" ออกจากสมุดบัญชีใช่หรือไม่?`)) return;
+      try {
+        const res = await fetch(`${SUPA_URL}/rpc/delete_admin_expense`, {
+          method: 'POST',
+          headers: {
+            'apikey': SUPA_KEY,
+            'Authorization': 'Bearer ' + SUPA_KEY,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ pin: ADMIN_PIN, p_id: expId })
+        });
+        if (res.ok) {
+          showToast('🗑️ ลบรายการ + อัปเดต Telegram เรียบร้อยแล้ว!');
+          notifyTelegramAccounting(`🗑️ [ลบรายการบัญชีจากหน้าเว็บ Admin] ลบรายการ "${desc}" (ID: EXP-${expId}) เรียบร้อยแล้วค่ะ`);
+          loadAccounting();
+        } else {
+          alert('ไม่สามารถลบรายการได้');
+        }
+      } catch (err) {
+        alert('เกิดข้อผิดพลาด: ' + err.message);
+      }
+    }
+
+    function exportAccountingLedgerCSV() {
+      if (!cachedLedger || cachedLedger.length === 0) {
+        alert('ยังไม่มีข้อมูลในสมุดบัญชีสำหรับส่งออกค่ะ');
+        return;
+      }
+      let csv = "\uFEFFรหัสธุรกรรม,เลขอ้างอิง,วันที่ทำรายการ,ประเภท,รหัสบัญชี,หมวดหมู่,จำนวนเงิน (บาท),รายละเอียด,เวลาบันทึก\n";
+      cachedLedger.forEach(r => {
+        const row = [
+          `"${(r.transaction_id || '').replace(/"/g, '""')}"`,
+          `"${(r.reference_no || '').replace(/"/g, '""')}"`,
+          `"${(r.entry_date || '').replace(/"/g, '""')}"`,
+          `"${(r.transaction_type || '').replace(/"/g, '""')}"`,
+          `"${(r.account_code || '').replace(/"/g, '""')}"`,
+          `"${(r.category || '').replace(/"/g, '""')}"`,
+          `"${parseFloat(r.amount || 0).toFixed(2)}"`,
+          `"${(r.description || '').replace(/"/g, '""')}"`,
+          `"${(r.created_at || '').replace(/"/g, '""')}"`
+        ];
+        csv += row.join(',') + "\n";
+      });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `PaKhem_Accounting_Ledger_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast('📥 ดาวน์โหลดสมุดบัญชี Excel (CSV) เรียบร้อย!');
     }
 
     function renderBenchmarks() {
@@ -822,8 +1313,7 @@
               <div><b>${sku}</b></div>
             </div>
           </div>
-        <div id="toast"><span>✅</span> <span id="toastMsg">บันทึกสำเร็จ</span></div>
-</body>
+        </body>
         </html>
       `);
       w.document.close();
@@ -839,8 +1329,13 @@
       if (isAuth) {
         if (gate) gate.style.display = 'none';
         loadOrders();
+        loadAccounting();
         renderBenchmarks();
         renderSuppliers();
+        if (window.location.hash === '#accounting') {
+          const accBtn = document.querySelector("nav button[onclick*=\"accounting\"]");
+          if (accBtn) switchTab('accounting', accBtn);
+        }
       } else {
         if (gate) {
           gate.style.display = 'flex';
@@ -864,8 +1359,13 @@
         document.getElementById('adminAuthGate').style.display = 'none';
         showToast('🔓 เข้าสู่ระบบแอดมินสำเร็จ!');
         loadOrders();
+        loadAccounting();
         renderBenchmarks();
         renderSuppliers();
+        if (window.location.hash === '#accounting') {
+          const accBtn = document.querySelector("nav button[onclick*=\"accounting\"]");
+          if (accBtn) switchTab('accounting', accBtn);
+        }
       } else {
         err.style.display = 'block';
         input.value = '';
@@ -918,7 +1418,7 @@
 
       let slipsHtml = '';
       pendingOrders.forEach((o, idx) => {
-        const isCod = (o.payment_method || '').toUpperCase() === 'COD';
+        const isCod = (o.payment_method || '').toUpperCase().includes('COD');
         const barcodeVal = o.tracking_number || o.order_code;
         const svgId = `barcode-svg-${idx}`;
 
@@ -936,7 +1436,7 @@
               <div class="section">
                 <div class="section-title">ผู้ส่ง (Sender):</div>
                 <div style="font-size:9pt; font-weight:600;">🐟 ร้านปลาสลิดแดดเดียวสุพรรณบุรีแท้ ป้าเข็ม คัดพิเศษ</div>
-                <div style="font-size:8pt; color:#444;">LINE OA: @137gsref | watt29.github.io/pakhem-shop/fish.html</div>
+                <div style="font-size:8pt; color:#222;">ต.เสาธง อ.บางปะหัน จ.พระนครศรีอยุธยา 13220 | โทรผู้ส่ง: 093-532-5959</div><div style="font-size:7.5pt; color:#555;">LINE OA: @137gsref | watt29.github.io/pakhem-shop/</div>
               </div>
 
               <div class="section">
@@ -968,7 +1468,10 @@
                 <div class="cod-alert">
                   <div style="font-size:9pt; font-weight:700; text-transform:uppercase;">⚠️ พัสดุเก็บเงินปลายทาง (COD)</div>
                   <div class="cod-amount">ยอดเก็บเงิน: ${parseFloat(o.price).toLocaleString()} บาท</div>
-                  <div style="font-size:7.5pt;">(กรุณาเรียกเก็บเงินสด หรือสแกนพร้อมเพย์ก่อนส่งมอบพัสดุ)</div>
+                  <div style="font-size:8pt; font-weight:700; color:#1e293b; background:#fff; border:1px solid #fca5a5; border-radius:4px; padding:1.5mm; margin-top:1.5mm;">
+                    🏦 โอนชำระปลายทาง: <b>ธ.กรุงไทย (สาขาท่าพระ)</b><br>
+                    เลขที่บัญชี: <b style="font-size:9.5pt; color:#b91c1c;">038-0-25363-1</b> | ชื่อบัญชี: <b>นายจีรวัฒน์ พลอาจ</b>
+                  </div>
                 </div>
               ` : `
                 <div class="paid-alert">
@@ -1050,49 +1553,5 @@
     }
 
   </script>
-
-  <!-- Admin Security PIN Modal / Gate -->
-  <div id="adminAuthGate" style="position:fixed; top:0; left:0; width:100%; height:100%; background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%); z-index:99999; display:flex; justify-content:center; align-items:center; padding:16px;">
-    <div style="background:#ffffff; border-radius:16px; padding:32px 28px; width:100%; max-width:380px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.5); text-align:center;">
-      <div style="font-size:3rem; margin-bottom:12px;">🔒</div>
-      <h2 style="font-size:1.35rem; font-weight:700; color:#0f172a; margin-bottom:6px;">ระบบจัดการหลังบ้าน</h2>
-      <p style="font-size:0.85rem; color:#64748b; margin-bottom:20px;">เฉพาะเจ้าของร้าน ป้าเข็ม คัดพิเศษ เท่านั้น<br>(ข้อมูลลูกค้าและออเดอร์มีความปลอดภัยสูง)</p>
-      
-      <form onsubmit="handleAdminLogin(event)">
-        <div style="margin-bottom:16px;">
-          <input type="password" id="adminPinInput" placeholder="กรอกรหัส PIN แอดมิน..." style="width:100%; padding:14px; border:2px solid #cbd5e1; border-radius:10px; font-size:1.1rem; text-align:center; letter-spacing:4px; font-weight:700; outline:none;" required autofocus>
-        </div>
-        <div id="pinErrorMsg" style="color:#ef4444; font-size:0.85rem; margin-bottom:12px; display:none; font-weight:600;">
-          ❌ รหัส PIN ไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง
-        </div>
-        <button type="submit" style="width:100%; padding:14px; background:#c2410c; color:#fff; border:none; border-radius:10px; font-size:1rem; font-weight:700; cursor:pointer; box-shadow:0 4px 12px rgba(194,65,12,0.3);">
-          🔓 เข้าสู่ระบบหลังบ้าน
-        </button>
-      </form>
-      <div style="margin-top:20px; font-size:0.75rem; color:#94a3b8;">
-        รหัสเริ่มต้น: <b>8899</b> (เปลี่ยนได้ในโค้ด)
-      </div>
-    </div>
-  </div>
-
-
-  <!-- Slip Viewer Modal -->
-  <div id="slipViewerModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.8); z-index:999999; justify-content:center; align-items:center; padding:16px;">
-    <div style="background:#fff; border-radius:16px; width:100%; max-width:440px; max-height:90vh; overflow-y:auto; padding:20px; box-shadow:0 25px 50px rgba(0,0,0,0.4); text-align:center;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">
-        <h3 style="font-size:1.1rem; color:#0f172a; font-weight:700;" id="slipModalTitle">🧾 รูปสลิปโอนเงิน</h3>
-        <button onclick="closeSlipModal()" style="background:none; border:none; font-size:1.4rem; cursor:pointer; color:#64748b;">×</button>
-      </div>
-      <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:8px; margin-bottom:14px;">
-        <img id="slipModalImg" src="" alt="สลิปโอนเงิน" style="width:100%; max-height:480px; object-fit:contain; border-radius:6px;">
-      </div>
-      <div style="display:flex; gap:8px;">
-        <button id="slipConfirmBtn" onclick="confirmSlipOrder()" class="btn-action green" style="flex:1; padding:10px; font-size:0.9rem; justify-content:center;">✅ ยอดตรง ยืนยันออเดอร์</button>
-        <button onclick="closeSlipModal()" class="btn-action" style="padding:10px 16px; font-size:0.9rem;">ปิด</button>
-      </div>
-    </div>
-  </div>
-
-
 </body>
 </html>
