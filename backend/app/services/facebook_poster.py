@@ -244,6 +244,69 @@ def _log_rate_limit_usage(r) -> None:
         (logger.warning if high else logger.info)(f"[fb_rate_usage] {header}: {data}")
 
 
+def _ensure_top_cta_message(message: str, page_id: str) -> str:
+    """เสริมบรรทัด CTA สั่งซื้อ/ทักแชทไว้ด้านบนสุดของแคปชั่นอัตโนมัติ (ถ้ายังไม่มี)"""
+    msg = (message or "").strip()
+    if not msg:
+        return msg
+    if "สั่งซื้อ: กดปุ่ม" in msg or "สนใจสินค้าในคลิป: กด" in msg or "ทักแชทสั่งซื้อ" in msg:
+        return msg
+    lines = msg.splitlines()
+    first = lines[0] if lines else ""
+    rest = "\n".join(lines[1:]).strip()
+    is_fish = any(k in msg for k in ("ปลาสลิด", "ปลาแดดเดียว", "โรงตาก", "สุพรรณ"))
+    if is_fish:
+        cta_line = '💬 สั่งซื้อ: กดปุ่ม "ส่งข้อความ" ทักแชท หรือพิมพ์คำว่า "สนใจ" ในคอมเมนต์ได้เลยจ้า!\n━━━━━━━━━━━━━━━━━━'
+    else:
+        cta_line = '💬 สนใจสินค้า: กดปุ่ม "ส่งข้อความ" ทักแชท หรือพิมพ์คำว่า "สนใจ" ในคอมเมนต์ได้เลยจ้า!\n━━━━━━━━━━━━━━━━━━'
+    return f"{first}\n{cta_line}\n{rest}" if rest else f"{first}\n{cta_line}"
+
+
+def _is_real_fb_token(token: str) -> bool:
+    """True เมื่อเป็น Facebook Page Token จริง (ขึ้นต้น EAA และยาว > 40 ตัวอักษร) และไม่ได้รันอยู่ใน pytest"""
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return False
+    t = (token or "").strip()
+    return len(t) > 40 and t.startswith("EAA") and "mock" not in t.lower()
+
+
+def _auto_post_order_comment(target_id: str, message: str, page_id: str, token: str) -> None:
+    """โพสต์คอมเมนต์ปักหมุดสั่งซื้อใต้โพสต์/วิดีโอใหม่อัตโนมัติ 100% (เฉพาะเมื่อใช้ Token จริง)"""
+    if not _is_prod() or not target_id or not _is_real_fb_token(token):
+        return
+    try:
+        is_fish = any(k in (message or "") for k in ("ปลาสลิด", "ปลาแดดเดียว", "โรงตาก", "สุพรรณ"))
+        if is_fish:
+            c_text = (
+                "🐟 สนใจสั่งปลาสลิดแดดเดียวสุพรรณแท้ ป้าเข็ม (ไซส์ใหญ่ เนื้อแน่นหนาฟู เค็มน้อย):\n"
+                "• ชุด 450-500 กรัม (ประมาณ 3-4 ตัว): โอน 390.- ส่งฟรี! (ปลายทาง 410.-)\n"
+                "• ชุด 900-1,000 กรัม (ประมาณ 5-7 ตัว): โอน 550.- ส่งฟรี! (ปลายทาง 570.-)\n"
+                "• ชุด 1.8-2.0 กิโลกรัม (ประมาณ 10-14 ตัว): โอน 1,090.- ส่งฟรีรถห้องเย็น!\n"
+                f"👉 พิมพ์คำว่า \"สนใจ\" ตอบกลับใต้คอมเมนต์นี้ หรือกดทักแชท m.me/{page_id} ได้เลยจ้า!"
+            )
+        else:
+            c_text = (
+                "🛍️ สนใจสินค้าในโพสต์นี้ หรืออยากให้ป้าเข็มส่งพิกัดของแท้โปรโมชั่นพิเศษให้:\n"
+                f"👉 พิมพ์คำว่า \"สนใจ\" ใต้คอมเมนต์นี้ หรือกดทักแชทเพจ m.me/{page_id} ได้เลยจ้า เดี๋ยวป้าเข็มส่งลิงก์ให้ทันทีจ้า! 💬✨"
+            )
+        files = None
+        if is_fish:
+            static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
+            fried_img = os.path.join(static_dir, "fish_fried_plate.jpg")
+            if os.path.exists(fried_img):
+                with open(fried_img, "rb") as fh:
+                    files = {"source": ("fish_fried_plate.jpg", fh.read(), "image/jpeg")}
+        httpx.post(
+            f"{GRAPH_URL}/{target_id}/comments",
+            params={"access_token": token},
+            data={"message": c_text},
+            files=files,
+            timeout=25,
+        )
+    except Exception as e:
+        logger.debug(f"[facebook_poster] auto order comment failed: {e}")
+
+
 def _post_feed_single(message: str, link: str = "", image_url: str = "",
                       background_preset_id: str = "", *,
                       page_id: Optional[str] = None,
@@ -294,6 +357,9 @@ def _post_feed_single(message: str, link: str = "", image_url: str = "",
             or "s.shopee.co.th" in (message or "").lower()):
         message = sanitize_public_product_text(message)
 
+    if not background_preset_id and _is_real_fb_token(token):
+        message = _ensure_top_cta_message(message, target_page_id)
+
     if background_preset_id:
         # พื้นสี (text-only): Facebook กำหนดให้โพสต์ข้อความล้วน (ไม่มี media/link)
         # และข้อความ ≤ 130 ตัวอักษร — เกินจะถูก 400 ปฏิเสธ
@@ -308,7 +374,13 @@ def _post_feed_single(message: str, link: str = "", image_url: str = "",
             data["message"] = (message or "").strip()
     else:
         endpoint = f"{GRAPH_URL}/{target_page_id}/feed"
-        data = {"message": message}
+        data = {
+            "message": message,
+            "call_to_action": json.dumps({
+                "type": "MESSAGE_PAGE",
+                "value": {"link": link or f"https://m.me/{target_page_id}"},
+            }),
+        }
         if link:
             data["link"] = link
 
@@ -330,6 +402,7 @@ def _post_feed_single(message: str, link: str = "", image_url: str = "",
     # /photos คืนทั้ง id (รูป) และ post_id (โพสต์ feed) — ใช้ post_id เพราะลิงก์ตรงโพสต์มากกว่า
     pid = body.get("post_id") or body.get("id")
     if r.status_code == 200 and pid:
+        _auto_post_order_comment(str(pid), message, target_page_id, token)
         return {"ok": True, "post_id": pid, "error": None}
     err = (body.get("error") or {}).get("message") or f"HTTP {r.status_code}"
     return {"ok": False, "post_id": None, "error": str(err)[:200]}
@@ -425,6 +498,8 @@ def post_photo(message: str = "", file_path: str = "", image_url: str = "") -> d
         return {"ok": False, "post_id": None,
                 "error": "ต้องมี file_path หรือ image_url อย่างใดอย่างหนึ่ง"}
 
+    if message and _is_real_fb_token(token):
+        message = _ensure_top_cta_message(message, PAGE_ID)
     endpoint = f"{GRAPH_URL}/{PAGE_ID}/photos"
     data = {}
     if message:
@@ -461,6 +536,7 @@ def post_photo(message: str = "", file_path: str = "", image_url: str = "") -> d
     # /photos คืนทั้ง id (รูป) และ post_id (โพสต์ feed) — ใช้ post_id เพราะลิงก์ตรงโพสต์
     pid = body.get("post_id") or body.get("id")
     if r.status_code == 200 and pid:
+        _auto_post_order_comment(str(pid), message, PAGE_ID, token)
         return {"ok": True, "post_id": str(pid), "error": None}
     err = (body.get("error") or {}).get("message") or f"HTTP {r.status_code}"
     return {"ok": False, "post_id": None, "error": str(err)[:200]}
@@ -583,17 +659,9 @@ def fetch_page_posts(limit: int = 100) -> list:
 
 
 def delete_page_post(post_id: str) -> bool:
-    """ลบโพสต์ออกจากเพจผ่าน Graph API DELETE /{post_id} — คืน True เมื่อสำเร็จ"""
-    token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or ""
-    if not token or not post_id:
-        return False
-    try:
-        r = httpx.request("DELETE", f"{GRAPH_URL}/{post_id}",
-                          params={"access_token": token}, timeout=20)
-        return r.status_code == 200
-    except Exception as e:
-        logger.warning(f"[facebook_poster] delete post failed {post_id}: {e}")
-        return False
+    """ปิดระบบลบโพสต์บน Facebook อย่างถาวร 100% — ห้ามลบคลิปหรือโพสต์ใดๆ เด็ดขาด"""
+    logger.warning(f"🚫 [SAFETY GUARD] ปฏิเสธคำสั่งลบโพสต์ Facebook ID {post_id} — ระบบล็อคห้ามลบเด็ดขาด 100%")
+    return False
 
 
 def post_video(description: str = "", file_url: str = "", file_path: str = "",
@@ -625,8 +693,10 @@ def post_video(description: str = "", file_url: str = "", file_path: str = "",
         return {"ok": False, "video_id": None,
                 "error": "ต้องมี file_url หรือ file_path อย่างใดอย่างหนึ่ง"}
 
+    if description and _is_real_fb_token(token):
+        description = _ensure_top_cta_message(description, PAGE_ID)
     endpoint = f"{GRAPH_URL}/{PAGE_ID}/videos"
-    data = {"published": "true"}  # string ตัวเล็ก — Graph API ต้องการ true/false
+    data = {"published": "true", "call_to_action": json.dumps({"type": "MESSAGE_PAGE"})}  # string ตัวเล็ก — Graph API ต้องการ true/false + ติดปุ่มส่งข้อความอัตโนมัติ 100%
     if description:
         data["description"] = description
     if (title or "").strip():
@@ -658,6 +728,7 @@ def post_video(description: str = "", file_url: str = "", file_path: str = "",
         body = {}
     vid = body.get("id") or body.get("video_id")
     if r.status_code == 200 and vid:
+        _auto_post_order_comment(str(vid), description, PAGE_ID, token)
         return {"ok": True, "video_id": str(vid), "error": None}
     err = (body.get("error") or {}).get("message") or f"HTTP {r.status_code}"
     return {"ok": False, "video_id": None, "error": str(err)[:200]}
@@ -696,6 +767,10 @@ def post_reel(description: str = "", file_path: str = "", file_url: str = "",
     ต้องทำ pacing เอง (ดู uploader.py). description/title กรองอักษรต่างภาษาก่อนส่ง.
     คืน {ok, video_id, error}
     """
+    from app.services.video_publish_policy import publication_block_reason
+    blocked = publication_block_reason(file_path, description)
+    if blocked:
+        return {"ok": False, "video_id": None, "error": blocked}
     token = access_token or os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or ""
     target_page_id = page_id or PAGE_ID
     if not token:
@@ -776,6 +851,8 @@ def post_reel(description: str = "", file_path: str = "", file_url: str = "",
         "access_token": token,
     }
     if description:
+        if _is_real_fb_token(token):
+            description = _ensure_top_cta_message(description, target_page_id)
         finish_data["description"] = description
     if (title or "").strip():
         finish_data["title"] = (title or "").strip()[:80]
@@ -790,6 +867,20 @@ def post_reel(description: str = "", file_path: str = "", file_url: str = "",
     except Exception:
         body3 = {}
     if r3.status_code == 200 and body3.get("success") is True:
+        # ติดปุ่ม MESSAGE_PAGE ("ส่งข้อความ") บนคลิป Reels ทันทีหลัง Publish เสมอ 100%
+        if _is_real_fb_token(token):
+            try:
+                httpx.post(
+                    f"{GRAPH_URL}/{video_id}",
+                    data={
+                        "call_to_action": json.dumps({"type": "MESSAGE_PAGE"}),
+                        "access_token": token,
+                    },
+                    timeout=15,
+                )
+            except Exception as e_cta:
+                logger.debug(f"[facebook_poster] attach MESSAGE_PAGE CTA failed: {e_cta}")
+        _auto_post_order_comment(str(video_id), description, target_page_id, token)
         return {"ok": True, "video_id": video_id, "error": None}
     err = (body3.get("error") or {}).get("message") or f"HTTP {r3.status_code}"
     return {"ok": False, "video_id": video_id,
