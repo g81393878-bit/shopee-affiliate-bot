@@ -100,6 +100,47 @@ def build_fish_guarantee_comment() -> str:
     )
 
 
+def _get_pending_slip_from_supabase(sender_id: str) -> dict | None:
+    if not sender_id:
+        return None
+    sb_url, sb_key = _get_supabase_config()
+    if not sb_url or not sb_key:
+        return None
+    try:
+        headers = {"apikey": sb_key, "Authorization": f"Bearer {sb_key}"}
+        r = httpx.get(
+            f"{sb_url}/rest/v1/system_preferences",
+            params={"key": f"eq.fb_slip_{sender_id}", "select": "value"},
+            headers=headers,
+            timeout=6.0,
+        )
+        if r.status_code == 200 and r.json():
+            val = json.loads(r.json()[0].get("value") or "{}")
+            if (time.time() - float(val.get("ts") or 0)) < 86400:
+                return val
+    except Exception:
+        pass
+    return None
+
+
+def _clear_pending_slip_in_supabase(sender_id: str) -> None:
+    if not sender_id:
+        return
+    sb_url, sb_key = _get_supabase_config()
+    if not sb_url or not sb_key:
+        return
+    try:
+        headers = {"apikey": sb_key, "Authorization": f"Bearer {sb_key}"}
+        httpx.delete(
+            f"{sb_url}/rest/v1/system_preferences",
+            params={"key": f"eq.fb_slip_{sender_id}"},
+            headers=headers,
+            timeout=6.0,
+        )
+    except Exception:
+        pass
+
+
 def _save_comment_order_to_supabase(
     order_code: str,
     name: str,
@@ -107,6 +148,9 @@ def _save_comment_order_to_supabase(
     address: str,
     pkg: str,
     price: float,
+    payment_method: str = "เก็บเงินปลายทาง (COD) 💵",
+    sender_id: str = "",
+    extra_note: str = "",
 ) -> bool:
     sb_url, sb_key = _get_supabase_config()
     if not sb_url or not sb_key:
@@ -118,6 +162,7 @@ def _save_comment_order_to_supabase(
             "Content-Type": "application/json",
             "Prefer": "return=minimal",
         }
+        note_str = f"สั่งซื้อผ่าน Facebook (Render Cloud 24/7) [FB_ID:{sender_id}] {extra_note}".strip() if sender_id else f"สั่งซื้อผ่านคอมเมนต์ Facebook (Render Cloud 24/7) {extra_note}".strip()
         payload = {
             "order_code": order_code,
             "product_name": "ปลาสลิดแดดเดียว ไซส์จัมโบ้ 5-7 ตัว/กก. ป้าเข็ม คัดพิเศษ",
@@ -127,9 +172,9 @@ def _save_comment_order_to_supabase(
             "customer_name": name,
             "phone": phone,
             "address": address,
-            "payment_method": "เก็บเงินปลายทาง (COD) 💵",
+            "payment_method": payment_method,
             "status": "PENDING",
-            "note": "สั่งซื้อผ่านคอมเมนต์ Facebook (Render Cloud 24/7)",
+            "note": note_str,
             "created_at": datetime.now(ICT).isoformat(),
         }
         r = httpx.post(
@@ -188,7 +233,7 @@ def _save_comment_lead_to_supabase(
         return False
 
 
-def generate_comment_reply(comment_text: str, commenter_name: str = "") -> tuple[str, dict | None]:
+def generate_comment_reply(comment_text: str, commenter_name: str = "", sender_id: str = "") -> tuple[str, dict | None]:
     text = (comment_text or "").strip()
     lower_text = text.lower()
     clean_name = (commenter_name or "").strip()
@@ -211,26 +256,55 @@ def generate_comment_reply(comment_text: str, commenter_name: str = "") -> tuple
     )
     if phone_match and (has_address or len(text) > 25):
         phone = re.sub(r"[-\s]", "", phone_match.group(0))
-        is_transfer = any(k in text for k in ["โอน", "สลิป", "พร้อมเพย์"])
-        if "500" in text or "พอดีมื้อ" in text or "ทดลอง" in text:
-            pkg_name = "ชุดทดลองชิม ไซส์จัมโบ้ (450-500 กรัม / ประมาณ 3-4 ตัว)"
+        pending_slip = _get_pending_slip_from_supabase(sender_id)
+        slip_amt = float((pending_slip or {}).get("amount") or 0.0)
+        explicit_cod = any(k in lower_text for k in ["ปลายทาง", "เก็บเงินปลายทาง", "cod"])
+        is_transfer = bool(pending_slip) or (any(k in text for k in ["โอน", "สลิป", "พร้อมเพย์", "จ่ายแล้ว"]) and not explicit_cod)
+
+        if "500" in text or "พอดีมื้อ" in text or "ทดลอง" in text or (350 <= slip_amt <= 430):
+            pkg_name = "ชุดพอดีมื้อ 450-500 กรัม (ประมาณ 3-4 ตัว)"
             price = 390.0 if is_transfer else 410.0
-        elif "2" in text or "สองโล" in text or "2kg" in text:
-            pkg_name = "ชุดครอบครัวใหญ่ ไซส์จัมโบ้ (2 กิโลกรัม / ประมาณ 10-14 ตัว • โอนเงินส่งฟรี)"
+        elif "2" in text or "สองโล" in text or "2kg" in text or (slip_amt >= 1000):
+            pkg_name = "ชุดครอบครัวใหญ่ ไซส์จัมโบ้ (1.8-2.0 กิโลกรัม / ประมาณ 10-14 ตัว • โอนเงินส่งฟรี)"
             price = 1090.0
+            is_transfer = True
         else:
             pkg_name = "ชุดขายดีอันดับ 1 ไซส์จัมโบ้ (900-1,000 กรัม / ประมาณ 5-7 ตัว)"
             price = 550.0 if is_transfer else 570.0
 
+        extra_note = ""
+        if pending_slip:
+            s_url = pending_slip.get("slip_url") or ""
+            r_ok = pending_slip.get("receiver_ok", True)
+            check_str = "รอแอดมินตรวจยอดเงินเข้า" if r_ok else "⚠️ รอแอดมินตรวจชื่อผู้รับและยอดเงิน"
+            amt_tag = f"{slip_amt:,.0f}.-" if slip_amt > 0 else "แนบสลิปแล้ว"
+            payment_method = f"โอนเงิน ({amt_tag} {check_str}) 🏦"
+            extra_note = f"[SLIP:{s_url}]"
+            _clear_pending_slip_in_supabase(sender_id)
+        elif is_transfer:
+            payment_method = "โอนเงินผ่านธนาคาร (รอแนบสลิป/ตรวจยอด) 🏦"
+        else:
+            payment_method = "เก็บเงินปลายทาง (COD) 💵"
+
         order_code = f"PKF-{datetime.now(ICT).strftime('%m%d%H%M%S')}"
         cust_label = commenter_name or f"ลูกค้าคอมเมนต์ FB ({phone[-4:]})"
-        _save_comment_order_to_supabase(order_code, cust_label, phone, text, pkg_name, price)
+        _save_comment_order_to_supabase(
+            order_code,
+            cust_label,
+            phone,
+            text,
+            pkg_name,
+            price,
+            payment_method=payment_method,
+            sender_id=sender_id,
+            extra_note=extra_note,
+        )
 
         reply = (
             f"{greeting} แอดมินน้องพิมรับออเดอร์ให้เรียบร้อยแล้วค่ะ ✨\n"
             f"🔖 รหัสคำสั่งซื้อ: {order_code}\n"
             f"📦 รายการ: {pkg_name}\n"
-            f"💰 ยอดรวม: {price:,.0f} บาท (จัดส่งด่วนแพ็กเจลเก็บความเย็น ฟรี!)\n"
+            f"💰 ยอดรวม: {price:,.0f} บาท ({payment_method})\n"
             f"🚚 เตรียมจัดส่งรอบสดใหม่ให้ถึงหน้าบ้านเลยนะคะ ขอบพระคุณมากค่ะ 🙏🐟"
         )
         return reply, {
@@ -239,6 +313,7 @@ def generate_comment_reply(comment_text: str, commenter_name: str = "") -> tuple
             "phone": phone,
             "pkg_name": pkg_name,
             "price": price,
+            "payment_method": payment_method,
             "address": text,
         }
 
@@ -300,6 +375,20 @@ def generate_comment_reply(comment_text: str, commenter_name: str = "") -> tuple
             f"{greeting} รับชุดตุนสุดคุ้ม 1.8–2.0 กิโลกรัม (ประมาณ 10–14 ตัว) ยอดโอน 1,090 บาท ส่งฟรีรถห้องเย็นควบคุมอุณหภูมิค่ะ ❄️🚚 (ชุด 2 กก. รับเฉพาะโอนเงินค่ะ)\n\n"
             f"🏦 ธ.กรุงไทย: 038-0-25363-1 (นายจีรวัฒน์ พลอาจ)\n\n"
             f"👉 โอนแล้วส่งรูปสลิป พร้อมพิมพ์ 'ชื่อ - ที่อยู่ - เบอร์โทรศัพท์' ในแชทนี้ได้เลยนะคะ 😊"
+        )
+        return reply, None
+
+    if any(k in lower_text for k in ["เลขบัญชี", "ขอเลขบัญชี", "โอนเงิน", "เลขที่บัญชี", "บัญชีธนาคาร", "โอนจ่าย", "จ่ายเงิน", "พร้อมเพย์", "โอนส่งฟรี"]):
+        reply = (
+            f"{greeting} โอนเงินล่วงหน้า จัดส่งด่วนแพ็กซองฟอยล์+เจลเย็น ฟรีทุกชุดค่ะ 🚚❄️\n\n"
+            f"🏦 ธนาคารกรุงไทย (Krungthai)\n"
+            f"• เลขที่บัญชี: 038-0-25363-1\n"
+            f"• ชื่อบัญชี: นายจีรวัฒน์ พลอาจ\n\n"
+            f"📦 ยอดโอนตามขนาดชุด (รวมส่งฟรีแล้ว):\n"
+            f"• ชุดพอดีมื้อ 450–500 กรัม (ประมาณ 3–4 ตัว) = 390 บาท\n"
+            f"• ชุดขายดี 900–1,000 กรัม (ประมาณ 5–7 ตัว) = 550 บาท ⭐\n"
+            f"• ชุดตุนสุดคุ้ม 1.8–2.0 กิโลกรัม (ประมาณ 10–14 ตัว) = 1,090 บาท (ส่งฟรีรถห้องเย็น!)\n\n"
+            f"👉 โอนเรียบร้อยแล้ว ส่งรูปสลิป + พิมพ์ 'ชื่อ - ที่อยู่ - เบอร์โทรศัพท์' ในแชทนี้ได้เลยนะคะ ขอบพระคุณค่ะ 🙏😊"
         )
         return reply, None
 
@@ -585,7 +674,7 @@ def run_fish_cloud_scan_cycle(limit_posts: int = 10) -> dict:
                     _REPLIED_CACHE[cid] = {"replied_on_fb": True}
                     continue
 
-                reply_text, order_info = generate_comment_reply(c_msg, from_name)
+                reply_text, order_info = generate_comment_reply(c_msg, from_name, sender_id=from_id)
                 priv_text = generate_private_offer_message(c_msg, from_name)
                 res = _reply_to_fb_comment(cid, reply_text, token, page_id, priv_text)
                 if res.get("ok"):
@@ -673,23 +762,83 @@ def run_fish_cloud_scan_cycle(limit_posts: int = 10) -> dict:
                     except Exception:
                         continue
 
-                    reply_text, order_info = generate_comment_reply(m_text, from_name)
+                    reply_text, order_info = generate_comment_reply(m_text, from_name, sender_id=from_id)
                     qr_buttons = [
                         {"content_type": "text", "title": "รับชุด 500g (3-4ตัว)", "payload": "QR_PKG_500G"},
                         {"content_type": "text", "title": "รับชุด 1กก. (5-7ตัว)", "payload": "QR_PKG_1KG"},
                         {"content_type": "text", "title": "ปลายทาง 500g (410.-)", "payload": "QR_COD_500G"},
                         {"content_type": "text", "title": "ปลายทาง 1กก. (570.-)", "payload": "QR_COD_1KG"},
                     ]
-                    sr = httpx.post(
-                        f"https://graph.facebook.com/v21.0/{page_id}/messages",
-                        params={"access_token": token},
-                        json={
-                            "recipient": {"id": from_id},
-                            "messaging_type": "RESPONSE",
-                            "message": {"text": reply_text, "quick_replies": qr_buttons},
-                        },
-                        timeout=12.0,
-                    )
+                    tpl_buttons = [
+                        {"type": "postback", "title": "📦 ปลายทาง 500g(410)", "payload": "QR_COD_500G"},
+                        {"type": "postback", "title": "⭐ ปลายทาง 1กก.(570)", "payload": "QR_COD_1KG"},
+                        {"type": "postback", "title": "🏦 โอนส่งฟรี (390/550)", "payload": "QR_BANK_INFO"},
+                    ]
+                    sr = None
+                    if not order_info:
+                        if len(reply_text) <= 600:
+                            sr = httpx.post(
+                                f"https://graph.facebook.com/v21.0/{page_id}/messages",
+                                params={"access_token": token},
+                                json={
+                                    "recipient": {"id": from_id},
+                                    "messaging_type": "RESPONSE",
+                                    "message": {
+                                        "attachment": {
+                                            "type": "template",
+                                            "payload": {
+                                                "template_type": "button",
+                                                "text": reply_text,
+                                                "buttons": tpl_buttons,
+                                            },
+                                        },
+                                        "quick_replies": qr_buttons,
+                                    },
+                                },
+                                timeout=12.0,
+                            )
+                        else:
+                            httpx.post(
+                                f"https://graph.facebook.com/v21.0/{page_id}/messages",
+                                params={"access_token": token},
+                                json={
+                                    "recipient": {"id": from_id},
+                                    "messaging_type": "RESPONSE",
+                                    "message": {"text": reply_text},
+                                },
+                                timeout=12.0,
+                            )
+                            sr = httpx.post(
+                                f"https://graph.facebook.com/v21.0/{page_id}/messages",
+                                params={"access_token": token},
+                                json={
+                                    "recipient": {"id": from_id},
+                                    "messaging_type": "RESPONSE",
+                                    "message": {
+                                        "attachment": {
+                                            "type": "template",
+                                            "payload": {
+                                                "template_type": "button",
+                                                "text": "📦 เลือกชุดสั่งซื้อ (กดปุ่มในกล่องนี้ หรือพิมพ์เลข 1 หรือ 2 ได้เลยค่ะ):",
+                                                "buttons": tpl_buttons,
+                                            },
+                                        },
+                                        "quick_replies": qr_buttons,
+                                    },
+                                },
+                                timeout=12.0,
+                            )
+                    if not sr or sr.status_code != 200:
+                        sr = httpx.post(
+                            f"https://graph.facebook.com/v21.0/{page_id}/messages",
+                            params={"access_token": token},
+                            json={
+                                "recipient": {"id": from_id},
+                                "messaging_type": "RESPONSE",
+                                "message": {"text": reply_text, "quick_replies": qr_buttons},
+                            },
+                            timeout=12.0,
+                        )
                     if sr.status_code != 200:
                         sr = httpx.post(
                             f"https://graph.facebook.com/v21.0/{page_id}/messages",
