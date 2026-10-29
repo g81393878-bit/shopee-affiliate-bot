@@ -55,21 +55,44 @@ def _verify_signature(body: bytes, signature: str) -> bool:
     return hmac.compare_digest(digest, expected.strip())
 
 
-def _reply_to_facebook(recipient_id: str, text: str) -> bool:
-    """ส่งข้อความกลับเข้า Messenger ของผู้ใช้ผ่าน Meta Graph Send API"""
+DEFAULT_QUICK_REPLIES = [
+    {"content_type": "text", "title": "รับชุด 500g (3-4ตัว)", "payload": "QR_PKG_500G"},
+    {"content_type": "text", "title": "รับชุด 1กก. (5-7ตัว)", "payload": "QR_PKG_1KG"},
+    {"content_type": "text", "title": "ปลายทาง 500g (410.-)", "payload": "QR_COD_500G"},
+    {"content_type": "text", "title": "ปลายทาง 1กก. (570.-)", "payload": "QR_COD_1KG"},
+]
+
+
+def _reply_to_facebook(recipient_id: str, text: str, quick_replies: list | None = None) -> bool:
+    """ส่งข้อความพร้อมปุ่มกดเลือกด่วน (Quick Replies) กลับเข้า Messenger ของผู้ใช้ผ่าน Meta Graph Send API"""
     if not FACEBOOK_PAGE_ACCESS_TOKEN:
         logger.warning("[facebook] Missing FACEBOOK_PAGE_ACCESS_TOKEN")
         return False
     try:
+        msg_obj: dict = {"text": text}
+        if quick_replies:
+            msg_obj["quick_replies"] = quick_replies
         r = httpx.post(
             "https://graph.facebook.com/v21.0/me/messages",
             params={"access_token": FACEBOOK_PAGE_ACCESS_TOKEN},
             json={
                 "recipient": {"id": recipient_id},
-                "message": {"text": text}
+                "messaging_type": "RESPONSE",
+                "message": msg_obj,
             },
             timeout=10,
         )
+        if r.status_code != 200 and quick_replies:
+            r = httpx.post(
+                "https://graph.facebook.com/v21.0/me/messages",
+                params={"access_token": FACEBOOK_PAGE_ACCESS_TOKEN},
+                json={
+                    "recipient": {"id": recipient_id},
+                    "messaging_type": "RESPONSE",
+                    "message": {"text": text},
+                },
+                timeout=10,
+            )
         if r.status_code != 200:
             logger.warning(f"[facebook] send failed ({r.status_code}): {r.text}")
         return r.status_code == 200
@@ -107,7 +130,7 @@ def _save_order_to_supabase(order_code: str, name: str, phone: str, address: str
         }
         payload = {
             "order_code": order_code,
-            "product_name": "ปลาสลิดแดดเดียว ไซส์จัมโบ้ 6 ตัวโล ป้าเข็ม คัดพิเศษ",
+            "product_name": "ปลาสลิดแดดเดียว ไซส์จัมโบ้ 5-7 ตัว/กก. ป้าเข็ม คัดพิเศษ",
             "package_code": "500g" if "500" in pkg else ("2kg" if "2" in pkg else "1kg"),
             "package_name": pkg,
             "price": price,
@@ -181,19 +204,22 @@ def _handle_event(event: dict) -> None:
     """ประมวลผล Messenger: สั้น กระชับ ชัดเจน อ่านรูปลายมือและสลิปด้วย Groq Vision บน Cloud จริง"""
     sender = (event.get("sender") or {}).get("id")
     message = event.get("message") or {}
-    if not sender:
+    if not sender or message.get("is_echo"):
+        return
+    if sender in ("1307380735783361", "1323469404180656"):
         return
     text = (message.get("text") or "").strip()
+    qr_payload = ((message.get("quick_reply") or {}).get("payload") or "").strip()
     attachments = message.get("attachments") or []
 
     MENU_SHORT = (
-        "🐟 ปลาสลิดแดดเดียว ป้าเข็ม (สุพรรณแท้ ไซส์จัมโบ้ 6 ตัวโล)\n"
+        "🐟 ปลาสลิดแดดเดียว ป้าเข็ม (สุพรรณแท้ ไซส์จัมโบ้ 5-7 ตัว/กก.)\n"
         "ทอดกรอบนอกนุ่มใน เค็มน้อย 3% แพ็กซองฟอยล์+เจลเย็นทุกกล่อง\n\n"
         "📦 โปรโมชั่นพิเศษ (เลือกโอนส่งฟรี หรือ เก็บเงินปลายทาง ได้เลยค่ะ):\n"
-        "1️⃣ ชุด 500g (3 ตัวใหญ่) : โอน 390.- ส่งฟรี! | ปลายทาง 410.-\n"
-        "2️⃣ ชุดขายดี 1kg (6 ตัวใหญ่) : โอน 550.- ส่งฟรี! | ปลายทาง 570.- ⭐\n"
-        "3️⃣ ชุดคุ้ม 2kg (12 ตัวใหญ่) : โอน 1,090.- ส่งฟรีรถห้องเย็น!\n\n"
-        "👉 สั่งซื้อง่ายๆ: พิมพ์ชุดที่รับ พร้อม 'ชื่อ-ที่อยู่-เบอร์โทร' ในแชทนี้ได้เลยนะคะ 😊"
+        "1️⃣ ชุด 500 กรัม (ประมาณ 3-4 ตัว) : โอน 390.- ส่งฟรี! | ปลายทาง 410.-\n"
+        "2️⃣ ชุดขายดี 1 กิโลกรัม (ประมาณ 5-7 ตัว) : โอน 550.- ส่งฟรี! | ปลายทาง 570.- ⭐\n"
+        "3️⃣ ชุดคุ้ม 2 กิโลกรัม (ประมาณ 10-14 ตัว) : โอน 1,090.- ส่งฟรีรถห้องเย็น!\n\n"
+        "👉 กดปุ่มเลือกชุดด้านล่าง หรือพิมพ์ 'ชื่อ-ที่อยู่-เบอร์โทร' ในแชทนี้ได้เลยนะคะ 😊"
     )
 
     # 0. ตรวจจับรูปภาพด้วย Groq Vision (qwen/qwen3.8-27b)
@@ -216,78 +242,121 @@ def _handle_event(event: dict) -> None:
                         _send_telegram_alert(f"📦 [ลูกค้าส่งรูปจดที่อยู่จัดส่ง!]\n👤 Facebook: `{sender}`\n🖼️ รูป: {img_url}\n📝 ที่อยู่ที่อ่านได้:\n{ocr_text}")
                         break
                     else:
-                        _reply_to_facebook(sender, f"ได้รับรูปภาพเรียบร้อยค่ะ 🙏\n\n{MENU_SHORT}")
+                        _reply_to_facebook(sender, f"ได้รับรูปภาพเรียบร้อยค่ะ 🙏\n\n{MENU_SHORT}", DEFAULT_QUICK_REPLIES)
                         _send_telegram_alert(f"📸 [ลูกค้าส่งรูปภาพทั่วไป]\n👤 Facebook: `{sender}`\n🖼️ รูป: {img_url}")
                         return
 
     if not text:
         postback = event.get("postback") or {}
-        text = (postback.get("payload") or postback.get("title") or "").strip()
-    if not text:
+        text = (postback.get("title") or postback.get("payload") or "").strip()
+        if not qr_payload:
+            qr_payload = (postback.get("payload") or "").strip()
+    if not text and not qr_payload:
         return
 
     lower_text = text.lower().strip()
     now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
-    # 1. ลูกค้าพิมพ์ตัวเลข หรือ กดปุ่มแอดเลือกชุด 1, 2, 3 (ต้องเช็คก่อนเช็คเบอร์โทร แต่ถ้ามีที่อยู่+เบอร์โทรให้ข้ามไปบันทึกออเดอร์เลย)
+    # 1. ลูกค้าพิมพ์ตัวเลข หรือ กดปุ่มแอด/Quick Reply เลือกชุด (ต้องเช็คก่อนเช็คเบอร์โทร แต่ถ้ามีที่อยู่+เบอร์โทรให้ข้ามไปบันทึกออเดอร์เลย)
     text_clean_phone = re.sub(r'[-\s]', '', text)
     phone_match = re.search(r'0[689]\d{8}', text_clean_phone)
     has_address = any(k in text for k in ["บ้านเลขที่", "ต.", "อ.", "จ.", "ตำบล", "อำเภอ", "จังหวัด", "ถนน", "ถ.", "ซอย", "ซ.", "ม.", "หมู่"])
 
     if not phone_match:
-        # 1.1 ปุ่มแอด "สั่งแบบเก็บเงินปลายทาง (COD)" หรือพิมพ์ถามปลายทาง
-        if any(k in lower_text for k in ["สั่งแบบเก็บเงินปลายทาง", "เก็บเงินปลายทาง", "เก็บปลายทาง", "ปลายทาง", "cod"]):
+        is_cod_intent = any(k in lower_text for k in ["สั่งแบบเก็บเงินปลายทาง", "เก็บเงินปลายทาง", "เก็บปลายทาง", "ปลายทาง", "cod"])
+        has_1kg_unit = any(k in lower_text for k in ["รับชุดขายดี", "ชุดขายดี", "1 กก", "1กก", "1kg", "1 กิโล", "1กิโล", "หนึ่งกิโล", "โลนึง", "1 โล", "1โล", "5-7 ตัว", "5-7ตัว", "570"])
+        has_500g_unit = any(k in lower_text for k in ["รับชุดพอดีมื้อ", "ชุดพอดีมื้อ", "500g", "500 กรัม", "500กรัม", "ครึ่งโล", "ครึ่งกิโล", "3-4 ตัว", "3-4ตัว", "410"])
+        is_1kg_intent = qr_payload in ("QR_PKG_1KG", "ORDER_PKG_1KG", "QR_COD_1KG") or has_1kg_unit or (
+            not has_500g_unit and (lower_text in ("2", "ชุด2", "ชุด 2", "เอาชุด2", "เอา 2", "รับชุด 2") or any(k in lower_text for k in ["ชุด 2", "ชุด2"]))
+        )
+        is_500g_intent = qr_payload in ("QR_PKG_500G", "ORDER_PKG_500G", "QR_COD_500G") or has_500g_unit or (
+            not has_1kg_unit and (lower_text in ("1", "ชุด1", "ชุด 1", "เอาชุด1", "เอา 1", "รับชุด 1") or any(k in lower_text for k in ["ชุด 1", "ชุด1"]))
+        )
+
+        # 1.0 ปุ่ม Quick Reply เก็บปลายทาง ชุด 500g (410.-) หรือ พิมพ์เลือกชุด 500g + ปลายทาง
+        if qr_payload == "QR_COD_500G" or (is_cod_intent and is_500g_intent and not is_1kg_intent):
             _reply_to_facebook(
                 sender,
-                "✅ สั่งแบบเก็บเงินปลายทาง (COD) รับของหน้าบ้านก่อนจ่ายเงินได้เลยค่ะ 🚚❄️\n\n"
-                "📦 เลือกชุดเก็บเงินปลายทาง (รวมค่าส่งแพ็กฟอยล์เจลเย็นแล้ว):\n"
-                "1️⃣ ชุดพอดีมื้อ 500 กรัม (3 ตัวใหญ่) = 410 บาท\n"
-                "2️⃣ ชุดขายดี 1 กิโลกรัม (6 ตัวใหญ่) = 570 บาท ⭐\n\n"
-                "👉 รับชุดไหน พิมพ์แจ้ง 'ชุดที่รับ + ชื่อ - ที่อยู่ - เบอร์โทรศัพท์' ในแชทนี้ได้เลยนะคะ เดี๋ยวป้าเข็มล็อกคิวส่งรอบสดใหม่ให้ทันทีค่ะ 😊"
+                "✅ รับชุดพอดีมื้อ 500 กรัม (ประมาณ 3-4 ตัว) แบบเก็บเงินปลายทาง (COD) ยอดรวม 410 บาท (รวมส่งแพ็กฟอยล์เจลเย็นแล้ว จ่ายเงินหน้าบ้านตอนรับของได้เลยค่ะ) 🚚❄️\n\n"
+                "👉 รบกวนพิมพ์แจ้ง 'ชื่อ - ที่อยู่จัดส่ง - เบอร์โทรศัพท์' ในแชทนี้ได้เลยนะคะ เดี๋ยวทางร้านล็อกคิวแพ็กส่งรอบสดใหม่ให้ทันทีค่ะ 😊"
             )
             return
 
-        # 1.2 ปุ่มแอด "รับชุดพอดีมื้อ 500g (โอน 390.- ส่งฟรี)" หรือเลือกชุด 1 (500g)
-        if lower_text in ("1", "ชุด1", "ชุด 1", "เอาชุด1", "เอา 1", "รับชุด 1") or any(k in lower_text for k in ["รับชุดพอดีมื้อ", "ชุดพอดีมื้อ", "500g", "500 กรัม", "500กรัม", "ครึ่งโล", "ครึ่งกิโล"]):
+        # 1.05 ปุ่ม Quick Reply เก็บปลายทาง ชุด 1 กก. (570.-) หรือ พิมพ์เลือกชุด 1 กก. + ปลายทาง
+        if qr_payload == "QR_COD_1KG" or (is_cod_intent and is_1kg_intent and not is_500g_intent):
             _reply_to_facebook(
                 sender,
-                "✅ รับชุดพอดีมื้อ 500 กรัม (3 ตัวใหญ่) ค่ะ 🐟✨\n"
-                "• 💵 เก็บเงินปลายทาง (COD): 410 บาท (รวมส่งแล้ว)\n"
+                "✅ รับชุดขายดี 1 กิโลกรัม (ประมาณ 5-7 ตัว) แบบเก็บเงินปลายทาง (COD) ยอดรวม 570 บาท (รวมส่งแพ็กฟอยล์เจลเย็นแล้ว จ่ายเงินหน้าบ้านตอนรับของได้เลยค่ะ) ⭐🚚❄️\n\n"
+                "👉 รบกวนพิมพ์แจ้ง 'ชื่อ - ที่อยู่จัดส่ง - เบอร์โทรศัพท์' ในแชทนี้ได้เลยนะคะ เดี๋ยวทางร้านล็อกคิวแพ็กส่งรอบสดใหม่ให้ทันทีค่ะ 😊"
+            )
+            return
+
+        # 1.1 ถามจำนวนตัว / กี่ตัวโล / ตัวละเท่าไหร่ / ไซส์ไหน
+        if any(k in lower_text for k in ["กี่ตัว", "โลละกี่ตัว", "ตัวละ", "ราคาตัวละ", "ขายเป็นตัว", "แยกตัว", "ตัวใหญ่ไหม", "ตัวใหญ่มั้ย", "ไซส์ไหน", "ขนาดไหน"]):
+            _reply_to_facebook(
+                sender,
+                "🐟 ปลาสลิดแดดเดียวสุพรรณแท้ ป้าเข็ม คัดไซส์ใหญ่พิเศษ ประมาณ 5-7 ตัว/กก.ค่ะ (จำหน่ายเป็นแพ็กซีลสูญญากาศ เนื้อหนาฟู เค็มน้อย 3%)\n\n"
+                "1️⃣ ชุด 500 กรัม (ได้ประมาณ 3-4 ตัว | น้ำหนัก +/- 50g) : โอน 390.- ส่งฟรี (เฉลี่ยตัวละ ~97-130.-) | ปลายทาง 410.-\n"
+                "2️⃣ ชุดขายดี 1 กิโลกรัม (ได้ประมาณ 5-7 ตัว | น้ำหนัก +/- 50g) : โอน 550.- ส่งฟรี (เฉลี่ยตัวละ ~78-110.- คุ้มมาก!) | ปลายทาง 570.- ⭐\n"
+                "3️⃣ ชุดคุ้ม 2 กิโลกรัม (ได้ประมาณ 10-14 ตัว | น้ำหนัก +/- 50g) : โอน 1,090.- ส่งฟรีรถห้องเย็น (เฉลี่ยตัวละ ~77-109.-)!\n\n"
+                "👉 กดปุ่มเลือกชุดด้านล่าง หรือพิมพ์ชุดที่รับ พร้อม 'ชื่อ-ที่อยู่-เบอร์โทร' ในแชทนี้ได้เลยนะคะ 😊",
+                DEFAULT_QUICK_REPLIES,
+            )
+            return
+
+        # 1.2 ปุ่ม "รับชุด 500g (3-4ตัว)" หรือ "รับชุดพอดีมื้อ 500g (โอน 390.- ส่งฟรี)" หรือเลือกชุด 1 (500g)
+        if qr_payload in ("QR_PKG_500G", "ORDER_PKG_500G") or is_500g_intent:
+            _reply_to_facebook(
+                sender,
+                "✅ รับชุดพอดีมื้อ 500 กรัม (ประมาณ 3-4 ตัว) ค่ะ 🐟✨\n"
+                "• 💵 เก็บเงินปลายทาง (COD): 410 บาท (รวมส่งแล้ว จ่ายหน้าบ้าน)\n"
                 "• 🏦 โอนเงินส่งฟรี: 390 บาท (ธ.กรุงไทย 038-0-25363-1 นายจีรวัฒน์ พลอาจ)\n\n"
-                "👉 รบกวนพิมพ์ 'ชื่อ - ที่อยู่ - เบอร์โทรศัพท์' แจ้งในแชทนี้ได้เลยนะคะ (หากโอนเงิน ส่งรูปสลิปแนบมาได้เลยค่ะ) 😊"
+                "👉 รบกวนพิมพ์ 'ชื่อ - ที่อยู่ - เบอร์โทรศัพท์' แจ้งในแชทนี้ได้เลยนะคะ (หากโอนเงิน ส่งรูปสลิปแนบมาได้เลยค่ะ) 😊",
+                [
+                    {"content_type": "text", "title": "ปลายทาง 500g (410.-)", "payload": "QR_COD_500G"},
+                    {"content_type": "text", "title": "รับชุด 1กก. (5-7ตัว)", "payload": "QR_PKG_1KG"},
+                ],
             )
             return
 
-        # 1.3 ปุ่มแอด "รับชุดขายดี 1 กก. (โอน 550.- ส่งฟรี)" หรือเลือกชุด 2 (1kg)
-        if lower_text in ("2", "ชุด2", "ชุด 2", "เอาชุด2", "เอา 2", "รับชุด 2") or any(k in lower_text for k in ["รับชุดขายดี", "ชุดขายดี", "1 กก", "1กก", "1kg", "1 กิโล", "1กิโล", "หนึ่งกิโล", "โลนึง"]):
+        # 1.3 ปุ่ม "รับชุด 1กก. (5-7ตัว)" หรือ "รับชุดขายดี 1 กก. (โอน 550.- ส่งฟรี)" หรือเลือกชุด 2 (1kg)
+        if qr_payload in ("QR_PKG_1KG", "ORDER_PKG_1KG") or is_1kg_intent:
             _reply_to_facebook(
                 sender,
-                "✅ รับชุดขายดี 1 กิโลกรัม (6 ตัวใหญ่) ค่ะ ⭐🐟\n"
-                "• 💵 เก็บเงินปลายทาง (COD): 570 บาท (รวมส่งแล้ว)\n"
+                "✅ รับชุดขายดี 1 กิโลกรัม (ประมาณ 5-7 ตัว) ค่ะ ⭐🐟\n"
+                "• 💵 เก็บเงินปลายทาง (COD): 570 บาท (รวมส่งแล้ว จ่ายหน้าบ้าน)\n"
                 "• 🏦 โอนเงินส่งฟรี: 550 บาท (ธ.กรุงไทย 038-0-25363-1 นายจีรวัฒน์ พลอาจ)\n\n"
-                "👉 รบกวนพิมพ์ 'ชื่อ - ที่อยู่ - เบอร์โทรศัพท์' แจ้งในแชทนี้ได้เลยนะคะ (หากโอนเงิน ส่งรูปสลิปแนบมาได้เลยค่ะ) 😊"
+                "👉 รบกวนพิมพ์ 'ชื่อ - ที่อยู่ - เบอร์โทรศัพท์' แจ้งในแชทนี้ได้เลยนะคะ (หากโอนเงิน ส่งรูปสลิปแนบมาได้เลยค่ะ) 😊",
+                [
+                    {"content_type": "text", "title": "ปลายทาง 1กก. (570.-)", "payload": "QR_COD_1KG"},
+                    {"content_type": "text", "title": "รับชุด 500g (3-4ตัว)", "payload": "QR_PKG_500G"},
+                ],
             )
             return
 
         # 1.4 เลือกชุด 3 (2kg)
-        if lower_text in ("3", "ชุด3", "ชุด 3", "เอาชุด3", "เอา 3", "รับชุด 3") or any(k in lower_text for k in ["รับชุดตุน", "ชุดตุน", "ชุดครอบครัว", "2 กก", "2กก", "2kg", "2 กิโล", "2กิโล", "สองโล", "สองกิโล"]):
+        if qr_payload in ("QR_PKG_2KG", "ORDER_PKG_2KG") or lower_text in ("3", "ชุด3", "ชุด 3", "เอาชุด3", "เอา 3", "รับชุด 3") or any(k in lower_text for k in ["รับชุดตุน", "ชุดตุน", "ชุดครอบครัว", "2 กก", "2กก", "2kg", "2 กิโล", "2กิโล", "สองโล", "สองกิโล", "2 โล", "2โล", "ชุด 3", "ชุด3"]):
             _reply_to_facebook(
                 sender,
-                "✅ รับชุดตุนสุดคุ้ม 2 กิโลกรัม (12 ตัวใหญ่) ยอดโอน 1,090 บาท ส่งฟรีรถห้องเย็นควบคุมอุณหภูมิค่ะ ❄️🚚\n\n"
+                "✅ รับชุดตุนสุดคุ้ม 2 กิโลกรัม (ประมาณ 10-14 ตัว) ยอดโอน 1,090 บาท ส่งฟรีรถห้องเย็นควบคุมอุณหภูมิค่ะ ❄️🚚 (ชุด 2 กก. รับเฉพาะโอนเงินค่ะ)\n\n"
                 "🏦 ธ.กรุงไทย: 038-0-25363-1 (นายจีรวัฒน์ พลอาจ)\n\n"
                 "👉 โอนแล้วส่งรูปสลิป พร้อมพิมพ์ 'ชื่อ - ที่อยู่ - เบอร์โทรศัพท์' ในแชทนี้ได้เลยนะคะ 😊"
             )
             return
 
-        # 1.5 ถามจำนวนตัว / กี่ตัวโล / ไซส์ไหน
-        if any(k in lower_text for k in ["กี่ตัว", "โลละกี่ตัว", "ตัวใหญ่ไหม", "ตัวใหญ่มั้ย", "ไซส์ไหน", "ขนาดไหน"]):
+        # 1.5 ปุ่มแอด "สั่งแบบเก็บเงินปลายทาง (COD)" หรือพิมพ์ถามปลายทาง (เมื่อยังไม่ได้ระบุขนาดชุด)
+        if is_cod_intent:
             _reply_to_facebook(
                 sender,
-                "🐟 ปลาสลิดแดดเดียวสุพรรณแท้ ป้าเข็ม คัดไซส์จัมโบ้พิเศษ 6 ตัวโลค่ะ (ตัวใหญ่เนื้อหนาฟู เค็มน้อย 3%)\n\n"
-                "1️⃣ ชุด 500 กรัม (ได้ 3 ตัวใหญ่) : โอน 390.- ส่งฟรี | ปลายทาง 410.-\n"
-                "2️⃣ ชุดขายดี 1 กิโลกรัม (ได้ 6 ตัวใหญ่) : โอน 550.- ส่งฟรี | ปลายทาง 570.- ⭐\n"
-                "3️⃣ ชุดคุ้ม 2 กิโลกรัม (ได้ 12 ตัวใหญ่) : โอน 1,090.- ส่งฟรีรถห้องเย็น!\n\n"
-                "👉 สนใจรับชุดไหน พิมพ์ชุดที่รับ พร้อม 'ชื่อ-ที่อยู่-เบอร์โทร' ในแชทนี้ได้เลยนะคะ 😊"
+                "✅ สั่งแบบเก็บเงินปลายทาง (COD) รับของหน้าบ้านก่อนจ่ายเงินได้เลยค่ะ 🚚❄️\n\n"
+                "📦 เลือกชุดเก็บเงินปลายทาง (รวมค่าส่งแพ็กฟอยล์เจลเย็นแล้ว):\n"
+                "1️⃣ ชุดพอดีมื้อ 500 กรัม (ประมาณ 3-4 ตัว) = 410 บาท\n"
+                "2️⃣ ชุดขายดี 1 กิโลกรัม (ประมาณ 5-7 ตัว) = 570 บาท ⭐\n\n"
+                "👉 กดปุ่มเลือกชุดด้านล่าง หรือพิมพ์แจ้ง 'ชุดที่รับ + ชื่อ - ที่อยู่ - เบอร์โทรศัพท์' ในแชทนี้ได้เลยนะคะ 😊",
+                [
+                    {"content_type": "text", "title": "ปลายทาง 500g (410.-)", "payload": "QR_COD_500G"},
+                    {"content_type": "text", "title": "ปลายทาง 1กก. (570.-)", "payload": "QR_COD_1KG"},
+                ],
             )
             return
 
@@ -296,15 +365,15 @@ def _handle_event(event: dict) -> None:
     if phone_match and (has_address or len(text) > 20):
         phone = phone_match.group(0)
         is_transfer = any(k in text for k in ["โอน", "สลิป", "พร้อมเพย์"]) and "ปลายทาง" not in text
-        if "500" in text or "พอดีมื้อ" in text or "ครึ่งโล" in text:
-            pkg_name = "ชุดพอดีมื้อ 500 กรัม (3 ตัวใหญ่)"
+        if any(k in lower_text for k in ["500", "พอดีมื้อ", "ครึ่งโล", "ครึ่งกิโล", "ชุด 1", "ชุด1", "3 ตัว"]):
+            pkg_name = "ชุดพอดีมื้อ 450-450-500 กรัม (ประมาณ 3-4 ตัว)"
             price = 390.0 if is_transfer else 410.0
-        elif "2 กิโล" in text or "สองโล" in text or "2kg" in text or "ชุด 3" in text:
-            pkg_name = "ชุดตุนสุดคุ้ม 2 กิโลกรัม (12 ตัวใหญ่)"
+        elif any(k in lower_text for k in ["2 กิโล", "2กิโล", "2 กก", "2กก", "สองโล", "2kg", "2 โล", "ชุด 3", "ชุด3", "ประมาณ 10-14 ตัว"]):
+            pkg_name = "ชุดตุนสุดคุ้ม 1.8-2.0 กิโลกรัม (ประมาณ 10-14 ตัว)"
             price = 1090.0
             is_transfer = True
         else:
-            pkg_name = "ชุดยอดฮิต 1 กิโลกรัม (6 ตัวใหญ่)"
+            pkg_name = "ชุดยอดฮิต 900-1,000 กรัม (ประมาณ 5-7 ตัว)"
             price = 550.0 if is_transfer else 570.0
 
         payment_method = "โอนเงินผ่านธนาคาร 🏦" if is_transfer else "เก็บเงินปลายทาง (COD) 💵"
@@ -359,16 +428,16 @@ def _handle_event(event: dict) -> None:
 
     # 6. ถามเรื่องความเค็ม / รสชาติ
     if any(k in lower_text for k in ["เค็มไหม", "เค็มมั้ย", "รสชาติ", "เค็มมาก"]):
-        _reply_to_facebook(sender, f"ไม่เค็มจัดแน่นอนค่ะ ป้าเข็มหมักเกลือสมุทรเพียง 3% กลมกล่อมกำลังดี ทอดกรอบนอกนุ่มในค่ะ 🐟\n\n{MENU_SHORT}")
+        _reply_to_facebook(sender, f"ไม่เค็มจัดแน่นอนค่ะ ป้าเข็มหมักเกลือสมุทรเพียง 3% กลมกล่อมกำลังดี ทอดกรอบนอกนุ่มในค่ะ 🐟\n\n{MENU_SHORT}", DEFAULT_QUICK_REPLIES)
         return
 
     # 7. ถามเรื่องค่าส่ง / ปลายทาง / ส่งกี่วัน
     if any(k in lower_text for k in ["ส่งยังไง", "ส่งฟรีไหม", "ค่าส่ง", "ปลายทาง", "เก็บเงินปลายทาง", "cod", "กี่วัน", "ส่งวันไหน"]):
-        _reply_to_facebook(sender, f"🚚 โอนเงินส่งฟรีทุกชุดค่ะ (มีเก็บเงินปลายทาง COD +20.-)\nแพ็กเจลเย็นส่งถึงหน้าบ้านใน 1-2 วันค่ะ\n\n{MENU_SHORT}")
+        _reply_to_facebook(sender, f"🚚 โอนเงินส่งฟรีทุกชุดค่ะ (มีเก็บเงินปลายทาง COD +20.-)\nแพ็กเจลเย็นส่งถึงหน้าบ้านใน 1-2 วันค่ะ\n\n{MENU_SHORT}", DEFAULT_QUICK_REPLIES)
         return
 
     # 8. ทักทายทั่วไป หรือข้อความอื่นๆ -> ส่งเมนูสั้น กระชับ ทันที
-    _reply_to_facebook(sender, MENU_SHORT)
+    _reply_to_facebook(sender, MENU_SHORT, DEFAULT_QUICK_REPLIES)
 
 
 
