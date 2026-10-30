@@ -9,11 +9,15 @@
 2. 📺 **[คู่มือที่ 2: วิธีเพิ่มช่อง YouTube Shorts 6 ช่อง & การแก้ Error 403](file:///d:/Shopee_Web_Scraping/docs/manual/02_YOUTUBE_SHORTS_SETUP.md)**
 3. ⚫ **[คู่มือที่ 3: วิธีเพิ่มและจัดการบัญชี TikTok Studio หลายช่อง](file:///d:/Shopee_Web_Scraping/docs/manual/03_TIKTOK_MULTI_ACCOUNT.md)**
 4. 📘 **[คู่มือที่ 4: การตั้งค่า Facebook Pages 3 เพจ & ต่ออายุ Token](file:///d:/Shopee_Web_Scraping/docs/manual/04_FACEBOOK_PAGES_REELS.md)**
-5. 💬 **[คู่มือที่ 5: ระบบ LINE OA ป้าเข็ม, Flex การ์ด & ธุรกิจขายบอท SaaS](file:///d:/Shopee_Web_Scraping/docs/manual/05_LINE_OA_AND_SAAS.md)**
+5. 💬 **[คู่มือที่ 5: ระบบ LINE OA ป้าเข็ม, Flex การ์ด & ผู้ช่วยช้อป Shopee](file:///d:/Shopee_Web_Scraping/docs/manual/05_LINE_OA_AND_SAAS.md)**
 6. 🤖 **[คู่มือที่ 6: ศูนย์บัญชาการ Telegram Commander & คำสั่งด่วนระยะไกล](file:///d:/Shopee_Web_Scraping/docs/manual/06_TELEGRAM_COMMANDER.md)**
 7. 🛠️ **[คู่มือที่ 7: ตารางแก้ปัญหาฉุกเฉิน & คำสั่งกู้คืนระบบ One-Click](file:///d:/Shopee_Web_Scraping/docs/manual/07_TROUBLESHOOTING_AND_RECOVERY.md)**
 8. 🔮 **[คู่มือที่ 8: มาตรฐานโหราศาสตร์และศาสตร์ความเชื่อแท้ 100%](file:///d:/Shopee_Web_Scraping/docs/manual/08_AUTHENTIC_ASTROLOGY_AND_ESOTERIC_GUIDE.md)**
 9. ☁️ **[คู่มือที่ 9: Google Cloud Architecture, Least Privilege Impersonation & Master Google Docs](file:///d:/Shopee_Web_Scraping/docs/manual/09_GOOGLE_CLOUD_AND_WORKSPACE_MCP.md)**
+10. 🎯 **[คู่มือที่ 10: ระบบยิงแอด Facebook & ยามเฝ้างบอัตโนมัติ Autopilot 24x7](file:///d:/Shopee_Web_Scraping/docs/manual/10_FACEBOOK_ADS_AND_AUTOPILOT_24X7.md)**
+11. 📦 **[คู่มือที่ 26: นโยบายการจัดส่งสินค้า & ใบแทรกขอบคุณในกล่องพัสดุ (Shipping Policy & Box Insert SOP)](file:///d:/Shopee_Web_Scraping/docs/manual/26_SHIPPING_POLICY_AND_BOX_INSERT_SOP.md)**
+12. 📍 **[คู่มือที่ 27: ระบบตรวจที่อยู่ทั่วไทย 100%, คำนวณระยะทางจัดส่ง, จำที่อยู่เดิมอัตโนมัติ และฐานข้อมูลทะเบียนลูกค้า CRM](file:///d:/Shopee_Web_Scraping/docs/manual/27_ADDRESS_VALIDATION_AND_CUSTOMER_CRM_SOP.md)**
+13. 👵 **[คู่มือที่ 28: คู่มือมาตรฐานการสื่อสารกับลูกค้าผู้สูงอายุ, คลังคำถามสั้น & ระบบนำทางปิดการขายอัตโนมัติ](file:///d:/Shopee_Web_Scraping/docs/manual/28_ELDERLY_CUSTOMER_COMMUNICATION_AND_FAQ_NAVIGATOR_SOP.md)**
 
 ---
 
@@ -134,7 +138,7 @@
 
 1. **ริชเมนูสไตล์ Ultra-Modern Glassmorphism 3 ปุ่ม (ขนาดกะทัดรัด):**
    * **ปุ่ม 1 (สีส้ม):** `🔍 ค้นหาสินค้า` ➔ พิมพ์ชื่อสินค้า หรือระบุงบประมาณให้ป้าเข็มค้นหา
-   * **ปุ่ม 2 (สีทอง):** `💼 บอทรายเดือน` ➔ แสดงแพ็กเกจเช่าบอท พร้อมปุ่ม Quick Reply แยกรายตัว (Lean 490 / Starter 990 / Business 1,990 / White-Label 4,990 / ขายขาด)
+   * **ปุ่ม 2 (สีทอง):** `🎬 สินค้าในคลิป` ➔ ดูพิกัดสินค้าจากคลิปวิดีโอ & Reels ล่าสุด พร้อมปุ่มช้อป Shopee ทันที
    * **ปุ่ม 3 (สีเขียว):** `💬 คุยกับป้าเข็ม` ➔ ปรึกษา สอบถามโปรโมชั่น หรือทักทายกับป้าเข็ม
 2. **ระบบปิดการขายตลอด 24 ชม.:**
    * แสดงการ์ดสินค้า Flex Message สวยงามพร้อมปุ่มกดสั่งซื้อ
@@ -378,7 +382,7 @@ ssh root@119.10.140.161 "systemctl restart shopee-bot"
 
 ## 📞 12. สรุปคำสั่งด่วนสั่งการระยะไกล (Telegram Commander Shortcuts)
 
-สามารถพิมพ์สั่งการบอทได้ 24 ชม. ผ่าน **Telegram `@pakhem_commander_bot`**:
+สามารถพิมพ์สั่งการบอทได้ 24 ชม. ผ่าน **Telegram `@pakhem_fish_bot`**:
 * `/status` ➔ เช็คสถานะสดของระบบ, การรันของบอท, สุขภาพ VPS
 * `/stock` ➔ ดูรายชื่อคลิปที่รอโพสต์ในคลังสต็อก (ทั้งสินค้าและคอนเทนต์เพียว)
 * `/post` ➔ สั่งยิงโพสต์คลิปทันทีโดยไม่ต้องรอรอบ 30 นาที
@@ -388,4 +392,25 @@ ssh root@119.10.140.161 "systemctl restart shopee-bot"
 ---
 
 *© 2026 ระบบ Shopee Affiliate & AI Social Automation — ป้าเข็ม ของดีบอกต่อ*
+
+
+
+---
+
+## 🚀 13. ระบบยิงแอด Facebook อัตโนมัติ 100%, Meta Pixel + CAPI & ยามเฝ้างบ 24/7
+* **คู่มือฉบับเต็ม:** [10_FACEBOOK_ADS_AND_AUTOPILOT_24X7.md](file:///d:/Shopee_Web_Scraping/docs/manual/10_FACEBOOK_ADS_AND_AUTOPILOT_24X7.md)
+* **คำสั่งด่วนใน Telegram `@pakhem_fish_bot`:** พิมพ์ `/ads` หรือ `เช็คแอด` เพื่อดูงบที่ใช้จริง, CPC, CTR, LPV, การตรวจจับแคมเปญซ้ำ `⚠️ [ซ้ำ]`, ยอดวิวคลิป และยอดสั่งซื้อปลาสลิดสดๆ ตลอด 24 ชม.
+
+---
+
+## 🗺️ 14. ระบบตรวจที่อยู่ทั่วไทย 100%, คำนวณระยะทางจัดส่ง, จำที่อยู่เดิมอัตโนมัติ & ทะเบียนลูกค้า CRM (`admin.html`)
+* **คู่มือฉบับเต็ม:** [27_ADDRESS_VALIDATION_AND_CUSTOMER_CRM_SOP.md](file:///d:/Shopee_Web_Scraping/docs/manual/27_ADDRESS_VALIDATION_AND_CUSTOMER_CRM_SOP.md) | [26_SHIPPING_POLICY_AND_BOX_INSERT_SOP.md](file:///d:/Shopee_Web_Scraping/docs/manual/26_SHIPPING_POLICY_AND_BOX_INSERT_SOP.md)
+* **ตรวจที่อยู่ + เบอร์โทรจริง 10 หลักครบ 100% ทุกช่องทาง:** ใช้ฐานข้อมูลไปรษณีย์ไทย `970 รหัสไปรษณีย์ / 7,455 ตำบล` บังคับตรวจ ตำบล/แขวง + อำเภอ/เขต + จังหวัด + เบอร์โทร 10 หลัก ก่อนเปิดบิลทั้งบน **LINE OA (`@137gsref`)**, **Facebook Messenger ทั้ง 2 เพจ**, **คอมเมนต์เพจ**, และ **หน้าเว็บสั่งซื้อ (`fish.html`)**
+* **คำนวณระยะทางจัดส่งจริงจาก อ.บางปะหัน จ.อยุธยา (`calculateShippingRouteInfo`):**
+  * ระยะทาง `≤ 350 กม.` (ถึงใน `1–2 วัน`): ส่งแช่แข็งพร้อมซองฟอยล์เก็บอุณหภูมิ (เลือกโอนส่งฟรี หรือ `COD +20.-` สำหรับชุด `500g` / `1kg`)
+  * ระยะทาง `> 350 กม.` (ถึงใน `3–4 วัน`) หรือชุด `2kg`: ส่งรถห้องเย็นควบคุมอุณหภูมิ (รับเฉพาะโอนเงินล่วงหน้า บัญชีกรุงไทย `038-0-25363-1` นายจีรวัฒน์ พลอาจ)
+* **จำชื่อ-เบอร์-ที่อยู่เดิมถาวร 3 ชั้น (`lookupPreviousOrderAddress` & `ORDER_CTX`):** ลูกค้าเก่ากลับมาสั่งซ้ำ กดปุ่ม **`✅ ใช้ชื่อ-เบอร์-ที่อยู่เดิมนี้`** ได้เลยในคลิกเดียว ไม่ต้องพิมพ์ที่อยู่ใหม่
+* **แยกหมวดออเดอร์ 5 กลุ่ม & ทะเบียนลูกค้า CRM บน [`admin.html`](https://watt29.github.io/pakhem-shop/admin.html) + ซิงค์ Google Sheets:**
+  * แยกบิล **`🟢 พร้อมแพ็กส่ง (โอนมีสลิป / COD)`** ออกจาก **`⏳ รอโอนเงิน (ค้างหน้า QR)`** และ **`⚪ ยกเลิก/ไม่โอน`** ป้องกันการพิมพ์ใบปะหน้าผิด
+  * มีตาราง **`👥 ฐานข้อมูลทะเบียนลูกค้าแยกกลุ่ม (Customer CRM)`** และปุ่ม **`✏️ แก้ไข`** / **`🗑️ ลบ`** ข้อมูลได้โดยตรงจากหน้าเว็บ `admin.html` พร้อมซิงค์ลง Google Sheets อัตโนมัติ
 
