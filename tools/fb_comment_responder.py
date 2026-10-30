@@ -14,6 +14,17 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import httpx
+import sys as _sys
+from pathlib import Path as _Path
+_BACKEND_DIR = str(_Path(__file__).resolve().parent.parent / "backend")
+if _BACKEND_DIR not in _sys.path:
+    _sys.path.insert(0, _BACKEND_DIR)
+from app.services.thai_address_validator import (
+    build_incomplete_order_guidance,
+    enrich_thai_address,
+    has_complete_thai_address,
+    validate_thai_phone,
+)
 
 if sys.platform == "win32":
     _orig_popen = subprocess.Popen
@@ -157,6 +168,10 @@ def _save_comment_order_to_supabase(
     """บันทึกออเดอร์กรณีลูกค้าพิมพ์ชื่อ-ที่อยู่-เบอร์โทรสั่งในคอมเมนต์หรือ Inbox พร้อมระบุชื่อเพจ"""
     if not SUPABASE_URL or not SUPABASE_KEY:
         return False
+    address = enrich_thai_address(address)
+    if not validate_thai_phone(phone)["valid"] or not has_complete_thai_address(address):
+        logger.warning(f"[FBComment] blocked incomplete order save: phone={phone} address={address}")
+        return False
     try:
         headers = {
             "apikey": SUPABASE_KEY,
@@ -280,8 +295,16 @@ def generate_comment_reply(comment_text: str, commenter_name: str = "", post_mes
             "address": "",
         }
 
-    # 1.2 กรณีลูกค้าพิมพ์เบอร์โทร + ที่อยู่ สั่งซื้อครบถ้วน
-    if phone and has_address:
+    # 1.2 กรณีลูกค้าพิมพ์ที่อยู่หรือเบอร์โทร (บังคับครบ บ้านเลขที่ + ตำบล/แขวง + อำเภอ/เขต + จังหวัด + เบอร์โทร 10 หลัก 100%)
+    if has_address or (phone and len(text) > 25):
+        guidance_reply, _, addr_state = build_incomplete_order_guidance(
+            text,
+            greeting=greeting,
+        )
+        if not addr_state["addr_complete"] or not addr_state["phone_complete"]:
+            return guidance_reply, None
+        phone = addr_state["saved_phone"]
+        text = addr_state["saved_address"]
         pending_slip = _get_pending_slip_from_supabase(sender_id)
         slip_amt = float((pending_slip or {}).get("amount") or 0.0)
         explicit_cod = any(k in lower_text for k in ["ปลายทาง", "เก็บเงินปลายทาง", "cod"])

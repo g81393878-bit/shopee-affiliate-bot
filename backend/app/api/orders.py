@@ -21,6 +21,11 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app import models
 from app.services.courier_service import book_courier_shipment, render_thermal_shipping_label_html
+from app.services.thai_address_validator import (
+    enrich_thai_address,
+    has_complete_thai_address,
+    validate_thai_phone,
+)
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
 TOOLS_DIR = ROOT / "tools"
@@ -44,7 +49,7 @@ class FishOrderRequest(BaseModel):
     package: str = Field("1kg", description="แพ็กเกจที่เลือก: 500g, 1kg, 2kg")
     package_name: Optional[str] = None
     price: float = Field(550.0, description="ยอดรวม (บาท)")
-    payment_method: str = Field("COD", description="COD หรือ PROMPTPAY / TRANSFER")
+    payment_method: str = Field("TRANSFER", description="TRANSFER / PROMPTPAY หรือ COD (เฉพาะชุด 500g/1kg +20 บาท)")
     note: Optional[str] = None
 
 
@@ -55,6 +60,21 @@ class OrderStatusUpdate(BaseModel):
 
 @router.post("/fish")
 def create_fish_order(order: FishOrderRequest, db: Session = Depends(get_db)):
+    phone_check = validate_thai_phone(order.phone)
+    if not phone_check["valid"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"เบอร์โทรศัพท์ไม่ถูกต้อง ({phone_check['reason']}) กรุณาระบุเบอร์โทรศัพท์จริง 10 หลักค่ะ",
+        )
+    enriched_addr = enrich_thai_address(order.address)
+    if not has_complete_thai_address(enriched_addr):
+        raise HTTPException(
+            status_code=400,
+            detail="ที่อยู่จัดส่งยังไม่ครบถ้วน กรุณาระบุ บ้านเลขที่ ตำบล/แขวง อำเภอ/เขต และจังหวัด ให้ครบถ้วนค่ะ",
+        )
+    order.phone = phone_check["phone"]
+    order.address = enriched_addr
+
     now = datetime.datetime.now()
     now_str = now.strftime("%d/%m/%Y %H:%M:%S")
     order_id = f"PKF-{now.strftime('%m%d%H%M%S')}"

@@ -17,6 +17,12 @@ import os
 import re
 from datetime import datetime, timezone, timedelta
 import httpx
+from app.services.thai_address_validator import (
+    build_incomplete_order_guidance,
+    enrich_thai_address,
+    has_complete_thai_address,
+    validate_thai_phone,
+)
 
 logger = logging.getLogger("FishCloudWorker")
 ICT = timezone(timedelta(hours=7))
@@ -172,6 +178,10 @@ def _save_comment_order_to_supabase(
     sb_url, sb_key = _get_supabase_config()
     if not sb_url or not sb_key:
         return False
+    address = enrich_thai_address(address)
+    if not validate_thai_phone(phone)["valid"] or not has_complete_thai_address(address):
+        logger.warning(f"[FishCloudWorker] blocked incomplete order save: phone={phone} address={address}")
+        return False
     try:
         headers = {
             "apikey": sb_key,
@@ -279,8 +289,15 @@ def generate_comment_reply(comment_text: str, commenter_name: str = "", sender_i
         )
         return reply, None
 
-    if phone_match and (has_address or len(text) > 25):
-        phone = re.sub(r"[-\s]", "", phone_match.group(0))
+    if has_address or (phone_match and len(text) > 25):
+        guidance_reply, _, addr_state = build_incomplete_order_guidance(
+            text,
+            greeting=greeting,
+        )
+        if not addr_state["addr_complete"] or not addr_state["phone_complete"]:
+            return guidance_reply, None
+        phone = addr_state["saved_phone"]
+        text = addr_state["saved_address"]
         pending_slip = _get_pending_slip_from_supabase(sender_id)
         slip_amt = float((pending_slip or {}).get("amount") or 0.0)
         explicit_cod = any(k in lower_text for k in ["ปลายทาง", "เก็บเงินปลายทาง", "cod"])

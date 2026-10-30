@@ -2214,15 +2214,21 @@
             </button>
           </div>
 
-          <!-- ตัวช่วยพิมพ์แค่ บ้านเลขที่ + รหัสไปรษณีย์ 5 หลัก -->
-          <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:8px; margin-bottom:8px; background:#f8fafc; padding:10px; border-radius:10px; border:1px solid #cbd5e1;">
+          <!-- ตัวช่วยพิมพ์แค่ บ้านเลขที่ + รหัสไปรษณีย์ 5 หลัก + เลือกตำบลครบ 7,436 ตำบลทั่วไทย -->
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:8px; background:#f8fafc; padding:10px; border-radius:10px; border:1px solid #cbd5e1;">
             <div>
-              <span style="font-size:0.76rem; font-weight:600; color:#475569; display:block; margin-bottom:3px;">1️⃣ บ้านเลขที่ / หมู่ / ซอย</span>
+              <span style="font-size:0.76rem; font-weight:600; color:#475569; display:block; margin-bottom:3px;">1️⃣ บ้านเลขที่ / หมู่ / ซอย *</span>
               <input type="text" id="quickHouseNo" class="form-control" placeholder="เช่น 99/1 หมู่ 2" style="padding:8px 10px; font-size:0.88rem;" oninput="syncQuickAddressHelper()">
             </div>
             <div>
-              <span style="font-size:0.76rem; font-weight:600; color:#475569; display:block; margin-bottom:3px;">2️⃣ รหัสไปรษณีย์ 5 หลัก (เติมจังหวัดอัตโนมัติ)</span>
-              <input type="tel" id="quickZipCode" class="form-control" placeholder="เช่น 10900, 72000" maxlength="5" style="padding:8px 10px; font-size:0.88rem;" oninput="handleQuickZipLookup(this.value)">
+              <span style="font-size:0.76rem; font-weight:600; color:#475569; display:block; margin-bottom:3px;">2️⃣ รหัสไปรษณีย์ 5 หลัก (เติม อ./จ. อัตโนมัติ) *</span>
+              <input type="tel" id="quickZipCode" class="form-control" placeholder="เช่น 13150, 10900" maxlength="5" style="padding:8px 10px; font-size:0.88rem;" oninput="handleQuickZipLookup(this.value)">
+            </div>
+            <div id="quickTambonWrap" style="grid-column: 1 / -1; display:none;">
+              <span style="font-size:0.76rem; font-weight:700; color:#0369a1; display:block; margin-bottom:3px;">3️⃣ เลือกตำบล/แขวง (จากรหัสไปรษณีย์) *</span>
+              <select id="quickTambonSelect" class="form-control" style="padding:8px 10px; font-size:0.88rem; border-color:#38bdf8; background:#f0f9ff; font-weight:600;" onchange="syncQuickAddressHelper()">
+                <option value="">-- กดเลือกตำบล/แขวง --</option>
+              </select>
             </div>
             <div id="zipAutoResultHint" style="grid-column: 1 / -1; font-size:0.78rem; color:#059669; font-weight:600; display:none;"></div>
           </div>
@@ -2308,7 +2314,7 @@
 
             <div id="codDeliveryEtaText" style="margin-top:3px;">• ⏱️ <b>รอบการจัดส่ง:</b> ทางร้านจะไปส่งที่ขนส่งภายใน <b>1–2 วัน</b> <i>(เพราะทำปลาสดใหม่ ตากแดด 1 วัน และแช่แข็งอย่างน้อย 12 ชม. ก่อนแพ็กส่งค่ะ)</i></div>
 
-            <div>• ❄️ เนื่องจากเป็นปลาสลิดแพ็กเจลความเย็นสดใหม่ <b>รบกวนสแตนด์บายรับสายพนักงานขนส่งและเตรียมเงินสดให้พอดี</b> เมื่อพัสดุไปถึงด้วยนะคะ (เปลี่ยนเป็น <b>"💳 โอนเงิน"</b> เพื่อรับสิทธิ์ส่งฟรี 0 บาท ประหยัดทันที 20.- ค่ะ!)</div>
+            <div>• ❄️ เนื่องจากเป็นปลาสลิดแช่แข็งแพ็กซองฟอยล์เก็บอุณหภูมิสดใหม่ <b>รบกวนสแตนด์บายรับสายพนักงานขนส่งและเตรียมเงินสดให้พอดี</b> เมื่อพัสดุไปถึงด้วยนะคะ (เปลี่ยนเป็น <b>"💳 โอนเงิน"</b> เพื่อรับสิทธิ์ส่งฟรี 0 บาท ประหยัดทันที 20.- ค่ะ!)</div>
 
           </div>
 
@@ -2621,6 +2627,7 @@
 
 
 
+  <script src="https://watt29.github.io/pakhem-shop/thai_zip_db.js?v=20261030"></script>
   <script>
 
     // 11 Master Products across 7 popular categories
@@ -2716,20 +2723,103 @@
 
 
 
-    // === Guided Address Navigation Helpers (GPS + Zip Auto-Fill + Auto-Save Customer Info) ===
+    // === Guided Address Navigation Helpers (Nationwide 970 Zip / 7,436 Tambon DB + GPS + Strict Validation) ===
     let lastAutoAreaText = '';
+    let currentZipInfo = null;
+
+    function lookupThaiZipWeb(zipCode) {
+      const clean = String(zipCode || '').replace(/\D/g, '');
+      if (clean.length !== 5 || typeof THAI_ZIP_DB === 'undefined' || !THAI_ZIP_DB[clean]) return null;
+      const entry = THAI_ZIP_DB[clean];
+      const isBkk = clean.indexOf('10') === 0 || String(entry.p || '').indexOf('กรุงเทพ') !== -1;
+      const tambons = Array.isArray(entry.t) ? entry.t : (entry.t ? String(entry.t).split('|').filter(Boolean) : []);
+      return { zip: clean, amphoe: entry.a || '', province: entry.p || '', tambons: tambons, isBkk: isBkk };
+    }
+
+    function validateThaiPhoneWeb(rawPhone) {
+      const digits = String(rawPhone || '').replace(/\D/g, '');
+      if (!digits) return { valid: false, phone: '', reason: 'ยังไม่ได้ระบุเบอร์โทรศัพท์' };
+      if (digits.length < 10) return { valid: false, phone: digits, reason: 'เบอร์โทรศัพท์มีแค่ ' + digits.length + ' หลัก (ต้องครบ 10 หลัก)' };
+      if (digits.length > 10) return { valid: false, phone: digits, reason: 'เบอร์โทรศัพท์เกินเป็น ' + digits.length + ' หลัก (ต้องมี 10 หลักพอดี)' };
+      if (!/^0[2689]\d{8}$/.test(digits)) return { valid: false, phone: digits, reason: 'รูปแบบเบอร์โทรไม่ถูกต้อง (ต้องขึ้นต้นด้วย 06, 08, 09 หรือ 02)' };
+      const fakeList = ['0812345678', '0891234567', '0912345678', '0612345678', '0800000000', '0900000000', '0600000000', '0999999999', '0888888888'];
+      if (fakeList.indexOf(digits) !== -1 || /^0\d(\d)\1{7}$/.test(digits) || /1234567$/.test(digits) || /12345678$/.test(digits)) {
+        return { valid: false, phone: digits, reason: 'เป็นเบอร์ตัวอย่างหรือตัวเลขเรียงกัน กรุณาระบุเบอร์โทรศัพท์จริง 10 หลักค่ะ' };
+      }
+      return { valid: true, phone: digits, reason: '' };
+    }
+
+    function enrichThaiAddressWeb(rawAddress) {
+      let addr = String(rawAddress || '').trim();
+      if (!addr) return addr;
+      const zipM = addr.match(/\b([1-9]\d{4})\b/);
+      const zipCode = zipM ? zipM[1] : '';
+      const zipInfo = zipCode ? lookupThaiZipWeb(zipCode) : null;
+      if (zipInfo) {
+        const hasSub = /(?:ต\.|ตำบล|แขวง)/.test(addr);
+        const hasDist = /(?:อ\.|อำเภอ|เขต)/.test(addr);
+        const hasProv = /(?:จ\.|จังหวัด|กรุงเทพ|กทม)/.test(addr);
+        let matchedTambon = '';
+        if (!hasSub && zipInfo.tambons && zipInfo.tambons.length > 0) {
+          if (zipInfo.tambons.length === 1) {
+            matchedTambon = zipInfo.tambons[0];
+          } else {
+            const sortedT = zipInfo.tambons.slice().sort((a, b) => b.length - a.length);
+            for (let i = 0; i < sortedT.length; i++) {
+              const cand = sortedT[i];
+              if (addr.indexOf(cand) !== -1) {
+                const isAmphoeOnly = (cand === zipInfo.amphoe) && new RegExp('(?:อ\\.|อำเภอ|เขต)\\s*' + cand).test(addr);
+                if (!isAmphoeOnly) { matchedTambon = cand; break; }
+              }
+            }
+          }
+        }
+        const addParts = [];
+        if (!hasSub && matchedTambon) {
+          const tLabel = zipInfo.isBkk ? ('แขวง' + matchedTambon) : ('ต.' + matchedTambon);
+          if (addr.indexOf(matchedTambon) !== -1) addr = addr.replace(matchedTambon, tLabel);
+          else addParts.push(tLabel);
+        }
+        if (!hasDist && zipInfo.amphoe) {
+          const dLabel = zipInfo.amphoe.indexOf('เขต') === 0 ? zipInfo.amphoe : (zipInfo.isBkk ? ('เขต' + zipInfo.amphoe) : ('อ.' + zipInfo.amphoe));
+          if (zipInfo.amphoe !== matchedTambon && addr.indexOf(zipInfo.amphoe) !== -1 && !zipInfo.isBkk && addr.indexOf('ต.' + zipInfo.amphoe) === -1 && addr.indexOf('ตำบล' + zipInfo.amphoe) === -1) addr = addr.replace(zipInfo.amphoe, dLabel);
+          else addParts.push(dLabel);
+        }
+        if (!hasProv && zipInfo.province) {
+          const pLabel = zipInfo.isBkk ? zipInfo.province : ('จ.' + zipInfo.province);
+          if (zipInfo.province !== zipInfo.amphoe && zipInfo.province !== matchedTambon && addr.indexOf(zipInfo.province) !== -1 && !zipInfo.isBkk && addr.indexOf('อ.' + zipInfo.province) === -1 && addr.indexOf('ต.' + zipInfo.province) === -1) addr = addr.replace(zipInfo.province, pLabel);
+          else addParts.push(pLabel);
+        }
+        if (addParts.length > 0) {
+          const beforeZip = addr.replace(new RegExp('\\s*\\b' + zipCode + '\\b\\s*'), ' ').trim();
+          addr = (beforeZip + ' ' + addParts.join(' ') + ' ' + zipCode).trim();
+        }
+      }
+      return addr;
+    }
+
+    function hasCompleteThaiAddressWeb(addr) {
+      const s = String(addr || '').trim();
+      if (s.length < 12) return false;
+      const hasSub = /(?:ต\.|ตำบล|แขวง)\s*[ก-๙A-Za-z]{2,}/.test(s);
+      const hasDist = /(?:อ\.|อำเภอ|เขต)\s*[ก-๙A-Za-z]{2,}/.test(s);
+      const hasProv = /(?:จ\.|จังหวัด)\s*[ก-๙A-Za-z]{2,}|กรุงเทพ|กทม/.test(s);
+      return hasSub && hasDist && hasProv;
+    }
 
     function syncQuickAddressHelper() {
       const house = (document.getElementById('quickHouseNo')?.value || '').trim();
       const zip = (document.getElementById('quickZipCode')?.value || '').trim();
+      const tambonSel = (document.getElementById('quickTambonSelect')?.value || '').trim();
       const addrEl = document.getElementById('custAddress');
       if (!addrEl) return;
-      if (house || lastAutoAreaText || zip) {
+      if (house || tambonSel || lastAutoAreaText || zip) {
         const parts = [];
-        if (house) parts.push('บ้านเลขที่ ' + house);
+        if (house) parts.push(/^บ้านเลขที่/.test(house) ? house : ('บ้านเลขที่ ' + house));
+        if (tambonSel) parts.push(tambonSel);
         if (lastAutoAreaText) parts.push(lastAutoAreaText);
         if (zip && (!lastAutoAreaText || !lastAutoAreaText.includes(zip))) parts.push(zip);
-        addrEl.value = parts.join(' ');
+        addrEl.value = enrichThaiAddressWeb(parts.join(' '));
       }
     }
 
@@ -2738,41 +2828,39 @@
       const zipInput = document.getElementById('quickZipCode');
       if (zipInput && zipInput.value !== cleanZip) zipInput.value = cleanZip;
       const hintEl = document.getElementById('zipAutoResultHint');
+      const tambonWrap = document.getElementById('quickTambonWrap');
+      const tambonSelect = document.getElementById('quickTambonSelect');
       if (cleanZip.length !== 5) {
+        currentZipInfo = null;
         if (hintEl) hintEl.style.display = 'none';
+        if (tambonWrap) tambonWrap.style.display = 'none';
         syncQuickAddressHelper();
         return;
       }
-      if (hintEl) {
-        hintEl.style.display = 'block';
-        hintEl.innerText = '⏳ กำลังค้นหา ตำบล/อำเภอ/จังหวัด จากรหัสไปรษณีย์ ' + cleanZip + '...';
-      }
-      try {
-        const res = await fetch('https://nominatim.openstreetmap.org/search?postalcode=' + cleanZip + '&country=Thailand&format=json&addressdetails=1&accept-language=th&limit=1');
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.length > 0) {
-            const a = data[0].address || {};
-            const sub = a.suburb || a.tambon || a.village || a.town || a.quarter || '';
-            const dist = a.city_district || a.amphoe || a.county || a.municipality || a.city || '';
-            const prov = a.state || a.province || a.city || '';
-            const areaParts = [];
-            if (sub) areaParts.push(sub);
-            if (dist && dist !== sub) areaParts.push(dist);
-            if (prov && prov !== dist) areaParts.push('จ.' + prov.replace(/^จังหวัด/, ''));
-            areaParts.push(cleanZip);
-            lastAutoAreaText = areaParts.join(' ');
-            if (hintEl) {
-              hintEl.innerText = '✅ เติมพื้นที่อัตโนมัติแล้ว: ' + lastAutoAreaText + ' (พิมพ์แค่บ้านเลขที่ด้านซ้ายได้เลยค่ะ)';
-            }
-            syncQuickAddressHelper();
-            return;
+      const zInfo = lookupThaiZipWeb(cleanZip);
+      if (zInfo) {
+        currentZipInfo = zInfo;
+        const dPrefix = zInfo.isBkk ? (zInfo.amphoe.indexOf('เขต') === 0 ? '' : 'เขต') : 'อ.';
+        const pPrefix = zInfo.isBkk ? '' : 'จ.';
+        const tPrefix = zInfo.isBkk ? 'แขวง' : 'ต.';
+        lastAutoAreaText = `${dPrefix}${zInfo.amphoe} ${pPrefix}${zInfo.province} ${cleanZip}`.trim();
+        if (tambonSelect && tambonWrap) {
+          tambonSelect.innerHTML = '<option value="">-- กดเลือก' + (zInfo.isBkk ? 'แขวง' : 'ตำบล') + ' (' + zInfo.tambons.length + ' แห่ง) --</option>' +
+            zInfo.tambons.map(t => `<option value="${tPrefix}${t}">${tPrefix}${t}</option>`).join('');
+          if (zInfo.tambons.length === 1) {
+            tambonSelect.value = `${tPrefix}${zInfo.tambons[0]}`;
           }
+          tambonWrap.style.display = 'block';
         }
-      } catch (e) {
-        console.warn('Zip lookup error:', e);
+        if (hintEl) {
+          hintEl.style.display = 'block';
+          hintEl.innerText = '✅ พบพื้นที่รหัส ' + cleanZip + ': ' + lastAutoAreaText + (zInfo.tambons.length > 1 ? ' (กรุณากดเลือกตำบล/แขวงในช่องที่ 3 ด้วยนะคะ)' : '');
+        }
+        syncQuickAddressHelper();
+        return;
       }
       if (hintEl) hintEl.style.display = 'none';
+      if (tambonWrap) tambonWrap.style.display = 'none';
       syncQuickAddressHelper();
     }
 
@@ -3938,25 +4026,50 @@
       
 
       const name = document.getElementById('custName').value.trim();
-
-      const phone = document.getElementById('custPhone').value.trim();
-
-      const address = document.getElementById('custAddress').value.trim();
-
+      const rawPhone = document.getElementById('custPhone').value.trim();
+      let address = enrichThaiAddressWeb(document.getElementById('custAddress').value.trim());
+      document.getElementById('custAddress').value = address;
       const noteInput = document.getElementById('custNote');
-
       const note = noteInput ? noteInput.value.trim() : '';
 
-
-
-      if (!name || !phone || !address) {
-
+      if (!name || !rawPhone || !address) {
         alert('กรุณากรอกข้อมูล ชื่อ, เบอร์โทร และที่อยู่จัดส่งให้ครบถ้วนนะคะ 💕');
-
         isSubmitting = false;
-
         return;
+      }
 
+      const phoneCheck = validateThaiPhoneWeb(rawPhone);
+      if (!phoneCheck.valid) {
+        alert('⚠️ เบอร์โทรศัพท์ไม่ถูกต้องค่ะ:\n• ' + phoneCheck.reason + '\n\nกรุณาระบุเบอร์โทรศัพท์จริง 10 หลัก (เช่น 0891234567) เพื่อให้พนักงานขนส่งโทรแจ้งก่อนส่งพัสดุนะคะ 📞');
+        document.getElementById('custPhone')?.focus();
+        isSubmitting = false;
+        return;
+      }
+      const phone = phoneCheck.phone;
+      document.getElementById('custPhone').value = phone;
+
+      if (!hasCompleteThaiAddressWeb(address)) {
+        const zipM = address.match(/\b([1-9]\d{4})\b/);
+        if (zipM) {
+          const zInput = document.getElementById('quickZipCode');
+          if (zInput && zInput.value !== zipM[1]) {
+            zInput.value = zipM[1];
+            handleQuickZipLookup(zipM[1]);
+          }
+        }
+        const missingList = [];
+        if (!/(?:ต\.|ตำบล|แขวง)\s*[ก-๙A-Za-z]{2,}/.test(address)) missingList.push('• ตำบล / แขวง (สามารถกดเลือกจากช่องที่ 3 หรือพิมพ์ ต. ... ได้เลยค่ะ)');
+        if (!/(?:อ\.|อำเภอ|เขต)\s*[ก-๙A-Za-z]{2,}/.test(address)) missingList.push('• อำเภอ / เขต (หรือกรอกรหัสไปรษณีย์ 5 หลักในช่องที่ 2)');
+        if (!/(?:จ\.|จังหวัด)\s*[ก-๙A-Za-z]{2,}|กรุงเทพ|กทม/.test(address)) missingList.push('• จังหวัด');
+        alert('⚠️ ที่อยู่จัดส่งยังไม่ครบถ้วนค่ะ (ป้องกันพัสดุตีกลับ):\n' + (missingList.join('\n') || '• กรุณาระบุ บ้านเลขที่ ตำบล/แขวง อำเภอ/เขต และจังหวัด ให้ครบถ้วนค่ะ'));
+        const tSel = document.getElementById('quickTambonSelect');
+        if (tSel && document.getElementById('quickTambonWrap')?.style.display !== 'none' && !tSel.value) {
+          tSel.focus();
+        } else {
+          document.getElementById('custAddress')?.focus();
+        }
+        isSubmitting = false;
+        return;
       }
 
       if (currentPayment === 'TRANSFER' && selectedSlipChecking) {
@@ -4640,6 +4753,22 @@
 
             startTickerCycle();
 
+            const boardEl = document.getElementById('liveOrderBoardList');
+            if (boardEl) {
+              boardEl.innerHTML = data.slice(0, 5).map(o => {
+                const nm = (o.masked_name || 'คุณลูกค้า') + (o.province ? ' (' + o.province + ')' : '');
+                const pkg = o.package_name || 'ปลาสลิดแดดเดียว คัดพิเศษ';
+                const t = formatRelativeTime(o.created_at);
+                return `<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#ffffff; border:1px solid #d1fae5; border-radius:10px; padding:9px 12px; font-size:0.84rem;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="background:#dcfce7; color:#047857; font-weight:800; padding:3px 8px; border-radius:99px; font-size:0.74rem;">✅ สั่งซื้อจริง</span>
+                    <span><b style="color:#0f172a;">${nm}</b> • <span style="color:#047857; font-weight:600;">${pkg}</span></span>
+                  </div>
+                  <span style="font-size:0.75rem; color:#64748b; white-space:nowrap;">${t}</span>
+                </div>`;
+              }).join('');
+            }
+
           } else {
 
             // ไม่มียอดออเดอร์ในระบบ ซ่อนกล่องไว้ 100% ไม่เมคข้อมูลหลอก
@@ -4722,11 +4851,12 @@
 
 
 
-    // Initialize only on real page load
-
-    initRealOrdersTicker();
-
-
+    // Initialize on DOM ready so #liveOrderTicker and #liveOrderBoardList are guaranteed to exist
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initRealOrdersTicker);
+    } else {
+      setTimeout(initRealOrdersTicker, 50);
+    }
 
 </script>
 

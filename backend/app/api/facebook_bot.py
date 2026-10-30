@@ -19,6 +19,12 @@ from datetime import datetime
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
+from app.services.thai_address_validator import (
+    build_incomplete_order_guidance,
+    enrich_thai_address,
+    has_complete_thai_address,
+    validate_thai_phone,
+)
 
 logger = logging.getLogger("FacebookBot")
 
@@ -351,6 +357,10 @@ def _save_order_to_supabase(
     """บันทึกออเดอร์ใหม่จาก Facebook ลง Supabase direct_orders พร้อมติดแท็ก [FB_ID:...] และชื่อเพจเพื่อแจ้งเลขพัสดุอัตโนมัติ"""
     if not SUPABASE_URL or not SUPABASE_KEY:
         return False
+    address = enrich_thai_address(address)
+    if not validate_thai_phone(phone)["valid"] or not has_complete_thai_address(address):
+        logger.warning(f"[facebook] blocked incomplete order save: phone={phone} address={address}")
+        return False
     try:
         headers = {
             "apikey": SUPABASE_KEY,
@@ -570,11 +580,15 @@ def _handle_event(event: dict, page_id: str = "") -> None:
     now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
     # 1. ลูกค้าพิมพ์ตัวเลข หรือ กดปุ่มแอด/Quick Reply เลือกชุด (ต้องเช็คก่อนเช็คเบอร์โทร แต่ถ้ามีที่อยู่+เบอร์โทรให้ข้ามไปบันทึกออเดอร์เลย)
+    recent_ctx_early = _RECENT_CONTEXT.get(sender) or {}
+    if (time.time() - float(recent_ctx_early.get("ts") or 0)) > 7200:
+        recent_ctx_early = {}
     text_clean_phone = re.sub(r'[-\s]', '', text)
-    phone_match = re.search(r'0[689]\d{8}', text_clean_phone)
-    has_address = any(k in text for k in ["บ้านเลขที่", "ต.", "อ.", "จ.", "ตำบล", "อำเภอ", "จังหวัด", "ถนน", "ถ.", "ซอย", "ซ.", "ม.", "หมู่"])
+    phone_match = re.search(r'(?:^|[^\d])(0[2689]\d{8})(?!\d)', text_clean_phone)
+    has_address = bool(re.search(r'(?:บ้านเลขที่|ต\.|อ\.|จ\.|ตำบล|อำเภอ|จังหวัด|แขวง|เขต|กทม|กรุงเทพ|ถนน|ถ\.|ซอย|ซ\.|ม\.|หมู่ที่|หมู่|\b[1-9]\d{4}\b|\d+/\d+)', text))
+    is_tambon_reply = bool(recent_ctx_early.get("saved_address") and not has_complete_thai_address(recent_ctx_early.get("saved_address", "")))
 
-    if not phone_match:
+    if not phone_match and not has_address and not is_tambon_reply:
         is_cod_intent = any(k in lower_text for k in ["สั่งแบบเก็บเงินปลายทาง", "เก็บเงินปลายทาง", "เก็บปลายทาง", "ปลายทาง", "cod"])
         has_1kg_unit = any(k in lower_text for k in ["รับชุดขายดี", "ชุดขายดี", "1 กก", "1กก", "1kg", "1 กิโล", "1กิโล", "หนึ่งกิโล", "โลนึง", "1 โล", "1โล", "5-7 ตัว", "5-7ตัว", "570"])
         has_500g_unit = any(k in lower_text for k in ["รับชุดพอดีมื้อ", "ชุดพอดีมื้อ", "500g", "500 กรัม", "500กรัม", "ครึ่งโล", "ครึ่งกิโล", "3-4 ตัว", "3-4ตัว", "410"])
@@ -685,13 +699,34 @@ def _handle_event(event: dict, page_id: str = "") -> None:
             )
             return
 
-    # 2. ตรวจจับการสั่งซื้อพร้อมที่อยู่และเบอร์โทร (ทั้งจากพิมพ์ และจากรูปถ่ายที่อยู่)
-    if phone_match and (has_address or len(text) > 20):
-        phone = phone_match.group(0)
+    # 2. ตรวจจับการสั่งซื้อพร้อมที่อยู่และเบอร์โทร (บังคับครบ บ้านเลขที่ + ตำบล/แขวง + อำเภอ/เขต + จังหวัด + เบอร์โทร 10 หลัก 100%)
+    recent_ctx = _RECENT_CONTEXT.get(sender) or {}
+    if (time.time() - float(recent_ctx.get("ts") or 0)) > 7200:
+        recent_ctx = {}
+    raw_digits_all = re.sub(r"\D", "", text)
+    has_invalid_phone_attempt = bool(re.search(r"0\d{6,12}", raw_digits_all)) and not (
+        phone_match and validate_thai_phone(phone_match.group(1))["valid"]
+    )
+
+    if has_address or is_tambon_reply or has_invalid_phone_attempt or (phone_match and (recent_ctx.get("saved_address") or len(text) > 20)):
+        guidance_reply, tambon_qrs, addr_state = build_incomplete_order_guidance(
+            text,
+            saved_address=recent_ctx.get("saved_address") or "",
+            saved_phone=recent_ctx.get("saved_phone") or "",
+            greeting="สวัสดีค่ะคุณลูกค้า 🙏💕",
+        )
+        if not addr_state["addr_complete"] or not addr_state["phone_complete"]:
+            recent_ctx["saved_address"] = addr_state["saved_address"]
+            recent_ctx["saved_phone"] = addr_state["saved_phone"]
+            recent_ctx["ts"] = time.time()
+            _RECENT_CONTEXT[sender] = recent_ctx
+            _reply_to_facebook(sender, guidance_reply, tambon_qrs or None, page_id=page_id)
+            return
+
+        phone = addr_state["saved_phone"]
+        text = addr_state["saved_address"]
+        lower_text = text.lower()
         pending_slip = _get_pending_slip(sender)
-        recent_ctx = _RECENT_CONTEXT.get(sender) or {}
-        if (time.time() - float(recent_ctx.get("ts") or 0)) > 7200:
-            recent_ctx = {}
 
         explicit_cod = any(k in lower_text for k in ["ปลายทาง", "เก็บเงินปลายทาง", "cod"])
         explicit_transfer = any(k in lower_text for k in ["โอน", "สลิป", "พร้อมเพย์", "จ่ายแล้ว"]) and not explicit_cod
@@ -784,9 +819,12 @@ def _handle_event(event: dict, page_id: str = "") -> None:
         )
         return
 
-    # 3. ลูกค้าทิ้งเฉพาะเบอร์โทร ให้โทรกลับ
+    # 3. ลูกค้าทิ้งเฉพาะเบอร์โทร (จำเบอร์ไว้ในบริบท)
     if phone_match and not has_address and len(text) <= 35:
-        phone = phone_match.group(0)
+        phone = phone_match.group(1)
+        recent_ctx["saved_phone"] = phone
+        recent_ctx["ts"] = time.time()
+        _RECENT_CONTEXT[sender] = recent_ctx
         page_label = _get_page_label(page_id)
         _reply_to_facebook(sender, f"ได้รับเบอร์โทร {phone} เรียบร้อยค่ะ 🙏 เดี๋ยวเจ้าหน้าที่รีบโทรติดต่อกลับไปนะคะ\n(หรือพิมพ์ชื่อ-ที่อยู่ สั่งเก็บเงินปลายทางในแชทนี้ได้เลยค่ะ 😊)", page_id=page_id)
         _send_telegram_alert(f"📞 [ลูกค้าทิ้งเบอร์ให้โทรกลับ!]\n🏠 เพจ: {page_label}\n👤 Facebook: `{sender}`\n📱 เบอร์: **`{phone}`**\n💬 ข้อความ: \"{text}\"")
