@@ -282,3 +282,51 @@ def test_post_message_cold_pack_upcountry_spoilage(monkeypatch):
     assert "ไม่เสีย" in sent_text[0][1]
     assert "ซองฟอยล์เก็บอุณหภูมิ" in sent_text[0][1]
     assert "รับประกันความสด 100%" in sent_text[0][1]
+
+
+def test_edge_faqs_and_out_of_csv_weird_question(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.setattr(fb, "FACEBOOK_APP_SECRET", "mock_facebook_app_secret")
+    sent_text = []
+    tg_alerts = []
+    monkeypatch.setattr(
+        fb,
+        "_reply_to_facebook",
+        lambda rid, text, *args, **kwargs: sent_text.append((rid, text)) or True,
+    )
+    monkeypatch.setattr(
+        fb,
+        "_send_telegram_alert",
+        lambda text: tg_alerts.append(text) or True,
+    )
+    client = TestClient(app)
+
+    # 1. FAQ_23 (ต่อราคา), FAQ_24 (ฮาลาล), FAQ_25 (ผู้สูงอายุ/ก้าง), FAQ_26 (ส่งต่างประเทศ)
+    for q, expected_kw in [
+        ("ลดอีกได้ไหมคะ", "โปรโมชั่นลดพิเศษ"),
+        ("อิสลามทานได้ไหมคะ", "ฮาลาล"),
+        ("ผู้สูงอายุทานได้ไหม ก้างเยอะไหม", "เค็มน้อย 3%"),
+        ("ส่งต่างประเทศไหมคะ", "77 จังหวัด"),
+    ]:
+        sent_text.clear()
+        resp = client.post("/api/webhooks/facebook", json={
+            "object": "page",
+            "entry": [{"id": "1307380735783361", "messaging": [{"sender": {"id": "3001"}, "message": {"text": q}}]}],
+        })
+        assert resp.status_code == 200
+        assert len(sent_text) == 1
+        assert expected_kw in sent_text[0][1]
+
+    # 2. คำถามแปลกนอก CSV -> ต้องตอบรับเรื่องอย่างสุภาพ (ไม่ส่ง MENU_SHORT เดิมๆ) และแจ้งเตือนเข้า Telegram
+    sent_text.clear()
+    tg_alerts.clear()
+    resp = client.post("/api/webhooks/facebook", json={
+        "object": "page",
+        "entry": [{"id": "1307380735783361", "messaging": [{"sender": {"id": "3002"}, "message": {"text": "ขอแลกกับข้าวสารหอมมะลิ 2 ถุงได้ไหมครับ"}}]}],
+    })
+    assert resp.status_code == 200
+    assert len(sent_text) == 1
+    assert len(tg_alerts) == 1
+    assert "พบคำถามใหม่นอก CSV" in tg_alerts[0]

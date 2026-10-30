@@ -907,7 +907,27 @@ def _handle_event(event: dict, page_id: str = "") -> None:
         _reply_to_facebook(sender, f"🚚 โอนเงินส่งฟรีทุกชุดค่ะ (มีเก็บเงินปลายทาง COD +20.-)\nแพ็กซองฟอยล์เก็บความเย็นส่งถึงหน้าบ้านใน 1-2 วันค่ะ\n\n{MENU_SHORT}", DEFAULT_QUICK_REPLIES, page_id=page_id)
         return
 
-    # 8. ทักทายทั่วไป หรือข้อความอื่นๆ -> ส่งเมนูสั้น กระชับ ทันที
+    # 7.9 กรณีเป็นคำถามแปลกๆ นอกเหนือ 26 หมวดใน CSV -> ให้ AI ตอบตามข้อมูลจริง หรือรับเรื่องส่งต่อแอดมิน พร้อมแจ้งเตือนเข้า Telegram ทันที!
+    try:
+        from app.services.fish_faq_engine import answer_out_of_csv_question
+        out_res = answer_out_of_csv_question(text, greeting="สวัสดีค่ะคุณลูกค้า 🙏💕", web_url=WEB_STORE_URL)
+        if out_res and out_res.get("reply"):
+            _reply_to_facebook(sender, out_res["reply"], DEFAULT_QUICK_REPLIES, page_id=page_id)
+            page_label = _get_page_label(page_id)
+            mode_tag = "🤖 AI ตอบตามข้อมูลจริง" if out_res.get("mode") == "AI_GROUNDED" else "🙋‍♀️ รับเรื่องรอแอดมินตอบ"
+            _send_telegram_alert(
+                f"❓ [พบคำถามใหม่นอก CSV ใน Messenger!]\n"
+                f"🏠 เพจ: {page_label}\n"
+                f"👤 ลูกค้า: `{sender}`\n"
+                f"💬 คำถาม: \"{text}\"\n"
+                f"📌 สถานะ: {mode_tag}\n"
+                f"⏰ เวลา: {now_str}"
+            )
+            return
+    except Exception as e:
+        logger.warning(f"[facebook] answer_out_of_csv_question error: {e}")
+
+    # 8. ทักทายทั่วไป หรือข้อความสั้นๆ (เช่น สวัสดี / สนใจ) -> ส่งเมนูสั้น กระชับ ทันที
     _reply_to_facebook(sender, MENU_SHORT, DEFAULT_QUICK_REPLIES, page_id=page_id)
 
 
