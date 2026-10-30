@@ -585,10 +585,43 @@ def _handle_event(event: dict, page_id: str = "") -> None:
         recent_ctx_early = {}
     text_clean_phone = re.sub(r'[-\s]', '', text)
     phone_match = re.search(r'(?:^|[^\d])(0[2689]\d{8})(?!\d)', text_clean_phone)
-    has_address = bool(re.search(r'(?:บ้านเลขที่|ต\.|อ\.|จ\.|ตำบล|อำเภอ|จังหวัด|แขวง|เขต|กทม|กรุงเทพ|ถนน|ถ\.|ซอย|ซ\.|ม\.|หมู่ที่|หมู่|\b[1-9]\d{4}\b|\d+/\d+)', text))
+    text_for_addr = re.sub(r'ต่างจังหวัด|(?:ตำบล|อำเภอ|จังหวัด|เขต|แขวง|ถนน|ซอย)\s*(?:ไหน|อะไร|ใด)', '', text)
+    is_inquiry_sentence = any(
+        q in lower_text
+        for q in ["ไหม", "มั้ย", "ป่าว", "เปล่า", "เหรอ", "หรือคะ", "ทำไม", "ยังไง", "อย่างไร", "เท่าไหร่", "กี่วัน", "กี่ตัว", "ที่ไหน", "จังหวัดไหน", "อำเภอไหน", "อะไร", "?"]
+    )
+    has_address = bool(
+        re.search(r'(?:บ้านเลขที่|ต\.|อ\.|จ\.|ตำบล|อำเภอ|จังหวัด|แขวง|เขต|กทม|กรุงเทพ|ถนน|ถ\.|ซอย|ซ\.|ม\.|หมู่ที่|หมู่|\b[1-9]\d{4}\b|\d+/\d+)', text_for_addr)
+    ) and not (is_inquiry_sentence and not phone_match)
     is_tambon_reply = bool(recent_ctx_early.get("saved_address") and not has_complete_thai_address(recent_ctx_early.get("saved_address", "")))
 
     if not phone_match and not has_address and not is_tambon_reply:
+        # 0.9 ตรวจสอบคลังคำถาม-คำตอบอัจฉริยะ 20 หมวดจากไฟล์ CSV (data/fish_faq_rules.csv) เป็นอันดับแรกสุด!
+        # (ยกเว้นกรณีลูกค้ากดปุ่มเลือกแพ็กเกจ qr_payload หรือพิมพ์เลขชุดสั้นๆ เพื่อสั่งซื้อโดยไม่มีคำถาม)
+        is_short_pkg_choice = lower_text in (
+            "1", "2", "3",
+            "ชุด1", "ชุด 1", "เอาชุด1", "เอา 1", "รับชุด 1", "รับชุดพอดีมื้อ",
+            "ชุด2", "ชุด 2", "เอาชุด2", "เอา 2", "รับชุด 2", "รับชุดขายดี",
+            "ชุด3", "ชุด 3", "เอาชุด3", "เอา 3", "รับชุด 3", "รับชุดตุน",
+            "ตกลง", "ยืนยัน", "ตกลงค่ะ", "ตกลงครับ", "ยืนยันค่ะ", "ยืนยันครับ", "ok", "โอเค",
+        )
+        has_question_word = any(
+            q in lower_text
+            for q in ["ไหม", "มั้ย", "ป่าว", "เปล่า", "เหรอ", "หรือ", "ทำไม", "ยังไง", "อย่างไร", "เท่าไหร่", "กี่", "ไหน", "อะไร", "ไม่มี", "ไม่ได้", "?"]
+        )
+        has_explicit_order_verb = any(v in lower_text for v in ["รับชุด", "เอาชุด", "สั่งชุด", "รับ 1", "เอา 1", "สั่ง 1", "รับ 500", "เอา 500", "สั่ง 500", "รับ 2", "เอา 2", "สั่ง 2", "สั่งแบบเก็บเงินปลายทาง"])
+        if not qr_payload and not is_short_pkg_choice and (has_question_word or not has_explicit_order_verb):
+            try:
+                from app.services.fish_faq_engine import match_faq_rule
+                csv_matched = match_faq_rule(text, greeting="สวัสดีค่ะคุณลูกค้า 🙏💕", web_url=WEB_STORE_URL)
+                if csv_matched and csv_matched.get("comment_reply"):
+                    if csv_matched.get("rule_id") == "FAQ_17_BANK_ACCOUNT_TRUST":
+                        _RECENT_CONTEXT[sender] = {"pkg": _RECENT_CONTEXT.get(sender, {}).get("pkg"), "pay": "transfer", "ts": time.time()}
+                    _reply_to_facebook(sender, csv_matched["comment_reply"], DEFAULT_QUICK_REPLIES, page_id=page_id)
+                    return
+            except Exception as e:
+                logger.warning(f"[facebook] early fish_faq_engine error: {e}")
+
         is_cod_intent = any(k in lower_text for k in ["สั่งแบบเก็บเงินปลายทาง", "เก็บเงินปลายทาง", "เก็บปลายทาง", "ปลายทาง", "cod"])
         has_1kg_unit = any(k in lower_text for k in ["รับชุดขายดี", "ชุดขายดี", "1 กก", "1กก", "1kg", "1 กิโล", "1กิโล", "หนึ่งกิโล", "โลนึง", "1 โล", "1โล", "5-7 ตัว", "5-7ตัว", "570"])
         has_500g_unit = any(k in lower_text for k in ["รับชุดพอดีมื้อ", "ชุดพอดีมื้อ", "500g", "500 กรัม", "500กรัม", "ครึ่งโล", "ครึ่งกิโล", "3-4 ตัว", "3-4ตัว", "410"])
@@ -604,7 +637,7 @@ def _handle_event(event: dict, page_id: str = "") -> None:
             _RECENT_CONTEXT[sender] = {"pkg": "500g", "pay": "cod", "ts": time.time()}
             _reply_to_facebook(
                 sender,
-                "✅ รับชุดพอดีมื้อ 500 กรัม (ประมาณ 3-4 ตัว) แบบเก็บเงินปลายทาง (COD) ยอดรวม 410 บาท (รวมส่งแพ็กฟอยล์ซองฟอยล์เก็บความเย็นแล้ว จ่ายเงินหน้าบ้านตอนรับของได้เลยค่ะ) 🚚❄️\n\n"
+                "✅ รับชุดพอดีมื้อ 500 กรัม (ประมาณ 3-4 ตัว) แบบเก็บเงินปลายทาง (COD) ยอดรวม 410 บาท (รวมส่งแพ็กซองฟอยล์เก็บความเย็นแล้ว จ่ายเงินหน้าบ้านตอนรับของได้เลยค่ะ) 🚚❄️\n\n"
                 "👉 รบกวนพิมพ์แจ้ง 'ชื่อ - ที่อยู่จัดส่ง - เบอร์โทรศัพท์' ในแชทนี้ได้เลยนะคะ เดี๋ยวทางร้านล็อกคิวแพ็กส่งรอบสดใหม่ให้ทันทีค่ะ 😊",
                 page_id=page_id,
             )
@@ -615,7 +648,7 @@ def _handle_event(event: dict, page_id: str = "") -> None:
             _RECENT_CONTEXT[sender] = {"pkg": "1kg", "pay": "cod", "ts": time.time()}
             _reply_to_facebook(
                 sender,
-                "✅ รับชุดขายดี 1 กิโลกรัม (ประมาณ 5-7 ตัว) แบบเก็บเงินปลายทาง (COD) ยอดรวม 570 บาท (รวมส่งแพ็กฟอยล์ซองฟอยล์เก็บความเย็นแล้ว จ่ายเงินหน้าบ้านตอนรับของได้เลยค่ะ) ⭐🚚❄️\n\n"
+                "✅ รับชุดขายดี 1 กิโลกรัม (ประมาณ 5-7 ตัว) แบบเก็บเงินปลายทาง (COD) ยอดรวม 570 บาท (รวมส่งแพ็กซองฟอยล์เก็บความเย็นแล้ว จ่ายเงินหน้าบ้านตอนรับของได้เลยค่ะ) ⭐🚚❄️\n\n"
                 "👉 รบกวนพิมพ์แจ้ง 'ชื่อ - ที่อยู่จัดส่ง - เบอร์โทรศัพท์' ในแชทนี้ได้เลยนะคะ เดี๋ยวทางร้านล็อกคิวแพ็กส่งรอบสดใหม่ให้ทันทีค่ะ 😊",
                 page_id=page_id,
             )
@@ -826,7 +859,7 @@ def _handle_event(event: dict, page_id: str = "") -> None:
         recent_ctx["ts"] = time.time()
         _RECENT_CONTEXT[sender] = recent_ctx
         page_label = _get_page_label(page_id)
-        _reply_to_facebook(sender, f"ได้รับเบอร์โทร {phone} เรียบร้อยค่ะ 🙏 เดี๋ยวเจ้าหน้าที่รีบโทรติดต่อกลับไปนะคะ\n(หรือพิมพ์ชื่อ-ที่อยู่ สั่งเก็บเงินปลายทางในแชทนี้ได้เลยค่ะ 😊)", page_id=page_id)
+        _reply_to_facebook(sender, f"ป้าเข็มบันทึกเบอร์โทร {phone} ไว้ให้เรียบร้อยแล้วจ้ะ 🙏🐟\n👉 รบกวนพิมพ์แจ้ง 'ชื่อผู้รับ + ที่อยู่จัดส่ง (บ้านเลขที่/ตำบล/อำเภอ/จังหวัด)' และชุดที่ต้องการ (พิมพ์ 1=500g, 2=1กก., 3=2กก.) ในแชทนี้ได้เลยนะคะ เดี๋ยวระบบออกรหัสคำสั่งซื้อจัดส่งให้ทันทีค่ะ 😊", page_id=page_id)
         _send_telegram_alert(f"📞 [ลูกค้าทิ้งเบอร์ให้โทรกลับ!]\n🏠 เพจ: {page_label}\n👤 Facebook: `{sender}`\n📱 เบอร์: **`{phone}`**\n💬 ข้อความ: \"{text}\"")
         return
 
@@ -853,6 +886,16 @@ def _handle_event(event: dict, page_id: str = "") -> None:
         )
         _reply_to_facebook(sender, bank_msg, page_id=page_id)
         return
+
+    # 5.5 ตรวจจับคลังคำถาม-คำตอบอัจฉริยะ 13 หมวดจากไฟล์ CSV (data/fish_faq_rules.csv)
+    try:
+        from app.services.fish_faq_engine import match_faq_rule
+        csv_matched = match_faq_rule(text, greeting="สวัสดีค่ะคุณลูกค้า 🙏💕", web_url=WEB_STORE_URL)
+        if csv_matched and csv_matched.get("comment_reply"):
+            _reply_to_facebook(sender, csv_matched["comment_reply"], DEFAULT_QUICK_REPLIES, page_id=page_id)
+            return
+    except Exception as e:
+        logger.warning(f"[facebook] fish_faq_engine error: {e}")
 
     # 6. ถามเรื่องความเค็ม / รสชาติ
     if any(k in lower_text for k in ["เค็มไหม", "เค็มมั้ย", "รสชาติ", "เค็มมาก"]):

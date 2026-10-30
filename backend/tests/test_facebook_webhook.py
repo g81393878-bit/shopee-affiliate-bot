@@ -93,19 +93,20 @@ def test_post_message_replies_bot_intro(monkeypatch):
 
     monkeypatch.setattr(fb, "FACEBOOK_APP_SECRET", "mock_facebook_app_secret")
     sent = []
-    monkeypatch.setattr(fb, "_reply_to_facebook",
-                        lambda rid, text: sent.append((rid, text)) or True)
+    monkeypatch.setattr(
+        fb,
+        "_reply_to_facebook",
+        lambda rid, text, *args, **kwargs: sent.append((rid, text)) or True,
+    )
     client = TestClient(app)
 
     payload = {"object": "page", "entry": [{"id": "1", "messaging": [
-        {"sender": {"id": "1001"}, "message": {"text": "หูฟัง"}},
+        {"sender": {"id": "1001"}, "message": {"text": "สวัสดีค่ะ"}},
     ]}]}
     resp = client.post("/api/webhooks/facebook", json=payload)
     assert resp.status_code == 200
     assert len(sent) == 1 and sent[0][0] == "1001"
-    # ตอบแนะนำบอทป้าเข็ม ไม่ค้นสินค้า/ไม่โพสต์สินค้า
-    assert sent[0][1] == fb.BOT_INTRO
-    assert "ป้าเข็ม" in sent[0][1] and "LINE" in sent[0][1]
+    assert "ปลาสลิด" in sent[0][1] and "390.-" in sent[0][1]
 
 
 def test_verify_signature_sha1_supported(monkeypatch):
@@ -116,17 +117,33 @@ def test_verify_signature_sha1_supported(monkeypatch):
     assert fb._verify_signature(body, "") is False
 
 
-def test_bot_intro_includes_line_oa_url_when_set():
-    intro = fb._build_intro("https://line.me/R/ti/p/@pakhem")
-    assert "https://line.me/R/ti/p/@pakhem" in intro
-    assert "แอดไลน์" in intro
+def test_csv_faq_origin_and_guarantee_in_messenger(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
 
+    monkeypatch.setattr(fb, "FACEBOOK_APP_SECRET", "mock_facebook_app_secret")
+    sent = []
+    monkeypatch.setattr(
+        fb,
+        "_reply_to_facebook",
+        lambda rid, text, *args, **kwargs: sent.append((rid, text)) or True,
+    )
+    client = TestClient(app)
 
-def test_bot_intro_fallback_without_url():
-    intro = fb._build_intro("")
-    assert "แอดไลน์ร้าน" in intro
-    assert "ป้าเข็ม ขายของ" in intro
-    assert "line.me" not in intro
+    for q_text, expected_kw in [
+        ("ปลาบางบ่อไหม", "ปลาสลิดสุพรรณบุรีแท้ 100%"),
+        ("มีรับประกันไหม", "รับประกัน"),
+        ("สั่งยังไงคะ", "พิมพ์สั่งในแชทเพจนี้ได้เลยค่ะ"),
+        ("ทำไมชุด 2 กิโลไม่มีเก็บเงินปลายทาง", "รถควบคุมอุณหภูมิ"),
+    ]:
+        sent.clear()
+        payload = {"object": "page", "entry": [{"id": "1307380735783361", "messaging": [
+            {"sender": {"id": "27904143002574068"}, "message": {"text": q_text}},
+        ]}]}
+        resp = client.post("/api/webhooks/facebook", json=payload)
+        assert resp.status_code == 200
+        assert len(sent) == 1
+        assert expected_kw in sent[0][1], f"Expected {expected_kw} in reply for {q_text}"
 
 
 def test_get_verify_rejects_wrong_mode(monkeypatch):
@@ -241,3 +258,27 @@ def test_verify_signature_edge_cases(monkeypatch):
     # whitespace หน้าหลัง → strip แล้วยังตรงกันได้
     good = _sign(body, "my_secret", "sha256")
     assert fb._verify_signature(body, "  " + good + "  ") is True
+
+
+def test_post_message_cold_pack_upcountry_spoilage(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.setattr(fb, "FACEBOOK_APP_SECRET", "mock_facebook_app_secret")
+    sent_text = []
+    monkeypatch.setattr(
+        fb,
+        "_reply_to_facebook",
+        lambda rid, text, *args, **kwargs: sent_text.append((rid, text)) or True,
+    )
+    client = TestClient(app)
+
+    payload = {"object": "page", "entry": [{"id": "1", "messaging": [
+        {"sender": {"id": "2002"}, "message": {"text": "ส่งต่างจังหวัดปลาจะเสียไหม?"}},
+    ]}]}
+    resp = client.post("/api/webhooks/facebook", json=payload)
+    assert resp.status_code == 200
+    assert len(sent_text) == 1 and sent_text[0][0] == "2002"
+    assert "ไม่เสีย" in sent_text[0][1]
+    assert "ซองฟอยล์เก็บอุณหภูมิ" in sent_text[0][1]
+    assert "รับประกันความสด 100%" in sent_text[0][1]
