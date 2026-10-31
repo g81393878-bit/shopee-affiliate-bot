@@ -1,24 +1,5 @@
 @echo off
-chcp 65001 >nul
-title PaKhem Facebook Live All-Day Autopilot (เช้า-บ่าย-เย็น-ดึก)
+title PaKhem Facebook Live All-Day Autopilot
 cd /d "%~dp0"
-
-echo ================================================================
-echo    🐟 PaKhem Facebook Live 24/7 All-Day Autopilot (วนรอบอัตโนมัติ)
-echo ================================================================
-echo.
-echo ⏱️ รูปแบบการทำงาน : ไลฟ์รอบละ 4 ชม. ➔ พักระบบ 30 นาที ➔ เปิดรอบใหม่
-echo 📱 เพจเป้าหมาย    : เพจ 1 (ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้)
-echo 🎬 วิดีโอ         : เลือกคลิปปลาสลิดล็อตใหม่ล่าสุดให้อัตโนมัติ
-echo 📲 การแจ้งเตือน   : รายงานเข้า LINE & Telegram ทุกช่วงสตรีมและช่วงพัก
-echo 💡 การหยุดระบบ    : กด Ctrl + C หรือปิดหน้าต่างนี้เมื่อต้องการหยุด
-echo ================================================================
-echo.
-
-python tools/fb_live_streamer.py --auto-page 1 --hours 4 --rest-minutes 30 --auto-cycle --yes
-
-echo.
-echo ================================================================
-echo    🛑 ปิดระบบสตรีมมิ่ง All-Day Autopilot เรียบร้อยแล้ว ปลอดภัย 100%
-echo ================================================================
+python -X utf8 tools/fb_live_streamer.py --auto-page 1 --hours 4 --rest-minutes 30 --auto-cycle --yes
 pause
