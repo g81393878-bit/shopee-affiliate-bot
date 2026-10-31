@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         🐟 ป้าเข็ม — ผู้ช่วยแชร์ไลฟ์สดลงกลุ่ม 1-คลิก (v5.4 Safe Guard 100%)
+// @name         🐟 ป้าเข็ม — ผู้ช่วยแชร์ไลฟ์สดลงกลุ่ม 1-คลิก (v5.5 Anti-Flicker)
 // @namespace    https://watt29.github.io/pakhem-shop/
-// @version      5.4
-// @description  ผู้ช่วยแชร์ไลฟ์สดลงกลุ่ม 1-คลิก คลีน ปลอดภัย ไร้ Error 100%
+// @version      5.5
+// @description  ผู้ช่วยแชร์ไลฟ์สดลงกลุ่ม 1-คลิก คลีน ปลอดภัย ไร้การกระพริบ 100%
 // @author       Watt & Pa Khem
 // @match        https://*.facebook.com/*
 // @match        https://*.messenger.com/*
@@ -13,6 +13,8 @@
 
 (function() {
     'use strict';
+    if (window.__PA_KHEM_LOADED__) return;
+    window.__PA_KHEM_LOADED__ = true;
 
     // แคปชั่นทองคำ 3 บรรทัด (สำหรับโพสต์หลัก)
     const CAPTIONS = [
@@ -667,7 +669,15 @@ function checkGroupMembership() {
     }
 
     function createWidget() {
-        if (document.getElementById("pakhem-group-helper")) return;
+        const existing = document.getElementById("pakhem-group-helper");
+        // ถ้าเป็นแผงเวอร์ชันใหม่เรียบร้อยแล้ว ไม่ต้องสร้างซ้ำ
+        if (existing && existing.querySelector("#pkh-btn-auto-share-live") && !existing.querySelector("#pkh-caption-area")) {
+            return;
+        }
+        // ถ้าเป็นแผงเวอร์ชันเก่า ให้ลบทิ้งทันทีเพื่อไม่ให้กระพริบชนกัน
+        if (existing) {
+            existing.remove();
+        }
 
         const widget = document.createElement("div");
         widget.id = "pakhem-group-helper";

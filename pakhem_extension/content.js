@@ -1,5 +1,7 @@
 (function() {
     'use strict';
+    if (window.__PA_KHEM_LOADED__) return;
+    window.__PA_KHEM_LOADED__ = true;
 
     // แคปชั่นทองคำ 3 บรรทัด (สำหรับโพสต์หลัก)
     const CAPTIONS = [
@@ -654,7 +656,15 @@ function checkGroupMembership() {
     }
 
     function createWidget() {
-        if (document.getElementById("pakhem-group-helper")) return;
+        const existing = document.getElementById("pakhem-group-helper");
+        // ถ้าเป็นแผงเวอร์ชันใหม่เรียบร้อยแล้ว ไม่ต้องสร้างซ้ำ
+        if (existing && existing.querySelector("#pkh-btn-auto-share-live") && !existing.querySelector("#pkh-caption-area")) {
+            return;
+        }
+        // ถ้าเป็นแผงเวอร์ชันเก่า ให้ลบทิ้งทันทีเพื่อไม่ให้กระพริบชนกัน
+        if (existing) {
+            existing.remove();
+        }
 
         const widget = document.createElement("div");
         widget.id = "pakhem-group-helper";
