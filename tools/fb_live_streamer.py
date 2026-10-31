@@ -19,7 +19,69 @@ if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 # โหลด .env หากมี
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+if str(ROOT / "backend") not in sys.path:
+    sys.path.insert(0, str(ROOT / "backend"))
+load_dotenv(ROOT / "backend" / ".env", override=False)
 load_dotenv()
+
+LIVE_DEFAULT_TITLE = "🔴 [สด] ปลาสลิดแดดเดียวสุพรรณแท้ ป้าเข็ม คัดพิเศษ ล็อตใหม่วันนี้! (สั่งซื้อทักแชท/พิมพ์ สนใจ)"
+LIVE_DEFAULT_DESC = (
+    "🐟 วันนี้มีปลาสลิดแดดเดียวเข้าใหม่สดๆ ร้อนๆ จ้า! ปลาสลิดสุพรรณแท้ ป้าเข็ม คัดพิเศษ ไซส์จัมโบ้ เนื้อแน่นหนาฟู มันแทรก เค็มน้อยกำลังดี!\n"
+    "💬 สั่งซื้อ: กดปุ่ม \"ส่งข้อความ\" ทักแชทเพจ หรือพิมพ์คำว่า \"สนใจ\" ในคอมเมนต์ไลฟ์นี้ได้เลยจ้า!\n\n"
+    "✅ เนื้อปลาสลิดสุพรรณแท้ 97% + เกลือสมุทรธรรมชาติ 3% (ไร้สารกันบูด 0% ไร้ผงชูรส 0%)\n"
+    "✅ น้ำหนักเนื้อปลาล้วนหลังตัดหัวแล้ว (ประมาณ 5–7 ตัว/กก.)\n"
+    "✅ ซีลสูญญากาศแช่เยือกแข็ง -18°C แพ็กซองฟอยล์เก็บความเย็นส่งตรงถึงบ้าน (เสียเคลมฟรี 100%)\n\n"
+    "📦 โปรโมชั่นล็อตใหม่วันนี้ (จำหน่ายแบบดิบแดดเดียว นำไปทอดไฟกลางเหลืองกรอบหอมฟุ้ง):\n"
+    "1️⃣ ชุดพอดีมื้อ 500 กรัม (3–4 ตัว): โอนเงิน 390 บาท ส่งฟรี! | เก็บปลายทาง 410.-\n"
+    "2️⃣ ชุดยอดฮิต 1 กิโลกรัม (5–7 ตัว): โอนเงิน 550 บาท ส่งฟรี! | เก็บปลายทาง 570.-\n"
+    "3️⃣ ชุดตุนสุดคุ้ม 2 กิโลกรัม (10–14 ตัว): โอนเงิน 1,090 บาท ส่งฟรีรถห้องเย็นควบคุมอุณหภูมิ!\n\n"
+    "👇 พิมพ์คำว่า \"สนใจ\" หรือเลขชุด 1, 2, 3 ในคอมเมนต์ไลฟ์สดนี้ เดี๋ยวป้าเข็มทักแชทไปรับออเดอร์ทันทีจ้า!"
+)
+
+
+def create_auto_facebook_live(page_id: str, page_token: str, title: str = LIVE_DEFAULT_TITLE, description: str = LIVE_DEFAULT_DESC) -> dict:
+    """สร้างห้องไลฟ์สดอัตโนมัติผ่าน Facebook Graph API (ไม่ต้องก๊อปปี้ Stream Key เอง)"""
+    import httpx
+    r = httpx.post(
+        f"https://graph.facebook.com/v21.0/{page_id}/live_videos",
+        data={
+            "access_token": page_token,
+            "status": "LIVE_NOW",
+            "title": title,
+            "description": description,
+        },
+        timeout=20.0,
+    )
+    if r.status_code != 200:
+        raise RuntimeError(f"Graph API error ({r.status_code}): {r.text}")
+    data = r.json()
+    live_id = data.get("id", "")
+    video_id = ""
+    try:
+        r_info = httpx.get(
+            f"https://graph.facebook.com/v21.0/{live_id}",
+            params={"access_token": page_token, "fields": "id,video,permalink_url,status"},
+            timeout=15.0,
+        )
+        if r_info.status_code == 200:
+            info_json = r_info.json()
+            video_id = (info_json.get("video") or {}).get("id", "")
+            data["video_id"] = video_id
+            data["permalink_url"] = info_json.get("permalink_url", "")
+    except Exception:
+        pass
+    # โพสต์คอมเมนต์แรกราคา + รูปจานปลาทอดใต้ไลฟ์สดอัตโนมัติ
+    try:
+        from app.services.facebook_poster import _auto_post_order_comment
+        target_comment_id = video_id or live_id
+        if target_comment_id:
+            _auto_post_order_comment(page_id, target_comment_id, page_token)
+    except Exception:
+        pass
+    return data
 
 
 def find_ffmpeg_binary() -> str:
@@ -47,27 +109,34 @@ def find_ffmpeg_binary() -> str:
 
 
 def find_available_videos() -> list:
-    """ค้นหาไฟล์ .mp4 แนะนำในโปรเจกต์"""
+    """ค้นหาไฟล์ .mp4 แนะนำในโปรเจกต์ (เรียงคลิปใหม่ล่าสุดวันนี้ไว้เป็นอันดับ 1)"""
     candidates = []
-    search_dirs = [Path("image"), Path("artifacts/videos"), Path("artifacts")]
+    search_dirs = [ROOT / "image", ROOT / "artifacts/videos", ROOT / "artifacts"]
     for sdir in search_dirs:
         if sdir.exists():
             for f in sdir.glob("*.mp4"):
                 candidates.append(f)
+    priority_names = [
+        "pakhem_fresh_batch_20261031.mp4",
+        "pakhem_fish_commercial_30s_clean.mp4",
+        "pakhem_fried_gourami_fixed_20261029.mp4",
+    ]
+    candidates.sort(key=lambda p: (priority_names.index(p.name) if p.name in priority_names else 99, p.name))
     return candidates
 
 
 def prompt_video_choice(candidates: list) -> str:
-    """ให้ผู้ใช้เลือกไฟล์วิดีโอหรือพิมพ์/ลากไฟล์ลงมา"""
+    """ให้ผู้ใช้เลือกไฟล์วิดีโอหรือพิมพ์/ลากไฟล์ลงมา (กด Enter เลือก [1] ทันที)"""
     print("\n🎥 พบไฟล์วิดีโอในโปรเจกต์ที่พร้อมใช้งาน:")
     for idx, v in enumerate(candidates[:6], 1):
-        print(f"  [{idx}] {v.name} ({v.parent})")
+        tag = " ⭐ (คลิปใหม่วันนี้ - แนะนำ!)" if idx == 1 else ""
+        print(f"  [{idx}] {v.name}{tag}")
     print("  [0] ลากไฟล์วิดีโออื่นมาวาง หรือพิมพ์ Path เอง")
 
     while True:
-        choice = input("\n👉 เลือกหมายเลข [1-6] หรือลากไฟล์มาวาง: ").strip().strip('"').strip("'")
+        choice = input("\n👉 เลือกหมายเลข [1-6] (หรือกด Enter เพื่อเลือก [1] ทันที): ").strip().strip('"').strip("'")
         if not choice:
-            continue
+            return str(candidates[0].resolve())
         if choice.isdigit():
             c_int = int(choice)
             if 1 <= c_int <= len(candidates):
@@ -109,9 +178,16 @@ def test_video(ffmpeg_bin: str, video_path: str) -> bool:
         return False
 
 
-def start_live_stream(ffmpeg_bin: str, video_path: str, stream_key: str, loop: bool = True, bitrate: str = "3500k"):
-    """เริ่มยิงสตรีมเข้า Facebook Live แบบมี Auto-Reconnect"""
-    rtmps_url = f"rtmps://live-api-s.facebook.com:443/rtmp/{stream_key}"
+def start_live_stream(ffmpeg_bin: str, video_path: str, stream_key: str, loop: bool = True, bitrate: str = "3500k", duration_minutes: int = 0, page_id: str = "", page_token: str = "", live_id: str = ""):
+    """เริ่มยิงสตรีมเข้า Facebook Live แบบมี Auto-Reconnect และรองรับการตั้งเวลาปิดอัตโนมัติ (Timer Auto-Stop)"""
+    if stream_key.startswith("rtmp://") or stream_key.startswith("rtmps://"):
+        rtmps_url = stream_key
+    else:
+        rtmps_url = f"rtmps://live-api-s.facebook.com:443/rtmp/{stream_key}"
+
+    # คำนวณเวลาสิ้นสุดหากมีการกำหนดระยะเวลา
+    start_time = time.time()
+    end_deadline = (start_time + (duration_minutes * 60)) if duration_minutes > 0 else 0
 
     # ประกอบคำสั่ง FFmpeg ตามมาตรฐาน Facebook Live
     cmd = [ffmpeg_bin, "-re"]
@@ -137,27 +213,59 @@ def start_live_stream(ffmpeg_bin: str, video_path: str, stream_key: str, loop: b
         rtmps_url
     ])
 
+    duration_desc = f"ตั้งเวลาปิดอัตโนมัติใน {duration_minutes} นาที ({duration_minutes/60:.1f} ชม.)" if duration_minutes > 0 else "เปิดวนลูปไม่รู้จบ (จนกว่าจะสั่งปิด)"
+
     print("\n" + "=" * 65)
-    print("🚀 เริ่มต้นระบบสตรีมมิ่ง Facebook Live 24/7")
+    print("🚀 เริ่มต้นระบบสตรีมมิ่ง Facebook Live 24/7 (Autopilot Timer)")
     print(f"   📹 ไฟล์วิดีโอ : {video_path}")
-    print(f"   🔄 การวนลูป  : {'เปิดวนลูปไม่รู้จบ (24/7 Loop)' if loop else 'เล่นรอบเดียว'}")
+    print(f"   🔄 การวนลูป  : {'เปิดวนลูปต่อเนื่อง' if loop else 'เล่นรอบเดียว'}")
+    print(f"   ⏱️ ระยะเวลา  : {duration_desc}")
     print(f"   ⚡ บิตเรต     : {bitrate}")
     print("   🔴 สถานะ     : สัญญาณกำลังยิงขึ้นสู่เซิร์ฟเวอร์ Facebook...")
-    print("   💡 คำแนะนำ  : กด [Ctrl + C] ในหน้าต่างนี้เพื่อหยุดการสตรีม")
+    print("   💡 คำแนะนำ  : กด [Ctrl + C] ในหน้าต่างนี้เพื่อหยุดการสตรีมก่อนกำหนดได้ตลอดเวลา")
     print("=" * 65 + "\n")
 
     attempt = 1
     while True:
         try:
-            # รัน ffmpeg
-            process = subprocess.Popen(cmd)
-            return_code = process.wait()
+            # ตรวจสอบว่าหมดเวลาหรือยังก่อนเริ่ม/ต่อรอบ
+            if end_deadline > 0 and time.time() >= end_deadline:
+                print(f"\n⏰ ครบกำหนดเวลาสตรีม {duration_minutes} นาทีแล้ว! ระบบกำลังปิดไลฟ์สดอัตโนมัติ...")
+                break
 
-            if return_code == 0:
-                print("\n🏁 การสตรีมสิ้นสุดลงตามปกติ")
+            process = subprocess.Popen(cmd)
+
+            # ลูปเฝ้าดูโปรเซสพร้อมตรวจจับเวลาหมด
+            while process.poll() is None:
+                if end_deadline > 0 and time.time() >= end_deadline:
+                    print(f"\n\n⏰ [Autopilot Timer] ครบกำหนดเวลา {duration_minutes} นาทีแล้ว!")
+                    print("🛑 กำลังสั่งปิดการสตรีมและบันทึกวิดีโอ Replay อัตโนมัติ...")
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                    return_code = 0
+                    break
+                time.sleep(1)
+
+            return_code = process.poll()
+
+            if return_code == 0 or (end_deadline > 0 and time.time() >= end_deadline):
+                print("\n🏁 การสตรีมสิ้นสุดลงเรียบร้อยแล้วอย่างสมบูรณ์")
+                # แจ้งเตือนเข้า Telegram / LINE หากตั้งค่าไว้
+                try:
+                    from tools.telegram_notifier import send_admin_line_notification, send_telegram_sync
+                    msg = f"🏁 [Facebook Live] สตรีมครบกำหนด {duration_minutes} นาที และปิดอัตโนมัติเรียบร้อยแล้วจ้า! (วิดีโอถูกบันทึกเป็น Replay บนเพจแล้ว)"
+                    send_admin_line_notification(msg)
+                    send_telegram_sync(msg)
+                except Exception:
+                    pass
                 break
             else:
                 print(f"\n⚠️ สัญญาณสตรีมหลุด (Exit Code: {return_code})")
+                if end_deadline > 0 and time.time() >= end_deadline:
+                    break
                 print(f"🔄 กำลังรอ 5 วินาทีเพื่อเชื่อมต่อใหม่รอบที่ {attempt}...")
                 time.sleep(5)
                 attempt += 1
@@ -178,7 +286,10 @@ def main():
     parser = argparse.ArgumentParser(description="Facebook Live 24/7 FFmpeg Streamer")
     parser.add_argument("--video", "-v", type=str, help="Path ไปยังไฟล์วิดีโอ .mp4")
     parser.add_argument("--key", "-k", type=str, help="Facebook Stream Key")
+    parser.add_argument("--auto-page", "-p", type=int, choices=[1, 2], help="สร้างห้องไลฟ์สดอัตโนมัติบนเพจ 1 หรือ เพจ 2 (ไม่ต้องก๊อป Stream Key)")
     parser.add_argument("--bitrate", "-b", type=str, default="3500k", help="Bitrate (เช่น 3500k, 4000k)")
+    parser.add_argument("--hours", "-H", type=float, default=0.0, help="กำหนดระยะเวลาไลฟ์สดเป็นชั่วโมง (เช่น 2 หรือ 2.5) แล้วปิดอัตโนมัติ")
+    parser.add_argument("--minutes", "-m", type=int, default=0, help="กำหนดระยะเวลาไลฟ์สดเป็นนาที (เช่น 90 หรือ 120)")
     parser.add_argument("--no-loop", action="store_true", help="ไม่วนลูป (เล่นรอบเดียวแล้วจบ)")
     parser.add_argument("--test", action="store_true", help="โหมดทดสอบไฟล์วิดีโออย่างเดียว (ไม่ยิงขึ้น Facebook)")
     args = parser.parse_args()
@@ -212,30 +323,81 @@ def main():
         test_video(ffmpeg_bin, video_path)
         sys.exit(0)
 
-    # 4. เช็ค Stream Key
+    # 4. เลือกเพจไลฟ์สดอัตโนมัติ หรือวาง Stream Key เอง
     stream_key = args.key or os.getenv("FB_STREAM_KEY")
-    if not stream_key:
-        print("\n🔑 ไปที่ Facebook Page -> ถ่ายทอดสด (Go Live) -> ซอฟต์แวร์สตรีมมิ่ง -> คัดลอก Stream Key")
-        stream_key = input("👉 วาง Facebook Stream Key ที่นี่: ").strip().strip('"').strip("'")
+    auto_page_choice = args.auto_page
+
+    if not stream_key and not auto_page_choice:
+        print("\n📡 เลือกช่องทางเปิดไลฟ์สด (ระบบดึง Stream Key + โพสต์แคปชั่นให้อัตโนมัติ 100%):")
+        print("  [1] 🐟 เพจ 1: ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้ (แนะนำ - กด Enter ได้เลย!)")
+        print("  [2] 🍳 เพจ 2: ครัวแม่บ้าน ชี้เป้าของอร่อย")
+        print("  [3] 🔑 วาง Facebook Stream Key เองจากหน้าเว็บ")
+        sel = input("\n👉 เลือก [1/2/3] (หรือกด Enter เพื่อไลฟ์ลงเพจ 1 ทันที): ").strip()
+        if not sel or sel == "1":
+            auto_page_choice = 1
+        elif sel == "2":
+            auto_page_choice = 2
+        else:
+            stream_key = input("👉 วาง Facebook Stream Key ที่นี่: ").strip().strip('"').strip("'")
+
+    if auto_page_choice in (1, 2):
+        sys.path.insert(0, str(ROOT / "reels_uploader"))
+        from reels_uploader.uploader import configured_pages
+        pages = configured_pages()
+        if len(pages) < auto_page_choice:
+            print("❌ ไม่พบ Token ของเพจที่เลือกในระบบ .env")
+            sys.exit(1)
+        target_page = pages[auto_page_choice - 1]
+        print(f"\n⏳ กำลังสร้างห้องไลฟ์สดอัตโนมัติบนเพจ ID: {target_page['id']} ...")
+        live_info = create_auto_facebook_live(target_page["id"], target_page["token"])
+        stream_key = live_info.get("secure_stream_url") or live_info.get("stream_url") or ""
+        live_id = live_info.get("id", "")
+        video_id = live_info.get("video_id") or live_id
+        print(f"✅ สร้างห้องไลฟ์สดสำเร็จ! (Live ID: {live_id} | Video ID: {video_id})")
+        print(f"🔗 ลิงก์ดูไลฟ์สดบนเพจ: https://www.facebook.com/{target_page['id']}/videos/{video_id}", flush=True)
 
     if not stream_key:
         print("❌ ต้องระบุ Stream Key จึงจะสามารถสตรีมได้")
         sys.exit(1)
 
-    # 5. ทดสอบไฟล์เบื้องต้นก่อนเริ่ม
+    # 5. กำหนดระยะเวลาการไลฟ์สด (Autopilot Timer)
+    duration_minutes = args.minutes or int(args.hours * 60)
+    if duration_minutes <= 0 and not args.hours and not args.minutes:
+        print("\n⏱️ กำหนดระยะเวลาไลฟ์สด (ระบบจะปิดอัตโนมัติเมื่อครบเวลา):")
+        print("  [1] ⭐ ไลฟ์ 2 ชั่วโมง (แนะนำ! ครอบคลุมช่วงคนดูเยอะที่สุด)")
+        print("  [2] ไลฟ์ 3 ชั่วโมง")
+        print("  [3] ไลฟ์ 4 ชั่วโมง")
+        print("  [0] เปิดวนลูปยาวๆ ไม่จำกัดเวลา (ผู้ใช้กด Ctrl+C เพื่อปิดเอง)")
+        dur_choice = input("\n👉 เลือก [1/2/3/0] หรือพิมพ์จำนวนชั่วโมง (กด Enter เพื่อเลือก [1] = 2 ชม.): ").strip()
+        if not dur_choice or dur_choice == "1":
+            duration_minutes = 120
+        elif dur_choice == "2":
+            duration_minutes = 180
+        elif dur_choice == "3":
+            duration_minutes = 240
+        elif dur_choice == "0":
+            duration_minutes = 0
+        else:
+            try:
+                duration_minutes = int(float(dur_choice) * 60)
+            except ValueError:
+                duration_minutes = 120
+
+    # 6. ทดสอบไฟล์เบื้องต้นก่อนเริ่ม
     test_ok = test_video(ffmpeg_bin, video_path)
     if not test_ok:
         cont = input("⚠️ มีข้อความแจ้งเตือน ต้องการดำเนินการต่อหรือไม่ (y/n)? ").lower()
         if cont != "y":
             sys.exit(0)
 
-    # 6. เริ่มการสตรีม
+    # 7. เริ่มการสตรีม
     start_live_stream(
         ffmpeg_bin=ffmpeg_bin,
         video_path=video_path,
         stream_key=stream_key,
         loop=not args.no_loop,
-        bitrate=args.bitrate
+        bitrate=args.bitrate,
+        duration_minutes=duration_minutes
     )
 
 
