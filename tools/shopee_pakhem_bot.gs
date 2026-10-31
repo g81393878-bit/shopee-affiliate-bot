@@ -126,7 +126,7 @@ const GROQ_KEYS = [
   "REDACTED_SECRET"
 ];
 
-const BOT_NAME = "ป้าเข็ม ขายของ";
+const BOT_NAME = "ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้";
 
 function doPost(e) {
   if (!e || !e.postData || !e.postData.contents) {
@@ -369,7 +369,7 @@ function handleFacebookMessengerEvents(data) {
   var entries = data.entry || [];
   for (var i = 0; i < entries.length; i++) {
     var entryPageId = String(entries[i].id || "");
-    var entryPageLabel = entryPageId === "1323469404180656" ? "เพจ 2: ป้าเข็ม ชี้เป้า" : "เพจ 1: ป้าเข็ม ขายของ";
+    var entryPageLabel = entryPageId === "1323469404180656" ? "เพจ 2: ครัวแม่บ้าน ชี้เป้าของอร่อย" : "เพจ 1: ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้";
     // 0.0 ดักจับคอมเมนต์ใต้โพสต์/แอด Real-time (Feed changes)
     var changes = entries[i].changes || [];
     for (var k = 0; k < changes.length; k++) {
@@ -614,7 +614,7 @@ function handleFacebookMessengerEvents(data) {
       var rawDigitsFb = text.replace(/[^\d]/g, "");
       var textForAddrFb = text.replace(/ต่างจังหวัด|(?:ตำบล|อำเภอ|จังหวัด|เขต|แขวง|ถนน|ซอย)\s*(?:ไหน|อะไร|ใด)/g, "");
       var isInquiryFb = ["ไหม", "มั้ย", "ป่าว", "เปล่า", "เหรอ", "หรือคะ", "ทำไม", "ยังไง", "อย่างไร", "เท่าไหร่", "กี่วัน", "กี่ตัว", "ที่ไหน", "จังหวัดไหน", "อำเภอไหน", "อะไร", "?"].some(function(q) { return lowerText.indexOf(q) !== -1; });
-      var hasAddrAttemptFb = /(?:บ้านเลขที่|ต\.|อ\.|จ\.|ตำบล|อำเภอ|จังหวัด|แขวง|เขต|กทม|กรุงเทพ|ถนน|ถ\.|ซอย|ซ\.|ม\.|หมู่ที่|หมู่|\b[1-9]\d{4}\b|\d+\/\d+)/.test(textForAddrFb) && !isInquiryFb;
+      var isBtnChoiceFb = Boolean(qrPayload) || /390/.test(text); var hasAddrAttemptFb = !isBtnChoiceFb && /(?:บ้านเลขที่|ต\.|อ\.|จ\.|ตำบล|อำเภอ|จังหวัด|แขวง|เขต|กทม|กรุงเทพ|ถนน|ถ\.|ซอย|ซ\.|ม\.|หมู่ที่|หมู่|\b[1-9]\d{4}\b|\d+\/\d+)/.test(textForAddrFb) && !isInquiryFb;
       var hasInvalidPhoneAttempt = /0\d{6,12}/.test(rawDigitsFb) && !validateThaiPhoneNumber(rawDigitsFb.match(/0\d{6,12}/)[0]).valid;
       if (hasAddrAttemptFb || hasInvalidPhoneAttempt || (updatedFbCtx.savedAddress && !hasCompleteThaiAddress(updatedFbCtx.savedAddress))) {
         var checkAddr = enrichThaiAddressWithMaps(updatedFbCtx.savedAddress || (hasAddrAttemptFb ? text : ""));
@@ -1585,8 +1585,17 @@ function calculateShippingRouteInfo(addressText, lat, lng) {
 /**
  * ค้นหา อำเภอ + จังหวัด + รายชื่อตำบล ทั้งหมดจากรหัสไปรษณีย์ 5 หลัก (ฐานข้อมูลไปรษณีย์ไทย 970 รหัส 7,436 ตำบล ใน ThaiZipMap.gs)
  */
+/**
+ * แปลงตัวเลขไทย (๐-๙) และตัวเลขเต็มความกว้าง (０-９) เป็นเลขอารบิกสากล (0-9) ทุกขั้นตอน
+ */
+function normalizeThaiDigits(input) {
+  return String(input == null ? "" : input)
+    .replace(/[๐-๙]/g, function(ch) { return String(ch.charCodeAt(0) - 0x0E50); })
+    .replace(/[０-９]/g, function(ch) { return String(ch.charCodeAt(0) - 0xFF10); });
+}
+
 function lookupThaiZipCodeInfo(zipCode) {
-  var z = String(zipCode || "").replace(/\D/g, "").slice(0, 5);
+  var z = normalizeThaiDigits(zipCode).replace(/\D/g, "").slice(0, 5);
   if (z.length !== 5) return null;
   if (typeof THAI_ZIP_DB !== "undefined" && THAI_ZIP_DB[z]) {
     var rec = THAI_ZIP_DB[z];
@@ -1617,7 +1626,7 @@ function lookupThaiZipCodeInfo(zipCode) {
  * ตรวจสอบความถูกต้องของเบอร์โทรศัพท์ไทย 10 หลัก (ป้องกันเบอร์ไม่ครบ 10 หลัก / เกิน 10 หลัก / เบอร์มั่ว เช่น 0812345678, 0800000000)
  */
 function validateThaiPhoneNumber(rawInput) {
-  var digits = String(rawInput || "").replace(/\D/g, "");
+  var digits = normalizeThaiDigits(rawInput).replace(/\D/g, "");
   if (!digits) {
     return { valid: false, phone: "", reason: "กรุณากรอกเบอร์โทรศัพท์มือถือ 10 หลักค่ะ" };
   }
@@ -1698,7 +1707,7 @@ function hasCompleteThaiAddress(addrText) {
  */
 function enrichThaiAddressWithMaps(rawText) {
   if (!rawText) return rawText;
-  var clean = String(rawText)
+  var clean = normalizeThaiDigits(rawText)
     .replace(/บ้านเลขที่\s*[:：-]\s*/g, "บ้านเลขที่ ")
     .replace(/(?:ตำบล|ต\.)\s*[:：-]?\s*/g, "ต.")
     .replace(/แขวง\s*[:：-]?\s*/g, "แขวง")
@@ -2052,6 +2061,7 @@ function buildHouseNumberStepCard(areaText, routeInfo, ctx) {
 
 function extractOrderDetails(text, userId) {
   if (!text) return null;
+  text = normalizeThaiDigits(text);
   // หากเป็นคำสั่งเลือกตำบล หรือขั้นตอนย่อยที่ไม่มีเบอร์โทร ให้ข้ามไปเข้าตัวจัดการเฉพาะขั้นทันที
   if (/^(?:เลือกตำบล|ตำบล)\s*[:：-]/i.test(text.trim())) {
     return null;
@@ -2476,7 +2486,7 @@ function handleOrderStatusLookup(queryText, replyToken, userId) {
 }
 
 function handleTextMessage(event) {
-  const userText = (event.message.text || "").trim();
+  const userText = normalizeThaiDigits(event.message.text || "").trim();
   const lowerText = userText.toLowerCase();
   const replyToken = event.replyToken;
   const userId = (event.source && event.source.userId) || "";
@@ -4645,23 +4655,49 @@ function replyLine(replyToken, messages) {
 }
 
 function pushAdminAlert(text) {
-  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return;
-  const url = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendMessage";
-  const payload = {
-    chat_id: TELEGRAM_CHAT_ID,
-    text: text,
-    disable_web_page_preview: true
-  };
-  try {
-    UrlFetchApp.fetch(url, {
-      method: "post",
-      contentType: "application/json",
-      payload: JSON.stringify(payload),
-      muteHttpExceptions: true
-    });
-  } catch (e) {
-    Logger.log("Telegram push error: " + e);
+  // 1. ส่งเข้า Telegram (ฟรี ไม่จำกัด)
+  if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
+    const url = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendMessage";
+    const payload = {
+      chat_id: TELEGRAM_CHAT_ID,
+      text: text,
+      disable_web_page_preview: true
+    };
+    try {
+      UrlFetchApp.fetch(url, {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify(payload),
+        muteHttpExceptions: true
+      });
+    } catch (e) {
+      Logger.log("Telegram push error: " + e);
+    }
   }
+
+  // 2. ส่งแจ้งเตือนด่วนเข้า LINE ส่วนตัวแอดมินทันที (เฉพาะออเดอร์ใหม่ / สลิปโอนเงิน / ทิ้งเบอร์โทร)
+  if (ADMIN_LINE_UID && LINE_ACCESS_TOKEN) {
+    var isUrgentOrder = text.indexOf("ออเดอร์") !== -1 || text.indexOf("สลิป") !== -1 || text.indexOf("เตือนด่วน") !== -1 || text.indexOf("โอนเงิน") !== -1 || text.indexOf("ทิ้งเบอร์") !== -1;
+    if (isUrgentOrder) {
+      try {
+        var lineUrl = "https://api.line.me/v2/bot/message/push";
+        var linePayload = {
+          to: ADMIN_LINE_UID,
+          messages: [{ type: "text", text: text }]
+        };
+        UrlFetchApp.fetch(lineUrl, {
+          method: "post",
+          contentType: "application/json",
+          headers: { "Authorization": "Bearer " + LINE_ACCESS_TOKEN },
+          payload: JSON.stringify(linePayload),
+          muteHttpExceptions: true
+        });
+      } catch (err) {
+        Logger.log("LINE push to admin error: " + err);
+      }
+    }
+  }
+}
 }
 
 /**
@@ -5701,8 +5737,8 @@ function handleTelegramWebhookUpdate(data) {
         "• โดเมนหลัก: https://watt29.github.io/\n" +
         "• หน้าปลาสลิด: https://watt29.github.io/pakhem-shop/fish.html\n\n" +
         "🎬 โพสต์วิดีโอโฆษณา Facebook (พร้อมปุ่มสั่งซื้อ):\n" +
-        "• เพจ 1 (ป้าเข็ม ขายของ): https://www.facebook.com/1307380735783361/videos/943186271935444\n" +
-        "• เพจ 2 (ป้าเข็ม ชี้เป้าของดี): https://www.facebook.com/1323469404180656/videos/2217772302119681\n\n" +
+        "• เพจ 1 (ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้): https://www.facebook.com/1307380735783361/videos/943186271935444\n" +
+        "• เพจ 2 (ครัวแม่บ้าน ชี้เป้าของอร่อยของดี): https://www.facebook.com/1323469404180656/videos/2217772302119681\n\n" +
         "📱 วิดีโอสั้น Reels (9:16):\n" +
         "• เพจ 1: https://www.facebook.com/reel/1797683198138608\n" +
         "• เพจ 2: https://www.facebook.com/reel/2070659433579010\n" +

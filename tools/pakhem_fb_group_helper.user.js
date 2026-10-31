@@ -1,0 +1,1577 @@
+// ==UserScript==
+// @name         🐟 ป้าเข็ม — ผู้ช่วยโพสต์กลุ่มตลาดนัด (v4.1 ตรวจสอบสถานะสมาชิกกลุ่ม 100%)
+// @namespace    https://watt29.github.io/pakhem-shop/
+// @version      3.9
+// @description  ระบบตรวจจับอัตโนมัติ: ทราบทันทีว่าอยู่ในกลุ่มไหม (เป็นสมาชิกแล้วหรือยัง) + ล็อกเป้าโพสต์และแนบรูปภาพ 100%
+// @author       Watt & Pa Khem
+// @match        https://*.facebook.com/*
+// @grant        GM_setClipboard
+// @grant        GM_notification
+// @run-at       document-idle
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    // แคปชั่นทองคำ 3 บรรทัด (สำหรับโพสต์หลัก)
+    const CAPTIONS = [
+        {
+            title: "สูตรทองคำ 3 บรรทัด (แนะนำที่สุด - จบใน 3 วินาที)",
+            text: "🐟 ปลาสลิดสุพรรณแดดเดียวแท้ ป้าเข็ม (ไซส์จัมโบ้ เนื้อแน่นหนาฟู มันแทรก เค็มน้อย 3% ไร้สาร ไร้ชูรส)\n📦 ราคามาตรฐานส่งฟรีถึงบ้าน: 500g 390.- | 1 กก. 550.- | 2 กก. 1,090.- (ส่งฟรีรถห้องเย็น!)\n💬 สั่งซื้อ: ทักแชท Inbox หรือพิมพ์คำว่า \"สนใจ\" ในคอมเมนต์ได้เลยจ้า มีรอบส่งสดใหม่ทุกวัน!"
+        },
+        {
+            title: "สูตร 2: เน้นชุดยอดฮิต 1 กิโลกรัม (550.- ส่งฟรี)",
+            text: "🔥 ปลาสลิดสุพรรณแดดเดียวแท้ 100% ตัวใหญ่เนื้อหนาฟู ทอดกรอบนอกนุ่มใน เค็มน้อย ไม่แสบคอ\n📦 ชุดขายดี 1 กิโล (ประมาณ 5-7 ตัวจัมโบ้) เพียง 550 บาท ส่งฟรี! (เก็บเงินปลายทาง 570.-)\n💬 ทักแชท Inbox แจ้งชื่อที่อยู่เบอร์โทรได้เลยจ้า จัดส่ง 1-2 วันถึงหน้าบ้าน!"
+        },
+        {
+            title: "สูตร 3: สายรักสุขภาพ ผู้สูงอายุ (เค็มน้อย 3% คลีนแท้)",
+            text: "🌿 ปลาสลิดแดดเดียวเพื่อสุขภาพ เกลือสมุทรธรรมชาติ 3% ไร้สารกันบูด ไร้ชูรส ตัดหัวขอดเกล็ดเรียบร้อย\n👉 500g 390.- ส่งฟรี | 1 กก. 550.- ส่งฟรี | 2 กก. 1,090.- ส่งฟรีรถห้องเย็น\n💬 สนใจสั่งซื้อ ทักแชทข้อความ Inbox หรือ LINE: @137gsref ได้เลยครับผม"
+        }
+    ];
+
+    const IMAGES = {
+        price: "https://watt29.github.io/pakhem-shop/fish_real_basket_clean.jpg",
+        fried: "https://watt29.github.io/pakhem-shop/fish_fried_plate.jpg"
+    };
+
+    const TARGET_GROUPS = [
+        { name: "--- 🛍️ เลือกกลุ่มเป้าหมาย / ค้นหากลุ่มทันที ---", url: "" },
+        { name: "📋 ⭐ 1. เปิดดู 'กลุ่มที่คุณเป็นสมาชิกแล้วทั้งหมด'", url: "https://www.facebook.com/groups/joins/" },
+        { name: "🛍️ 2. ตลาดขายส่ง-ปลีก อาหารแห้ง แดดเดียว", url: "https://www.facebook.com/groups/203180857683381" },
+        { name: "🛍️ 3. ตลาดนัดคนสุขสำราญ (ซื้อขายอาหาร)", url: "https://www.facebook.com/groups/562879874340349" },
+        { name: "🛍️ 4. ตลาดนัด อาหารอร่อย (ขายของกิน)", url: "https://www.facebook.com/groups/1585596445047346" },
+        { name: "🔍 5. ค้นหากลุ่ม 'อาหารแห้ง แดดเดียว'", url: "https://www.facebook.com/search/groups/?q=%E0%B8%AD%E0%B8%B2%E0%B8%AB%E0%B8%B2%E0%B8%A3%E0%B9%81%E0%B8%AB%E0%B9%89%E0%B8%87+%E0%B9%81%E0%B8%94%E0%B8%94%E0%B9%80%E0%B8%94%E0%B8%B5%E0%B8%A2%E0%B8%A7" },
+        { name: "🔍 6. ค้นหากลุ่ม 'ซื้อขายอาหารพร้อมส่ง'", url: "https://www.facebook.com/search/groups/?q=%E0%B8%8B%E0%B8%B7%E0%B9%89%E0%B8%AD%E0%B8%82%E0%B8%B2%E0%B8%A2%E0%B8%AD%E0%B8%B2%E0%B8%AB%E0%B8%B2%E0%B8%A3%E0%B8%9E%E0%B8%A3%E0%B9%89%E0%B8%AD%E0%B8%A1%E0%B8%AA%E0%B9%88%E0%B8%87" },
+        { name: "🔍 7. ค้นหากลุ่ม 'ตลาดขายส่งอาหาร'", url: "https://www.facebook.com/search/groups/?q=%E0%B8%95%E0%B8%A5%E0%B8%B2%E0%B8%94%E0%B8%82%E0%B8%B2%E0%B8%A2%E0%B8%AA%E0%B9%88%E0%B8%87%E0%B8%AD%E0%B8%B2%E0%B8%AB%E0%B8%B2%E0%B8%A3" }
+    ];
+
+    let currentCaptionIndex = 0;
+    let cachedPricePngBlob = null;
+    let cachedPriceFile = null;
+    let cachedFriedPngBlob = null;
+
+    // โหลดรูปภาพเตรียมไว้ล่วงหน้าทันที
+    async function prefetchImageBlobs() {
+        try {
+            const res = await fetch(IMAGES.price, { mode: 'cors' });
+            const rawBlob = await res.blob();
+            cachedPriceFile = new File([rawBlob], "pakhem_fish_price.jpg", { type: "image/jpeg" });
+            cachedPricePngBlob = await convertBlobToPng(rawBlob);
+        } catch(e) {}
+
+        try {
+            const res2 = await fetch(IMAGES.fried, { mode: 'cors' });
+            const rawBlob2 = await res2.blob();
+            cachedFriedPngBlob = await convertBlobToPng(rawBlob2);
+        } catch(e) {}
+    }
+
+    function convertBlobToPng(blob) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            const url = URL.createObjectURL(blob);
+            img.onload = () => {
+                const canvas = document.createElement("canvas");
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+                const ctx = canvas.getContext("2d");
+                ctx.drawImage(img, 0, 0);
+                URL.revokeObjectURL(url);
+                canvas.toBlob((pngBlob) => resolve(pngBlob), "image/png");
+            };
+            img.onerror = () => resolve(null);
+            img.src = url;
+        });
+    }
+
+    async function copyPngBlobToClipboard(pngBlob) {
+        if (!pngBlob) return false;
+        try {
+            if (navigator.clipboard && navigator.clipboard.write) {
+                await navigator.clipboard.write([
+                    new ClipboardItem({ "image/png": pngBlob })
+                ]);
+                return true;
+            }
+        } catch(e) {}
+        return false;
+    }
+
+    // ==============================================================
+    // 🔍 ระบบตรวจจับสถานะกลุ่ม (Group Status & Membership Detector)
+    // ==============================================================
+    function getActiveProfileName() {
+        // ดึงชื่อโปรไฟล์/เพจที่กำลังใช้งานอยู่จริง
+        const profileLink = document.querySelector('div[data-pagelet="GroupInlineComposer"] a[aria-label*="โปรไฟล์ของ"], div[data-pagelet="GroupInlineComposer"] a[aria-label*="profile"]');
+        if (profileLink) {
+            const label = profileLink.getAttribute('aria-label') || '';
+            const name = label.replace(/^โปรไฟล์ของ\s*/, '').replace(/'s profile$/, '').trim();
+            if (name) return name;
+        }
+        const topProfile = document.querySelector('div[aria-label="โปรไฟล์ของคุณ"], div[aria-label="Your profile"]');
+        if (topProfile && topProfile.textContent.trim()) {
+            return topProfile.textContent.trim();
+        }
+        return "ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้";
+    }
+
+        // ==============================================================
+    // ⚡ ระบบค้นหา Element ด้วย Native XPath (High-Performance DOM Evaluator)
+    // ==============================================================
+    function getElementByXPath(xpath, context = document) {
+        try {
+            const result = document.evaluate(
+                xpath,
+                context,
+                null,
+                XPathResult.FIRST_ORDERED_NODE_TYPE,
+                null
+            );
+            return result.singleNodeValue;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function getAllElementsByXPath(xpath, context = document) {
+        try {
+            const result = document.evaluate(
+                xpath,
+                context,
+                null,
+                XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
+                null
+            );
+            return Array.from({ length: result.snapshotLength }, (_, i) => result.snapshotItem(i));
+        } catch (e) {
+            return [];
+        }
+    }
+
+function checkGroupMembership() {
+        if (window.location.pathname.includes('/groups/joins')) {
+            return {
+                isGroup: false,
+                name: "กลุ่มที่คุณเข้าร่วมแล้วทั้งหมด",
+                status: "non_group",
+                canPost: false,
+                profileName: getActiveProfileName(),
+                badgeText: "📋 เลือกคลิกกลุ่มที่ต้องการโพสต์",
+                badgeBg: "#cce5ff",
+                badgeColor: "#004085"
+            };
+        }
+
+        const isGroupUrl = window.location.pathname.includes('/groups/');
+        if (!isGroupUrl) {
+            return {
+                isGroup: false,
+                name: "ไม่ใช่หน้ากลุ่ม Facebook",
+                status: "non_group",
+                canPost: false,
+                profileName: getActiveProfileName(),
+                badgeText: "⚠️ ไม่อยู่ในกลุ่ม",
+                badgeBg: "#f8d7da",
+                badgeColor: "#721c24"
+            };
+        }
+
+        // 1. ดึงชื่อกลุ่มจาก document.title (แม่นยำที่สุดบน Facebook SPA)
+        let groupName = "";
+        try {
+            let title = document.title || "";
+            title = title.replace(/^\(\d+\+?\)\s*/, '');
+            title = title.replace(/\s*[\|\-]\s*Facebook.*$/i, '').trim();
+            if (title && title !== "Facebook") {
+                groupName = title;
+            }
+        } catch(e) {}
+
+        if (!groupName) {
+            const h1 = document.querySelector('h1, div[data-pagelet="GroupActions"] h1');
+            groupName = h1 ? h1.textContent.trim() : "กลุ่ม Facebook";
+        }
+        if (groupName.length > 26) groupName = groupName.substring(0, 26) + "...";
+
+        // 2. ตรวจสอบความสามารถในการโพสต์ (GroupInlineComposer มีอยู่จริงหรือไม่)
+        const inlineComposer = document.querySelector('div[data-pagelet="GroupInlineComposer"]');
+        const hasComposer = !!inlineComposer;
+
+        // 1. ดึง ID ของกลุ่มปัจจุบันเพื่อแยกแยะกลุ่มจริงออกจากกล่องแนะนำ
+        const currentPath = window.location.pathname;
+        const currentGroupMatch = currentPath.match(/\/groups\/([^\/?#]+)/);
+        const currentGroupId = currentGroupMatch ? currentGroupMatch[1] : '';
+
+        // ฟังก์ชันคัดกรองปุ่ม: ข้ามปุ่มที่อยู่ในโซนแนะนำ "ค้นพบกลุ่มเพิ่มเติม" หรือการ์ดกลุ่มอื่น
+        function isInsideSuggestedGroups(element) {
+            if (!element) return false;
+            if (element.closest('div[data-pagelet*="Discover"], div[data-pagelet*="Recommendation"], div[aria-label*="ค้นพบกลุ่มเพิ่มเติม"], div[aria-label*="Discover groups"], div[aria-label*="กลุ่มที่คุณอาจสนใจ"]')) {
+                return true;
+            }
+            let parent = element.parentElement;
+            for (let i = 0; i < 8 && parent; i++) {
+                if (parent.matches && parent.matches('div[role="feed"], div[data-pagelet="GroupInlineComposer"], div[data-pagelet="GroupActions"]')) {
+                    break;
+                }
+                const text = parent.innerText || parent.textContent || '';
+                if (text.includes('ค้นพบกลุ่มเพิ่มเติม') || text.includes('Discover groups') || text.includes('กลุ่มที่คุณอาจสนใจ')) {
+                    return true;
+                }
+                const otherGroupLink = parent.querySelector('a[href*="/groups/"]');
+                if (otherGroupLink) {
+                    const href = otherGroupLink.getAttribute('href') || '';
+                    if (currentGroupId && href.includes('/groups/') && !href.includes(currentGroupId)) {
+                        return true;
+                    }
+                }
+                parent = parent.parentElement;
+            }
+            return false;
+        }
+
+        // 2.5 ⚡ ค้นหาด้วย Native XPath ความเร็วสูง (XPath Fast Path)
+        let joinBtn = null;
+        let pendingBtn = null;
+        let joinedBtn = null;
+        let inviteBtn = null;
+
+        const xpJoined = getElementByXPath('//div[@role="button" and (contains(., "เข้าร่วมแล้ว") or contains(., "เป็นสมาชิกแล้ว"))] | //a[@role="button" and contains(., "เข้าร่วมแล้ว")]');
+        if (xpJoined && !isInsideSuggestedGroups(xpJoined)) joinedBtn = xpJoined;
+
+        const xpPending = getElementByXPath('//div[@role="button" and (contains(., "ยกเลิกคำขอ") or contains(., "รอดำเนินการ"))]');
+        if (xpPending && !isInsideSuggestedGroups(xpPending)) pendingBtn = xpPending;
+
+        const xpJoin = getElementByXPath('//div[@role="button" and (contains(., "เข้าร่วมกลุ่ม") or contains(., "ขอเข้าร่วม"))]');
+        if (xpJoin && !isInsideSuggestedGroups(xpJoin)) joinBtn = xpJoin;
+
+        const xpInvite = getElementByXPath('//div[@role="button" and (contains(., "เชิญ") or contains(., "Invite"))]');
+        if (xpInvite && !isInsideSuggestedGroups(xpInvite)) inviteBtn = xpInvite;
+
+        // 3. สแกนปุ่มและข้อความทั้งหมดในโครงสร้างกลุ่ม (Deep Fallback Scan)
+        const candidates = Array.from(document.querySelectorAll('div[role="button"], a[role="button"], span[dir="auto"], span, div[tabindex="0"]'));
+
+        // ตัวแปรถูกประกาศใน XPath Fast Path แล้ว
+
+        for (const el of candidates) {
+            if (el.closest('[role="article"]') || el.closest('form')) continue;
+            // ข้ามปุ่มที่อยู่ในกล่องแนะนำกลุ่มอื่นเด็ดขาด!
+            if (isInsideSuggestedGroups(el)) continue;
+
+            const aria = (el.getAttribute("aria-label") || "").trim();
+            const text = (el.textContent || "").trim();
+            const combined = (aria + " " + text).toLowerCase().replace(/[\s\-_]/g, '');
+
+            // สมาชิกแล้ว
+            if (combined.includes("เข้าร่วมแล้ว") || combined.includes("เป็นสมาชิกแล้ว") || combined === "joined") {
+                joinedBtn = el.closest('div[role="button"]') || el;
+            }
+
+            // ปุ่มเชิญเพื่อน (มีเฉพาะสมาชิกกลุ่มเท่านั้น)
+            if (combined.includes("เชิญ") || combined.includes("invite")) {
+                inviteBtn = el.closest('div[role="button"]') || el;
+            }
+
+            // คำขอรอดำเนินการ
+            if (combined.includes("ยกเลิกคำขอ") || combined.includes("cancelrequest") || combined.includes("รอดำเนินการ") || combined.includes("pending")) {
+                pendingBtn = el.closest('div[role="button"]') || el;
+            }
+
+            // ขอเข้าร่วมกลุ่ม
+            if (combined.includes("เข้าร่วมกลุ่ม") || combined.includes("joingroup") || combined.includes("ขอเข้าร่วม")) {
+                joinBtn = el.closest('div[role="button"]') || el;
+            }
+        }
+
+        const pageText = document.body ? (document.body.innerText || "") : "";
+        const mustJoinNotice = pageText.includes("เข้าร่วมกลุ่มนี้เพื่อโพสต์และแสดงความคิดเห็น") ||
+                               pageText.includes("คุณต้องเป็นสมาชิกของกลุ่มนี้จึงจะโพสต์ได้");
+
+        const profileName = getActiveProfileName();
+
+        // 1. ตรวจสอบปุ่ม "เข้าร่วมแล้ว" (Joined) เป็นอันดับแรก (Priority สูงสุด)
+        // เพราะถ้า Facebook แสดงปุ่ม "เข้าร่วมแล้ว" แปลว่าผู้ใช้เป็นสมาชิกของกลุ่มนี้แน่นอน 100%!
+        if (joinedBtn) {
+            return {
+                isGroup: true,
+                name: groupName,
+                status: "member",
+                canPost: true,
+                profileName: profileName,
+                badgeText: "🟢 เป็นสมาชิกแล้ว (พร้อมโพสต์)",
+                badgeBg: "#d4edda",
+                badgeColor: "#155724"
+            };
+        }
+
+        // 2. ตรวจสอบคำขอรอดำเนินการ (ส่งคำขอไปแล้ว รอแอดมินอนุมัติ)
+        if (pendingBtn) {
+            return {
+                isGroup: true,
+                name: groupName,
+                status: "pending",
+                canPost: false,
+                profileName: profileName,
+                badgeText: "⏳ ส่งคำขอแล้ว (รอแอดมินอนุมัติ)",
+                badgeBg: "#fff3cd",
+                badgeColor: "#856404"
+            };
+        }
+
+        // 3. ตรวจสอบปุ่ม "เข้าร่วมกลุ่ม" ของกลุ่มปัจจุบัน
+        // (กรณีไม่ใช่สมาชิก แม้เป็นกลุ่มสาธารณะที่มีกล่องโพสต์ แต่หากไม่มีปุ่ม 'เข้าร่วมแล้ว' และมีปุ่ม 'เข้าร่วมกลุ่ม')
+        if (joinBtn || mustJoinNotice) {
+            return {
+                isGroup: true,
+                name: groupName,
+                status: "not_member",
+                canPost: false,
+                joinElement: joinBtn,
+                profileName: profileName,
+                badgeText: "🔴 ยังไม่เป็นสมาชิก (คลิกขอเข้ากลุ่ม)",
+                badgeBg: "#f8d7da",
+                badgeColor: "#721c24"
+            };
+        }
+
+        // 4. เป็นสมาชิกผ่านกล่องโพสต์ หรือปุ่มเชิญ
+        if (hasComposer || inviteBtn) {
+            return {
+                isGroup: true,
+                name: groupName,
+                status: "member",
+                canPost: true,
+                profileName: profileName,
+                badgeText: "🟢 เป็นสมาชิกแล้ว (พร้อมโพสต์)",
+                badgeBg: "#d4edda",
+                badgeColor: "#155724"
+            };
+        }
+
+        return {
+            isGroup: true,
+            name: groupName,
+            status: "unknown",
+            canPost: true,
+            profileName: profileName,
+            badgeText: "🔍 กำลังตรวจสถานะ (พร้อมโพสต์)",
+            badgeBg: "#e8f4fd",
+            badgeColor: "#0c5460"
+        };
+    }
+
+
+    // ==============================================================
+    // 📝 ระบบตอบคำถามขอเข้ากลุ่มอัตโนมัติ (Auto-Answer Group Questions)
+    // ==============================================================
+    function autoAnswerGroupQuestions() {
+        const dialog = document.querySelector('div[role="dialog"]');
+        if (!dialog) {
+            return { success: false, msg: "ไม่พบหน้าต่างคำถามบนหน้าจอครับ (กดปุ่ม 'เข้าร่วมกลุ่ม' ก่อน)" };
+        }
+
+        let answeredCount = 0;
+
+        // 1. ติ๊กเครื่องหมายถูกยอมรับกฎกลุ่มทั้งหมด
+        const checkboxes = Array.from(dialog.querySelectorAll('input[type="checkbox"], div[role="checkbox"]'));
+        for (const cb of checkboxes) {
+            if (cb.tagName === 'INPUT' && !cb.checked) {
+                cb.click();
+                answeredCount++;
+            } else if (cb.getAttribute('aria-checked') !== 'true') {
+                cb.click();
+                answeredCount++;
+            }
+        }
+
+        // 2. เติมคำตอบลงในช่องเขียน (Textarea, Input)
+        const inputs = Array.from(dialog.querySelectorAll('textarea, input[type="text"], div[contenteditable="true"]'));
+        for (const input of inputs) {
+            const parent = input.closest('div[role="listitem"], div') || input.parentElement;
+            const qText = parent ? (parent.innerText || '').toLowerCase() : '';
+
+            let answer = "ขออนุญาตเข้าร่วมกลุ่มเพื่อแลกเปลี่ยนและจำหน่ายสินค้าคุณภาพดีตามกฎระเบียบของกลุ่มครับ";
+            if (qText.includes("ขาย") || qText.includes("สินค้า") || qText.includes("ธุรกิจ") || qText.includes("sell") || qText.includes("product")) {
+                answer = "จำหน่ายปลาสลิดสุพรรณแดดเดียวแท้ ป้าเข็ม คัดพิเศษ (ไซส์จัมโบ้ สะอาด ไร้สาร เค็มน้อย 3%)";
+            } else if (qText.includes("กฎ") || qText.includes("rule") || qText.includes("ยอมรับ") || qText.includes("accept")) {
+                answer = "ยอมรับและพร้อมปฏิบัติตามกฎระเบียบของกลุ่มทุกประการครับ";
+            } else if (qText.includes("จังหวัด") || qText.includes("ที่อยู่") || qText.includes("อยู่อำเภอ") || qText.includes("location") || qText.includes("where")) {
+                answer = "อยุธยา / สุพรรณบุรี (บริการจัดส่งด่วนห้องเย็น 1-2 วันถึงบ้านทั่วไทย)";
+            }
+
+            if (input.tagName === "DIV" && input.getAttribute("contenteditable") === "true") {
+                input.focus();
+                document.execCommand("insertText", false, answer);
+            } else {
+                input.value = answer;
+                input.dispatchEvent(new Event("input", { bubbles: true }));
+                input.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+            answeredCount++;
+        }
+
+        // 3. เลื่อนไปยังปุ่มส่ง (Submit)
+        const submitBtn = Array.from(dialog.querySelectorAll('div[role="button"]')).find(b => {
+            const t = (b.textContent || '').trim();
+            return t === "ส่ง" || t === "Submit" || t.includes("ส่งคำขอ");
+        });
+
+        if (submitBtn) {
+            submitBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        return {
+            success: answeredCount > 0,
+            count: answeredCount,
+            submitBtn: submitBtn
+        };
+    }
+
+    // ==============================================================
+    // 🔍 เรดาร์กวาดรายชื่อกลุ่มบนหน้าค้นหา (Group Harvester & CSV Export)
+    // ==============================================================
+    function scanAndExportGroupsToCsv() {
+        const links = Array.from(document.querySelectorAll('a[href*="/groups/"]'));
+        const groups = [];
+        const seenUrls = new Set();
+
+        for (const a of links) {
+            let href = (a.href || '').split('?')[0].split('/posts')[0];
+            if (!href.includes('/groups/') || href.endsWith('/groups/') || href.includes('/joins')) continue;
+            if (seenUrls.has(href)) continue;
+
+            const card = a.closest('div[role="feed"] > div, div[role="article"], div.x1n2onr6') || a.parentElement;
+            const text = card ? (card.innerText || '') : '';
+            const title = a.textContent ? a.textContent.trim() : '';
+
+            if (title.length < 3 || title.includes('โพสต์') || title.includes('สมาชิก') || title === "Facebook") continue;
+
+            seenUrls.add(href);
+
+            const isMember = text.includes('เข้าร่วมแล้ว') || text.includes('Joined');
+            const isPending = text.includes('ยกเลิกคำขอ') || text.includes('รอดำเนินการ') || text.includes('Pending');
+            const status = isMember ? 'เป็นสมาชิกแล้ว' : (isPending ? 'รออนุมัติ' : 'ยังไม่เป็นสมาชิก');
+
+            groups.push({
+                title: title.replace(/"/g, '""'),
+                url: href,
+                status: status
+            });
+        }
+
+        if (groups.length === 0) {
+            return { count: 0 };
+        }
+
+        // สร้าง CSV พร้อม BOM (UTF-8) สำหรับเปิดใน Excel ภาษาไทยไม่เพี้ยน
+        let csvContent = "\ufeff\"ชื่อกลุ่ม\",\"สถานะสมาชิก\",\"ลิงก์กลุ่ม Facebook\"\n";
+        groups.forEach(g => {
+            csvContent += `\"${g.title}\",\"${g.status}\",\"${g.url}\"\n`;
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `facebook_groups_pakhem_${new Date().toISOString().slice(0,10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        return { count: groups.length, groups: groups };
+    }
+
+    // ฟังก์ชันค้นหากล่อง "สร้างโพสต์"
+    function findCreatePostTrigger() {
+        const inlineComposer = document.querySelector('div[data-pagelet="GroupInlineComposer"] div[role="button"][tabindex="0"]') ||
+                               document.querySelector('div[data-pagelet="GroupInlineComposer"] div[role="button"]') ||
+                               document.querySelector('div[data-pagelet*="Composer"] div[role="button"]');
+        if (inlineComposer) return inlineComposer;
+
+        // ⚡ XPath Ultra-Fast Composer Detection
+        const xpathComposer = getElementByXPath(
+            '//div[@data-pagelet="GroupInlineComposer"]//div[@role="button"] | //div[contains(@data-pagelet, "Composer")]//div[@role="button"] | //div[@role="button" and (contains(., "เขียนอะไร") or contains(., "สร้างโพสต์") or contains(., "คุณกำลังคิดอะไรอยู่"))]'
+        );
+        if (xpathComposer && !xpathComposer.closest('[role="article"]')) return xpathComposer;
+
+        const allCandidates = Array.from(document.querySelectorAll('span, div[role="button"], div[tabindex="0"]'));
+        for (const el of allCandidates) {
+            if (el.closest('[role="article"]') || el.closest('form')) continue;
+            const rawText = el.textContent || '';
+            const cleanText = rawText.replace(/[\.\s\u2026?？_—\-]/g, '').toLowerCase();
+
+            if (cleanText.includes('เขียนอะไร') ||
+                cleanText.includes('สร้างโพสต์') ||
+                cleanText.includes('คุณกำลังคิดอะไรอยู่') ||
+                cleanText.includes('writesomething') ||
+                cleanText.includes('createapublicpost')) {
+                return el.closest('div[role="button"]') || el.parentElement || el;
+            }
+        }
+        return null;
+    }
+
+    function simulateFullClick(element) {
+        if (!element) return;
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        element.focus();
+        element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+        element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+        element.click();
+    }
+
+    async function insertTextIntoEditor(composer, text) {
+        composer.focus();
+        await new Promise(r => setTimeout(r, 100));
+
+        try {
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            const range = document.createRange();
+            range.selectNodeContents(composer);
+            range.collapse(false);
+            sel.addRange(range);
+            document.execCommand("insertText", false, text);
+        } catch(e) {}
+
+        await new Promise(r => setTimeout(r, 200));
+
+        if (!composer.textContent || !composer.textContent.includes("ปลาสลิด")) {
+            try {
+                const inputEvt = new InputEvent('beforeinput', {
+                    bubbles: true,
+                    cancelable: true,
+                    inputType: 'insertText',
+                    data: text
+                });
+                composer.dispatchEvent(inputEvt);
+            } catch(e) {}
+        }
+    }
+
+    function isImagePreviewPresent(dialog) {
+        if (!dialog) return false;
+        const imgThumb = dialog.querySelector('img[src^="blob:"], div[aria-label*="เอาสื่อออก"], div[aria-label*="Remove"], div[aria-label*="แก้ไขรูปภาพ"], div[aria-label*="Edit photo"], img[src*="fbcdn.net"]');
+        return !!imgThumb;
+    }
+
+    
+    // ==============================================================
+    // 💬 ระบบผู้ช่วยปิดการขายใน Facebook Messenger (Inbox Sales Assistant - v4.8)
+    // ==============================================================
+    const MESSENGER_REPLIES = {
+        price: `ปลาสลิดสุพรรณแดดเดียวแท้ ป้าเข็ม คัดพิเศษ (ไซส์จัมโบ้ เนื้อแน่นหนาฟู มันแทรก เค็มน้อย 3% ไร้ชูรส) 🐟✨
+📦 ราคามาตรฐานส่งฟรีถึงหน้าบ้าน:
+• ชุด 500 กรัม (3-4 ตัว): โอน 390.- (เก็บปลายทาง 410.-)
+• ชุด 1 กิโลกรัม (5-7 ตัว): โอน 550.- (เก็บปลายทาง 570.-) ⭐ ขายดีที่สุด!
+• ชุด 2 กิโลกรัม (10-14 ตัว): โอน 1,090.- (ส่งฟรีรถห้องเย็นควบคุมอุณหภูมิ!)
+🚚 แช่เยือกแข็ง -18°C บรรจุซองฟอยล์ ส่งถึงใน 1-2 วัน สินค้าเสียหายเคลมฟรี 100% ค่ะ 💕
+👉 คุณลูกค้ารับชุดไหนดีคะ แจ้งชื่อ-ที่อยู่-เบอร์โทร ให้แอดมินเปิดบิลส่งได้เลยจ้า`,
+
+        bank: `🏦 ยอดโอนชำระเงินส่งฟรี ร้านป้าเข็ม:
+• ธนาคารกรุงไทย (Krungthai)
+• เลขที่บัญชี: 038-0-25363-1
+• ชื่อบัญชี: นายจีรวัฒน์ พลอาจ
+โอนแล้วส่งสลิปพร้อมแจ้งชื่อ-ที่อยู่-เบอร์โทรผู้รับไว้ในแชทนี้ได้เลยนะคะ แอดมินรีบแพ็กจัดส่งสดใหม่ให้ทันทีจ้า 🙏✨`,
+
+        shipping: `❄️ มาตรฐานการผลิตและการจัดส่ง ร้านป้าเข็ม:
+1. ตากแดดธรรมชาติ 1 แดด เนื้อปลาหอมหนาฟู
+2. ซีลสูญญากาศและแช่เยือกแข็ง ≤ -18°C อย่างน้อย 12 ชม.
+3. บรรจุซองฟอยล์เก็บอุณหภูมิ จัดส่งถึงบ้านภายใน 1-2 วัน
+🛡️ รับประกันความสด 100% หากสินค้ามีปัญหาถ่ายรูปแจ้งในแชท เคลมส่งใหม่ให้ฟรีทันทีค่ะ!`
+    };
+
+    function isElementVisible(el) {
+        if (!el) return false;
+        try {
+            const rect = el.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
+        } catch(e) {
+            return false;
+        }
+    }
+
+    function findMessengerComposer() {
+        // 1. Meta Business Suite Lexical Editor
+        let el = document.querySelector('div[data-lexical-editor="true"]');
+        if (el && isElementVisible(el)) return el;
+
+        // 2. Query by role="textbox" and contenteditable (excluding our helper widget)
+        const textboxes = Array.from(document.querySelectorAll('div[role="textbox"][contenteditable="true"]'));
+        const validTextboxes = textboxes.filter(tb => !tb.closest('#pakhem-group-helper') && isElementVisible(tb));
+        if (validTextboxes.length > 0) return validTextboxes[validTextboxes.length - 1];
+
+        // 3. XPath query for reply/message boxes
+        const xp = getElementByXPath(
+            '//div[contains(@aria-label, "ตอบกลับ") and @contenteditable="true"] | ' +
+            '//div[contains(@aria-placeholder, "ตอบกลับ") and @contenteditable="true"] | ' +
+            '//div[contains(@aria-label, "ข้อความ") and @contenteditable="true"] | ' +
+            '//div[contains(@aria-label, "Message") and @contenteditable="true"]'
+        );
+        if (xp && !xp.closest('#pakhem-group-helper') && isElementVisible(xp)) return xp;
+
+        // 4. Any contenteditable in main area (last one)
+        const editables = Array.from(document.querySelectorAll('div[contenteditable="true"]')).filter(ed => !ed.closest('#pakhem-group-helper') && isElementVisible(ed));
+        if (editables.length > 0) {
+            return editables[editables.length - 1];
+        }
+        return null;
+    }
+
+    function extractAddressFromMessenger() {
+        const selectors = [
+            'div[data-scope="messages_table"] div[dir="auto"]',
+            'div[role="main"] div[dir="auto"]',
+            'div[role="row"] div[dir="auto"]',
+            'div[data-lexical-text="true"]',
+            'span[dir="auto"]'
+        ];
+        let allElements = [];
+        for (const sel of selectors) {
+            const els = Array.from(document.querySelectorAll(sel));
+            if (els.length > allElements.length) {
+                allElements = els;
+            }
+        }
+        const widget = document.getElementById("pakhem-group-helper");
+        const chatElements = allElements.filter(el => !widget || !widget.contains(el));
+        const fullChatText = chatElements.map(m => (m.textContent || "").trim()).filter(Boolean).join("\n");
+
+        const phoneMatch = fullChatText.match(/(?:0[689]\d[\s\-]?\d{3}[\s\-]?\d{4}|0[23457]\d[\s\-]?\d{3}[\s\-]?\d{3})/);
+        const phone = phoneMatch ? phoneMatch[0].replace(/[\s\-]/g, '') : "";
+
+        const zipMatch = fullChatText.match(/\b(1\d{4}|2\d{4}|3\d{4}|4\d{4}|5\d{4}|6\d{4}|7\d{4}|8\d{4}|9\d{4})\b/);
+        const zip = zipMatch ? zipMatch[0] : "";
+
+        const lines = fullChatText.split("\n").map(l => l.trim()).filter(l => l.length > 4);
+        let addressLines = [];
+        for (const l of lines) {
+            if (l.includes("ต.") || l.includes("ตำบล") || l.includes("อ.") || l.includes("อำเภอ") ||
+                l.includes("จ.") || l.includes("จังหวัด") || l.includes("แขวง") || l.includes("เขต") ||
+                l.includes("ม.") || l.includes("หมู่") || l.includes("ซอย") || l.includes("ถนน") ||
+                l.includes("บ้านเลขที่") || l.includes("เลขที่")) {
+                if (!l.includes("กดปุ่มเลือก") && !l.includes("สูตรทองคำ") && !l.includes("ปลาสลิด") && !l.includes("ราคามาตรฐาน")) {
+                    addressLines.push(l);
+                }
+            }
+        }
+
+        return {
+            phone: phone,
+            zip: zip,
+            address: addressLines.join(" "),
+            raw: fullChatText
+        };
+    }
+
+    function createWidget() {
+        if (document.getElementById("pakhem-group-helper")) return;
+
+        const widget = document.createElement("div");
+        widget.id = "pakhem-group-helper";
+        widget.style.cssText = `
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 999999;
+            background: #ffffff;
+            border-radius: 14px;
+            box-shadow: 0 10px 35px rgba(0,0,0,0.35);
+            width: 350px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            border: 2px solid #28a745;
+            overflow: hidden;
+            box-sizing: border-box;
+            transition: border-color 0.3s;
+        `;
+
+        const savedPos = localStorage.getItem("pkh_widget_pos");
+        if (savedPos) {
+            try {
+                const pos = JSON.parse(savedPos);
+                widget.style.top = `${pos.top}px`;
+                widget.style.left = `${pos.left}px`;
+                widget.style.bottom = "auto";
+                widget.style.right = "auto";
+            } catch(e) {}
+        }
+
+        widget.innerHTML = `
+            <div id="pkh-header" style="background: #28a745; color: #fff; padding: 10px 14px; font-weight: bold; font-size: 13px; display: flex; justify-content: space-between; align-items: center; cursor: move; user-select: none;">
+                <span id="pkh-header-text">🤖 ป้าเข็ม: ตรวจกลุ่ม + โพสต์ (v4.8)</span>
+                <span id="pkh-toggle" style="cursor: pointer; font-size: 16px; padding: 0 4px;">➖</span>
+            </div>
+            <div id="pkh-body" style="padding: 10px 12px; font-size: 12px; color: #333;">
+                
+                <!-- 💬 แถบปิดการขายด่วน Facebook Messenger / Meta Business Suite Inbox -->
+                <div id="pkh-messenger-box" style="display: none; margin-bottom: 8px; padding: 8px; background: #eef7ff; border-radius: 8px; border: 1.5px solid #007bff;">
+                    <div style="font-weight: bold; color: #004085; font-size: 11px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+                        <span>💬 ผู้ช่วยปิดการขายในแชท</span>
+                        <span style="font-size: 10px; background: #007bff; color: white; padding: 1px 5px; border-radius: 4px;">1-คลิกพิมพ์</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 6px;">
+                        <button type="button" id="pkh-btn-send-price" style="background: #28a745; color: white; border: none; border-radius: 6px; padding: 6px 2px; font-size: 10.5px; font-weight: bold; cursor: pointer;">💰 ส่งราคา 3 ชุด</button>
+                        <button type="button" id="pkh-btn-send-bank" style="background: #17a2b8; color: white; border: none; border-radius: 6px; padding: 6px 2px; font-size: 10.5px; font-weight: bold; cursor: pointer;">🏦 ส่งเลขบัญชี</button>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 6px;">
+                        <button type="button" id="pkh-btn-send-shipping" style="background: #6c757d; color: white; border: none; border-radius: 6px; padding: 6px 2px; font-size: 10.5px; font-weight: bold; cursor: pointer;">❄️ ส่งเงื่อนไขรถเย็น</button>
+                        <button type="button" id="pkh-btn-extract-addr" style="background: #ffc107; color: #212529; border: none; border-radius: 6px; padding: 6px 2px; font-size: 10.5px; font-weight: bold; cursor: pointer;">📋 สกัดที่อยู่ลูกค้า</button>
+                    </div>
+
+                    <!-- 📝 CRM Mini-Card โน้ตลูกค้าสดในแชท + โหลด CSV -->
+                    <div id="pkh-inbox-crm" style="margin-top: 6px; padding: 6px 8px; background: #ffffff; border-radius: 6px; border: 1px dashed #b8daff;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <span style="font-weight: bold; color: #0056b3; font-size: 10.5px;">📝 โน้ตลูกค้าคนนี้</span>
+                            <button type="button" id="pkh-btn-export-notes-csv" style="background: none; border: none; color: #28a745; font-size: 10px; font-weight: bold; cursor: pointer; text-decoration: underline;" title="ส่งออกโน้ตลูกค้าทั้งหมดเป็นไฟล์ CSV">📥 โหลด CSV</button>
+                        </div>
+                        <input type="text" id="pkh-inbox-note-input" placeholder="พิมพ์โน้ต เช่น ชอบเค็มน้อย / สั่ง 2 กก. รถเย็น" style="width: 100%; padding: 4px 6px; font-size: 10.5px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; margin-bottom: 4px;">
+                        <div style="display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 4px;">
+                            <span class="pkh-inbox-tag" data-tag="เค็มน้อย" style="background: #e9ecef; color: #495057; padding: 1px 5px; border-radius: 3px; font-size: 9.5px; cursor: pointer;">+ เค็มน้อย</span>
+                            <span class="pkh-inbox-tag" data-tag="ส่งรถเย็น" style="background: #e9ecef; color: #495057; padding: 1px 5px; border-radius: 3px; font-size: 9.5px; cursor: pointer;">+ ส่งรถเย็น</span>
+                            <span class="pkh-inbox-tag" data-tag="โอนแล้ว" style="background: #e9ecef; color: #495057; padding: 1px 5px; border-radius: 3px; font-size: 9.5px; cursor: pointer;">+ โอนแล้ว</span>
+                            <span class="pkh-inbox-tag" data-tag="COD" style="background: #e9ecef; color: #495057; padding: 1px 5px; border-radius: 3px; font-size: 9.5px; cursor: pointer;">+ COD</span>
+                            <span class="pkh-inbox-tag" data-tag="ขาประจำ" style="background: #e9ecef; color: #495057; padding: 1px 5px; border-radius: 3px; font-size: 9.5px; cursor: pointer;">+ ขาประจำ</span>
+                        </div>
+                        <div style="text-align: right;">
+                            <button type="button" id="pkh-btn-save-inbox-note" style="background: #007bff; color: white; border: none; border-radius: 4px; padding: 3px 8px; font-size: 10px; font-weight: bold; cursor: pointer;">💾 บันทึกโน้ต</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- แถบแสดงสถานะสมาชิกกลุ่ม -->
+                <div id="pkh-group-badge" style="padding: 8px 10px; margin-bottom: 8px; border-radius: 8px; font-size: 11px; font-weight: bold; background: #e2e3e5; color: #383d41; border: 1px solid rgba(0,0,0,0.08); display: flex; flex-direction: column; gap: 4px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span id="pkh-group-title" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px;">กำลังตรวจกลุ่ม...</span>
+                        <button id="pkh-btn-refresh-status" style="background: transparent; border: none; font-size: 12px; cursor: pointer; padding: 0;" title="คลิกเพื่อตรวจสถานะกลุ่มใหม่">🔄</button>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
+                        <span id="pkh-group-status">ตรวจสถานะ...</span>
+                        <span id="pkh-profile-name" style="font-weight: normal; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;"></span>
+                    </div>
+                </div>
+
+                <!-- ลิงก์ย่อ/ขยายเครื่องมือโพสต์กลุ่มในโหมด Inbox -->
+                <div id="pkh-group-tools-toggle" style="display: none; margin-bottom: 6px; text-align: center;">
+                    <button type="button" id="pkh-btn-toggle-group-tools" style="background: none; border: none; color: #007bff; font-size: 11px; cursor: pointer; text-decoration: underline;">📢 แสดงเครื่องมือโพสต์กลุ่ม Facebook ▼</button>
+                </div>
+
+                <!-- 📢 กล่องเครื่องมือโพสต์กลุ่ม Facebook (จะถูกซ่อนอัตโนมัติในโหมด Inbox) -->
+                <div id="pkh-group-tools">
+                    <!-- ช่องพิมพ์ค้นหากลุ่ม Facebook ทันที -->
+                    <div style="display: flex; gap: 4px; margin-bottom: 8px;">
+                        <input id="pkh-custom-search" type="text" placeholder="🔍 พิมพ์คำค้นหากลุ่ม (เช่น อาหารแห้ง)..." style="flex: 1; padding: 6px 8px; font-size: 11px; border: 1.5px solid #007bff; border-radius: 6px; box-sizing: border-box; outline: none;">
+                        <button id="pkh-btn-go-search" style="background: #007bff; color: white; border: none; border-radius: 6px; padding: 6px 10px; font-size: 11px; font-weight: bold; cursor: pointer; white-space: nowrap;">ค้นหากลุ่ม</button>
+                    </div>
+
+                    <div style="margin-bottom: 8px;">
+                        <select id="pkh-select-group" style="width: 100%; padding: 6px; font-size: 11px; border-radius: 6px; border: 1.5px solid #28a745; background: #e8f5e9; color: #1b5e20; font-weight: bold; cursor: pointer;">
+                            ${TARGET_GROUPS.map((g) => `<option value="${g.url}">${g.name}</option>`).join('')}
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom: 6px; font-weight: bold; color: #1b5e20; display: flex; justify-content: space-between; align-items: center;">
+                        <span id="pkh-cap-title" style="font-size: 11px;">${CAPTIONS[0].title}</span>
+                        <button id="pkh-btn-rand" style="background:#e4e6eb; border:none; border-radius:6px; padding:2px 8px; font-size:11px; cursor:pointer;">🎲 สุ่ม</button>
+                    </div>
+                    <textarea id="pkh-caption-area" style="width: 100%; height: 75px; font-size: 11px; padding: 6px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; resize: none; margin-bottom: 8px; font-family: inherit;">${CAPTIONS[0].text}</textarea>
+
+                    <div style="margin-bottom: 8px;">
+                        <button id="pkh-btn-insert" style="width: 100%; background: #28a745; color: white; border: none; border-radius: 8px; padding: 13px 4px; font-weight: bold; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 4px 12px rgba(40,167,69,0.4);">
+                            🚀 1-คลิก โพสต์พร้อมรูปป้ายราคา (อัตโนมัติ 100%)
+                        </button>
+                    </div>
+
+                    <div style="display: flex; gap: 4px; margin-bottom: 6px;">
+                        <button id="pkh-btn-copy-img" style="flex: 1; background: #007bff; color: white; border: none; border-radius: 6px; padding: 5px 2px; font-size: 10px; cursor: pointer;">
+                            🖼️ ก๊อปรูปป้าย
+                        </button>
+                        <button id="pkh-btn-copy-fried" style="flex: 1; background: #6f42c1; color: white; border: none; border-radius: 6px; padding: 5px 2px; font-size: 10px; cursor: pointer;">
+                            🍳 ก๊อปรูปทอด
+                        </button>
+                        <button id="pkh-btn-copy-text" style="flex: 1; background: #e4e6eb; color: #333; border: none; border-radius: 6px; padding: 5px 2px; font-size: 10px; cursor: pointer;">
+                            📋 ก๊อปข้อความ
+                        </button>
+                    </div>
+
+                    <div style="display: flex; gap: 4px; margin-bottom: 6px;">
+                        <button id="pkh-btn-auto-answer" style="flex: 1; background: #ffc107; color: #212529; border: none; border-radius: 6px; padding: 6px 2px; font-size: 10px; font-weight: bold; cursor: pointer;" title="คลิกเพื่อตอบคำถามขอเข้ากลุ่มและยอมรับกฎอัตโนมัติ">
+                            📝 ตอบคำถามเข้ากลุ่ม 1-คลิก
+                        </button>
+                        <button id="pkh-btn-harvest-csv" style="flex: 1; background: #17a2b8; color: white; border: none; border-radius: 6px; padding: 6px 2px; font-size: 10px; font-weight: bold; cursor: pointer;" title="ดูดรายชื่อกลุ่มในหน้าค้นหาเป็นไฟล์ CSV">
+                            📥 ดูดลิสต์กลุ่ม (CSV)
+                        </button>
+                    </div>
+                </div>
+
+                <div id="pkh-toast" style="font-size: 11px; color: #666; text-align: center; min-height: 28px; line-height: 1.4; padding: 4px; background: #f8f9fa; border-radius: 6px;">
+                    🔒 พร้อมตรวจสอบสถานะสมาชิกและโพสต์ทันทีครับ
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(widget);
+
+        // 📝 ตรวจสอบโน้ตลูกค้า (CRM Note Alert บนวิดเจ็ต)
+        const crmBadge = document.createElement("div");
+        crmBadge.id = "pkh-crm-badge";
+        crmBadge.style.cssText = "display: none; padding: 6px 8px; margin-bottom: 8px; border-radius: 6px; font-size: 11px; background: #e8f4fd; color: #004085; border: 1px solid #b8daff; line-height: 1.4;";
+        const groupBadgeEl = widget.querySelector("#pkh-group-badge");
+        if (groupBadgeEl && groupBadgeEl.parentNode) {
+            groupBadgeEl.parentNode.insertBefore(crmBadge, groupBadgeEl.nextSibling);
+        }
+
+        async function checkCustomerNoteAlert() {
+            try {
+                const currentKey = window.location.origin + window.location.pathname;
+                let note = "";
+                if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+                    const data = await chrome.storage.local.get(["pakhem_customer_notes"]);
+                    const notes = data.pakhem_customer_notes || {};
+                    if (notes[currentKey]) note = notes[currentKey].note || "";
+                } else {
+                    const raw = localStorage.getItem("pakhem_customer_notes");
+                    if (raw) {
+                        const notes = JSON.parse(raw);
+                        if (notes[currentKey]) note = notes[currentKey].note || "";
+                    }
+                }
+
+                if (note && crmBadge) {
+                    crmBadge.style.display = "block";
+                    crmBadge.innerHTML = `💡 <b>โน้ตลูกค้ารายนี้:</b><br>${note}`;
+                } else if (crmBadge) {
+                    crmBadge.style.display = "none";
+                }
+            } catch(e) {}
+        }
+        checkCustomerNoteAlert();
+
+        // Elements
+        const header = widget.querySelector("#pkh-header");
+        const headerText = widget.querySelector("#pkh-header-text");
+        const toggleBtn = widget.querySelector("#pkh-toggle");
+        const bodyDiv = widget.querySelector("#pkh-body");
+        const groupBadge = widget.querySelector("#pkh-group-badge");
+        const groupTitle = widget.querySelector("#pkh-group-title");
+        const groupStatus = widget.querySelector("#pkh-group-status");
+        const refreshStatusBtn = widget.querySelector("#pkh-btn-refresh-status");
+        const capTitle = widget.querySelector("#pkh-cap-title");
+        const capArea = widget.querySelector("#pkh-caption-area");
+        const randBtn = widget.querySelector("#pkh-btn-rand");
+        const insertBtn = widget.querySelector("#pkh-btn-insert");
+        const copyImgBtn = widget.querySelector("#pkh-btn-copy-img");
+        const copyFriedBtn = widget.querySelector("#pkh-btn-copy-fried");
+        const copyTextBtn = widget.querySelector("#pkh-btn-copy-text");
+        const selectGroup = widget.querySelector("#pkh-select-group");
+        const toast = widget.querySelector("#pkh-toast");
+
+        // 💬 จัดการแถบผู้ช่วยปิดการขาย Messenger / Meta Business Suite Inbox
+        const messengerBox = widget.querySelector("#pkh-messenger-box");
+        const btnSendPrice = widget.querySelector("#pkh-btn-send-price");
+        const btnSendBank = widget.querySelector("#pkh-btn-send-bank");
+        const btnSendShipping = widget.querySelector("#pkh-btn-send-shipping");
+        const btnExtractAddr = widget.querySelector("#pkh-btn-extract-addr");
+
+        let isGroupToolsManuallyOpened = false;
+
+        function checkMessengerPageMode() {
+            const isMsg = window.location.pathname.includes('/messages') || window.location.pathname.includes('/inbox');
+            const groupToolsEl = widget.querySelector("#pkh-group-tools");
+            const groupToolsToggleEl = widget.querySelector("#pkh-group-tools-toggle");
+            const groupBadgeEl = widget.querySelector("#pkh-group-badge");
+
+            if (isMsg) {
+                if (messengerBox) messengerBox.style.display = "block";
+                if (groupBadgeEl) groupBadgeEl.style.display = "none";
+                if (groupToolsToggleEl) groupToolsToggleEl.style.display = "block";
+                if (groupToolsEl && !isGroupToolsManuallyOpened) {
+                    groupToolsEl.style.display = "none";
+                }
+                if (headerText && !headerText.textContent.includes("⏳")) {
+                    headerText.textContent = "💬 ป้าเข็ม: ผู้ช่วยปิดการขาย Inbox (v4.8)";
+                    header.style.background = "#007bff";
+                    widget.style.borderColor = "#007bff";
+                }
+            } else {
+                if (messengerBox) messengerBox.style.display = "none";
+                if (groupBadgeEl) groupBadgeEl.style.display = "flex";
+                if (groupToolsToggleEl) groupToolsToggleEl.style.display = "none";
+                if (groupToolsEl) groupToolsEl.style.display = "block";
+            }
+        }
+        setInterval(checkMessengerPageMode, 2000);
+        checkMessengerPageMode();
+
+        const btnToggleGroupTools = widget.querySelector("#pkh-btn-toggle-group-tools");
+        if (btnToggleGroupTools) {
+            btnToggleGroupTools.addEventListener("click", () => {
+                const groupToolsEl = widget.querySelector("#pkh-group-tools");
+                if (groupToolsEl) {
+                    if (groupToolsEl.style.display === "none") {
+                        groupToolsEl.style.display = "block";
+                        isGroupToolsManuallyOpened = true;
+                        btnToggleGroupTools.textContent = "📢 ซ่อนเครื่องมือโพสต์กลุ่ม Facebook ▲";
+                    } else {
+                        groupToolsEl.style.display = "none";
+                        isGroupToolsManuallyOpened = false;
+                        btnToggleGroupTools.textContent = "📢 แสดงเครื่องมือโพสต์กลุ่ม Facebook ▼";
+                    }
+                }
+            });
+        }
+
+        async function insertReplyToMessenger(replyText, label) {
+            const composer = findMessengerComposer();
+            let inserted = false;
+            if (composer) {
+                inserted = await insertTextIntoEditor(composer, replyText);
+            }
+
+            // Always copy to clipboard as seamless failsafe
+            try {
+                await navigator.clipboard.writeText(replyText);
+            } catch(e) {}
+
+            if (inserted) {
+                showToast(`✅ พิมพ์ ${label} ลงในช่องแชทแล้วครับ (กดส่งได้เลย)`, "#28a745");
+            } else if (composer) {
+                showToast(`✅ วางข้อความแล้ว (หรือกด Ctrl+V ในช่องแชทได้ทันที)`, "#007bff");
+            } else {
+                showToast(`📋 ก๊อปปี้ ${label} เข้าคลิปบอร์ดแล้วครับ กด Ctrl+V วางได้เลย!`, "#007bff");
+            }
+        }
+
+        if (btnSendPrice) {
+            btnSendPrice.addEventListener("click", () => insertReplyToMessenger(MESSENGER_REPLIES.price, "ราคา 3 แพ็กเกจ"));
+        }
+        if (btnSendBank) {
+            btnSendBank.addEventListener("click", () => insertReplyToMessenger(MESSENGER_REPLIES.bank, "บัญชีกรุงไทย"));
+        }
+        if (btnSendShipping) {
+            btnSendShipping.addEventListener("click", () => insertReplyToMessenger(MESSENGER_REPLIES.shipping, "เงื่อนไขจัดส่ง"));
+        }
+        if (btnExtractAddr) {
+            btnExtractAddr.addEventListener("click", async () => {
+                showToast("⏳ กำลังสแกนแชทเพื่อสกัดที่อยู่...", "#007bff");
+                const res = extractAddressFromMessenger();
+                let summary = "";
+                if (res.phone) summary += `เบอร์: ${res.phone} `;
+                if (res.zip) summary += `ปณ: ${res.zip} `;
+                if (res.address) summary += `ที่อยู่: ${res.address}`;
+
+                if (summary) {
+                    try {
+                        await navigator.clipboard.writeText(summary);
+                    } catch(e) {}
+                    showToast(`🎉 สกัดสำเร็จ: ${summary.substring(0, 45)}... (ก๊อปปี้แล้ว)`, "#28a745");
+                } else {
+                    showToast("ℹ️ ไม่พบเบอร์โทรหรือที่อยู่ในแชทข้อความล่าสุดครับ", "#e67e22");
+                }
+            });
+        }
+
+        // 📝 CRM โน้ตลูกค้าสดในแชท + Export CSV
+        const inboxNoteInput = widget.querySelector("#pkh-inbox-note-input");
+        const btnSaveInboxNote = widget.querySelector("#pkh-btn-save-inbox-note");
+        const btnExportNotesCsv = widget.querySelector("#pkh-btn-export-notes-csv");
+        const inboxTagChips = widget.querySelectorAll(".pkh-inbox-tag");
+
+        function getChatCustomerName() {
+            const nameEl = document.querySelector('div[role="main"] h2') ||
+                           document.querySelector('div[data-scope="messages_table"]') ||
+                           Array.from(document.querySelectorAll('span[dir="auto"], div[dir="auto"]')).find(el => {
+                               const txt = (el.textContent || "").trim();
+                               return txt.length > 2 && txt.length < 35 && !txt.includes("ป้าเข็ม") && !txt.includes("กล่องข้อความ") && !txt.includes("Messenger") && !txt.includes("มอบหมาย");
+                           });
+            return nameEl ? (nameEl.textContent || "").trim() : "";
+        }
+
+        async function loadCurrentCustomerNote() {
+            if (!inboxNoteInput) return;
+            try {
+                const currentKey = window.location.origin + window.location.pathname;
+                let note = "";
+                if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+                    const data = await chrome.storage.local.get(["pakhem_customer_notes"]);
+                    const notes = data.pakhem_customer_notes || {};
+                    if (notes[currentKey]) note = notes[currentKey].note || "";
+                } else {
+                    const raw = localStorage.getItem("pakhem_customer_notes");
+                    if (raw) {
+                        const notes = JSON.parse(raw);
+                        if (notes[currentKey]) note = notes[currentKey].note || "";
+                    }
+                }
+                if (note && inboxNoteInput.value !== note) {
+                    inboxNoteInput.value = note;
+                }
+            } catch(e) {}
+        }
+        setInterval(loadCurrentCustomerNote, 3000);
+        loadCurrentCustomerNote();
+
+        if (inboxTagChips) {
+            inboxTagChips.forEach(chip => {
+                chip.addEventListener("click", () => {
+                    const tag = chip.getAttribute("data-tag") || "";
+                    if (inboxNoteInput && tag) {
+                        const cur = inboxNoteInput.value.trim();
+                        inboxNoteInput.value = cur ? cur + " | " + tag : tag;
+                    }
+                });
+            });
+        }
+
+        if (btnSaveInboxNote) {
+            btnSaveInboxNote.addEventListener("click", async () => {
+                const noteText = inboxNoteInput ? inboxNoteInput.value.trim() : "";
+                const currentKey = window.location.origin + window.location.pathname;
+                const custName = getChatCustomerName();
+
+                let notes = {};
+                try {
+                    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+                        const data = await chrome.storage.local.get(["pakhem_customer_notes"]);
+                        notes = data.pakhem_customer_notes || {};
+                        notes[currentKey] = {
+                            key: currentKey,
+                            url: window.location.href,
+                            title: custName || document.title || "ลูกค้าแชท",
+                            note: noteText,
+                            updated_at: new Date().toLocaleString("th-TH")
+                        };
+                        await chrome.storage.local.set({ pakhem_customer_notes: notes });
+                    }
+                } catch(e) {}
+
+                try {
+                    const raw = localStorage.getItem("pakhem_customer_notes");
+                    if (raw) notes = JSON.parse(raw);
+                    notes[currentKey] = {
+                        key: currentKey,
+                        url: window.location.href,
+                        title: custName || document.title || "ลูกค้าแชท",
+                        note: noteText,
+                        updated_at: new Date().toLocaleString("th-TH")
+                    };
+                    localStorage.setItem("pakhem_customer_notes", JSON.stringify(notes));
+                } catch(e) {}
+
+                checkCustomerNoteAlert();
+                showToast("💾 บันทึกโน้ตลูกค้าเรียบร้อยแล้ว!", "#28a745");
+            });
+        }
+
+        if (btnExportNotesCsv) {
+            btnExportNotesCsv.addEventListener("click", async () => {
+                let notes = {};
+                try {
+                    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+                        const data = await chrome.storage.local.get(["pakhem_customer_notes"]);
+                        notes = data.pakhem_customer_notes || {};
+                    }
+                } catch(e) {}
+                if (Object.keys(notes).length === 0) {
+                    try {
+                        const raw = localStorage.getItem("pakhem_customer_notes");
+                        if (raw) notes = JSON.parse(raw);
+                    } catch(e) {}
+                }
+
+                const items = Object.values(notes);
+                if (items.length === 0) {
+                    showToast("⚠️ ยังไม่มีรายการโน้ตลูกค้าที่บันทึกไว้ครับ", "#e67e22");
+                    return;
+                }
+
+                let csv = "\ufeffวันเวลาที่บันทึก,ชื่อลูกค้า/หัวข้อ,URL หน้าแชท/เพจ,โน้ตลูกค้า (CRM)\r\n";
+                for (const it of items) {
+                    const time = `"${(it.updated_at || "").replace(/"/g, '""')}"`;
+                    const title = `"${(it.title || "").replace(/"/g, '""')}"`;
+                    const url = `"${(it.url || it.key || "").replace(/"/g, '""')}"`;
+                    const note = `"${(it.note || "").replace(/"/g, '""')}"`;
+                    csv += `${time},${title},${url},${note}\r\n`;
+                }
+
+                const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                const downloadUrl = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = downloadUrl;
+                a.download = `pakhem_customer_notes_${new Date().toISOString().slice(0, 10)}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(downloadUrl);
+                showToast(`🎉 ส่งออก CSV โน้ตลูกค้า ${items.length} รายการสำเร็จ!`, "#28a745");
+            });
+        }
+
+        function showToast(msg, color="#28a745") {
+            toast.innerHTML = msg;
+            toast.style.color = color;
+            toast.style.fontWeight = "bold";
+        }
+
+        // อัปเดตสถานะสมาชิกกลุ่มแบบ Realtime
+        function updateGroupBadgeUI() {
+            const isMsg = window.location.pathname.includes('/messages') || window.location.pathname.includes('/inbox');
+            if (isMsg) return; // Do not overwrite header or badges when in Inbox mode!
+
+            try {
+                const info = checkGroupMembership();
+                groupTitle.textContent = info.name;
+                groupStatus.textContent = info.badgeText;
+                groupBadge.style.background = info.badgeBg;
+                groupBadge.style.color = info.badgeColor;
+
+                const profileSpan = widget.querySelector("#pkh-profile-name");
+                if (profileSpan) {
+                    profileSpan.textContent = "👤 " + (info.profileName || "ป้าเข็ม");
+                }
+
+                if (info.status === "not_member") {
+                    header.style.background = "#d9534f";
+                    widget.style.borderColor = "#d9534f";
+                    headerText.textContent = "❌ ยังไม่ได้เข้าร่วมกลุ่ม";
+                    groupBadge.style.cursor = "pointer";
+                    groupBadge.title = "คลิกที่นี่เพื่อกดขอเข้าร่วมกลุ่ม";
+                    groupBadge.onclick = () => {
+                        if (info.joinElement) simulateFullClick(info.joinElement);
+                    };
+                    insertBtn.innerHTML = "👉 ยังไม่ได้เข้ากลุ่ม (คลิกเพื่อขอเข้าร่วมกลุ่ม)";
+                    insertBtn.style.background = "#d9534f";
+                    insertBtn.style.boxShadow = "0 4px 12px rgba(217,83,79,0.4)";
+                    insertBtn.disabled = false;
+                } else if (info.status === "pending") {
+                    header.style.background = "#e67e22";
+                    widget.style.borderColor = "#e67e22";
+                    headerText.textContent = "⏳ รอแอดมินอนุมัติ";
+                    groupBadge.style.cursor = "default";
+                    groupBadge.onclick = null;
+                    insertBtn.innerHTML = "⏳ รอแอดมินกลุ่มอนุมัติ (ยังโพสต์ไม่ได้)";
+                    insertBtn.style.background = "#e67e22";
+                    insertBtn.style.boxShadow = "none";
+                    insertBtn.disabled = true;
+                } else if (info.status === "member") {
+                    header.style.background = "#28a745";
+                    widget.style.borderColor = "#28a745";
+                    headerText.textContent = "🐟 ป้าเข็ม: สมาชิกกลุ่มแล้ว (พร้อมโพสต์)";
+                    if (toast && toast.innerHTML.includes("ยังไม่ได้เข้าร่วมกลุ่ม")) {
+                        showToast("🔒 พร้อมโพสต์อัตโนมัติ 100% แล้วครับ กดปุ่มสีเขียวได้เลย!", "#28a745");
+                    }
+                    groupBadge.style.cursor = "default";
+                    groupBadge.onclick = null;
+                    insertBtn.innerHTML = "🚀 1-คลิก โพสต์พร้อมรูปป้ายราคา (อัตโนมัติ 100%)";
+                    insertBtn.style.background = "#28a745";
+                    insertBtn.style.boxShadow = "0 4px 12px rgba(40,167,69,0.4)";
+                    insertBtn.disabled = false;
+                } else {
+                    header.style.background = "#28a745";
+                    widget.style.borderColor = "#28a745";
+                    headerText.textContent = "🐟 ป้าเข็ม: ตรวจกลุ่ม + โพสต์ (v4.8)";
+                    groupBadge.style.cursor = "default";
+                    groupBadge.onclick = null;
+                    insertBtn.innerHTML = "🚀 1-คลิก โพสต์พร้อมรูปป้ายราคา (อัตโนมัติ 100%)";
+                    insertBtn.style.background = "#28a745";
+                    insertBtn.style.boxShadow = "0 4px 12px rgba(40,167,69,0.4)";
+                    insertBtn.disabled = false;
+                }
+            } catch(err) {
+                console.error("PaKhem updateGroupBadgeUI error:", err);
+                if (groupTitle) groupTitle.textContent = (document.title || "").replace(/\s*[\|\-]\s*Facebook.*$/i, '').trim() || "กลุ่ม Facebook";
+                if (groupStatus) groupStatus.textContent = "🟢 พร้อมโพสต์ (สแตนด์บาย)";
+                if (groupBadge) {
+                    groupBadge.style.background = "#d4edda";
+                    groupBadge.style.color = "#155724";
+                }
+                if (insertBtn) insertBtn.disabled = false;
+            }
+        }
+
+        if (refreshStatusBtn) {
+            refreshStatusBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                updateGroupBadgeUI();
+                showToast("🔄 ตรวจสอบสถานะกลุ่มใหม่แล้ว!", "#007bff");
+            });
+        }
+
+        const customSearchInput = widget.querySelector("#pkh-custom-search");
+        const goSearchBtn = widget.querySelector("#pkh-btn-go-search");
+
+        function executeGroupSearch() {
+            const kw = customSearchInput ? customSearchInput.value.trim() : "";
+            if (kw) {
+                const searchUrl = `https://www.facebook.com/search/groups/?q=${encodeURIComponent(kw)}`;
+                window.open(searchUrl, "_blank");
+                showToast(`🔍 กำลังค้นหากลุ่ม '${kw}' ในแท็บใหม่...`, "#007bff");
+            } else {
+                showToast("⚠️ กรุณาพิมพ์คำค้นหาก่อนครับ เช่น 'อาหารแห้ง'", "#e67e22");
+            }
+        }
+
+        if (goSearchBtn) {
+            goSearchBtn.addEventListener("click", executeGroupSearch);
+        }
+        if (customSearchInput) {
+            customSearchInput.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    executeGroupSearch();
+                }
+            });
+        }
+
+
+        const btnAutoAnswer = widget.querySelector("#pkh-btn-auto-answer");
+        const btnHarvestCsv = widget.querySelector("#pkh-btn-harvest-csv");
+
+        if (btnAutoAnswer) {
+            btnAutoAnswer.addEventListener("click", () => {
+                showToast("⏳ กำลังสแกนและตอบคำถามเข้ากลุ่ม...", "#007bff");
+                const res = autoAnswerGroupQuestions();
+                if (res.success) {
+                    showToast(`✅ เติมคำตอบปลาสลิด + ติ๊กยอมรับกฎให้แล้ว (${res.count} ข้อ)! พร้อมส่งได้เลย`, "#28a745");
+                } else {
+                    showToast(res.msg || "💡 หากมีหน้าต่างคำถามเด้งขึ้นมา กดปุ่มนี้เพื่อตอบทันทีครับ", "#e67e22");
+                }
+            });
+        }
+
+        if (btnHarvestCsv) {
+            btnHarvestCsv.addEventListener("click", () => {
+                showToast("⏳ กำลังสแกนดูดรายชื่อกลุ่ม...", "#007bff");
+                const res = scanAndExportGroupsToCsv();
+                if (res.count > 0) {
+                    showToast(`🎉 กวาดรายชื่อกลุ่มได้ ${res.count} กลุ่ม ดาวน์โหลดเป็น CSV สำเร็จ!`, "#28a745");
+                } else {
+                    showToast("ℹ️ ไม่พบกลุ่มในหน้านี้ (ให้พิมพ์ค้นหากลุ่มก่อนครับ)", "#e67e22");
+                }
+            });
+        }
+
+        // ตรวจสอบสถานะกลุ่มทุก 2 วินาที
+        setInterval(updateGroupBadgeUI, 2000);
+        updateGroupBadgeUI();
+
+        selectGroup.addEventListener("change", () => {
+            const url = selectGroup.value;
+            if (url) {
+                window.open(url, "_blank");
+                showToast("เปิดหน้ากลุ่มตลาดนัดในแท็บใหม่แล้วครับ!", "#28a745");
+                selectGroup.selectedIndex = 0;
+            }
+        });
+
+        // ลากย้ายตำแหน่ง
+        let isDragging = false;
+        let startX = 0, startY = 0;
+        let startLeft = 0, startTop = 0;
+
+        function onDragStart(clientX, clientY) {
+            isDragging = true;
+            const rect = widget.getBoundingClientRect();
+            startLeft = rect.left;
+            startTop = rect.top;
+            startX = clientX;
+            startY = clientY;
+
+            widget.style.bottom = "auto";
+            widget.style.right = "auto";
+            widget.style.left = `${startLeft}px`;
+            widget.style.top = `${startTop}px`;
+        }
+
+        function onDragMove(clientX, clientY) {
+            if (!isDragging) return;
+            const deltaX = clientX - startX;
+            const deltaY = clientY - startY;
+
+            let newLeft = startLeft + deltaX;
+            let newTop = startTop + deltaY;
+
+            newLeft = Math.max(10, Math.min(window.innerWidth - widget.offsetWidth - 10, newLeft));
+            newTop = Math.max(10, Math.min(window.innerHeight - widget.offsetHeight - 10, newTop));
+
+            widget.style.left = `${newLeft}px`;
+            widget.style.top = `${newTop}px`;
+        }
+
+        function onDragEnd() {
+            if (!isDragging) return;
+            isDragging = false;
+            const rect = widget.getBoundingClientRect();
+            localStorage.setItem("pkh_widget_pos", JSON.stringify({
+                left: Math.round(rect.left),
+                top: Math.round(rect.top)
+            }));
+        }
+
+        header.addEventListener("mousedown", (e) => {
+            if (e.target.id === "pkh-toggle") return;
+            onDragStart(e.clientX, e.clientY);
+            const onMouseMove = (ev) => onDragMove(ev.clientX, ev.clientY);
+            const onMouseUp = () => {
+                onDragEnd();
+                document.removeEventListener("mousemove", onMouseMove);
+                document.removeEventListener("mouseup", onMouseUp);
+            };
+            document.addEventListener("mousemove", onMouseMove);
+            document.addEventListener("mouseup", onMouseUp);
+        });
+
+        let isMinimized = false;
+        toggleBtn.addEventListener("click", () => {
+            isMinimized = !isMinimized;
+            bodyDiv.style.display = isMinimized ? "none" : "block";
+            toggleBtn.textContent = isMinimized ? "➕" : "➖";
+        });
+
+        randBtn.addEventListener("click", () => {
+            currentCaptionIndex = (currentCaptionIndex + 1) % CAPTIONS.length;
+            capTitle.textContent = CAPTIONS[currentCaptionIndex].title;
+            capArea.value = CAPTIONS[currentCaptionIndex].text;
+            showToast("สุ่มแคปชั่นขายใหม่แล้ว!", "#28a745");
+        });
+
+        // ==============================================================
+        // 🚀 ระบบโพสต์อัตโนมัติ (ตรวจสอบสถานะกลุ่มก่อนโพสต์ทุกครั้ง)
+        // ==============================================================
+        insertBtn.addEventListener("click", async () => {
+            const textToInsert = capArea.value.trim();
+
+            // ⚡ สเต็ป 0: ตรวจสอบก่อนว่าอยู่ในกลุ่มไหม และเป็นสมาชิกหรือยัง
+            const membership = checkGroupMembership();
+            if (membership.status === "not_member") {
+                header.style.background = "#d9534f";
+                headerText.textContent = "❌ ยังไม่ได้เข้าร่วมกลุ่ม";
+                showToast("⚠️ <b>บัญชีนี้ยังไม่ได้เข้าร่วมกลุ่มนี้ครับ!</b><br>👉 กำลังคลิกปุ่ม <b>'เข้าร่วมกลุ่ม'</b> ให้ทันที...", "#d9534f");
+                if (membership.joinElement) {
+                    simulateFullClick(membership.joinElement);
+                } else {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+                return;
+            }
+
+            if (membership.status === "pending") {
+                header.style.background = "#e67e22";
+                headerText.textContent = "⏳ รอแอดมินอนุมัติ";
+                showToast("⚠️ กลุ่มนี้ส่งคำขอเข้าร่วมแล้ว แต่<b>กำลังรอแอดมินอนุมัติ</b> จึงยังไม่สามารถโพสต์ได้ครับ", "#e67e22");
+                return;
+            }
+
+            // สเต็ปแรก: ก๊อปปี้รูปป้ายราคาเข้า Windows Clipboard ทันที
+            if (cachedPricePngBlob) {
+                copyPngBlobToClipboard(cachedPricePngBlob);
+            }
+
+            insertBtn.disabled = true;
+            insertBtn.style.opacity = "0.7";
+            header.style.background = "#007bff";
+            headerText.textContent = "⏳ กำลังดำเนินการ...";
+
+            // สเต็ปแท็บการสนทนา
+            const discussionTab = document.querySelector('a#posts[role="tab"]') ||
+                                  Array.from(document.querySelectorAll('a[role="tab"], div[role="tab"]')).find(t => {
+                                      const txt = t.textContent ? t.textContent.trim() : "";
+                                      return txt.includes("การสนทนา") || txt.includes("Discussion");
+                                  });
+
+            if (discussionTab && discussionTab.getAttribute("aria-selected") !== "true") {
+                showToast("⏳ 1/6 สลับไปแท็บ 'การสนทนา'...", "#007bff");
+                discussionTab.click();
+                await new Promise(r => setTimeout(r, 1200));
+            }
+
+            showToast("⏳ 2/6 ค้นหากล่องสร้างโพสต์...", "#007bff");
+
+            // ตรวจสอบว่าไดอะล็อกเปิดอยู่แล้วหรือไม่
+            let dialog = document.querySelector('div[role="dialog"]');
+            let composer = dialog ? dialog.querySelector('div[contenteditable="true"]') : null;
+
+            // ถ้าไดอะล็อกยังไม่เปิด ให้ค้นหาปุ่ม "เขียนอะไรสักหน่อย...." แล้วคลิกเปิด
+            if (!dialog || !composer) {
+                const trigger = findCreatePostTrigger();
+                if (trigger) {
+                    showToast("⏳ 3/6 คลิกเปิดกล่อง 'เขียนอะไรสักหน่อย'...", "#007bff");
+                    simulateFullClick(trigger);
+
+                    for (let w = 0; w < 20; w++) {
+                        await new Promise(r => setTimeout(r, 250));
+                        dialog = document.querySelector('div[role="dialog"]');
+                        if (dialog) {
+                            composer = dialog.querySelector('div[contenteditable="true"]');
+                            if (composer) break;
+                        }
+                    }
+                }
+            }
+
+            if (!dialog || !composer) {
+                header.style.background = "#e67e22";
+                headerText.textContent = "💡 คลิกกล่องโพสต์ 1 ที";
+                showToast("👉 กรุณาคลิกที่กล่อง <b>'เขียนอะไรสักหน่อย....'</b> บนหน้าจอ 1 ครั้ง<br>แล้วกดปุ่มสีเขียวนี้ใหม่อีกครั้งครับ!", "#e67e22");
+                insertBtn.disabled = false;
+                insertBtn.style.opacity = "1";
+                return;
+            }
+
+            // สเต็ปพิมพ์ข้อความแคปชั่น
+            showToast("⏳ 4/6 กำลังพิมพ์ข้อความราคา 3 บรรทัด...", "#007bff");
+            await insertTextIntoEditor(composer, textToInsert);
+            await new Promise(r => setTimeout(r, 400));
+
+            // ตรวจสอบไฟล์รูปภาพ
+            if (!cachedPriceFile) {
+                try {
+                    const res = await fetch(IMAGES.price, { mode: 'cors' });
+                    const blob = await res.blob();
+                    cachedPriceFile = new File([blob], "pakhem_fish_price.jpg", { type: "image/jpeg" });
+                } catch(e) {}
+            }
+
+            // คลิกเปิดพื้นที่ "รูปภาพ/วิดีโอ" ในไดอะล็อก
+            showToast("⏳ 5/6 กำลังเปิดพื้นที่แนบรูปภาพ...", "#007bff");
+            const photoButton = Array.from(dialog.querySelectorAll('div[role="button"], span, div')).find(el => {
+                const label = el.getAttribute('aria-label') || '';
+                const txt = el.textContent || '';
+                return (label.includes('รูปภาพ') || label.includes('Photo') || txt.includes('รูปภาพ/วิดีโอ')) &&
+                       !label.includes('แก้ไข') && !label.includes('เอาสื่อออก');
+            });
+
+            if (photoButton) {
+                photoButton.click();
+                await new Promise(r => setTimeout(r, 700));
+            }
+
+            // แนบไฟล์รูปภาพเข้าสู่ <input type="file"> ภายในไดอะล็อก
+            showToast("⏳ 6/6 กำลังแนบรูปป้ายราคา...", "#007bff");
+            if (cachedPriceFile) {
+                const dt = new DataTransfer();
+                dt.items.add(cachedPriceFile);
+
+                const dialogFileInputs = Array.from(dialog.querySelectorAll('input[type="file"]') || []);
+                dialogFileInputs.forEach(input => {
+                    try {
+                        const proto = HTMLInputElement.prototype;
+                        const nativeFilesSetter = Object.getOwnPropertyDescriptor(proto, 'files')?.set;
+                        if (nativeFilesSetter) {
+                            nativeFilesSetter.call(input, dt.files);
+                        } else {
+                            input.files = dt.files;
+                        }
+                        if (input._valueTracker) input._valueTracker.setValue('');
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                    } catch(e) {}
+                });
+
+                try {
+                    ['dragenter', 'dragover', 'drop'].forEach(evtType => {
+                        const dragEvt = new DragEvent(evtType, {
+                            bubbles: true,
+                            cancelable: true,
+                            dataTransfer: dt
+                        });
+                        composer.dispatchEvent(dragEvt);
+                        dialog.dispatchEvent(dragEvt);
+                    });
+                } catch(e) {}
+            }
+
+            // ตรวจสอบสถานะว่ารูปภาพขึ้นหรือยัง
+            let hasImage = false;
+            for (let c = 0; c < 12; c++) {
+                await new Promise(r => setTimeout(r, 300));
+                if (isImagePreviewPresent(dialog)) {
+                    hasImage = true;
+                    break;
+                }
+            }
+
+            // Failsafe: หากเบราว์เซอร์บล็อกการยัดรูปอัตโนมัติ ให้ผู้ใช้กด Ctrl+V เพียง 1 ที
+            if (!hasImage) {
+                header.style.background = "#e67e22";
+                widget.style.borderColor = "#e67e22";
+                headerText.textContent = "⚡ ข้อความพิมพ์แล้ว! (กด Ctrl+V เพื่อวางรูป)";
+                showToast("✍️ <b>ข้อความพิมพ์แล้ว!</b> 👉 <b>กดปุ่ม [ Ctrl + V ] 1 ทีครับ!</b><br>(รูปป้ายราคาอยู่ในคลิปบอร์ดแล้ว วางปุ๊บ บอทจะกดโพสต์ให้เองทันที)", "#e67e22");
+                composer.focus();
+
+                for (let wait = 0; wait < 60; wait++) {
+                    await new Promise(r => setTimeout(r, 350));
+                    if (isImagePreviewPresent(dialog)) {
+                        hasImage = true;
+                        break;
+                    }
+                }
+            }
+
+            // กดยืนยันโพสต์เมื่อรูปภาพปรากฏเท่านั้น
+            if (hasImage) {
+                header.style.background = "#28a745";
+                widget.style.borderColor = "#28a745";
+                headerText.textContent = "🚀 รูปและข้อความพร้อมแล้ว! กำลังโพสต์...";
+                showToast("🎉 ครบทั้งข้อความและรูปภาพแล้ว! กำลังกดปุ่ม 'โพสต์'...", "#28a745");
+                await new Promise(r => setTimeout(r, 800));
+
+                const postBtn = dialog.querySelector('div[aria-label="โพสต์"][role="button"]') ||
+                                Array.from(dialog.querySelectorAll('div[role="button"]')).find(b => {
+                                    const t = b.textContent ? b.textContent.trim() : "";
+                                    return t === "โพสต์" || t === "Post";
+                                });
+
+                if (postBtn && postBtn.getAttribute("aria-disabled") !== "true") {
+                    postBtn.click();
+                    showToast("✅ โพสต์พร้อมรูปภาพป้ายราคาขึ้นกลุ่มสำเร็จ 100% แล้วครับ!", "#28a745");
+                    headerText.textContent = "✅ โพสต์สำเร็จเรียบร้อย!";
+                } else {
+                    showToast("💡 ครบทั้งข้อความและรูปภาพแล้ว! กดปุ่มโพสต์สีน้ำเงินได้เลยครับ", "#007bff");
+                }
+            }
+
+            insertBtn.disabled = false;
+            insertBtn.style.opacity = "1";
+        });
+
+        copyImgBtn.addEventListener("click", async () => {
+            showToast("⏳ กำลังดึงรูปป้ายราคาลงคลิปบอร์ด...", "#007bff");
+            if (!cachedPricePngBlob) {
+                await prefetchImageBlobs();
+            }
+            const ok = await copyPngBlobToClipboard(cachedPricePngBlob);
+            if (ok) {
+                showToast("🖼️ ก๊อปรูปป้ายราคาลงคลิปบอร์ดแล้ว! (กด Ctrl+V วางได้ทันที)", "#28a745");
+            } else {
+                showToast("❌ เบราว์เซอร์ปฏิเสธคลิปบอร์ด ลองคลิกปุ่มอีกครั้งครับ", "#d9534f");
+            }
+        });
+
+        copyFriedBtn.addEventListener("click", async () => {
+            showToast("⏳ กำลังดึงรูปปลาทอดลงคลิปบอร์ด...", "#6f42c1");
+            if (!cachedFriedPngBlob) {
+                await prefetchImageBlobs();
+            }
+            const ok = await copyPngBlobToClipboard(cachedFriedPngBlob);
+            if (ok) {
+                showToast("🍳 ก๊อปรูปปลาทอดลงคลิปบอร์ดแล้ว! (กด Ctrl+V วางในเม้นต์ได้)", "#6f42c1");
+            } else {
+                showToast("❌ เบราว์เซอร์ปฏิเสธคลิปบอร์ด ลองคลิกปุ่มอีกครั้งครับ", "#d9534f");
+            }
+        });
+
+        copyTextBtn.addEventListener("click", () => {
+            navigator.clipboard.writeText(capArea.value.trim());
+            showToast("📋 ก๊อปปี้ข้อความราคา 3 บรรทัดแล้ว!", "#007bff");
+        });
+    }
+
+    prefetchImageBlobs();
+
+    window.addEventListener("load", () => {
+        setTimeout(createWidget, 2000);
+    });
+    setInterval(createWidget, 3500);
+
+})();

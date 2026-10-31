@@ -21,6 +21,7 @@ from app.services.thai_address_validator import (
     build_incomplete_order_guidance,
     enrich_thai_address,
     has_complete_thai_address,
+    normalize_thai_digits,
     validate_thai_phone,
 )
 
@@ -47,7 +48,37 @@ def _get_supabase_config() -> tuple[str, str]:
     return url, key
 
 
+def _send_line_admin_alert(text_msg: str) -> bool:
+    line_token = (os.getenv("LINE_CHANNEL_ACCESS_TOKEN") or "").strip()
+    admin_uid = (os.getenv("ADMIN_LINE_UID") or "Uc88eb3896b0e4bcc5fbaa9b78ac1294e").strip()
+    if not line_token or not admin_uid:
+        return False
+    try:
+        r = httpx.post(
+            "https://api.line.me/v2/bot/message/push",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {line_token}",
+            },
+            json={
+                "to": admin_uid,
+                "messages": [{"type": "text", "text": text_msg[:5000]}],
+            },
+            timeout=10.0,
+        )
+        return r.status_code == 200
+    except Exception as e:
+        logger.warning(f"[FishCloudWorker] LINE admin alert failed: {e}")
+        return False
+
+
 def _send_telegram_alert(text_msg: str) -> bool:
+    # แจ้งเตือนเข้า LINE แอดมินด้วยหากเป็นออเดอร์สำคัญ
+    if any(k in text_msg for k in ["ออเดอร์", "สลิป", "โอนเงิน", "ทิ้งเบอร์", "ที่อยู่จัดส่ง", "สร้างออเดอร์"]):
+        try:
+            _send_line_admin_alert(text_msg)
+        except Exception:
+            pass
     bot_token = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
     chat_id = (os.getenv("TELEGRAM_CHAT_ID") or "6734965582").strip()
     if not bot_token or not chat_id:
@@ -73,20 +104,19 @@ def _configured_fb_pages() -> list[dict]:
     p1_id = (os.getenv("FACEBOOK_PAGE_ID") or "1307380735783361").strip()
     p1_token = (os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or "").strip()
     if p1_id and p1_token:
-        pages.append({"id": p1_id, "name": "ป้าเข็ม ขายของ (เพจ 1)", "token": p1_token})
+        pages.append({"id": p1_id, "name": "ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้ (เพจ 1)", "token": p1_token})
 
     p2_id = (os.getenv("FACEBOOK_PAGE_2_ID") or "1323469404180656").strip()
     p2_token = (os.getenv("FACEBOOK_PAGE_2_ACCESS_TOKEN") or "").strip()
     if p2_id and p2_token:
-        pages.append({"id": p2_id, "name": "ป้าเข็ม เพจ 2", "token": p2_token})
+        pages.append({"id": p2_id, "name": "ครัวแม่บ้าน ชี้เป้าของอร่อย (เพจ 2)", "token": p2_token})
     return pages
 
 
 def build_fish_first_comment() -> str:
     return (
-        f"🛒 พิมพ์คำว่า \"สนใจ\" ตอบกลับใต้เม้นต์นี้ หรือกดลิงก์สั่งได้เลยค่ะ 👇\n"
-        f"👉 {WEB_STORE_URL}\n"
-        f"💬 แอด LINE สั่งด่วน: {LINE_OA_URL} (ID: @137gsref)\n"
+        f"🛒 พิมพ์คำว่า \"สนใจ\" (หรือพิมพ์เลขชุด 1, 2, 3) ตอบกลับใต้เม้นต์นี้ หรือกดปุ่ม \"ส่งข้อความ\" ทักแชทได้เลยจ้า 👇\n"
+        f"💡 น้ำหนักเนื้อปลาล้วนหลังตัดหัวแล้ว (ไร้หัวถ่วงน้ำหนัก ได้เนื้อเน้นๆ เต็มกิโล!)\n"
         f"━━━━━━━━━━━━━━━━━━━━━━\n"
         f"🐟 ปลาสลิดแดดเดียว สุพรรณบุรีแท้ ป้าเข็ม คัดพิเศษ (ไซส์จัมโบ้ 5–7 ตัว/กก. เค็มน้อย 3%):\n"
         f"• ชุดพอดีมื้อ 500 กรัม (3–4 ตัว): โอน 390.- ส่งฟรี! (ปลายทาง 410.-)\n"
@@ -118,7 +148,7 @@ def build_fish_guarantee_comment() -> str:
         "🏦 บัญชีสำหรับโอนชำระเงิน (กรณีโอนเงินส่งฟรี / พื้นที่ที่ไม่มีเก็บเงินปลายทาง)\n"
         "• ธนาคารกรุงไทย (สาขาท่าพระ) เลขที่บัญชี: 038-0-25363-1 (ชื่อบัญชี: นายจีรวัฒน์ พลอาจ)\n\n"
         "💚 ทางร้านให้ความสำคัญกับคุณภาพสินค้าและความมั่นใจของลูกค้าทุกออเดอร์ ก่อนยืนยันคำสั่งซื้อ ทางร้านจะแจ้งวิธีจัดส่ง ระยะเวลาโดยประมาณ และยอดชำระให้ทราบอย่างชัดเจนค่ะ\n"
-        "🟢 กดแอด LINE สั่งซื้อง่ายๆ คลิกเดียว: https://line.me/R/ti/p/@137gsref (LINE: @137gsref)\n"
+        "💬 สั่งซื้อง่ายๆ: กดปุ่ม \"ส่งข้อความ\" ทักแชทเพจ หรือพิมพ์คำว่า \"สนใจ\" ใต้โพสต์นี้ได้เลยจ้า (LINE: @137gsref)\n"
         "ขอบคุณที่ไว้วางใจเลือกซื้อปลาสลิดจากทางร้านนะคะ 🙏"
     )
 
@@ -261,7 +291,7 @@ def _save_comment_lead_to_supabase(
 
 
 def generate_comment_reply(comment_text: str, commenter_name: str = "", sender_id: str = "") -> tuple[str, dict | None]:
-    text = (comment_text or "").strip()
+    text = normalize_thai_digits(comment_text or "").strip()
     lower_text = text.lower()
     clean_name = (commenter_name or "").strip()
     if clean_name.startswith("คุณ"):
@@ -624,17 +654,13 @@ def generate_comment_reply(comment_text: str, commenter_name: str = "", sender_i
         return reply, None
 
     reply = (
-        f"{greeting} ขอบพระคุณที่สนใจ ปลาสลิดแดดเดียว สุพรรณบุรีแท้ ป้าเข็ม คัดพิเศษ (ไซส์จัมโบ้ 5–7 ตัว/กก. เนื้อล้วนหนาฟู เค็มน้อยกลมกล่อม) นะคะ 🐟✨\n\n"
-        f"🔥 โปรโมชั่นพิเศษ:\n"
-        f"• 📦 ชุดพอดีมื้อ 500 กรัม (ประมาณ 3–4 ตัว) = โอน 390.- ส่งฟรี! (ปลายทาง 410.-)\n"
-        f"• 🏆 ชุดขายดี 1 กิโลกรัม (ประมาณ 5–7 ตัว) = โอน 550.- ส่งฟรี! (ปลายทาง 570.-)\n"
-        f"• ❄️ ชุดครอบครัว 2 กิโลกรัม (ประมาณ 10–14 ตัว) = โอน 1,090.- ส่งฟรีรถห้องเย็น!\n\n"
-        f"📦 เงื่อนไขการจัดส่งและการชำระเงิน:\n"
-        f"🚚 แบบที่ 1 (พื้นที่ถึงภายใน 1–2 วัน): จัดส่งสินค้าแช่แข็ง พร้อมบรรจุภัณฑ์ฟอยล์เก็บอุณหภูมิ (เลือกชำระเงินปลายทางได้)\n"
-        f"❄️ แบบที่ 2 (พื้นที่ใช้เวลา 3–4 วัน): จัดส่งด้วยรถควบคุมอุณหภูมิ/รถห้องเย็น (จัดส่งหลังชำระเงินเต็มจำนวน งดเก็บเงินปลายทางค่ะ)\n"
-        f"💚 ก่อนยืนยันคำสั่งซื้อ ทางร้านจะแจ้งวิธีจัดส่ง ระยะเวลาโดยประมาณ และยอดชำระให้ทราบอย่างชัดเจนค่ะ\n\n"
-        f"🛒 กดสั่งซื้อผ่านหน้าเว็บได้ตลอด 24 ชม.: {WEB_STORE_URL}\n"
-        f"💬 หรือทักแชทเพจ / พิมพ์ชุดที่รับพร้อม ชื่อ-ที่อยู่-เบอร์โทร ให้แอดมินรับออเดอร์ได้เลยจ้า 💕"
+        f"{greeting} ปลาสลิดแดดเดียวสุพรรณแท้ ป้าเข็ม (ไซส์จัมโบ้ 5-7 ตัว/กก.) 🐟✨\n"
+        f"💡 น้ำหนักเนื้อปลาล้วนหลังตัดหัวแล้ว (ไร้หัวถ่วงน้ำหนัก ได้เนื้อเน้นๆ เต็มกิโล!)\n"
+        f"• ชุด 1 (500 กรัม / 3–4 ตัว): โอน 390.- ส่งฟรี! | ปลายทาง 410.-\n"
+        f"• ชุด 2 (1 กิโลกรัม / 5–7 ตัว): โอน 550.- ส่งฟรี! | ปลายทาง 570.- ⭐\n"
+        f"• ชุด 3 (2 กิโลกรัม / 10–14 ตัว): โอน 1,090.- (ส่งฟรีรถห้องเย็น!)\n"
+        f"🚚 แพ็กซองฟอยล์เก็บความเย็น ส่งด่วน 1–2 วันถึงบ้านทั่วไทย (เสียเคลมฟรี 100%)\n"
+        f"👇 กดปุ่มสั่งซื้อในกล่องนี้ (หรือพิมพ์ 1, 2, 3) ได้เลยจ้า:"
     )
     return reply, None
 
@@ -663,13 +689,13 @@ def generate_private_offer_message(comment_text: str, commenter_name: str = "") 
             specific_prefix = "🐟 ตอนนี้ทางร้านป้าเข็มคัดทำเฉพาะ \"ปลาสลิดแดดเดียว สุพรรณบุรีแท้ ไซส์จัมโบ้ 5-7 ตัว/กก.\" อย่างเดียวเลยจ้า เนื้อหนาฟูไร้ก้างฝอยค่ะ!\n\n"
 
     return (
-        f"{greeting} ป้าเข็มทักมาจากคอมเมนต์ \"{comment_text}\" นะคะ ขอบพระคุณมากๆ เลยจ้า 🐟💖\n\n"
+        f"{greeting} ป้าเข็มทักมาจากคอมเมนต์ \"{comment_text}\" นะคะ 🐟💖\n"
         f"{specific_prefix}"
-        f"🔥 ป้าเข็มขออนุญาตแนะนำโปรโมชั่นพิเศษ ปลาสลิดแดดเดียวสุพรรณแท้ ไซส์จัมโบ้ 5-7 ตัว/กก. (เค็มน้อย 3% เนื้อหนาฟู ไร้กลิ่นโคลน):\n"
-        f"1️⃣ ชุดพอดีมื้อ 500 กรัม (ประมาณ 3-4 ตัว): โอนเงิน 390.- ส่งฟรี! (เก็บปลายทาง COD 410.-)\n"
-        f"2️⃣ ชุดยอดฮิตขายดี 1 กิโลกรัม (ประมาณ 5-7 ตัว): โอนเงิน 550.- ส่งฟรี! (เก็บปลายทาง COD 570.-)\n"
-        f"3️⃣ ชุดตุนสุดคุ้ม 2 กิโลกรัม (ประมาณ 10-14 ตัว): โอนเงิน 1,090.- ส่งฟรีรถห้องเย็นควบคุมอุณหภูมิ! (ชุด 2 โลรับเฉพาะโอนเงินค่ะ)\n\n"
-        f"💬 คุณลูกค้าสนใจรับชุดไหน พิมพ์เลขชุด (เช่น 500g / 1 โล / 2 โล) พร้อม ชื่อ-ที่อยู่-เบอร์โทร ตอบกลับในแชทนี้ได้เลยนะคะ หรือกดสั่งที่หน้าเว็บ: {WEB_STORE_URL} ได้เลยจ้า 🙏✨"
+        f"💡 น้ำหนักเนื้อปลาล้วนหลังตัดหัวแล้ว (ไร้หัวถ่วงน้ำหนัก ได้เนื้อเน้นๆ เต็มกิโล!)\n"
+        f"• ชุด 1 (500 กรัม / 3–4 ตัว): โอน 390.- ส่งฟรี! | ปลายทาง 410.-\n"
+        f"• ชุด 2 (1 กิโลกรัม / 5–7 ตัว): โอน 550.- ส่งฟรี! | ปลายทาง 570.- ⭐\n"
+        f"• ชุด 3 (2 กิโลกรัม / 10–14 ตัว): โอน 1,090.- (ส่งฟรีรถห้องเย็น!)\n"
+        f"👇 กดปุ่มสั่งซื้อในกล่องนี้ (หรือพิมพ์ 1, 2, 3) ได้เลยจ้า:"
     )
 
 
