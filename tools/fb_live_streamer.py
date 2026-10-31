@@ -290,6 +290,8 @@ def main():
     parser.add_argument("--bitrate", "-b", type=str, default="3500k", help="Bitrate (เช่น 3500k, 4000k)")
     parser.add_argument("--hours", "-H", type=float, default=0.0, help="กำหนดระยะเวลาไลฟ์สดเป็นชั่วโมง (เช่น 2 หรือ 2.5) แล้วปิดอัตโนมัติ")
     parser.add_argument("--minutes", "-m", type=int, default=0, help="กำหนดระยะเวลาไลฟ์สดเป็นนาที (เช่น 90 หรือ 120)")
+    parser.add_argument("--rest-minutes", "-r", type=int, default=30, help="เวลาพักระหว่างรอบไลฟ์สด (นาที) ค่าเริ่มต้น 30 นาที")
+    parser.add_argument("--auto-cycle", "-c", action="store_true", help="โหมดวนรอบอัตโนมัติ เช้า-บ่าย-เย็น-ดึก (ไลฟ์จบ พัก แล้วเปิดรอบใหม่ให้เอง)")
     parser.add_argument("--yes", "-y", action="store_true", help="โหมดอัตโนมัติ 100%% ไม่ต้องถามยืนยัน (เลือกคลิปแนะนำและเริ่มทันที)")
     parser.add_argument("--no-loop", action="store_true", help="ไม่วนลูป (เล่นรอบเดียวแล้วจบ)")
     parser.add_argument("--test", action="store_true", help="โหมดทดสอบไฟล์วิดีโออย่างเดียว (ไม่ยิงขึ้น Facebook)")
@@ -395,15 +397,65 @@ def main():
         if cont != "y":
             sys.exit(0)
 
-    # 7. เริ่มการสตรีม
-    start_live_stream(
-        ffmpeg_bin=ffmpeg_bin,
-        video_path=video_path,
-        stream_key=stream_key,
-        loop=not args.no_loop,
-        bitrate=args.bitrate,
-        duration_minutes=duration_minutes
-    )
+    # 7. เริ่มการสตรีม (รองรับทั้งรอบเดียว และโหมดวนรอบอัตโนมัติ 24 ชม. เช้า-บ่าย-เย็น-ดึก)
+    cycle = 1
+    rest_mins = max(5, args.rest_minutes)
+
+    while True:
+        # หากอยู่ในโหมดสร้างห้องอัตโนมัติบนเพจ และไม่ใช่รอบแรก ให้ขอห้องไลฟ์สดใหม่สำหรับรอบถัดไป
+        current_stream_key = stream_key
+        if auto_page_choice in (1, 2) and cycle > 1:
+            print(f"\n⏳ [รอบที่ {cycle}] กำลังสร้างห้องไลฟ์สดใหม่บนเพจ ID: {target_page['id']} ...")
+            try:
+                live_info = create_auto_facebook_live(target_page["id"], target_page["token"])
+                current_stream_key = live_info.get("secure_stream_url") or live_info.get("stream_url") or ""
+                live_id = live_info.get("id", "")
+                video_id = live_info.get("video_id") or live_id
+                print(f"✅ สร้างห้องไลฟ์สดรอบที่ {cycle} สำเร็จ! (Live ID: {live_id} | Video ID: {video_id})")
+                print(f"🔗 ลิงก์ดูไลฟ์สดบนเพจ: https://www.facebook.com/{target_page['id']}/videos/{video_id}", flush=True)
+            except Exception as e:
+                print(f"⚠️ เกิดข้อผิดพลาดในการสร้างห้องไลฟ์รอบที่ {cycle}: {e}")
+                print("🔄 จะลองใหม่อีกครั้งใน 60 วินาที...")
+                time.sleep(60)
+                continue
+
+        if not current_stream_key:
+            print("❌ ไม่พบ Stream Key ในการสตรีมรอบนี้")
+            break
+
+        print(f"\n{'=' * 65}")
+        print(f"🎬 เริ่มต้นการสตรีมรอบที่ {cycle} (ระยะเวลา {duration_minutes} นาที / {duration_minutes/60:.1f} ชม.)")
+        print(f"{'=' * 65}")
+
+        start_live_stream(
+            ffmpeg_bin=ffmpeg_bin,
+            video_path=video_path,
+            stream_key=current_stream_key,
+            loop=not args.no_loop,
+            bitrate=args.bitrate,
+            duration_minutes=duration_minutes
+        )
+
+        # หากไม่ได้เปิดโหมด auto-cycle หรือไม่ได้กำหนดเวลา ให้จบรอบการทำงานทันที
+        if not args.auto_cycle or duration_minutes <= 0:
+            break
+
+        # แจ้งเตือนช่วงพักระบบ
+        print(f"\n{'=' * 65}")
+        print(f"⏸️ [รอบที่ {cycle} จบลงแล้ว] กำลังพักระบบ {rest_mins} นาทีตามนโยบายความปลอดภัย Facebook...")
+        print(f"⏰ ระบบจะเริ่มไลฟ์รอบที่ {cycle + 1} ให้อัตโนมัติเมื่อครบเวลาพัก")
+        print(f"{'=' * 65}")
+
+        try:
+            from tools.telegram_notifier import send_admin_line_notification, send_telegram_sync
+            alert_text = f"⏸️ [Facebook Live] สตรีมรอบที่ {cycle} เสร็จสิ้นแล้วจ้า! กำลังพักระบบ {rest_mins} นาที ก่อนเริ่มสตรีมรอบที่ {cycle + 1} ให้อัตโนมัติค่ะ 🐟"
+            send_admin_line_notification(alert_text)
+            send_telegram_sync(alert_text)
+        except Exception:
+            pass
+
+        time.sleep(rest_mins * 60)
+        cycle += 1
 
 
 if __name__ == "__main__":
