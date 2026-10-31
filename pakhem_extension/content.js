@@ -1418,33 +1418,38 @@ function checkGroupMembership() {
             btnAutoShareLive.addEventListener("click", executeAutoLiveShare);
         }
 
-        // อัปเดตสถานะสมาชิกกลุ่มแบบ Realtime
+        // อัปเดตสถานะสมาชิกกลุ่มแบบ Realtime (Safe Guard 100%)
         function updateGroupBadgeUI() {
-            const isMsg = window.location.pathname.includes('/messages') || window.location.pathname.includes('/inbox');
-            if (isMsg) return; // Do not overwrite header or badges when in Inbox mode!
+            const pth = window.location.pathname || "";
+            const isMsg = pth.includes('/messages') || pth.includes('/inbox');
+            if (isMsg) return;
 
             try {
                 const info = checkGroupMembership();
-                groupTitle.textContent = info.name;
-                groupStatus.textContent = info.badgeText;
-                groupBadge.style.background = info.badgeBg;
-                groupBadge.style.color = info.badgeColor;
+                if (groupTitle) groupTitle.textContent = info.name || "กลุ่ม Facebook";
+                if (groupStatus) groupStatus.textContent = info.badgeText || "ตรวจสถานะ...";
+                if (groupBadge) {
+                    groupBadge.style.background = info.badgeBg || "#e8f5e9";
+                    groupBadge.style.color = info.badgeColor || "#1b5e20";
+                }
 
-                const profileSpan = widget.querySelector("#pkh-profile-name");
+                const profileSpan = widget ? widget.querySelector("#pkh-profile-name") : null;
                 if (profileSpan) {
                     profileSpan.textContent = "👤 " + (info.profileName || "ป้าเข็ม");
                 }
 
-                const btnAutoShareLive = widget.querySelector("#pkh-btn-auto-share-live");
+                const btnAutoShareLive = widget ? widget.querySelector("#pkh-btn-auto-share-live") : null;
                 if (info.status === "not_member") {
-                    header.style.background = "#d9534f";
-                    widget.style.borderColor = "#d9534f";
-                    headerText.textContent = "❌ ยังไม่ได้เข้าร่วมกลุ่ม";
-                    groupBadge.style.cursor = "pointer";
-                    groupBadge.title = "คลิกที่นี่เพื่อกดขอเข้าร่วมกลุ่ม";
-                    groupBadge.onclick = () => {
-                        if (info.joinElement) simulateFullClick(info.joinElement);
-                    };
+                    if (header) header.style.background = "#d9534f";
+                    if (widget) widget.style.borderColor = "#d9534f";
+                    if (headerText) headerText.textContent = "❌ ยังไม่ได้เข้าร่วมกลุ่ม";
+                    if (groupBadge) {
+                        groupBadge.style.cursor = "pointer";
+                        groupBadge.title = "คลิกที่นี่เพื่อกดขอเข้าร่วมกลุ่ม";
+                        groupBadge.onclick = () => {
+                            if (info.joinElement) simulateFullClick(info.joinElement);
+                        };
+                    }
                     if (btnAutoShareLive) {
                         btnAutoShareLive.innerHTML = "👉 ยังไม่ได้เข้ากลุ่ม (คลิกเพื่อขอเข้าร่วมกลุ่ม)";
                         btnAutoShareLive.style.background = "#d9534f";
@@ -1453,33 +1458,26 @@ function checkGroupMembership() {
                         };
                     }
                 } else if (info.status === "pending") {
-                    header.style.background = "#e67e22";
-                    widget.style.borderColor = "#e67e22";
-                    headerText.textContent = "⏳ รอแอดมินอนุมัติ";
-                    groupBadge.style.cursor = "default";
-                    groupBadge.onclick = null;
+                    if (header) header.style.background = "#e67e22";
+                    if (widget) widget.style.borderColor = "#e67e22";
+                    if (headerText) headerText.textContent = "⏳ รอแอดมินอนุมัติ";
+                    if (groupBadge) {
+                        groupBadge.style.cursor = "default";
+                        groupBadge.onclick = null;
+                    }
                     if (btnAutoShareLive) {
                         btnAutoShareLive.innerHTML = "⏳ รอแอดมินกลุ่มอนุมัติ (ยังแชร์ไม่ได้)";
                         btnAutoShareLive.style.background = "#e67e22";
                         btnAutoShareLive.onclick = null;
                     }
-                } else if (info.status === "member") {
-                    header.style.background = "linear-gradient(135deg, #1b5e20, #28a745)";
-                    widget.style.borderColor = "#28a745";
-                    headerText.textContent = "🐟 ป้าเข็ม: ผู้ช่วยแชร์ลงกลุ่ม";
-                    groupBadge.style.cursor = "default";
-                    groupBadge.onclick = null;
-                    if (btnAutoShareLive) {
-                        btnAutoShareLive.innerHTML = "🚀 1-คลิก: ใส่แคปชั่น + แชร์ลงกลุ่มทันที!";
-                        btnAutoShareLive.style.background = "linear-gradient(135deg, #e0245e, #ff416c)";
-                        btnAutoShareLive.onclick = executeAutoLiveShare;
-                    }
                 } else {
-                    header.style.background = "linear-gradient(135deg, #1b5e20, #28a745)";
-                    widget.style.borderColor = "#28a745";
-                    headerText.textContent = "🐟 ป้าเข็ม: ผู้ช่วยแชร์ลงกลุ่ม";
-                    groupBadge.style.cursor = "default";
-                    groupBadge.onclick = null;
+                    if (header) header.style.background = "linear-gradient(135deg, #1b5e20, #28a745)";
+                    if (widget) widget.style.borderColor = "#28a745";
+                    if (headerText) headerText.textContent = "🐟 ป้าเข็ม: ผู้ช่วยแชร์ลงกลุ่ม";
+                    if (groupBadge) {
+                        groupBadge.style.cursor = "default";
+                        groupBadge.onclick = null;
+                    }
                     if (btnAutoShareLive) {
                         btnAutoShareLive.innerHTML = "🚀 1-คลิก: ใส่แคปชั่น + แชร์ลงกลุ่มทันที!";
                         btnAutoShareLive.style.background = "linear-gradient(135deg, #e0245e, #ff416c)";
@@ -1487,7 +1485,7 @@ function checkGroupMembership() {
                     }
                 }
             } catch(err) {
-                // Silently fallback without logging to console.error (prevents Chrome Error badge)
+                // Silently fallback without logging to console.error
                 if (groupTitle) groupTitle.textContent = (document.title || "").replace(/\s*[\|\-]\s*Facebook.*$/i, '').trim() || "กลุ่ม Facebook";
                 if (groupStatus) groupStatus.textContent = "🟢 พร้อมแชร์ (สแตนด์บาย)";
                 if (groupBadge) {
