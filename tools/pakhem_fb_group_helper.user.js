@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         🐟 ป้าเข็ม — ผู้ช่วยแชร์ไลฟ์สดลงกลุ่ม 1-คลิก (v5.5 Anti-Flicker)
+// @name         🐟 ป้าเข็ม — ผู้ช่วยแชร์ไลฟ์สดลงกลุ่ม 1-คลิก (v5.6 Rock Solid No Flicker)
 // @namespace    https://watt29.github.io/pakhem-shop/
-// @version      5.5
-// @description  ผู้ช่วยแชร์ไลฟ์สดลงกลุ่ม 1-คลิก คลีน ปลอดภัย ไร้การกระพริบ 100%
+// @version      5.6
+// @description  ผู้ช่วยแชร์ไลฟ์สดลงกลุ่ม 1-คลิก คลีน ปลอดภัย นิ่งสนิท ไม่กระพริบ 100%
 // @author       Watt & Pa Khem
 // @match        https://*.facebook.com/*
 // @match        https://*.messenger.com/*
@@ -838,70 +838,10 @@ function checkGroupMembership() {
             });
         }
 
+        // หัวแผงนิ่งสนิท 100% ไม่สลับข้อความไปมา (ป้องกันการกระพริบ)
         function checkMessengerPageMode() {
-            const pth = window.location.pathname || "";
-            const isMsg = pth.includes('/messages') || pth.includes('/inbox') || window.location.hostname.includes('messenger.com');
-            const isVideoOrLive = pth.includes('/videos/') || pth.includes('/live');
-
-            // ตรวจหาหน้าต่างสร้างโพสต์ / แชร์ไปยังกลุ่ม
-            const shareDialog = document.querySelector('div[role="dialog"]');
-            const isShareDialogOpen = !!shareDialog && (
-                (shareDialog.textContent || '').includes('สร้างโพสต์') || 
-                (shareDialog.textContent || '').includes('แชร์') || 
-                (shareDialog.textContent || '').includes('กลุ่ม') ||
-                (shareDialog.textContent || '').includes('Share')
-            );
-
-            const groupToolsEl = widget.querySelector("#pkh-group-tools");
-            const groupToolsToggleEl = widget.querySelector("#pkh-group-tools-toggle");
-            const groupBadgeEl = widget.querySelector("#pkh-group-badge");
-            const liveShareBox = widget.querySelector("#pkh-live-share-box");
-
-            // แสดงแถบช่วยแชร์ไลฟ์สดลงกลุ่มทันทีเมื่อเปิดหน้าต่างแชร์ หรืออยู่ในหน้าไลฟ์สด
-            if (liveShareBox) {
-                if (isShareDialogOpen || isVideoOrLive) {
-                    liveShareBox.style.display = "block";
-                } else {
-                    liveShareBox.style.display = "none";
-                }
-            }
-
-            if (isShareDialogOpen) {
-                if (headerText && !headerText.textContent.includes("⏳")) {
-                    headerText.textContent = "📢 ป้าเข็ม: แชร์ไลฟ์ลงกลุ่ม (v5.0)";
-                    header.style.background = "#e0245e";
-                    widget.style.borderColor = "#e0245e";
-                }
-                if (groupBadgeEl) groupBadgeEl.style.display = "flex";
-                if (groupToolsToggleEl) groupToolsToggleEl.style.display = "none";
-                if (groupToolsEl) groupToolsEl.style.display = "block";
-            } else if (isMsg) {
-                if (messengerBox) messengerBox.style.display = "block";
-                if (btnToggleChatBox) btnToggleChatBox.textContent = "💬 ซ่อนผู้ช่วยตอบแชท & รับออเดอร์ ▲";
-                if (groupBadgeEl && !pth.includes('/groups/')) groupBadgeEl.style.display = "none";
-                if (groupToolsToggleEl) groupToolsToggleEl.style.display = "block";
-                if (groupToolsEl && !isGroupToolsManuallyOpened) {
-                    groupToolsEl.style.display = "none";
-                }
-                if (headerText && !headerText.textContent.includes("⏳")) {
-                    headerText.textContent = "💬 ป้าเข็ม: ตอบแชท & รับออเดอร์เชื่อมบอท (v5.0)";
-                    header.style.background = "#007bff";
-                    widget.style.borderColor = "#007bff";
-                }
-            } else {
-                if (messengerBox && !isChatBoxManuallyOpened) messengerBox.style.display = "none";
-                if (groupBadgeEl) groupBadgeEl.style.display = "flex";
-                if (groupToolsToggleEl) groupToolsToggleEl.style.display = "none";
-                if (groupToolsEl) groupToolsEl.style.display = "block";
-                if (headerText && !headerText.textContent.includes("⏳")) {
-                    headerText.textContent = "🐟 ป้าเข็ม: ตรวจกลุ่ม + โพสต์ (v5.0)";
-                    header.style.background = "#28a745";
-                    widget.style.borderColor = "#28a745";
-                }
-            }
+            // ไม่มีการเปลี่ยนสีหรือสลับข้อความหัวแผงไปมา เพื่อให้นิ่งสนิท 100%
         }
-        setInterval(checkMessengerPageMode, 1500);
-        checkMessengerPageMode();
 
         const btnToggleGroupTools = widget.querySelector("#pkh-btn-toggle-group-tools");
         if (btnToggleGroupTools) {
