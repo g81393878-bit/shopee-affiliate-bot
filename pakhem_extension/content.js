@@ -1435,6 +1435,7 @@ function checkGroupMembership() {
                     profileSpan.textContent = "👤 " + (info.profileName || "ป้าเข็ม");
                 }
 
+                const btnAutoShareLive = widget.querySelector("#pkh-btn-auto-share-live");
                 if (info.status === "not_member") {
                     header.style.background = "#d9534f";
                     widget.style.borderColor = "#d9534f";
@@ -1444,43 +1445,46 @@ function checkGroupMembership() {
                     groupBadge.onclick = () => {
                         if (info.joinElement) simulateFullClick(info.joinElement);
                     };
-                    insertBtn.innerHTML = "👉 ยังไม่ได้เข้ากลุ่ม (คลิกเพื่อขอเข้าร่วมกลุ่ม)";
-                    insertBtn.style.background = "#d9534f";
-                    insertBtn.style.boxShadow = "0 4px 12px rgba(217,83,79,0.4)";
-                    insertBtn.disabled = false;
+                    if (btnAutoShareLive) {
+                        btnAutoShareLive.innerHTML = "👉 ยังไม่ได้เข้ากลุ่ม (คลิกเพื่อขอเข้าร่วมกลุ่ม)";
+                        btnAutoShareLive.style.background = "#d9534f";
+                        btnAutoShareLive.onclick = () => {
+                            if (info.joinElement) simulateFullClick(info.joinElement);
+                        };
+                    }
                 } else if (info.status === "pending") {
                     header.style.background = "#e67e22";
                     widget.style.borderColor = "#e67e22";
                     headerText.textContent = "⏳ รอแอดมินอนุมัติ";
                     groupBadge.style.cursor = "default";
                     groupBadge.onclick = null;
-                    insertBtn.innerHTML = "⏳ รอแอดมินกลุ่มอนุมัติ (ยังโพสต์ไม่ได้)";
-                    insertBtn.style.background = "#e67e22";
-                    insertBtn.style.boxShadow = "none";
-                    insertBtn.disabled = true;
-                } else if (info.status === "member") {
-                    header.style.background = "#28a745";
-                    widget.style.borderColor = "#28a745";
-                    headerText.textContent = "🐟 ป้าเข็ม: สมาชิกกลุ่มแล้ว (พร้อมโพสต์)";
-                    if (toast && toast.innerHTML.includes("ยังไม่ได้เข้าร่วมกลุ่ม")) {
-                        showToast("🔒 พร้อมโพสต์อัตโนมัติ 100% แล้วครับ กดปุ่มสีเขียวได้เลย!", "#28a745");
+                    if (btnAutoShareLive) {
+                        btnAutoShareLive.innerHTML = "⏳ รอแอดมินกลุ่มอนุมัติ (ยังแชร์ไม่ได้)";
+                        btnAutoShareLive.style.background = "#e67e22";
+                        btnAutoShareLive.onclick = null;
                     }
-                    groupBadge.style.cursor = "default";
-                    groupBadge.onclick = null;
-                    insertBtn.innerHTML = "🚀 1-คลิก โพสต์พร้อมรูปป้ายราคา (อัตโนมัติ 100%)";
-                    insertBtn.style.background = "#28a745";
-                    insertBtn.style.boxShadow = "0 4px 12px rgba(40,167,69,0.4)";
-                    insertBtn.disabled = false;
-                } else {
-                    header.style.background = "#28a745";
+                } else if (info.status === "member") {
+                    header.style.background = "linear-gradient(135deg, #1b5e20, #28a745)";
                     widget.style.borderColor = "#28a745";
-                    headerText.textContent = "🐟 ป้าเข็ม: ตรวจกลุ่ม + โพสต์ (v4.8)";
+                    headerText.textContent = "🐟 ป้าเข็ม: ผู้ช่วยแชร์ลงกลุ่ม";
                     groupBadge.style.cursor = "default";
                     groupBadge.onclick = null;
-                    insertBtn.innerHTML = "🚀 1-คลิก โพสต์พร้อมรูปป้ายราคา (อัตโนมัติ 100%)";
-                    insertBtn.style.background = "#28a745";
-                    insertBtn.style.boxShadow = "0 4px 12px rgba(40,167,69,0.4)";
-                    insertBtn.disabled = false;
+                    if (btnAutoShareLive) {
+                        btnAutoShareLive.innerHTML = "🚀 1-คลิก: ใส่แคปชั่น + แชร์ลงกลุ่มทันที!";
+                        btnAutoShareLive.style.background = "linear-gradient(135deg, #e0245e, #ff416c)";
+                        btnAutoShareLive.onclick = executeAutoLiveShare;
+                    }
+                } else {
+                    header.style.background = "linear-gradient(135deg, #1b5e20, #28a745)";
+                    widget.style.borderColor = "#28a745";
+                    headerText.textContent = "🐟 ป้าเข็ม: ผู้ช่วยแชร์ลงกลุ่ม";
+                    groupBadge.style.cursor = "default";
+                    groupBadge.onclick = null;
+                    if (btnAutoShareLive) {
+                        btnAutoShareLive.innerHTML = "🚀 1-คลิก: ใส่แคปชั่น + แชร์ลงกลุ่มทันที!";
+                        btnAutoShareLive.style.background = "linear-gradient(135deg, #e0245e, #ff416c)";
+                        btnAutoShareLive.onclick = executeAutoLiveShare;
+                    }
                 }
             } catch(err) {
                 console.error("PaKhem updateGroupBadgeUI error:", err);
@@ -1560,14 +1564,16 @@ function checkGroupMembership() {
         setInterval(updateGroupBadgeUI, 2000);
         updateGroupBadgeUI();
 
-        selectGroup.addEventListener("change", () => {
-            const url = selectGroup.value;
-            if (url) {
-                window.open(url, "_blank");
-                showToast("เปิดหน้ากลุ่มตลาดนัดในแท็บใหม่แล้วครับ!", "#28a745");
-                selectGroup.selectedIndex = 0;
-            }
-        });
+        if (selectGroup) {
+            selectGroup.addEventListener("change", () => {
+                const url = selectGroup.value;
+                if (url) {
+                    window.open(url, "_blank");
+                    showToast("เปิดหน้ากลุ่มตลาดนัดในแท็บใหม่แล้วครับ!", "#28a745");
+                    selectGroup.selectedIndex = 0;
+                }
+            });
+        }
 
         // ลากย้ายตำแหน่ง
         let isDragging = false;
@@ -1633,17 +1639,19 @@ function checkGroupMembership() {
             toggleBtn.textContent = isMinimized ? "➕" : "➖";
         });
 
-        randBtn.addEventListener("click", () => {
-            currentCaptionIndex = (currentCaptionIndex + 1) % CAPTIONS.length;
-            capTitle.textContent = CAPTIONS[currentCaptionIndex].title;
-            capArea.value = CAPTIONS[currentCaptionIndex].text;
-            showToast("สุ่มแคปชั่นขายใหม่แล้ว!", "#28a745");
-        });
+        if (randBtn) {
+            randBtn.addEventListener("click", () => {
+                currentCaptionIndex = (currentCaptionIndex + 1) % CAPTIONS.length;
+                if (capTitle) capTitle.textContent = CAPTIONS[currentCaptionIndex].title;
+                if (capArea) capArea.value = CAPTIONS[currentCaptionIndex].text;
+                showToast(`🎲 สลับใช้: ${CAPTIONS[currentCaptionIndex].title}`, "#007bff");
+            });
+        }
 
         // ==============================================================
         // 🚀 ระบบโพสต์อัตโนมัติ (ตรวจสอบสถานะกลุ่มก่อนโพสต์ทุกครั้ง)
         // ==============================================================
-        insertBtn.addEventListener("click", async () => {
+        if (insertBtn) insertBtn.addEventListener("click", async () => {
             const textToInsert = capArea.value.trim();
 
             // ⚡ สเต็ป 0: ตรวจสอบก่อนว่าอยู่ในกลุ่มไหม และเป็นสมาชิกหรือยัง
@@ -1840,36 +1848,47 @@ function checkGroupMembership() {
             insertBtn.style.opacity = "1";
         });
 
-        copyImgBtn.addEventListener("click", async () => {
-            showToast("⏳ กำลังดึงรูปป้ายราคาลงคลิปบอร์ด...", "#007bff");
-            if (!cachedPricePngBlob) {
-                await prefetchImageBlobs();
-            }
-            const ok = await copyPngBlobToClipboard(cachedPricePngBlob);
-            if (ok) {
-                showToast("🖼️ ก๊อปรูปป้ายราคาลงคลิปบอร์ดแล้ว! (กด Ctrl+V วางได้ทันที)", "#28a745");
-            } else {
-                showToast("❌ เบราว์เซอร์ปฏิเสธคลิปบอร์ด ลองคลิกปุ่มอีกครั้งครับ", "#d9534f");
-            }
-        });
+        if (copyImgBtn) {
+            copyImgBtn.addEventListener("click", async () => {
+                showToast("⏳ กำลังดึงรูปป้ายราคาลงคลิปบอร์ด...", "#007bff");
+                if (!cachedPricePngBlob) {
+                    await prefetchImageBlobs();
+                }
+                const ok = await copyPngBlobToClipboard(cachedPricePngBlob);
+                if (ok) {
+                    showToast("🖼️ ก๊อปรูปป้ายราคาลงคลิปบอร์ดแล้ว! (กด Ctrl+V วางได้ทันที)", "#28a745");
+                } else {
+                    showToast("❌ เบราว์เซอร์ปฏิเสธคลิปบอร์ด ลองคลิกปุ่มอีกครั้งครับ", "#d9534f");
+                }
+            });
+        }
 
-        copyFriedBtn.addEventListener("click", async () => {
-            showToast("⏳ กำลังดึงรูปปลาทอดลงคลิปบอร์ด...", "#6f42c1");
-            if (!cachedFriedPngBlob) {
-                await prefetchImageBlobs();
-            }
-            const ok = await copyPngBlobToClipboard(cachedFriedPngBlob);
-            if (ok) {
-                showToast("🍳 ก๊อปรูปปลาทอดลงคลิปบอร์ดแล้ว! (กด Ctrl+V วางในเม้นต์ได้)", "#6f42c1");
-            } else {
-                showToast("❌ เบราว์เซอร์ปฏิเสธคลิปบอร์ด ลองคลิกปุ่มอีกครั้งครับ", "#d9534f");
-            }
-        });
+        if (copyFriedBtn) {
+            copyFriedBtn.addEventListener("click", async () => {
+                showToast("⏳ กำลังดึงรูปปลาทอดลงคลิปบอร์ด...", "#6f42c1");
+                if (!cachedFriedPngBlob) {
+                    await prefetchImageBlobs();
+                }
+                const ok = await copyPngBlobToClipboard(cachedFriedPngBlob);
+                if (ok) {
+                    showToast("🍳 ก๊อปรูปปลาทอดลงคลิปบอร์ดแล้ว! (กด Ctrl+V วางในเม้นต์ได้)", "#6f42c1");
+                } else {
+                    showToast("❌ เบราว์เซอร์ปฏิเสธคลิปบอร์ด ลองคลิกปุ่มอีกครั้งครับ", "#d9534f");
+                }
+            });
+        }
 
-        copyTextBtn.addEventListener("click", () => {
-            navigator.clipboard.writeText(capArea.value.trim());
-            showToast("📋 ก๊อปปี้ข้อความราคา 3 บรรทัดแล้ว!", "#007bff");
-        });
+        if (copyTextBtn) {
+            copyTextBtn.addEventListener("click", async () => {
+                const text = (CAPTIONS && CAPTIONS[currentCaptionIndex]) ? CAPTIONS[currentCaptionIndex].text : "";
+                try {
+                    await navigator.clipboard.writeText(text);
+                    showToast("📋 ก๊อปปี้ข้อความแคปชั่นเรียบร้อยแล้วครับ!", "#28a745");
+                } catch(e) {
+                    showToast("❌ ก๊อปปี้ไม่สำเร็จ", "#d9534f");
+                }
+            });
+        }
     }
 
     prefetchImageBlobs();
