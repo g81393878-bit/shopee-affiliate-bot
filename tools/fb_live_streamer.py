@@ -392,7 +392,7 @@ def main():
 
     # 6. ทดสอบไฟล์เบื้องต้นก่อนเริ่ม
     test_ok = test_video(ffmpeg_bin, video_path)
-    if not test_ok:
+    if not test_ok and not args.yes:
         cont = input("⚠️ มีข้อความแจ้งเตือน ต้องการดำเนินการต่อหรือไม่ (y/n)? ").lower()
         if cont != "y":
             sys.exit(0)

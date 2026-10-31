@@ -1357,6 +1357,20 @@ function checkGroupMembership() {
                     });
                     return { isLive: true, post: null, shareBtn: shareBtn || null };
                 }
+
+                // 3. Fallback: ค้นหาปุ่มแชร์ของโพสต์หรือวิดีโอล่าสุดบนหน้าเพจ
+                const firstPost = document.querySelector('div[role="article"], div[data-pagelet*="FeedUnit"]');
+                if (firstPost) {
+                    const shareBtn = Array.from(firstPost.querySelectorAll('div[role="button"], span, div')).find(el => {
+                        const label = el.getAttribute('aria-label') || '';
+                        const txt = (el.textContent || '').trim();
+                        return (label === 'แชร์' || label.includes('แชร์') || label === 'Share' || txt === 'แชร์' || txt === 'Share') &&
+                               el.offsetParent !== null;
+                    });
+                    if (shareBtn) {
+                        return { isLive: false, isPost: true, post: firstPost, shareBtn };
+                    }
+                }
             } catch(e) {}
 
             return { isLive: false, post: null, shareBtn: null };
