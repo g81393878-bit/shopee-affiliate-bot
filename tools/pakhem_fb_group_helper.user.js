@@ -1,10 +1,11 @@
 // ==UserScript==
-// @name         🐟 ป้าเข็ม — ผู้ช่วยโพสต์กลุ่มตลาดนัด (v4.1 ตรวจสอบสถานะสมาชิกกลุ่ม 100%)
+// @name         🐟 ป้าเข็ม — ผู้ช่วยโพสต์กลุ่มตลาดนัด & ปิดการขาย Inbox (v5.0 Live Share & Autopilot)
 // @namespace    https://watt29.github.io/pakhem-shop/
-// @version      3.9
-// @description  ระบบตรวจจับอัตโนมัติ: ทราบทันทีว่าอยู่ในกลุ่มไหม (เป็นสมาชิกแล้วหรือยัง) + ล็อกเป้าโพสต์และแนบรูปภาพ 100%
+// @version      5.0
+// @description  ระบบตรวจจับอัตโนมัติ: แชร์ไลฟ์สดลงกลุ่ม 1-คลิก + ตรวจสถานะกลุ่ม + ตอบแชทช่วยบอท + สกัดที่อยู่และบันทึกออเดอร์เข้าบอท 1-คลิก
 // @author       Watt & Pa Khem
 // @match        https://*.facebook.com/*
+// @match        https://*.messenger.com/*
 // @grant        GM_setClipboard
 // @grant        GM_notification
 // @run-at       document-idle
@@ -704,19 +705,42 @@ function checkGroupMembership() {
             </div>
             <div id="pkh-body" style="padding: 10px 12px; font-size: 12px; color: #333;">
                 
-                <!-- 💬 แถบปิดการขายด่วน Facebook Messenger / Meta Business Suite Inbox -->
+                <!-- ปุ่มสลับโหมดผู้ช่วยตอบแชท & รับออเดอร์ช่วยบอท (เปิดได้ทุกหน้า ทั้งกลุ่ม/แชท/ไลฟ์สด) -->
+                <div style="margin-bottom: 6px; display: flex; gap: 4px;">
+                    <button type="button" id="pkh-btn-toggle-chat-box" style="flex: 1; background: #007bff; color: white; border: none; border-radius: 6px; padding: 6px 8px; font-size: 11px; font-weight: bold; cursor: pointer;">💬 เปิดผู้ช่วยตอบแชท & รับออเดอร์ช่วยบอท ▼</button>
+                </div>
+
+                <!-- 💬 แถบปิดการขายด่วน Facebook Messenger / Meta Business Suite Inbox / Live -->
                 <div id="pkh-messenger-box" style="display: none; margin-bottom: 8px; padding: 8px; background: #eef7ff; border-radius: 8px; border: 1.5px solid #007bff;">
                     <div style="font-weight: bold; color: #004085; font-size: 11px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
-                        <span>💬 ผู้ช่วยปิดการขายในแชท</span>
-                        <span style="font-size: 10px; background: #007bff; color: white; padding: 1px 5px; border-radius: 4px;">1-คลิกพิมพ์</span>
+                        <span>💬 ผู้ช่วยตอบแชท & รับออเดอร์เชื่อมบอท</span>
+                        <button type="button" id="pkh-btn-autopilot-toggle" style="font-size: 10px; background: #28a745; color: white; border: none; padding: 2px 7px; border-radius: 10px; font-weight: bold; cursor: pointer;" title="สลับโหมดสแกนแชทและบันทึกออเดอร์อัตโนมัติ 100%">🤖 อัตโนมัติ: ON</button>
                     </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 6px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 4px;">
                         <button type="button" id="pkh-btn-send-price" style="background: #28a745; color: white; border: none; border-radius: 6px; padding: 6px 2px; font-size: 10.5px; font-weight: bold; cursor: pointer;">💰 ส่งราคา 3 ชุด</button>
                         <button type="button" id="pkh-btn-send-bank" style="background: #17a2b8; color: white; border: none; border-radius: 6px; padding: 6px 2px; font-size: 10.5px; font-weight: bold; cursor: pointer;">🏦 ส่งเลขบัญชี</button>
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 6px;">
                         <button type="button" id="pkh-btn-send-shipping" style="background: #6c757d; color: white; border: none; border-radius: 6px; padding: 6px 2px; font-size: 10.5px; font-weight: bold; cursor: pointer;">❄️ ส่งเงื่อนไขรถเย็น</button>
-                        <button type="button" id="pkh-btn-extract-addr" style="background: #ffc107; color: #212529; border: none; border-radius: 6px; padding: 6px 2px; font-size: 10.5px; font-weight: bold; cursor: pointer;">📋 สกัดที่อยู่ลูกค้า</button>
+                        <button type="button" id="pkh-btn-extract-addr" style="background: #ffc107; color: #212529; border: none; border-radius: 6px; padding: 6px 2px; font-size: 10.5px; font-weight: bold; cursor: pointer;">📋 ดึงที่อยู่จากแชท</button>
+                    </div>
+
+                    <!-- 🛒 กล่องเปิดบิลส่งตรงเข้าฐานข้อมูลบอท (Supabase + Google Sheets + Telegram) -->
+                    <div id="pkh-order-builder" style="margin-top: 6px; padding: 7px 8px; background: #f0fff4; border-radius: 6px; border: 1.5px solid #28a745;">
+                        <div style="font-weight: bold; color: #1b5e20; font-size: 10.5px; margin-bottom: 4px;">🛒 บันทึกออเดอร์เข้าบอท (Supabase + Telegram)</div>
+                        <div style="display: flex; gap: 4px; margin-bottom: 4px;">
+                            <input type="text" id="pkh-ord-name" placeholder="ชื่อลูกค้า" style="flex: 1; padding: 4px 6px; font-size: 10.5px; border: 1px solid #ced4da; border-radius: 4px;">
+                            <input type="text" id="pkh-ord-phone" placeholder="เบอร์โทร 10 หลัก" style="width: 110px; padding: 4px 6px; font-size: 10.5px; border: 1px solid #ced4da; border-radius: 4px;">
+                        </div>
+                        <textarea id="pkh-ord-addr" placeholder="บ้านเลขที่ ตำบล อำเภอ จังหวัด รหัสไปรษณีย์ (กดปุ่ม '📋 ดึงที่อยู่จากแชท' เพื่อสกัดอัตโนมัติ)" style="width: 100%; height: 38px; padding: 4px 6px; font-size: 10.5px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; resize: none; margin-bottom: 4px; font-family: inherit;"></textarea>
+                        <select id="pkh-ord-pkg" style="width: 100%; padding: 4px 6px; font-size: 10.5px; border: 1px solid #28a745; border-radius: 4px; background: #fff; font-weight: bold; color: #1b5e20; margin-bottom: 5px;">
+                            <option value="SKU-SLID-MD-1KG|TRANSFER|550|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (โอนส่งฟรี)">⭐ 1 กก. โอนเงินส่งฟรี — 550 บาท</option>
+                            <option value="SKU-SLID-MD-1KG|COD|570|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (เก็บปลายทาง COD)">🚚 1 กก. เก็บปลายทาง COD — 570 บาท</option>
+                            <option value="SKU-SLID-MD-500G|TRANSFER|390|ปลาสลิดแดดเดียว ชุดพอดีมื้อ 500 กรัม (โอนส่งฟรี)">🐟 500 กรัม โอนเงินส่งฟรี — 390 บาท</option>
+                            <option value="SKU-SLID-MD-500G|COD|410|ปลาสลิดแดดเดียว ชุดพอดีมื้อ 500 กรัม (เก็บปลายทาง COD)">🚚 500 กรัม เก็บปลายทาง COD — 410 บาท</option>
+                            <option value="SKU-SLID-MD-2KG|TRANSFER|1090|ปลาสลิดแดดเดียว ชุดตุนสุดคุ้ม 2 กิโลกรัม (ส่งฟรีรถห้องเย็น)">❄️ 2 กก. โอนส่งฟรีรถห้องเย็น — 1,090 บาท</option>
+                        </select>
+                        <button type="button" id="pkh-btn-submit-order" style="width: 100%; background: #1b5e20; color: white; border: none; border-radius: 5px; padding: 6px; font-size: 11px; font-weight: bold; cursor: pointer;">🚀 บันทึกออเดอร์เข้าบอท + พิมพ์บิลยืนยันในแชท</button>
                     </div>
 
                     <!-- 📝 CRM Mini-Card โน้ตลูกค้าสดในแชท + โหลด CSV -->
@@ -736,6 +760,21 @@ function checkGroupMembership() {
                         <div style="text-align: right;">
                             <button type="button" id="pkh-btn-save-inbox-note" style="background: #007bff; color: white; border: none; border-radius: 4px; padding: 3px 8px; font-size: 10px; font-weight: bold; cursor: pointer;">💾 บันทึกโน้ต</button>
                         </div>
+                    </div>
+                </div>
+
+                <!-- 🎯 กล่องแชร์ไลฟ์สดลงกลุ่ม 1-คลิก (Live Share Assistant) -->
+                <div id="pkh-live-share-box" style="display: none; padding: 10px; margin-bottom: 8px; border-radius: 8px; background: #fff8e1; border: 1.5px solid #ffe082; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                    <div style="font-weight: bold; color: #b78103; font-size: 11.5px; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+                        <span>📢 หน้าต่างแชร์ลงกลุ่ม Facebook</span>
+                        <span style="background: #28a745; color: white; padding: 1px 6px; border-radius: 4px; font-size: 9.5px;">พร้อมแชร์</span>
+                    </div>
+                    <button type="button" id="pkh-btn-auto-share-live" style="width: 100%; background: linear-gradient(135deg, #e0245e, #ff416c); color: white; border: none; border-radius: 6px; padding: 11px 4px; font-weight: bold; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 4px 10px rgba(224,36,94,0.35);">
+                        🚀 1-คลิก: ใส่แคปชั่น + กดแชร์ลงกลุ่มทันที!
+                    </button>
+                    <div style="font-size: 10px; color: #666; margin-top: 6px; line-height: 1.4; text-align: center;">
+                        ✅ วิ่งเข้ากลุ่มโดยตรง <b>ไม่ต้องตามลบออก</b><br>
+                        🤖 <b>บอทจะคอยตอบแชท & สรุปออเดอร์แทน 100%</b>
                     </div>
                 </div>
 
@@ -874,33 +913,87 @@ function checkGroupMembership() {
         const btnExtractAddr = widget.querySelector("#pkh-btn-extract-addr");
 
         let isGroupToolsManuallyOpened = false;
+        let isChatBoxManuallyOpened = false;
+        const btnToggleChatBox = widget.querySelector("#pkh-btn-toggle-chat-box");
+
+        if (btnToggleChatBox) {
+            btnToggleChatBox.addEventListener("click", () => {
+                if (!messengerBox) return;
+                if (messengerBox.style.display === "none") {
+                    messengerBox.style.display = "block";
+                    isChatBoxManuallyOpened = true;
+                    btnToggleChatBox.textContent = "💬 ซ่อนผู้ช่วยตอบแชท & รับออเดอร์ ▲";
+                } else {
+                    messengerBox.style.display = "none";
+                    isChatBoxManuallyOpened = false;
+                    btnToggleChatBox.textContent = "💬 เปิดผู้ช่วยตอบแชท & รับออเดอร์ช่วยบอท ▼";
+                }
+            });
+        }
 
         function checkMessengerPageMode() {
-            const isMsg = window.location.pathname.includes('/messages') || window.location.pathname.includes('/inbox');
+            const pth = window.location.pathname || "";
+            const isMsg = pth.includes('/messages') || pth.includes('/inbox') || window.location.hostname.includes('messenger.com');
+            const isVideoOrLive = pth.includes('/videos/') || pth.includes('/live');
+
+            // ตรวจหาหน้าต่างสร้างโพสต์ / แชร์ไปยังกลุ่ม
+            const shareDialog = document.querySelector('div[role="dialog"]');
+            const isShareDialogOpen = !!shareDialog && (
+                (shareDialog.textContent || '').includes('สร้างโพสต์') || 
+                (shareDialog.textContent || '').includes('แชร์') || 
+                (shareDialog.textContent || '').includes('กลุ่ม') ||
+                (shareDialog.textContent || '').includes('Share')
+            );
+
             const groupToolsEl = widget.querySelector("#pkh-group-tools");
             const groupToolsToggleEl = widget.querySelector("#pkh-group-tools-toggle");
             const groupBadgeEl = widget.querySelector("#pkh-group-badge");
+            const liveShareBox = widget.querySelector("#pkh-live-share-box");
 
-            if (isMsg) {
+            // แสดงแถบช่วยแชร์ไลฟ์สดลงกลุ่มทันทีเมื่อเปิดหน้าต่างแชร์ หรืออยู่ในหน้าไลฟ์สด
+            if (liveShareBox) {
+                if (isShareDialogOpen || isVideoOrLive) {
+                    liveShareBox.style.display = "block";
+                } else {
+                    liveShareBox.style.display = "none";
+                }
+            }
+
+            if (isShareDialogOpen) {
+                if (headerText && !headerText.textContent.includes("⏳")) {
+                    headerText.textContent = "📢 ป้าเข็ม: แชร์ไลฟ์ลงกลุ่ม (v5.0)";
+                    header.style.background = "#e0245e";
+                    widget.style.borderColor = "#e0245e";
+                }
+                if (groupBadgeEl) groupBadgeEl.style.display = "flex";
+                if (groupToolsToggleEl) groupToolsToggleEl.style.display = "none";
+                if (groupToolsEl) groupToolsEl.style.display = "block";
+            } else if (isMsg) {
                 if (messengerBox) messengerBox.style.display = "block";
-                if (groupBadgeEl) groupBadgeEl.style.display = "none";
+                if (btnToggleChatBox) btnToggleChatBox.textContent = "💬 ซ่อนผู้ช่วยตอบแชท & รับออเดอร์ ▲";
+                if (groupBadgeEl && !pth.includes('/groups/')) groupBadgeEl.style.display = "none";
                 if (groupToolsToggleEl) groupToolsToggleEl.style.display = "block";
                 if (groupToolsEl && !isGroupToolsManuallyOpened) {
                     groupToolsEl.style.display = "none";
                 }
                 if (headerText && !headerText.textContent.includes("⏳")) {
-                    headerText.textContent = "💬 ป้าเข็ม: ผู้ช่วยปิดการขาย Inbox (v4.8)";
+                    headerText.textContent = "💬 ป้าเข็ม: ตอบแชท & รับออเดอร์เชื่อมบอท (v5.0)";
                     header.style.background = "#007bff";
                     widget.style.borderColor = "#007bff";
                 }
             } else {
-                if (messengerBox) messengerBox.style.display = "none";
+                if (messengerBox && !isChatBoxManuallyOpened) messengerBox.style.display = "none";
                 if (groupBadgeEl) groupBadgeEl.style.display = "flex";
                 if (groupToolsToggleEl) groupToolsToggleEl.style.display = "none";
                 if (groupToolsEl) groupToolsEl.style.display = "block";
+                if (headerText && !headerText.textContent.includes("⏳")) {
+                    headerText.textContent = "🐟 ป้าเข็ม: ตรวจกลุ่ม + โพสต์ (v5.0)";
+                    header.style.background = "#28a745";
+                    widget.style.borderColor = "#28a745";
+                }
             }
         }
-        setInterval(checkMessengerPageMode, 2000);
+        setInterval(checkMessengerPageMode, 1500);
         checkMessengerPageMode();
 
         const btnToggleGroupTools = widget.querySelector("#pkh-btn-toggle-group-tools");
@@ -921,11 +1014,27 @@ function checkGroupMembership() {
             });
         }
 
-        async function insertReplyToMessenger(replyText, label) {
+        async function insertReplyToMessenger(replyText, label, autoPressSend = false) {
             const composer = findMessengerComposer();
             let inserted = false;
             if (composer) {
                 inserted = await insertTextIntoEditor(composer, replyText);
+                if (autoPressSend && inserted) {
+                    await new Promise(r => setTimeout(r, 350));
+                    try {
+                        const enterEvt = new KeyboardEvent("keydown", {
+                            bubbles: true,
+                            cancelable: true,
+                            key: "Enter",
+                            code: "Enter",
+                            keyCode: 13,
+                            which: 13
+                        });
+                        composer.dispatchEvent(enterEvt);
+                        const sendBtn = document.querySelector('div[aria-label="กด Enter เพื่อส่ง"][role="button"], div[aria-label="Press enter to send"][role="button"], div[aria-label="ส่ง"][role="button"], div[aria-label="Send"][role="button"]');
+                        if (sendBtn) sendBtn.click();
+                    } catch(e) {}
+                }
             }
 
             // Always copy to clipboard as seamless failsafe
@@ -951,10 +1060,42 @@ function checkGroupMembership() {
         if (btnSendShipping) {
             btnSendShipping.addEventListener("click", () => insertReplyToMessenger(MESSENGER_REPLIES.shipping, "เงื่อนไขจัดส่ง"));
         }
+        const ordNameInput = widget.querySelector("#pkh-ord-name");
+        const ordPhoneInput = widget.querySelector("#pkh-ord-phone");
+        const ordAddrInput = widget.querySelector("#pkh-ord-addr");
+        const ordPkgSelect = widget.querySelector("#pkh-ord-pkg");
+        const btnSubmitOrder = widget.querySelector("#pkh-btn-submit-order");
+
         if (btnExtractAddr) {
             btnExtractAddr.addEventListener("click", async () => {
-                showToast("⏳ กำลังสแกนแชทเพื่อสกัดที่อยู่...", "#007bff");
+                showToast("⏳ กำลังสแกนแชทเพื่อสกัดชื่อ-เบอร์โทร-ที่อยู่...", "#007bff");
                 const res = extractAddressFromMessenger();
+                const chatName = getChatCustomerName();
+                if (ordNameInput && chatName && !ordNameInput.value.trim()) {
+                    ordNameInput.value = chatName;
+                }
+                if (ordPhoneInput && res.phone) {
+                    ordPhoneInput.value = res.phone;
+                }
+                if (ordAddrInput && (res.address || res.zip)) {
+                    ordAddrInput.value = (res.address + (res.zip && !res.address.includes(res.zip) ? " " + res.zip : "")).trim();
+                }
+                // Auto-detect package & payment from chat text
+                if (ordPkgSelect && res.raw) {
+                    const rawTxt = res.raw;
+                    const isCod = rawTxt.includes("ปลายทาง") || rawTxt.toUpperCase().includes("COD");
+                    if (rawTxt.includes("2 โล") || rawTxt.includes("2 กก") || rawTxt.includes("2กิโล") || rawTxt.includes("1,090") || rawTxt.includes("1090")) {
+                        ordPkgSelect.value = "SKU-SLID-MD-2KG|TRANSFER|1090|ปลาสลิดแดดเดียว ชุดตุนสุดคุ้ม 2 กิโลกรัม (ส่งฟรีรถห้องเย็น)";
+                    } else if (rawTxt.includes("ครึ่งโล") || rawTxt.includes("500") || rawTxt.includes("390") || rawTxt.includes("410")) {
+                        ordPkgSelect.value = isCod
+                            ? "SKU-SLID-MD-500G|COD|410|ปลาสลิดแดดเดียว ชุดพอดีมื้อ 500 กรัม (เก็บปลายทาง COD)"
+                            : "SKU-SLID-MD-500G|TRANSFER|390|ปลาสลิดแดดเดียว ชุดพอดีมื้อ 500 กรัม (โอนส่งฟรี)";
+                    } else {
+                        ordPkgSelect.value = isCod
+                            ? "SKU-SLID-MD-1KG|COD|570|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (เก็บปลายทาง COD)"
+                            : "SKU-SLID-MD-1KG|TRANSFER|550|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (โอนส่งฟรี)";
+                    }
+                }
                 let summary = "";
                 if (res.phone) summary += `เบอร์: ${res.phone} `;
                 if (res.zip) summary += `ปณ: ${res.zip} `;
@@ -964,12 +1105,226 @@ function checkGroupMembership() {
                     try {
                         await navigator.clipboard.writeText(summary);
                     } catch(e) {}
-                    showToast(`🎉 สกัดสำเร็จ: ${summary.substring(0, 45)}... (ก๊อปปี้แล้ว)`, "#28a745");
+                    showToast(`🎉 ดึงข้อมูลใส่ฟอร์มเปิดบิลแล้ว! ตรวจสอบแล้วกด '🚀 บันทึกออเดอร์' ได้เลย`, "#28a745");
                 } else {
-                    showToast("ℹ️ ไม่พบเบอร์โทรหรือที่อยู่ในแชทข้อความล่าสุดครับ", "#e67e22");
+                    showToast("ℹ️ ยังไม่พบเบอร์โทร/ที่อยู่ในแชท (พิมพ์กรอกในช่องด้านล่างได้เลยครับ)", "#e67e22");
                 }
             });
         }
+
+        if (btnSubmitOrder) {
+            btnSubmitOrder.addEventListener("click", async () => {
+                const nameVal = (ordNameInput ? ordNameInput.value.trim() : "") || getChatCustomerName() || "ลูกค้า Facebook";
+                const phoneVal = (ordPhoneInput ? ordPhoneInput.value.trim() : "").replace(/[\s\-]/g, "");
+                const addrVal = ordAddrInput ? ordAddrInput.value.trim() : "";
+                const pkgRaw = ordPkgSelect ? ordPkgSelect.value : "SKU-SLID-MD-1KG|TRANSFER|550|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (โอนส่งฟรี)";
+                const [sku, payMethod, priceStr, pkgLabel] = pkgRaw.split("|");
+                const priceNum = parseFloat(priceStr) || 550;
+
+                if (!/^0\d{8,9}$/.test(phoneVal)) {
+                    showToast("⚠️ กรุณาระบุเบอร์โทรศัพท์ผู้รับ 10 หลักให้ถูกต้องก่อนครับ", "#d9534f");
+                    if (ordPhoneInput) ordPhoneInput.focus();
+                    return;
+                }
+                if (addrVal.length < 10) {
+                    showToast("⚠️ กรุณาระบุที่อยู่จัดส่ง (บ้านเลขที่ ตำบล อำเภอ จังหวัด) ให้ครบก่อนครับ", "#d9534f");
+                    if (ordAddrInput) ordAddrInput.focus();
+                    return;
+                }
+
+                btnSubmitOrder.disabled = true;
+                btnSubmitOrder.textContent = "⏳ กำลังบันทึกออเดอร์เข้าฐานข้อมูลบอท...";
+                showToast("⏳ กำลังส่งออเดอร์เข้า Supabase + Google Sheets + Telegram...", "#007bff");
+
+                const now = new Date();
+                const pad = n => String(n).padStart(2, "0");
+                const orderId = `PKF-${pad(now.getMonth()+1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+
+                const supaUrl = "https://usqhvujqmnxqrdoovvnp.supabase.co/rest/v1/direct_orders";
+                const supaKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzcWh2dWpxbW54cXJkb292dm5wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyOTc4NjAsImV4cCI6MjA2OTg3Mzg2MH0.3kCGGAe1OoSJ_SCN_NDSdnKep1hXIMgMxR1lBd_i2eI";
+                const gasUrl = "https://script.google.com/macros/s/AKfycbxHAfBm0V67wkiXb1dlAFNbG3NQudcN35zuQ3xjFo0FRHY2ja8TB3-Xj0l_xOWxeF404Q/exec";
+
+                const orderRow = {
+                    order_code: orderId,
+                    product_name: "ปลาสลิดแดดเดียวสุพรรณแท้ ป้าเข็ม คัดพิเศษ",
+                    package_code: sku,
+                    package_name: pkgLabel,
+                    price: priceNum,
+                    customer_name: nameVal,
+                    phone: phoneVal,
+                    address: addrVal,
+                    payment_method: payMethod,
+                    status: "PENDING",
+                    note: `[ChromeExt v4.9] ${window.location.href}`,
+                    created_at: now.toISOString()
+                };
+
+                let saved = false;
+                try {
+                    const rSupa = await fetch(supaUrl, {
+                        method: "POST",
+                        headers: {
+                            "apikey": supaKey,
+                            "Authorization": "Bearer " + supaKey,
+                            "Content-Type": "application/json",
+                            "Prefer": "return=minimal"
+                        },
+                        body: JSON.stringify(orderRow)
+                    });
+                    if (rSupa.ok || rSupa.status === 409) saved = true;
+                } catch(e) {}
+
+                try {
+                    await fetch(gasUrl, {
+                        method: "POST",
+                        mode: "no-cors",
+                        headers: { "Content-Type": "text/plain;charset=utf-8" },
+                        body: JSON.stringify({
+                            action: "order_fish",
+                            order_id: orderId,
+                            skip_db: saved,
+                            name: nameVal,
+                            phone: phoneVal,
+                            address: addrVal,
+                            package: sku,
+                            package_name: pkgLabel,
+                            price: priceNum,
+                            payment_method: payMethod,
+                            note: `[ChromeExt v4.9] ${window.location.href}`
+                        })
+                    });
+                    saved = true;
+                } catch(e) {}
+
+                const payText = payMethod === "COD"
+                    ? `🚚 เก็บเงินปลายทาง (COD) ยอดรวม ${priceNum.toLocaleString()} บาท`
+                    : `💳 โอนเงินส่งฟรี ยอดรวม ${priceNum.toLocaleString()} บาท (กรุงไทย 038-0-25363-1 นายจีรวัฒน์ พลอาจ)`;
+
+                const confirmMsg = `✅ ป้าเข็มบันทึกออเดอร์ให้เรียบร้อยแล้วจ้า! 🙏💕
+🔖 รหัสสั่งซื้อ: ${orderId}
+📦 สินค้า: ${pkgLabel}
+💰 การชำระเงิน: ${payText}
+👤 ผู้รับ: คุณ${nameVal} (${phoneVal})
+📍 ที่อยู่จัดส่ง: ${addrVal}
+🚚 จัดส่งแพ็กซองฟอยล์เก็บความเย็นถึงหน้าบ้านภายใน 1-2 วันค่ะ ขอบพระคุณมากนะคะ 🐟✨`;
+
+                await insertReplyToMessenger(confirmMsg, `บิลยืนยันออเดอร์ ${orderId}`, true);
+                try {
+                    const savedMap = JSON.parse(localStorage.getItem("pkh_auto_saved_orders") || "{}");
+                    savedMap[phoneVal] = { orderId, ts: Date.now(), addr: addrVal };
+                    localStorage.setItem("pkh_auto_saved_orders", JSON.stringify(savedMap));
+                } catch(e) {}
+                showToast(`🎉 บันทึกออเดอร์ ${orderId} เข้าบอท + ส่งบิลในแชทสำเร็จ!`, "#28a745");
+                btnSubmitOrder.disabled = false;
+                btnSubmitOrder.textContent = "🚀 บันทึกออเดอร์เข้าบอท + พิมพ์บิลยืนยันในแชท";
+            });
+        }
+
+        // 🤖 ระบบ Auto-Pilot เฝ้าแชท & รับออเดอร์อัตโนมัติ 100% (v5.0)
+        const btnAutopilotToggle = widget.querySelector("#pkh-btn-autopilot-toggle");
+        let isAutoPilotEnabled = localStorage.getItem("pkh_autopilot_on") !== "0";
+        let isAutoPilotBusy = false;
+
+        function updateAutoPilotBtnUI() {
+            if (!btnAutopilotToggle) return;
+            if (isAutoPilotEnabled) {
+                btnAutopilotToggle.textContent = "🤖 อัตโนมัติ: ON";
+                btnAutopilotToggle.style.background = "#28a745";
+            } else {
+                btnAutopilotToggle.textContent = "⚪ อัตโนมัติ: OFF";
+                btnAutopilotToggle.style.background = "#6c757d";
+            }
+        }
+        updateAutoPilotBtnUI();
+
+        if (btnAutopilotToggle) {
+            btnAutopilotToggle.addEventListener("click", () => {
+                isAutoPilotEnabled = !isAutoPilotEnabled;
+                localStorage.setItem("pkh_autopilot_on", isAutoPilotEnabled ? "1" : "0");
+                updateAutoPilotBtnUI();
+                showToast(
+                    isAutoPilotEnabled
+                        ? "🤖 เปิดโหมดเฝ้าแชท & รับออเดอร์อัตโนมัติ 100% แล้ว!"
+                        : "⚪ ปิดโหมดอัตโนมัติ (ใช้โหมดกดปุ่ม 1-คลิก)",
+                    isAutoPilotEnabled ? "#28a745" : "#6c757d"
+                );
+            });
+        }
+
+        async function runMessengerAutoPilot() {
+            if (!isAutoPilotEnabled || isAutoPilotBusy) return;
+            const pth = window.location.pathname || "";
+            const isChatScreen = pth.includes("/messages") || pth.includes("/inbox") || window.location.hostname.includes("messenger.com");
+            if (!isChatScreen) return;
+
+            try {
+                const res = extractAddressFromMessenger();
+                const rawTxt = res.raw || "";
+                if (!rawTxt || rawTxt.length < 2) return;
+
+                const chatName = getChatCustomerName();
+                if (ordNameInput && chatName && document.activeElement !== ordNameInput) {
+                    ordNameInput.value = chatName;
+                }
+                if (ordPhoneInput && res.phone && document.activeElement !== ordPhoneInput) {
+                    ordPhoneInput.value = res.phone;
+                }
+                if (ordAddrInput && (res.address || res.zip) && document.activeElement !== ordAddrInput) {
+                    ordAddrInput.value = (res.address + (res.zip && !res.address.includes(res.zip) ? " " + res.zip : "")).trim();
+                }
+
+                // ตรวจบริบทว่าแชทนี้คุยเรื่องปลาสลิดหรือไม่ (ป้องกันแชทเพื่อน/ส่วนตัว)
+                const fishKeywords = ["ปลาสลิด", "ป้าเข็ม", "ครึ่งโล", "500", "1 โล", "1โล", "1 กิโล", "2 โล", "2โล", "390", "410", "550", "570", "1,090", "1090", "สนใจ", "ปลายทาง", "โอนเงิน", "แพ็กเกจ"];
+                const hasFishContext = pth.includes("/inbox") || fishKeywords.some(k => rawTxt.includes(k));
+                if (!hasFishContext) return;
+
+                // เลือกแพ็กเกจอัตโนมัติจากข้อความแชท
+                if (ordPkgSelect && document.activeElement !== ordPkgSelect) {
+                    const isCod = rawTxt.includes("ปลายทาง") || rawTxt.toUpperCase().includes("COD");
+                    if (rawTxt.includes("2 โล") || rawTxt.includes("2โล") || rawTxt.includes("2 กก") || rawTxt.includes("1,090") || rawTxt.includes("1090")) {
+                        ordPkgSelect.value = "SKU-SLID-MD-2KG|TRANSFER|1090|ปลาสลิดแดดเดียว ชุดตุนสุดคุ้ม 2 กิโลกรัม (ส่งฟรีรถห้องเย็น)";
+                    } else if (rawTxt.includes("ครึ่งโล") || rawTxt.includes("500") || rawTxt.includes("390") || rawTxt.includes("410")) {
+                        ordPkgSelect.value = isCod
+                            ? "SKU-SLID-MD-500G|COD|410|ปลาสลิดแดดเดียว ชุดพอดีมื้อ 500 กรัม (เก็บปลายทาง COD)"
+                            : "SKU-SLID-MD-500G|TRANSFER|390|ปลาสลิดแดดเดียว ชุดพอดีมื้อ 500 กรัม (โอนส่งฟรี)";
+                    } else {
+                        ordPkgSelect.value = isCod
+                            ? "SKU-SLID-MD-1KG|COD|570|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (เก็บปลายทาง COD)"
+                            : "SKU-SLID-MD-1KG|TRANSFER|550|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (โอนส่งฟรี)";
+                    }
+                }
+
+                // 1) กรณีพบเบอร์โทร 10 หลัก + ที่อยู่ครบถ้วน -> บันทึกออเดอร์เข้าบอทอัตโนมัติทันที (Zero-Click)
+                const cleanPhone = (res.phone || "").replace(/[\s\-]/g, "");
+                const fullAddr = ((res.address || "") + (res.zip && !(res.address || "").includes(res.zip) ? " " + res.zip : "")).trim();
+                if (/^0\d{8,9}$/.test(cleanPhone) && fullAddr.length >= 12 && !rawTxt.includes("รหัสสั่งซื้อ: PKF-")) {
+                    const savedMap = JSON.parse(localStorage.getItem("pkh_auto_saved_orders") || "{}");
+                    if (!savedMap[cleanPhone] && btnSubmitOrder && !btnSubmitOrder.disabled) {
+                        isAutoPilotBusy = true;
+                        showToast(`🤖 [Auto-Pilot] พบที่อยู่+เบอร์ ${cleanPhone} กำลังบันทึกออเดอร์อัตโนมัติ...`, "#28a745");
+                        btnSubmitOrder.click();
+                        setTimeout(() => { isAutoPilotBusy = false; }, 6000);
+                        return;
+                    }
+                }
+
+                // 2) กรณีลูกค้าทักถาม 'สนใจ / ราคาเท่าไหร่' และในแชทยังไม่เคยส่งตารางราคา -> ส่งตารางราคาอัตโนมัติ
+                const chatKey = window.location.origin + window.location.pathname;
+                const repliedMap = JSON.parse(localStorage.getItem("pkh_auto_replied_chats") || "{}");
+                const askPriceKeywords = ["สนใจ", "ราคาเท่าไหร่", "เท่าไร", "เท่าไหร่", "โลละเท่าไหร่", "กี่บาท", "สั่งปลาสลิด"];
+                if (!repliedMap[chatKey] && !rawTxt.includes("390.-") && askPriceKeywords.some(k => rawTxt.includes(k))) {
+                    isAutoPilotBusy = true;
+                    repliedMap[chatKey] = Date.now();
+                    localStorage.setItem("pkh_auto_replied_chats", JSON.stringify(repliedMap));
+                    showToast("🤖 [Auto-Pilot] ลูกค้าถามราคา กำลังส่งตารางราคา 3 ชุดอัตโนมัติ...", "#007bff");
+                    await insertReplyToMessenger(MESSENGER_REPLIES.price, "ราคา 3 แพ็กเกจ (Auto)", true);
+                    setTimeout(() => { isAutoPilotBusy = false; }, 5000);
+                }
+            } catch(e) {
+                isAutoPilotBusy = false;
+            }
+        }
+        setInterval(runMessengerAutoPilot, 3200);
 
         // 📝 CRM โน้ตลูกค้าสดในแชท + Export CSV
         const inboxNoteInput = widget.querySelector("#pkh-inbox-note-input");
@@ -1111,6 +1466,54 @@ function checkGroupMembership() {
             toast.innerHTML = msg;
             toast.style.color = color;
             toast.style.fontWeight = "bold";
+        }
+
+        // 🚀 ระบบแชร์ไลฟ์สดลงกลุ่มอัตโนมัติ 1-คลิก (Live Share Autopilot)
+        async function executeAutoLiveShare() {
+            const dialog = document.querySelector('div[role="dialog"]');
+            if (!dialog) {
+                showToast("⚠️ ไม่พบหน้าต่างแชร์ กรุณากดปุ่ม 'แชร์' ใต้วิดีโอไลฟ์สดก่อนจ้า", "#e67e22");
+                return;
+            }
+
+            const composer = dialog.querySelector('div[contenteditable="true"], div[role="textbox"]');
+            if (!composer) {
+                showToast("⚠️ ไม่พบช่องพิมพ์ข้อความในหน้าต่างแชร์", "#dc3545");
+                return;
+            }
+
+            const captionText = (CAPTIONS && CAPTIONS[0]) ? CAPTIONS[0].text : "🐟 ปลาสลิดสุพรรณแดดเดียวแท้ ป้าเข็ม คัดพิเศษ (ไซส์จัมโบ้ เนื้อแน่นหนาฟู มันแทรก เค็มน้อย 3% ไร้สาร ไร้ชูรส)\n📦 ราคามาตรฐานส่งฟรีถึงบ้าน: 500g 390.- | 1 กก. 550.- | 2 กก. 1,090.- (ส่งฟรีรถห้องเย็น!)\n💬 สั่งซื้อ: ทักแชท Inbox หรือพิมพ์คำว่า \"สนใจ\" ในคอมเมนต์ได้เลยจ้า มีรอบส่งสดใหม่ทุกวัน!";
+
+            showToast("⏳ กำลังใส่แคปชั่นปลาสลิดพร้อมราคาลงในช่องแชร์...", "#007bff");
+            await insertTextIntoEditor(composer, captionText);
+
+            try {
+                await navigator.clipboard.writeText(captionText);
+            } catch(e) {}
+
+            await new Promise(r => setTimeout(r, 600));
+
+            // ค้นหาปุ่มสีน้ำเงิน 'โพสต์' หรือ 'Post'
+            const buttons = Array.from(dialog.querySelectorAll('div[role="button"], button'));
+            const postBtn = buttons.find(b => {
+                const txt = (b.textContent || '').trim();
+                const aria = (b.getAttribute('aria-label') || '').trim();
+                return (txt === 'โพสต์' || txt === 'Post' || aria === 'โพสต์' || aria === 'Post');
+            });
+
+            if (postBtn && !postBtn.getAttribute('aria-disabled')) {
+                showToast("🚀 บอทกำลังกดปุ่มแชร์ลงกลุ่มให้ทันที...", "#28a745");
+                simulateFullClick(postBtn);
+                await new Promise(r => setTimeout(r, 1000));
+                showToast("✅ แชร์ลงกลุ่มสำเร็จเรียบร้อยแล้วจ้า! (ไม่ต้องตามลบออก บอทจะคอยตอบแชทแทน 100%)", "#28a745");
+            } else {
+                showToast("✅ ใส่แคปชั่นเรียบร้อยแล้วจ้า! กดปุ่ม 'โพสต์' สีน้ำเงินได้เลย", "#28a745");
+            }
+        }
+
+        const btnAutoShareLive = widget.querySelector("#pkh-btn-auto-share-live");
+        if (btnAutoShareLive) {
+            btnAutoShareLive.addEventListener("click", executeAutoLiveShare);
         }
 
         // อัปเดตสถานะสมาชิกกลุ่มแบบ Realtime
@@ -1573,5 +1976,42 @@ function checkGroupMembership() {
         setTimeout(createWidget, 2000);
     });
     setInterval(createWidget, 3500);
+
+// ==============================================================
+    // 📡 Chrome Message Passing (รับคำสั่งจาก popup.js)
+    // ==============================================================
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+        chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+            if (request.action === 'GET_GROUP_STATUS') {
+                const info = checkGroupMembership();
+                sendResponse(info);
+                return true;
+            }
+
+            if (request.action === 'START_POST') {
+                const widget = document.getElementById('pakhem-group-helper');
+                const insertBtn = widget ? widget.querySelector('#pkh-btn-insert') : null;
+                if (insertBtn) {
+                    insertBtn.click();
+                    sendResponse({ status: 'started' });
+                } else {
+                    sendResponse({ status: 'error', msg: 'ไม่พบวิดเจ็ตโพสต์' });
+                }
+                return true;
+            }
+
+            if (request.action === 'ANSWER_QUESTIONS') {
+                const res = autoAnswerGroupQuestions();
+                sendResponse(res);
+                return true;
+            }
+
+            if (request.action === 'HARVEST_CSV') {
+                const res = scanAndExportGroupsToCsv();
+                sendResponse(res);
+                return true;
+            }
+        });
+    }
 
 })();

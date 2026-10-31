@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "🐟 ป้าเข็ม — ผู้ช่วยโพสต์กลุ่มตลาดนัด Facebook",
-  "version": "4.8",
-  "description": "ระบบตรวจจับสถานะสมาชิกกลุ่ม Facebook อัตโนมัติ + คิวโพสต์หลายกลุ่มแบบปลอดภัย + ล็อกเป้าโพสต์และแนบรูปภาพป้ายราคา 1-คลิก สำหรับร้านปลาสลิดป้าเข็ม",
+  "name": "🐟 ป้าเข็ม — ผู้ช่วยโพสต์กลุ่ม & รับออเดอร์ช่วยบอท",
+  "version": "5.0",
+  "description": "ระบบผู้ช่วยโพสต์กลุ่มตลาดนัด + ตอบแชทช่วยบอท + สกัดที่อยู่และบันทึกออเดอร์เข้าฐานข้อมูลบอท (Supabase / Google Sheets / Telegram) 1-คลิก สำหรับร้านปลาสลิดป้าเข็ม",
   "permissions": [
     "tabs",
     "activeTab",
@@ -10,7 +10,11 @@
     "clipboardWrite"
   ],
   "host_permissions": [
-    "https://*.facebook.com/*"
+    "https://*.facebook.com/*",
+    "https://*.messenger.com/*",
+    "https://usqhvujqmnxqrdoovvnp.supabase.co/*",
+    "https://script.google.com/*",
+    "https://script.googleusercontent.com/*"
   ],
   "background": {
     "service_worker": "service-worker.js"
@@ -34,13 +38,14 @@
         "default": "Ctrl+Shift+P",
         "mac": "Command+Shift+P"
       },
-      "description": "เปิดเมนูป๊อปอัป ป้าเข็ม ผู้ช่วยกลุ่มตลาดนัด"
+      "description": "เปิดเมนูป๊อปอัป ป้าเข็ม ผู้ช่วยกลุ่มตลาดนัด & รับออเดอร์"
     }
   },
   "content_scripts": [
     {
       "matches": [
-        "https://*.facebook.com/*"
+        "https://*.facebook.com/*",
+        "https://*.messenger.com/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"
