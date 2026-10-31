@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         🐟 ป้าเข็ม — ผู้ช่วยแชร์ไลฟ์สดลงกลุ่ม 1-คลิก (v5.6 Rock Solid No Flicker)
+// @name         🐟 ป้าเข็ม — ผู้ช่วยแชร์ไลฟ์สดลงกลุ่ม 1-คลิก (v5.7 Live Radar)
 // @namespace    https://watt29.github.io/pakhem-shop/
-// @version      5.6
-// @description  ผู้ช่วยแชร์ไลฟ์สดลงกลุ่ม 1-คลิก คลีน ปลอดภัย นิ่งสนิท ไม่กระพริบ 100%
+// @version      5.7
+// @description  ตรวจจับไลฟ์สดอัตโนมัติ + ผู้ช่วยแชร์ไลฟ์สดลงกลุ่ม 1-คลิก คลีน ปลอดภัย นิ่งสนิท ไม่กระพริบ 100%
 // @author       Watt & Pa Khem
 // @match        https://*.facebook.com/*
 // @match        https://*.messenger.com/*
@@ -715,6 +715,11 @@ function checkGroupMembership() {
             </div>
             <div id="pkh-body" style="padding: 12px; font-size: 12px; color: #333; background: #ffffff; border-radius: 0 0 10px 10px;">
                 
+                <!-- แถบตรวจจับไลฟ์สดแบบเรียลไทม์ -->
+                <div id="pkh-live-banner" style="display: none; padding: 7px 10px; margin-bottom: 8px; border-radius: 8px; background: #fff0f3; border: 1.5px solid #ffccd5; color: #c92a2a; font-size: 11px; font-weight: bold; text-align: center; box-shadow: 0 2px 6px rgba(224,36,94,0.15);">
+                    🔴 ตรวจพบไลฟ์สดกำลังออกอากาศ!
+                </div>
+
                 <!-- แถบแสดงสถานะสมาชิกกลุ่ม -->
                 <div id="pkh-group-badge" style="padding: 8px 10px; margin-bottom: 10px; border-radius: 8px; font-size: 11px; font-weight: bold; background: #e8f5e9; color: #1b5e20; border: 1px solid #c8e6c9; display: flex; flex-direction: column; gap: 4px;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -1315,12 +1320,82 @@ function checkGroupMembership() {
             toast.style.fontWeight = "bold";
         }
 
+        // 📡 ตรวจจับไลฟ์สดที่กำลังออกอากาศอยู่บนหน้าจอแบบเรียลไทม์
+        function findActiveLivePost() {
+            try {
+                // 1. ตรวจหาป้าย "สด" หรือ "LIVE" ที่ปรากฏบนการ์ดโพสต์
+                const allBadges = Array.from(document.querySelectorAll('span, div')).filter(el => {
+                    const txt = (el.textContent || '').trim();
+                    return (txt === 'สด' || txt === 'LIVE' || txt === 'ถ่ายทอดสด' || txt === 'กำลังถ่ายทอดสด') &&
+                           el.offsetParent !== null &&
+                           el.offsetWidth > 0 &&
+                           el.offsetWidth < 140 &&
+                           el.offsetHeight < 60;
+                });
+
+                for (const badge of allBadges) {
+                    const post = badge.closest('div[role="article"], div[data-pagelet*="FeedUnit"], div[data-pagelet*="Video"], div[role="main"]');
+                    if (post) {
+                        const shareBtn = Array.from(post.querySelectorAll('div[role="button"], span, div')).find(el => {
+                            const label = el.getAttribute('aria-label') || '';
+                            const txt = (el.textContent || '').trim();
+                            return (label === 'แชร์' || label.includes('แชร์') || label === 'Share' || txt === 'แชร์' || txt === 'Share') &&
+                                   el.offsetParent !== null;
+                        });
+                        return { isLive: true, post, shareBtn: shareBtn || null };
+                    }
+                }
+
+                // 2. ตรวจสอบจาก URL วิดีโอ/ไลฟ์สด
+                const pth = window.location.pathname || "";
+                if (pth.includes('/videos/') || pth.includes('/live') || pth.includes('/watch')) {
+                    const shareBtn = Array.from(document.querySelectorAll('div[role="button"], span, div')).find(el => {
+                        const label = el.getAttribute('aria-label') || '';
+                        const txt = (el.textContent || '').trim();
+                        return (label === 'แชร์' || label === 'Share' || txt === 'แชร์' || txt === 'Share') &&
+                               el.offsetParent !== null;
+                    });
+                    return { isLive: true, post: null, shareBtn: shareBtn || null };
+                }
+            } catch(e) {}
+
+            return { isLive: false, post: null, shareBtn: null };
+        }
+
         // 🚀 ระบบแชร์ไลฟ์สดลงกลุ่มอัตโนมัติ 1-คลิก (Live Share Autopilot)
         async function executeAutoLiveShare() {
             let dialog = document.querySelector('div[role="dialog"]');
 
-            // ถ้ายังไม่เปิดหน้าต่างแชร์ ให้ลองเปิดช่องโพสต์ของกลุ่ม
+            // ถ้ายังไม่เปิดหน้าต่างแชร์ ให้ลองเปิดช่องโพสต์ของกลุ่ม หรือกดแชร์จากไลฟ์สด
             if (!dialog) {
+                // 1. ลองค้นหาปุ่มแชร์จากวิดีโอไลฟ์สดก่อน
+                const liveInfo = findActiveLivePost();
+                if (liveInfo && liveInfo.shareBtn) {
+                    showToast("⏳ 1/3 กำลังกดปุ่ม 'แชร์' ใต้วิดีโอไลฟ์สด...", "#007bff");
+                    simulateFullClick(liveInfo.shareBtn);
+                    await new Promise(r => setTimeout(r, 800));
+
+                    // ค้นหาตัวเลือก "แชร์ไปยังกลุ่ม" บนเมนูป๊อปอัป
+                    const menuItems = Array.from(document.querySelectorAll('div[role="menuitem"], span, div')).filter(el => {
+                        const txt = (el.textContent || '').trim();
+                        return (txt.includes('แชร์ไปยังกลุ่ม') || txt.includes('Share to a group') || (txt.includes('กลุ่ม') && txt.includes('แชร์'))) &&
+                               el.offsetParent !== null &&
+                               el.offsetWidth < 350;
+                    });
+
+                    const shareToGroupBtn = menuItems[0];
+                    if (shareToGroupBtn) {
+                        showToast("⏳ 2/3 กำลังเลือก 'แชร์ไปยังกลุ่ม'...", "#007bff");
+                        simulateFullClick(shareToGroupBtn);
+                        await new Promise(r => setTimeout(r, 800));
+                        showToast("👉 3/3 คลิกเลือกกลุ่มที่ต้องการแชร์ได้เลยครับ! (บอทจะใส่ราคาและกดแชร์ให้อัตโนมัติ)", "#28a745");
+                        return;
+                    } else {
+                        showToast("👉 กรุณาคลิกเลือก 'แชร์ไปยังกลุ่ม' บนเมนูที่เด้งขึ้นมาครับ", "#e67e22");
+                        return;
+                    }
+                }
+
                 const trigger = findCreatePostTrigger();
                 if (trigger) {
                     showToast("⏳ กำลังเปิดหน้าต่างโพสต์ของกลุ่ม...", "#007bff");
@@ -1388,6 +1463,20 @@ function checkGroupMembership() {
             if (isMsg) return;
 
             try {
+                // 1. ตรวจจับไลฟ์สดกำลังออกอากาศหรือไม่
+                const liveInfo = findActiveLivePost();
+                const liveBanner = widget ? widget.querySelector("#pkh-live-banner") : null;
+                const btnAutoShareLive = widget ? widget.querySelector("#pkh-btn-auto-share-live") : null;
+
+                if (liveBanner) {
+                    if (liveInfo && liveInfo.isLive) {
+                        liveBanner.style.display = "block";
+                        liveBanner.innerHTML = "🔴 <b>ตรวจพบไลฟ์สดกำลังออกอากาศ!</b>";
+                    } else {
+                        liveBanner.style.display = "none";
+                    }
+                }
+
                 const info = checkGroupMembership();
                 if (groupTitle) groupTitle.textContent = info.name || "กลุ่ม Facebook";
                 if (groupStatus) groupStatus.textContent = info.badgeText || "ตรวจสถานะ...";
@@ -1401,7 +1490,6 @@ function checkGroupMembership() {
                     profileSpan.textContent = "👤 " + (info.profileName || "ป้าเข็ม");
                 }
 
-                const btnAutoShareLive = widget ? widget.querySelector("#pkh-btn-auto-share-live") : null;
                 if (info.status === "not_member") {
                     if (header) header.style.background = "#d9534f";
                     if (widget) widget.style.borderColor = "#d9534f";
@@ -1442,8 +1530,13 @@ function checkGroupMembership() {
                         groupBadge.onclick = null;
                     }
                     if (btnAutoShareLive) {
-                        btnAutoShareLive.innerHTML = "🚀 1-คลิก: ใส่แคปชั่น + แชร์ลงกลุ่มทันที!";
-                        btnAutoShareLive.style.background = "linear-gradient(135deg, #e0245e, #ff416c)";
+                        if (liveInfo && liveInfo.isLive) {
+                            btnAutoShareLive.innerHTML = "🚀 1-คลิก: เริ่มแชร์ไลฟ์สดนี้ลงกลุ่ม!";
+                            btnAutoShareLive.style.background = "linear-gradient(135deg, #d63031, #e17055)";
+                        } else {
+                            btnAutoShareLive.innerHTML = "🚀 1-คลิก: ใส่แคปชั่น + แชร์ลงกลุ่มทันที!";
+                            btnAutoShareLive.style.background = "linear-gradient(135deg, #e0245e, #ff416c)";
+                        }
                         btnAutoShareLive.onclick = executeAutoLiveShare;
                     }
                 }
