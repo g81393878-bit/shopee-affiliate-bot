@@ -666,7 +666,7 @@ function checkGroupMembership() {
             background: #ffffff;
             border-radius: 14px;
             box-shadow: 0 10px 35px rgba(0,0,0,0.35);
-            width: 350px;
+            width: 300px;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             border: 2px solid #28a745;
             overflow: hidden;
@@ -686,152 +686,49 @@ function checkGroupMembership() {
         }
 
         widget.innerHTML = `
-            <div id="pkh-header" style="background: #28a745; color: #fff; padding: 10px 14px; font-weight: bold; font-size: 13px; display: flex; justify-content: space-between; align-items: center; cursor: move; user-select: none;">
-                <span id="pkh-header-text">🤖 ป้าเข็ม: ตรวจกลุ่ม + โพสต์ (v4.8)</span>
-                <span id="pkh-toggle" style="cursor: pointer; font-size: 16px; padding: 0 4px;">➖</span>
+            <div id="pkh-header" style="background: linear-gradient(135deg, #1b5e20, #28a745); color: #fff; padding: 10px 14px; font-weight: bold; font-size: 13px; display: flex; justify-content: space-between; align-items: center; cursor: move; user-select: none; border-radius: 10px 10px 0 0;">
+                <span id="pkh-header-text">🐟 ป้าเข็ม: ผู้ช่วยแชร์ลงกลุ่ม</span>
+                <span id="pkh-toggle" style="cursor: pointer; font-size: 16px; padding: 0 4px;" title="ย่อ/ขยายหน้าต่าง">—</span>
             </div>
-            <div id="pkh-body" style="padding: 10px 12px; font-size: 12px; color: #333;">
+            <div id="pkh-body" style="padding: 12px; font-size: 12px; color: #333; background: #ffffff; border-radius: 0 0 10px 10px;">
                 
-                <!-- ปุ่มสลับโหมดผู้ช่วยตอบแชท & รับออเดอร์ช่วยบอท (เปิดได้ทุกหน้า ทั้งกลุ่ม/แชท/ไลฟ์สด) -->
-                <div style="margin-bottom: 6px; display: flex; gap: 4px;">
-                    <button type="button" id="pkh-btn-toggle-chat-box" style="flex: 1; background: #007bff; color: white; border: none; border-radius: 6px; padding: 6px 8px; font-size: 11px; font-weight: bold; cursor: pointer;">💬 เปิดผู้ช่วยตอบแชท & รับออเดอร์ช่วยบอท ▼</button>
-                </div>
-
-                <!-- 💬 แถบปิดการขายด่วน Facebook Messenger / Meta Business Suite Inbox / Live -->
-                <div id="pkh-messenger-box" style="display: none; margin-bottom: 8px; padding: 8px; background: #eef7ff; border-radius: 8px; border: 1.5px solid #007bff;">
-                    <div style="font-weight: bold; color: #004085; font-size: 11px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
-                        <span>💬 ผู้ช่วยตอบแชท & รับออเดอร์เชื่อมบอท</span>
-                        <button type="button" id="pkh-btn-autopilot-toggle" style="font-size: 10px; background: #28a745; color: white; border: none; padding: 2px 7px; border-radius: 10px; font-weight: bold; cursor: pointer;" title="สลับโหมดสแกนแชทและบันทึกออเดอร์อัตโนมัติ 100%">🤖 อัตโนมัติ: ON</button>
-                    </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 4px;">
-                        <button type="button" id="pkh-btn-send-price" style="background: #28a745; color: white; border: none; border-radius: 6px; padding: 6px 2px; font-size: 10.5px; font-weight: bold; cursor: pointer;">💰 ส่งราคา 3 ชุด</button>
-                        <button type="button" id="pkh-btn-send-bank" style="background: #17a2b8; color: white; border: none; border-radius: 6px; padding: 6px 2px; font-size: 10.5px; font-weight: bold; cursor: pointer;">🏦 ส่งเลขบัญชี</button>
-                    </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 6px;">
-                        <button type="button" id="pkh-btn-send-shipping" style="background: #6c757d; color: white; border: none; border-radius: 6px; padding: 6px 2px; font-size: 10.5px; font-weight: bold; cursor: pointer;">❄️ ส่งเงื่อนไขรถเย็น</button>
-                        <button type="button" id="pkh-btn-extract-addr" style="background: #ffc107; color: #212529; border: none; border-radius: 6px; padding: 6px 2px; font-size: 10.5px; font-weight: bold; cursor: pointer;">📋 ดึงที่อยู่จากแชท</button>
-                    </div>
-
-                    <!-- 🛒 กล่องเปิดบิลส่งตรงเข้าฐานข้อมูลบอท (Supabase + Google Sheets + Telegram) -->
-                    <div id="pkh-order-builder" style="margin-top: 6px; padding: 7px 8px; background: #f0fff4; border-radius: 6px; border: 1.5px solid #28a745;">
-                        <div style="font-weight: bold; color: #1b5e20; font-size: 10.5px; margin-bottom: 4px;">🛒 บันทึกออเดอร์เข้าบอท (Supabase + Telegram)</div>
-                        <div style="display: flex; gap: 4px; margin-bottom: 4px;">
-                            <input type="text" id="pkh-ord-name" placeholder="ชื่อลูกค้า" style="flex: 1; padding: 4px 6px; font-size: 10.5px; border: 1px solid #ced4da; border-radius: 4px;">
-                            <input type="text" id="pkh-ord-phone" placeholder="เบอร์โทร 10 หลัก" style="width: 110px; padding: 4px 6px; font-size: 10.5px; border: 1px solid #ced4da; border-radius: 4px;">
-                        </div>
-                        <textarea id="pkh-ord-addr" placeholder="บ้านเลขที่ ตำบล อำเภอ จังหวัด รหัสไปรษณีย์ (กดปุ่ม '📋 ดึงที่อยู่จากแชท' เพื่อสกัดอัตโนมัติ)" style="width: 100%; height: 38px; padding: 4px 6px; font-size: 10.5px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; resize: none; margin-bottom: 4px; font-family: inherit;"></textarea>
-                        <select id="pkh-ord-pkg" style="width: 100%; padding: 4px 6px; font-size: 10.5px; border: 1px solid #28a745; border-radius: 4px; background: #fff; font-weight: bold; color: #1b5e20; margin-bottom: 5px;">
-                            <option value="SKU-SLID-MD-1KG|TRANSFER|550|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (โอนส่งฟรี)">⭐ 1 กก. โอนเงินส่งฟรี — 550 บาท</option>
-                            <option value="SKU-SLID-MD-1KG|COD|570|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (เก็บปลายทาง COD)">🚚 1 กก. เก็บปลายทาง COD — 570 บาท</option>
-                            <option value="SKU-SLID-MD-500G|TRANSFER|390|ปลาสลิดแดดเดียว ชุดพอดีมื้อ 500 กรัม (โอนส่งฟรี)">🐟 500 กรัม โอนเงินส่งฟรี — 390 บาท</option>
-                            <option value="SKU-SLID-MD-500G|COD|410|ปลาสลิดแดดเดียว ชุดพอดีมื้อ 500 กรัม (เก็บปลายทาง COD)">🚚 500 กรัม เก็บปลายทาง COD — 410 บาท</option>
-                            <option value="SKU-SLID-MD-2KG|TRANSFER|1090|ปลาสลิดแดดเดียว ชุดตุนสุดคุ้ม 2 กิโลกรัม (ส่งฟรีรถห้องเย็น)">❄️ 2 กก. โอนส่งฟรีรถห้องเย็น — 1,090 บาท</option>
-                        </select>
-                        <button type="button" id="pkh-btn-submit-order" style="width: 100%; background: #1b5e20; color: white; border: none; border-radius: 5px; padding: 6px; font-size: 11px; font-weight: bold; cursor: pointer;">🚀 บันทึกออเดอร์เข้าบอท + พิมพ์บิลยืนยันในแชท</button>
-                    </div>
-
-                    <!-- 📝 CRM Mini-Card โน้ตลูกค้าสดในแชท + โหลด CSV -->
-                    <div id="pkh-inbox-crm" style="margin-top: 6px; padding: 6px 8px; background: #ffffff; border-radius: 6px; border: 1px dashed #b8daff;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                            <span style="font-weight: bold; color: #0056b3; font-size: 10.5px;">📝 โน้ตลูกค้าคนนี้</span>
-                            <button type="button" id="pkh-btn-export-notes-csv" style="background: none; border: none; color: #28a745; font-size: 10px; font-weight: bold; cursor: pointer; text-decoration: underline;" title="ส่งออกโน้ตลูกค้าทั้งหมดเป็นไฟล์ CSV">📥 โหลด CSV</button>
-                        </div>
-                        <input type="text" id="pkh-inbox-note-input" placeholder="พิมพ์โน้ต เช่น ชอบเค็มน้อย / สั่ง 2 กก. รถเย็น" style="width: 100%; padding: 4px 6px; font-size: 10.5px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; margin-bottom: 4px;">
-                        <div style="display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 4px;">
-                            <span class="pkh-inbox-tag" data-tag="เค็มน้อย" style="background: #e9ecef; color: #495057; padding: 1px 5px; border-radius: 3px; font-size: 9.5px; cursor: pointer;">+ เค็มน้อย</span>
-                            <span class="pkh-inbox-tag" data-tag="ส่งรถเย็น" style="background: #e9ecef; color: #495057; padding: 1px 5px; border-radius: 3px; font-size: 9.5px; cursor: pointer;">+ ส่งรถเย็น</span>
-                            <span class="pkh-inbox-tag" data-tag="โอนแล้ว" style="background: #e9ecef; color: #495057; padding: 1px 5px; border-radius: 3px; font-size: 9.5px; cursor: pointer;">+ โอนแล้ว</span>
-                            <span class="pkh-inbox-tag" data-tag="COD" style="background: #e9ecef; color: #495057; padding: 1px 5px; border-radius: 3px; font-size: 9.5px; cursor: pointer;">+ COD</span>
-                            <span class="pkh-inbox-tag" data-tag="ขาประจำ" style="background: #e9ecef; color: #495057; padding: 1px 5px; border-radius: 3px; font-size: 9.5px; cursor: pointer;">+ ขาประจำ</span>
-                        </div>
-                        <div style="text-align: right;">
-                            <button type="button" id="pkh-btn-save-inbox-note" style="background: #007bff; color: white; border: none; border-radius: 4px; padding: 3px 8px; font-size: 10px; font-weight: bold; cursor: pointer;">💾 บันทึกโน้ต</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 🎯 กล่องแชร์ไลฟ์สดลงกลุ่ม 1-คลิก (Live Share Assistant) -->
-                <div id="pkh-live-share-box" style="display: none; padding: 10px; margin-bottom: 8px; border-radius: 8px; background: #fff8e1; border: 1.5px solid #ffe082; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-                    <div style="font-weight: bold; color: #b78103; font-size: 11.5px; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
-                        <span>📢 หน้าต่างแชร์ลงกลุ่ม Facebook</span>
-                        <span style="background: #28a745; color: white; padding: 1px 6px; border-radius: 4px; font-size: 9.5px;">พร้อมแชร์</span>
-                    </div>
-                    <button type="button" id="pkh-btn-auto-share-live" style="width: 100%; background: linear-gradient(135deg, #e0245e, #ff416c); color: white; border: none; border-radius: 6px; padding: 11px 4px; font-weight: bold; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 4px 10px rgba(224,36,94,0.35);">
-                        🚀 1-คลิก: ใส่แคปชั่น + กดแชร์ลงกลุ่มทันที!
-                    </button>
-                    <div style="font-size: 10px; color: #666; margin-top: 6px; line-height: 1.4; text-align: center;">
-                        ✅ วิ่งเข้ากลุ่มโดยตรง <b>ไม่ต้องตามลบออก</b><br>
-                        🤖 <b>บอทจะคอยตอบแชท & สรุปออเดอร์แทน 100%</b>
-                    </div>
-                </div>
-
                 <!-- แถบแสดงสถานะสมาชิกกลุ่ม -->
-                <div id="pkh-group-badge" style="padding: 8px 10px; margin-bottom: 8px; border-radius: 8px; font-size: 11px; font-weight: bold; background: #e2e3e5; color: #383d41; border: 1px solid rgba(0,0,0,0.08); display: flex; flex-direction: column; gap: 4px;">
+                <div id="pkh-group-badge" style="padding: 8px 10px; margin-bottom: 10px; border-radius: 8px; font-size: 11px; font-weight: bold; background: #e8f5e9; color: #1b5e20; border: 1px solid #c8e6c9; display: flex; flex-direction: column; gap: 4px;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span id="pkh-group-title" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px;">กำลังตรวจกลุ่ม...</span>
+                        <span id="pkh-group-title" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;">กำลังตรวจกลุ่ม...</span>
                         <button id="pkh-btn-refresh-status" style="background: transparent; border: none; font-size: 12px; cursor: pointer; padding: 0;" title="คลิกเพื่อตรวจสถานะกลุ่มใหม่">🔄</button>
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
                         <span id="pkh-group-status">ตรวจสถานะ...</span>
-                        <span id="pkh-profile-name" style="font-weight: normal; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;"></span>
+                        <span id="pkh-profile-name" style="font-weight: normal; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px;"></span>
                     </div>
                 </div>
 
-                <!-- ลิงก์ย่อ/ขยายเครื่องมือโพสต์กลุ่มในโหมด Inbox -->
-                <div id="pkh-group-tools-toggle" style="display: none; margin-bottom: 6px; text-align: center;">
-                    <button type="button" id="pkh-btn-toggle-group-tools" style="background: none; border: none; color: #007bff; font-size: 11px; cursor: pointer; text-decoration: underline;">📢 แสดงเครื่องมือโพสต์กลุ่ม Facebook ▼</button>
+                <!-- 🚀 ปุ่มหลักยักษ์: 1-คลิก ใส่แคปชั่น + แชร์ลงกลุ่มทันที -->
+                <div style="margin-bottom: 10px;">
+                    <button type="button" id="pkh-btn-auto-share-live" style="width: 100%; background: linear-gradient(135deg, #e0245e, #ff416c); color: white; border: none; border-radius: 8px; padding: 13px 4px; font-weight: bold; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 4px 12px rgba(224,36,94,0.35);">
+                        🚀 1-คลิก: ใส่แคปชั่น + แชร์ลงกลุ่มทันที!
+                    </button>
                 </div>
 
-                <!-- 📢 กล่องเครื่องมือโพสต์กลุ่ม Facebook (จะถูกซ่อนอัตโนมัติในโหมด Inbox) -->
-                <div id="pkh-group-tools">
-                    <!-- ช่องพิมพ์ค้นหากลุ่ม Facebook ทันที -->
-                    <div style="display: flex; gap: 4px; margin-bottom: 8px;">
-                        <input id="pkh-custom-search" type="text" placeholder="🔍 พิมพ์คำค้นหากลุ่ม (เช่น อาหารแห้ง)..." style="flex: 1; padding: 6px 8px; font-size: 11px; border: 1.5px solid #007bff; border-radius: 6px; box-sizing: border-box; outline: none;">
-                        <button id="pkh-btn-go-search" style="background: #007bff; color: white; border: none; border-radius: 6px; padding: 6px 10px; font-size: 11px; font-weight: bold; cursor: pointer; white-space: nowrap;">ค้นหากลุ่ม</button>
-                    </div>
-
-                    <div style="margin-bottom: 8px;">
-                        <select id="pkh-select-group" style="width: 100%; padding: 6px; font-size: 11px; border-radius: 6px; border: 1.5px solid #28a745; background: #e8f5e9; color: #1b5e20; font-weight: bold; cursor: pointer;">
-                            ${TARGET_GROUPS.map((g) => `<option value="${g.url}">${g.name}</option>`).join('')}
-                        </select>
-                    </div>
-
-                    <div style="margin-bottom: 6px; font-weight: bold; color: #1b5e20; display: flex; justify-content: space-between; align-items: center;">
-                        <span id="pkh-cap-title" style="font-size: 11px;">${CAPTIONS[0].title}</span>
-                        <button id="pkh-btn-rand" style="background:#e4e6eb; border:none; border-radius:6px; padding:2px 8px; font-size:11px; cursor:pointer;">🎲 สุ่ม</button>
-                    </div>
-                    <textarea id="pkh-caption-area" style="width: 100%; height: 75px; font-size: 11px; padding: 6px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; resize: none; margin-bottom: 8px; font-family: inherit;">${CAPTIONS[0].text}</textarea>
-
-                    <div style="margin-bottom: 8px;">
-                        <button id="pkh-btn-insert" style="width: 100%; background: #28a745; color: white; border: none; border-radius: 8px; padding: 13px 4px; font-weight: bold; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 4px 12px rgba(40,167,69,0.4);">
-                            🚀 1-คลิก โพสต์พร้อมรูปป้ายราคา (อัตโนมัติ 100%)
-                        </button>
-                    </div>
-
-                    <div style="display: flex; gap: 4px; margin-bottom: 6px;">
-                        <button id="pkh-btn-copy-img" style="flex: 1; background: #007bff; color: white; border: none; border-radius: 6px; padding: 5px 2px; font-size: 10px; cursor: pointer;">
-                            🖼️ ก๊อปรูปป้าย
-                        </button>
-                        <button id="pkh-btn-copy-fried" style="flex: 1; background: #6f42c1; color: white; border: none; border-radius: 6px; padding: 5px 2px; font-size: 10px; cursor: pointer;">
-                            🍳 ก๊อปรูปทอด
-                        </button>
-                        <button id="pkh-btn-copy-text" style="flex: 1; background: #e4e6eb; color: #333; border: none; border-radius: 6px; padding: 5px 2px; font-size: 10px; cursor: pointer;">
-                            📋 ก๊อปข้อความ
-                        </button>
-                    </div>
-
-                    <div style="display: flex; gap: 4px; margin-bottom: 6px;">
-                        <button id="pkh-btn-auto-answer" style="flex: 1; background: #ffc107; color: #212529; border: none; border-radius: 6px; padding: 6px 2px; font-size: 10px; font-weight: bold; cursor: pointer;" title="คลิกเพื่อตอบคำถามขอเข้ากลุ่มและยอมรับกฎอัตโนมัติ">
-                            📝 ตอบคำถามเข้ากลุ่ม 1-คลิก
-                        </button>
-                        <button id="pkh-btn-harvest-csv" style="flex: 1; background: #17a2b8; color: white; border: none; border-radius: 6px; padding: 6px 2px; font-size: 10px; font-weight: bold; cursor: pointer;" title="ดูดรายชื่อกลุ่มในหน้าค้นหาเป็นไฟล์ CSV">
-                            📥 ดูดลิสต์กลุ่ม (CSV)
-                        </button>
-                    </div>
+                <!-- ปุ่มสำรอง 1 แถว -->
+                <div style="display: flex; gap: 6px; margin-bottom: 10px;">
+                    <button id="pkh-btn-copy-text" style="flex: 1; background: #f0f2f5; color: #333; border: 1px solid #ced4da; border-radius: 6px; padding: 7px 4px; font-size: 11px; font-weight: bold; cursor: pointer;">
+                        📋 ก๊อปปี้แคปชั่น
+                    </button>
+                    <button id="pkh-btn-rand" style="flex: 1; background: #f0f2f5; color: #333; border: 1px solid #ced4da; border-radius: 6px; padding: 7px 4px; font-size: 11px; cursor: pointer;">
+                        🎲 สลับแคปชั่น
+                    </button>
                 </div>
 
-                <div id="pkh-toast" style="font-size: 11px; color: #666; text-align: center; min-height: 28px; line-height: 1.4; padding: 4px; background: #f8f9fa; border-radius: 6px;">
-                    🔒 พร้อมตรวจสอบสถานะสมาชิกและโพสต์ทันทีครับ
+                <!-- ข้อความยืนยันความสบายใจ -->
+                <div style="background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 8px 10px; font-size: 10.5px; color: #495057; line-height: 1.45; text-align: center; margin-bottom: 8px;">
+                    ✅ วิ่งเข้ากลุ่มโดยตรง <b>ไม่ต้องตามลบออก</b><br>
+                    🤖 <b>บอทจะคอยตอบแชท & สรุปออเดอร์แทน 100%</b>
+                </div>
+
+                <div id="pkh-toast" style="font-size: 11px; color: #666; text-align: center; min-height: 24px; line-height: 1.4; padding: 4px; background: #fdfdfe; border-radius: 6px;">
+                    🔒 พร้อมช่วยแชร์ลงกลุ่มทันทีครับ
                 </div>
             </div>
         `;
@@ -1457,9 +1354,27 @@ function checkGroupMembership() {
 
         // 🚀 ระบบแชร์ไลฟ์สดลงกลุ่มอัตโนมัติ 1-คลิก (Live Share Autopilot)
         async function executeAutoLiveShare() {
-            const dialog = document.querySelector('div[role="dialog"]');
+            let dialog = document.querySelector('div[role="dialog"]');
+
+            // ถ้ายังไม่เปิดหน้าต่างแชร์ ให้ลองเปิดช่องโพสต์ของกลุ่ม
             if (!dialog) {
-                showToast("⚠️ ไม่พบหน้าต่างแชร์ กรุณากดปุ่ม 'แชร์' ใต้วิดีโอไลฟ์สดก่อนจ้า", "#e67e22");
+                const trigger = findCreatePostTrigger();
+                if (trigger) {
+                    showToast("⏳ กำลังเปิดหน้าต่างโพสต์ของกลุ่ม...", "#007bff");
+                    simulateFullClick(trigger);
+                    await new Promise(r => setTimeout(r, 1000));
+                    dialog = document.querySelector('div[role="dialog"]');
+                }
+            }
+
+            if (!dialog) {
+                const captionText = CAPTIONS[currentCaptionIndex].text;
+                try {
+                    await navigator.clipboard.writeText(captionText);
+                    showToast("📋 ก๊อปปี้แคปชั่นสำเร็จแล้ว! (กดปุ่มแชร์ใต้วิดีโอแล้ววางได้เลย)", "#28a745");
+                } catch(e) {
+                    showToast("⚠️ กรุณากดปุ่ม 'แชร์' ใต้วิดีโอไลฟ์สดก่อนจ้า", "#e67e22");
+                }
                 return;
             }
 
@@ -1469,9 +1384,9 @@ function checkGroupMembership() {
                 return;
             }
 
-            const captionText = (CAPTIONS && CAPTIONS[0]) ? CAPTIONS[0].text : "🐟 ปลาสลิดสุพรรณแดดเดียวแท้ ป้าเข็ม คัดพิเศษ (ไซส์จัมโบ้ เนื้อแน่นหนาฟู มันแทรก เค็มน้อย 3% ไร้สาร ไร้ชูรส)\n📦 ราคามาตรฐานส่งฟรีถึงบ้าน: 500g 390.- | 1 กก. 550.- | 2 กก. 1,090.- (ส่งฟรีรถห้องเย็น!)\n💬 สั่งซื้อ: ทักแชท Inbox หรือพิมพ์คำว่า \"สนใจ\" ในคอมเมนต์ได้เลยจ้า มีรอบส่งสดใหม่ทุกวัน!";
+            const captionText = CAPTIONS[currentCaptionIndex].text;
 
-            showToast("⏳ กำลังใส่แคปชั่นปลาสลิดพร้อมราคาลงในช่องแชร์...", "#007bff");
+            showToast("⏳ กำลังใส่แคปชั่นปลาสลิดพร้อมราคา...", "#007bff");
             await insertTextIntoEditor(composer, captionText);
 
             try {
@@ -1489,10 +1404,10 @@ function checkGroupMembership() {
             });
 
             if (postBtn && !postBtn.getAttribute('aria-disabled')) {
-                showToast("🚀 บอทกำลังกดปุ่มแชร์ลงกลุ่มให้ทันที...", "#28a745");
+                showToast("🚀 กำลังกดปุ่มแชร์ลงกลุ่มอัตโนมัติ...", "#28a745");
                 simulateFullClick(postBtn);
                 await new Promise(r => setTimeout(r, 1000));
-                showToast("✅ แชร์ลงกลุ่มสำเร็จเรียบร้อยแล้วจ้า! (ไม่ต้องตามลบออก บอทจะคอยตอบแชทแทน 100%)", "#28a745");
+                showToast("✅ แชร์ลงกลุ่มเรียบร้อยแล้วจ้า! (ไม่ต้องตามลบออก บอทจะคอยตอบแชทแทน 100%)", "#28a745");
             } else {
                 showToast("✅ ใส่แคปชั่นเรียบร้อยแล้วจ้า! กดปุ่ม 'โพสต์' สีน้ำเงินได้เลย", "#28a745");
             }
