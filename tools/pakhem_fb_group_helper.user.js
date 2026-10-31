@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         🐟 ป้าเข็ม — ผู้ช่วยแชร์ไลฟ์สดลงกลุ่ม 1-คลิก (v5.3 Zero Error Guaranteed)
+// @name         🐟 ป้าเข็ม — ผู้ช่วยแชร์ไลฟ์สดลงกลุ่ม 1-คลิก (v5.3 Zero Error Clean)
 // @namespace    https://watt29.github.io/pakhem-shop/
 // @version      5.3
 // @description  ผู้ช่วยแชร์ไลฟ์สดลงกลุ่ม 1-คลิก คลีน ปลอดภัย ไร้ Error 100%
