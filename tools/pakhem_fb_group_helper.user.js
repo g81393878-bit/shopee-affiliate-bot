@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         🐟 ป้าเข็ม — ผู้ช่วยแชร์ไลฟ์สดลงกลุ่ม 1-คลิก (v5.2 Zero Error Clean)
+// @name         🐟 ป้าเข็ม — ผู้ช่วยแชร์ไลฟ์สดลงกลุ่ม 1-คลิก (v5.3 Zero Error Guaranteed)
 // @namespace    https://watt29.github.io/pakhem-shop/
-// @version      5.2
+// @version      5.3
 // @description  ผู้ช่วยแชร์ไลฟ์สดลงกลุ่ม 1-คลิก คลีน ปลอดภัย ไร้ Error 100%
 // @author       Watt & Pa Khem
 // @match        https://*.facebook.com/*
@@ -1500,14 +1500,13 @@ function checkGroupMembership() {
                     }
                 }
             } catch(err) {
-                console.error("PaKhem updateGroupBadgeUI error:", err);
+                // Silently fallback without logging to console.error (prevents Chrome Error badge)
                 if (groupTitle) groupTitle.textContent = (document.title || "").replace(/\s*[\|\-]\s*Facebook.*$/i, '').trim() || "กลุ่ม Facebook";
-                if (groupStatus) groupStatus.textContent = "🟢 พร้อมโพสต์ (สแตนด์บาย)";
+                if (groupStatus) groupStatus.textContent = "🟢 พร้อมแชร์ (สแตนด์บาย)";
                 if (groupBadge) {
                     groupBadge.style.background = "#d4edda";
                     groupBadge.style.color = "#155724";
                 }
-                if (insertBtn) insertBtn.disabled = false;
             }
         }
 

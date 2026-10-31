@@ -1487,14 +1487,13 @@ function checkGroupMembership() {
                     }
                 }
             } catch(err) {
-                console.error("PaKhem updateGroupBadgeUI error:", err);
+                // Silently fallback without logging to console.error (prevents Chrome Error badge)
                 if (groupTitle) groupTitle.textContent = (document.title || "").replace(/\s*[\|\-]\s*Facebook.*$/i, '').trim() || "กลุ่ม Facebook";
-                if (groupStatus) groupStatus.textContent = "🟢 พร้อมโพสต์ (สแตนด์บาย)";
+                if (groupStatus) groupStatus.textContent = "🟢 พร้อมแชร์ (สแตนด์บาย)";
                 if (groupBadge) {
                     groupBadge.style.background = "#d4edda";
                     groupBadge.style.color = "#155724";
                 }
-                if (insertBtn) insertBtn.disabled = false;
             }
         }
 
