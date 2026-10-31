@@ -290,6 +290,7 @@ def main():
     parser.add_argument("--bitrate", "-b", type=str, default="3500k", help="Bitrate (เช่น 3500k, 4000k)")
     parser.add_argument("--hours", "-H", type=float, default=0.0, help="กำหนดระยะเวลาไลฟ์สดเป็นชั่วโมง (เช่น 2 หรือ 2.5) แล้วปิดอัตโนมัติ")
     parser.add_argument("--minutes", "-m", type=int, default=0, help="กำหนดระยะเวลาไลฟ์สดเป็นนาที (เช่น 90 หรือ 120)")
+    parser.add_argument("--yes", "-y", action="store_true", help="โหมดอัตโนมัติ 100%% ไม่ต้องถามยืนยัน (เลือกคลิปแนะนำและเริ่มทันที)")
     parser.add_argument("--no-loop", action="store_true", help="ไม่วนลูป (เล่นรอบเดียวแล้วจบ)")
     parser.add_argument("--test", action="store_true", help="โหมดทดสอบไฟล์วิดีโออย่างเดียว (ไม่ยิงขึ้น Facebook)")
     args = parser.parse_args()
@@ -310,7 +311,11 @@ def main():
     if not video_path:
         candidates = find_available_videos()
         if candidates:
-            video_path = prompt_video_choice(candidates)
+            if args.yes:
+                video_path = str(candidates[0].resolve())
+                print(f"🎬 [Auto-Select] เลือกคลิปวิดีโอแนะนำอัตโนมัติ: {candidates[0].name}")
+            else:
+                video_path = prompt_video_choice(candidates)
         else:
             video_path = input("\n📁 วาง Path ไฟล์วิดีโอ .mp4 ที่ต้องการสตรีม: ").strip().strip('"').strip("'")
 
