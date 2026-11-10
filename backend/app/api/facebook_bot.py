@@ -10,7 +10,7 @@ Facebook Messenger Webhook — Multi-Agent Router 4 พนักงาน AI ป
 
   2. น้องพิม (แผนกรับออเดอร์และการเงิน): ตรวจจับที่อยู่ เบอร์โทร ออกรหัส PKF-xxxx บันทึกลง Supabase และยิงแจ้งเตือนเข้า Telegram @pakhem_fish_bot
 
-  3. พี่วิน (ฝ่ายจัดส่งและคลังห้องเย็น): ชี้แจงรอบจัดส่งรถเย็น Inter Express, มีเก็บเงินปลายทาง (COD), วิธีแช่ฟรีซ 6 เดือน
+  3. พี่วิน (ฝ่ายจัดส่งและคลังห้องเย็น): ชี้แจงรอบจัดส่งรถเย็น Inter Express, โอนส่งฟรีทั่วไทย (งดรับ COD), วิธีแช่ฟรีซ 6 เดือน
 
   4. ป้าเข็ม (เจ้าของร้าน & VIP): ดูแลเคลมสินค้า, ขายส่ง 50 กก., โอนสายหาคนจริง (Human-in-the-Loop) ผ่าน Telegram
 
@@ -1598,13 +1598,9 @@ def _finalize_facebook_order(
 
         _clear_pending_slip(sender)
 
-    elif is_transfer:
-
-        payment_method = "โอนเงินผ่านธนาคาร (รอแนบสลิป/ตรวจยอด) 🏦"
-
     else:
 
-        payment_method = "เก็บเงินปลายทาง (COD) 💵"
+        payment_method = "โอนเงินผ่านธนาคาร (รอแนบสลิป/ตรวจยอด) 🏦"
 
 
 
@@ -1630,7 +1626,7 @@ def _finalize_facebook_order(
 
         "pkg": pkg_code,
 
-        "pay": "transfer" if is_transfer else "cod",
+        "pay": "transfer",
 
         "house_filled": True,
 
@@ -2513,85 +2509,31 @@ def _handle_event(event: dict, page_id: str = "") -> None:
 
         if qr_payload == "QR_SWITCH_TO_COD" or any(k in lower_text for k in ["เปลี่ยนเป็นปลายทาง", "เปลี่ยนเป็นเก็บเงินปลายทาง", "ขอเปลี่ยนเป็นปลายทาง"]):
 
-            saved_addr_sw = recent_ctx_early.get("saved_address") or ""
+            _reply_to_facebook(
 
-            pkg_sw = recent_ctx_early.get("last_pkg") or recent_ctx_early.get("pkg") or "1kg"
+                sender,
 
-            if saved_addr_sw and has_complete_thai_address(saved_addr_sw):
+                "🐟 ขออนุญาตเรียนแจ้งคุณลูกค้าตามตรงนะคะ ทางร้านงดรับบริการเก็บเงินปลายทาง (COD) ทุกกรณี 100% ค่ะ 🙏❄️\n"
 
-                route_sw = calculate_shipping_route_info(saved_addr_sw)
+                "เนื่องจากปลาสลิดเป็นอาหารสดแช่แข็ง ≤ -18°C ทางร้านจึงจัดส่งหลังได้รับการชำระเงินโอนเต็มจำนวน เพื่อการันตีความสดใหม่และป้องกันสินค้าตกค้างเสียหายค่ะ (โอนเงินจัดส่งฟรีถึงหน้าบ้านทุกชุดเลยจ้า! 🚚)\n\n"
 
-                if not route_sw["allow_cod"]:
+                "🏦 บัญชีโอนชำระเงิน: ธ.กรุงไทย 038-0-25363-1 (นายจีรวัฒน์ พลอาจ)",
 
-                    _prompt_payment_choice_for_area(sender, recent_ctx_early, saved_addr_sw, route_sw, page_id=page_id)
+                [
 
-                    return
+                    {"content_type": "text", "title": "📋 คัดลอกเลขบัญชี", "payload": "QR_COPY_ACC"},
 
-                if pkg_sw == "2kg":
+                    {"content_type": "text", "title": "ชุด 500g (390.-)", "payload": "QR_PKG_500G"},
 
-                    _reply_to_facebook(
+                    {"content_type": "text", "title": "ชุด 1 กก. (550.-)", "payload": "QR_PKG_1KG"},
 
-                        sender,
+                ],
 
-                        "⚠️ ชุดตุนสุดคุ้ม 2 กิโลกรัม (1,090.-) จัดส่งด้วยรถห้องเย็นควบคุมอุณหภูมิ จึงรับเฉพาะโอนเงินล่วงหน้าค่ะ 🙏\n"
+                page_id=page_id,
 
-                        "ทางร้านงดรับเก็บเงินปลายทาง (COD) ทุกชุด 100% ค่ะ รับเฉพาะโอนเงินล่วงหน้าส่งฟรีนะคะ:",
+            )
 
-                        [
-
-                            {"content_type": "text", "title": "ชุด 1 กก. (550.-)", "payload": "QR_PKG_1KG"},
-
-                            {"content_type": "text", "title": "📋 คัดลอกเลขบัญชี", "payload": "QR_COPY_ACC"},
-
-                        ],
-
-                        page_id=page_id,
-
-                    )
-
-                    return
-
-                sw_order = _switch_recent_order_to_cod(sender, pkg_sw)
-
-                cod_p = 410 if pkg_sw == "500g" else 570
-
-                pkg_lbl = "ชุดพอดีมื้อ 450-500 กรัม (ประมาณ 2 ตัวจัมโบ้)" if pkg_sw == "500g" else "ชุดยอดฮิต 900-1,000 กรัม (ประมาณ 4 ตัวจัมโบ้)"
-
-                ocode_sw = (sw_order or {}).get("order_code") or recent_ctx_early.get("last_order_code") or "ล่าสุด"
-
-                recent_ctx_early["pay"] = "cod"
-
-                _RECENT_CONTEXT[sender] = recent_ctx_early
-
-                _reply_to_facebook(
-
-                    sender,
-
-                    f"✅ เปลี่ยนวิธีชำระเงินเป็น 'เก็บเงินปลายทาง (COD)' เรียบร้อยค่ะ 🚚💵\n\n"
-
-                    f"📦 รหัสคำสั่งซื้อ: {ocode_sw}\n"
-
-                    f"🐟 รายการ: {pkg_lbl}\n"
-
-                    f"💰 ยอดชำระหน้าบ้านตอนรับของ: {cod_p} บาท (รวมส่งแล้ว)\n"
-
-                    f"📍 ที่อยู่จัดส่ง: {saved_addr_sw}\n"
-
-                    f"{route_sw['summary_line']}\n\n"
-
-                    f"🚚 ทางร้านเตรียมแพ็กส่งรอบสดใหม่ให้ถึงหน้าบ้าน รอรับสายขนส่งได้เลยนะคะ ขอบพระคุณค่ะ 😊",
-
-                    page_id=page_id,
-
-                )
-
-                _send_telegram_alert(
-
-                    f"🔄 [ลูกค้ากดสลับเป็นเก็บเงินปลายทาง (COD)!]\n"
-
-                    f"🏠 เพจ: {_get_page_label(page_id)}\n"
-
-                    f"🔖 รหัส: {ocode_sw}\n"
+            return
 
                     f"📦 รายการ: {pkg_lbl}\n"
 
@@ -2657,7 +2599,7 @@ def _handle_event(event: dict, page_id: str = "") -> None:
 
                         if sel_pay == "transfer"
 
-                        else "🚚 สรุปรายการ: ชุดพอดีมื้อ 500 กรัม (2 ตัวจัมโบ้) เก็บเงินปลายทาง ยอดรวม 410 บาท ❄️"
+                        else "🏦 สรุปรายการ: ชุดพอดีมื้อ 500 กรัม (2 ตัวจัมโบ้) โอนเงิน 390 บาท (ส่งฟรี!) ❄️\n• ธ.กรุงไทย: 038-0-25363-1 (นายจีรวัฒน์ พลอาจ)"
 
                     )
 
@@ -2677,7 +2619,7 @@ def _handle_event(event: dict, page_id: str = "") -> None:
 
                         if sel_pay == "transfer"
 
-                        else "🚚 สรุปรายการ: ชุดขายดี 1 กิโลกรัม (4 ตัวจัมโบ้) เก็บเงินปลายทาง ยอดรวม 570 บาท ⭐❄️"
+                        else "🏦 สรุปรายการ: ชุดขายดี 1 กิโลกรัม (4 ตัวจัมโบ้) โอนเงิน 550 บาท (ส่งฟรี!) ⭐❄️\n• ธ.กรุงไทย: 038-0-25363-1 (นายจีรวัฒน์ พลอาจ)"
 
                     )
 
