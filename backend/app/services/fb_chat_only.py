@@ -125,6 +125,24 @@ def build_friendly_chat_reply(
     t = (text or "").strip()
     lower = t.lower()
 
+    # ตรวจจับคำถามค้นหาสถานพยาบาล (แยกแยะคนและสัตว์ชัดเจน 100%)
+    try:
+        from app.services.hospital_directory_service import is_any_hospital_query, format_hospital_directory_reply
+        if is_any_hospital_query(t):
+            max_res = 3 if channel == "comment" else 5
+            return format_hospital_directory_reply(t, max_results=max_res)
+    except Exception:
+        pass
+
+    # ตรวจจับคำถามค้นหาร้านอาหาร / สถานที่ท่องเที่ยว / โรงแรมทั่วไทย
+    try:
+        from app.services.places_directory_service import is_places_query, format_places_directory_reply
+        if is_places_query(t):
+            max_res = 2 if channel == "comment" else 3
+            return format_places_directory_reply(t, max_results=max_res)
+    except Exception:
+        pass
+
     if is_purchase_inquiry(t):
         return random.choice(_CLOSED_SHOP_REPLIES).format(greeting=greeting)
 
