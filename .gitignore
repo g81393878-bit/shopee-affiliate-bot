@@ -197,3 +197,6 @@ tools/twitch.tv.txt
 งบยิงแอด 60 บาท.txt
 หาคนชอบกดไลค์ (POST_ENGAGEMENT).txt
 โทเคน.txt
+
+# Cloudflare Worker versioned backups (contains live tokens)
+backups/cf_workers/
