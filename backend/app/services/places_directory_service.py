@@ -223,7 +223,7 @@ def extract_detailed_place_location(text: str) -> Dict[str, object]:
     if not tambon and not amphoe and not area:
         cleaned = working.lower()
         all_kws = sorted(
-            RESTAURANT_TRIGGERS + ATTRACTION_TRIGGERS + HOTEL_TRIGGERS + _FILLER_WORDS,
+            RESTAURANT_TRIGGERS + ATTRACTION_TRIGGERS + HOTEL_TRIGGERS + _FILLER_WORDS + _SHORT_FOOD + _SHORT_HOTEL + _SHORT_TRAVEL,
             key=len,
             reverse=True,
         )
@@ -233,6 +233,24 @@ def extract_detailed_place_location(text: str) -> Dict[str, object]:
         cleaned = re.sub(r"\s+", " ", cleaned).strip()
         if 2 <= len(cleaned) <= 35:
             area = cleaned
+
+    # 6. ถ้ายังไม่มีจังหวัด แต่มีชื่ออำเภอ/พื้นที่ (เช่น "รีสอรท มหาราช" หรือ "กิน บางปะหัน")
+    #    เติมอำเภอ + จังหวัดให้อัตโนมัติจากฐานข้อมูล 928 อำเภอทั่วไทย (ไม่หลุดไปจังหวัดอื่น!)
+    if not province and (amphoe or area):
+        try:
+            from app.services.thai_address_validator import lookup_thai_area_by_name
+            q_area = re.sub(r"^(?:อ\.|อำเภอ|เขต|ต\.|ตำบล|แขวง)", "", (amphoe or area)).strip()
+            if len(q_area) >= 2:
+                hit = lookup_thai_area_by_name(q_area)
+                if hit and hit.get("province"):
+                    province = str(hit["province"])
+                    if not amphoe and hit.get("amphoe"):
+                        prefix = "เขต" if hit.get("is_bkk") else "อ."
+                        amphoe = prefix + str(hit["amphoe"])
+                        if area == hit.get("amphoe"):
+                            area = ""
+        except Exception:
+            pass
 
     display_parts: List[str] = []
     query_parts: List[str] = []
