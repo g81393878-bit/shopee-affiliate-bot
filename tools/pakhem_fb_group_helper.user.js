@@ -25,7 +25,7 @@
     } catch (e) {}
 
     const SUPABASE_URL = "https://usqhvujqmnxqrdoovvnp.supabase.co/rest/v1/direct_orders";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzcWh2dWpxbW54cXJkb292dm5wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyOTc4NjAsImV4cCI6MjA2OTg3Mzg2MH0.3kCGGAe1OoSJ_SCN_NDSdnKep1hXIMgMxR1lBd_i2eI";
+    const SUPABASE_ANON_KEY = "REDACTED_SECRET";
     const GAS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxHAfBm0V67wkiXb1dlAFNbG3NQudcN35zuQ3xjFo0FRHY2ja8TB3-Xj0l_xOWxeF404Q/exec";
 
     const IMAGES = {

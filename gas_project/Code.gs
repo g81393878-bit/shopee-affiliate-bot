@@ -85,7 +85,7 @@ const TELEGRAM_CHAT_ID = "6734965582";
 
 // Supabase REST API Configurations
 const SUPABASE_URL = "https://usqhvujqmnxqrdoovvnp.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzcWh2dWpxbW54cXJkb292dm5wIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDI5Nzg2MCwiZXhwIjoyMDY5ODczODYwfQ.RXKNfknFfmf86bm1ivri1d7FP0jw0VbUkrb7AXn2Ejo";
+const SUPABASE_KEY = "REDACTED_SECRET";
 
 // Groq API Keys (หมุนเวียนคีย์อัตโนมัติ)
 const GROQ_KEYS = [
