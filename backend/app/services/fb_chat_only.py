@@ -152,4 +152,13 @@ def build_friendly_chat_reply(
     if any(k in lower for k in ("ขอบคุณ", "ขอบใจ", "thank")):
         return random.choice(_THANKS_REPLIES).format(greeting=greeting)
 
+    # พิมพ์แค่ชื่อจังหวัด/อำเภอ/ตำบล (เช่น "สุโขทัย", "อ.บางปะหัน อยุธยา") -> ส่งชุดพิกัด 4 หมวดทันที
+    try:
+        from app.services.places_directory_service import format_area_bundle_reply
+        bundle = format_area_bundle_reply(t)
+        if bundle:
+            return bundle
+    except Exception:
+        pass
+
     return random.choice(_FRIENDLY_GREETING_REPLIES).format(greeting=greeting)

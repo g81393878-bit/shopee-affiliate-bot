@@ -47,22 +47,25 @@ EXTRA_TOURIST_AREAS: Dict[str, Tuple[str, str]] = {
 }
 
 RESTAURANT_TRIGGERS = (
-    "ร้านอาหาร", "ของกิน", "ของอร่อย", "ร้านอร่อย", "ร้านเด็ด", "กินอะไรดี",
-    "กินข้าว", "คาเฟ่", "ร้านกาแฟ", "ก๋วยเตี๋ยว", "อาหารทะเล", "ซีฟู้ด",
+    "ร้านอาหาร", "ของกิน", "ของอร่อย", "ร้านอร่อย", "ร้านเด็ด", "กินอะไรดี", "กินไรดี", "กินอะไร",
+    "หิวข้าว", "หิว", "หาของกิน", "อยากกิน", "กินข้าว", "อาหารเช้า", "อาหารเย็น", "ข้าวแกง",
+    "คาเฟ่", "ร้านกาแฟ", "กาแฟ", "ก๋วยเตี๋ยว", "อาหารทะเล", "ซีฟู้ด", "ข้าวมันไก่", "ข้าวขาหมู", "ผัดไทย",
     "บุฟเฟ่ต์", "บุฟเฟต์", "หมูกระทะ", "ส้มตำ", "ชาบู", "ปิ้งย่าง",
     "ตลาดกลางคืน", "ตลาดโต้รุ่ง", "สตรีทฟู้ด", "อาหารพื้นเมือง", "restaurant", "cafe",
 )
 
 ATTRACTION_TRIGGERS = (
-    "สถานที่ท่องเที่ยว", "แหล่งท่องเที่ยว", "ที่เที่ยว", "ท่องเที่ยว", "เที่ยวไหนดี",
-    "จุดเช็คอิน", "จุดเช็กอิน", "แลนด์มาร์ค", "แลนด์มาร์ก", "น้ำตก", "ชายหาด",
-    "อุทยาน", "จุดชมวิว", "ตลาดน้ำ", "ไหว้พระ", "วัดดัง", "พิพิธภัณฑ์",
+    "สถานที่ท่องเที่ยว", "แหล่งท่องเที่ยว", "ที่เที่ยว", "ท่องเที่ยว", "เที่ยวไหนดี", "เที่ยวไหน",
+    "ไปไหนดี", "วันหยุดไปไหน", "เดินเล่น", "พาครอบครัวเที่ยว", "พาลูกเที่ยว",
+    "จุดเช็คอิน", "จุดเช็กอิน", "แลนด์มาร์ค", "แลนด์มาร์ก", "น้ำตก", "ชายหาด", "ทะเล",
+    "อุทยาน", "จุดชมวิว", "ชมวิว", "ตลาดน้ำ", "ไหว้พระ", "วัดดัง", "วัดสวย", "พิพิธภัณฑ์",
     "สวนสัตว์", "สวนน้ำ", "ถนนคนเดิน", "attraction", "travel",
 )
 
 HOTEL_TRIGGERS = (
     "โรงแรม", "ที่พัก", "รีสอร์ท", "รีสอร์ต", "โฮมสเตย์", "พูลวิลล่า",
-    "เกสต์เฮาส์", "บังกะโล", "ห้องพัก", "พักที่ไหนดี", "นอนไหนดี",
+    "เกสต์เฮาส์", "บังกะโล", "ห้องพัก", "พักที่ไหนดี", "พักไหนดี", "นอนไหนดี",
+    "หาที่นอน", "หาห้องพัก", "จองห้อง", "ค้างคืน", "อยากพัก",
     "ที่พักใกล้", "โรงแรมใกล้", "hotel", "resort", "homestay",
 )
 
@@ -230,6 +233,7 @@ def extract_detailed_place_location(text: str) -> Dict[str, object]:
         query_parts.append(province)
 
     is_specific = bool(tambon or amphoe or area)
+    has_explicit_location = bool(tambon or amphoe or province)
     display_label = " | ".join(display_parts) if display_parts else "ใกล้ฉัน (ไม่ได้ระบุพื้นที่)"
     map_query_loc = " ".join(query_parts) if query_parts else "ใกล้ฉัน"
 
@@ -238,10 +242,32 @@ def extract_detailed_place_location(text: str) -> Dict[str, object]:
         "amphoe": amphoe,
         "area": area,
         "province": province or None,
+        "has_explicit_location": has_explicit_location,
         "is_specific": is_specific,
         "display_label": display_label,
         "map_query_loc": map_query_loc,
     }
+
+
+def format_area_bundle_reply(text: str) -> Optional[str]:
+    """หากผู้ใช้พิมพ์แค่ชื่อจังหวัด/อำเภอ/ตำบล (เช่น 'สุโขทัย' หรือ 'อ.บางปะหัน อยุธยา') คืนชุดพิกัด 4 หมวดทันที"""
+    loc = extract_detailed_place_location(text)
+    if not loc.get("has_explicit_location"):
+        return None
+    q = str(loc["map_query_loc"])
+    label = str(loc["display_label"])
+    h_url = f"https://www.google.com/maps/search/{urllib.parse.quote('โรงพยาบาล ' + q)}"
+    f_url = f"https://www.google.com/maps/search/{urllib.parse.quote('ร้านอาหารอร่อย ' + q)}"
+    t_url = f"https://www.google.com/maps/search/{urllib.parse.quote('สถานที่ท่องเที่ยว ' + q)}"
+    r_url = f"https://www.google.com/maps/search/{urllib.parse.quote('โรงแรม ที่พัก ' + q)}"
+    return (
+        f"📍 รวมพิกัดสะดวก: {label}\n"
+        f"🏥 โรงพยาบาล: {h_url}\n"
+        f"🍜 ร้านอาหาร: {f_url}\n"
+        f"🗺️ ที่เที่ยว: {t_url}\n"
+        f"🏨 โรงแรม/ที่พัก: {r_url}\n"
+        f"🚑 ฉุกเฉินโทรฟรี 1669 ค่ะ"
+    )
 
 
 def _pick_search_keyword(cat: str, text: str) -> str:
