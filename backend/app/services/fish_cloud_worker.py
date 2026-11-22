@@ -72,6 +72,8 @@ from datetime import datetime, timezone, timedelta
 
 import httpx
 
+from app.services.fb_chat_only import build_friendly_chat_reply, is_fb_chat_only_mode
+
 
 
 from app.services.thai_address_validator import (
@@ -1146,6 +1148,9 @@ def generate_comment_reply(comment_text: str, commenter_name: str = "", sender_i
 
     clean_name = (commenter_name or "").strip()
 
+    if is_fb_chat_only_mode():
+        return build_friendly_chat_reply(text, clean_name, channel="comment"), None
+
 
 
     if clean_name.startswith("คุณ"):
@@ -1360,7 +1365,8 @@ def generate_comment_reply(comment_text: str, commenter_name: str = "", sender_i
 
 
 
-                price = 390.0 if is_transfer else 410.0
+                price = 390.0
+                is_transfer = True
 
 
 
@@ -1408,7 +1414,8 @@ def generate_comment_reply(comment_text: str, commenter_name: str = "", sender_i
 
 
 
-                price = 550.0 if is_transfer else 570.0
+                price = 550.0
+                is_transfer = True
 
 
 
@@ -1871,7 +1878,7 @@ def generate_comment_reply(comment_text: str, commenter_name: str = "", sender_i
 
 
 
-            f"• เก็บเงินปลายทาง: 410.-\n"
+            f"*(งดรับเก็บเงินปลายทาง COD เนื่องจากเป็นอาหารสดแช่แข็ง -18°C)*\n"
 
 
 
@@ -1907,7 +1914,7 @@ def generate_comment_reply(comment_text: str, commenter_name: str = "", sender_i
 
 
 
-            f"• เก็บเงินปลายทาง: 570.-\n"
+            f"*(งดรับเก็บเงินปลายทาง COD เนื่องจากเป็นอาหารสดแช่แข็ง -18°C)*\n"
 
 
 
@@ -2434,7 +2441,8 @@ def generate_comment_reply(comment_text: str, commenter_name: str = "", sender_i
 
 def generate_private_offer_message(comment_text: str, commenter_name: str = "") -> str:
 
-
+    if is_fb_chat_only_mode():
+        return ""
 
     clean_name = (commenter_name or "").strip()
 
@@ -3152,7 +3160,7 @@ def run_fish_cloud_scan_cycle(limit_posts: int = 10) -> dict:
 
 
 
-                if post_age_ok:
+                if post_age_ok and not is_fb_chat_only_mode():
 
 
 
@@ -3825,7 +3833,7 @@ def run_fish_cloud_scan_cycle(limit_posts: int = 10) -> dict:
 
 
                     reply_text, order_info = generate_comment_reply(m_text, from_name, sender_id=from_id)
-                    is_postpone_reply = "แชทนี้บันทึกไว้ให้แล้ว" in reply_text
+                    is_postpone_reply = is_fb_chat_only_mode() or ("แชทนี้บันทึกไว้ให้แล้ว" in reply_text)
 
                     qr_buttons = None if is_postpone_reply else [
                         {"content_type": "text", "title": "ชุด 500g (390.-)", "payload": "QR_PKG_500G"},

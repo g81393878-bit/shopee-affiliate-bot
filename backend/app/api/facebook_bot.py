@@ -40,6 +40,8 @@ import httpx
 
 from fastapi import APIRouter, HTTPException, Request, Response
 
+from app.services.fb_chat_only import build_friendly_chat_reply, is_fb_chat_only_mode
+
 from app.services.thai_address_validator import (
 
     build_incomplete_order_guidance,
@@ -1954,6 +1956,24 @@ def _handle_event(event: dict, page_id: str = "") -> None:
 
     attachments = message.get("attachments") or []
 
+    if is_fb_chat_only_mode():
+        postback = event.get("postback") or {}
+        postback_title = (postback.get("title") or "").strip()
+        if not text and not attachments and not postback:
+            return
+        profile_name = ""
+        try:
+            profile_name = _fetch_fb_profile_name(sender, page_id=page_id)
+        except Exception:
+            profile_name = ""
+        reply_text = build_friendly_chat_reply(
+            text or postback_title,
+            sender_name=profile_name,
+            channel="messenger",
+        )
+        _reply_to_facebook(sender, reply_text, quick_replies=None, page_id=page_id)
+        return
+
 
 
     MENU_SHORT = (
@@ -2231,6 +2251,15 @@ def _handle_event(event: dict, page_id: str = "") -> None:
     lower_text = text.lower().strip()
 
     now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+
+    # 0. ยุติการจำหน่ายและปิดรับออเดอร์ (Ceased Sales Guard)
+    _CLOSED_NOTICE = (
+        "🙏 สวัสดีค่ะ ขอขอบพระคุณที่ให้ความสนใจร้านป้าเข็มนะคะ\n\n"
+        "ขณะนี้ทางร้านได้ยุติการจำหน่ายสินค้าและปิดรับออเดอร์ทุกรายการเรียบร้อยแล้วค่ะ "
+        "กราบขออภัยในความไม่สะดวกเป็นอย่างยิ่ง และขอขอบพระคุณทุกท่านที่ให้การสนับสนุนด้วยดีตลอดมานะคะ ❤️🙏"
+    )
+    _reply_to_facebook(sender, _CLOSED_NOTICE, None, page_id=page_id)
+    return
 
 
 
@@ -2534,16 +2563,6 @@ def _handle_event(event: dict, page_id: str = "") -> None:
             )
 
             return
-
-                    f"📦 รายการ: {pkg_lbl}\n"
-
-                    f"💰 ยอด COD ใหม่: {cod_p} บาท\n"
-
-                    f"📍 ที่อยู่: {saved_addr_sw}"
-
-                )
-
-                return
 
 
 

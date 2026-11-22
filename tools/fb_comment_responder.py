@@ -80,6 +80,8 @@ if _BACKEND_DIR not in _sys.path:
 
     _sys.path.insert(0, _BACKEND_DIR)
 
+from app.services.fb_chat_only import build_friendly_chat_reply, is_fb_chat_only_mode
+
 
 
 from app.services.thai_address_validator import (
@@ -1049,6 +1051,9 @@ def generate_comment_reply(comment_text: str, commenter_name: str = "", post_mes
 
     clean_name = (commenter_name or "").strip()
 
+    if is_fb_chat_only_mode():
+        return build_friendly_chat_reply(text, clean_name, channel="comment"), None
+
 
 
     if clean_name.startswith("คุณ"):
@@ -1676,10 +1681,16 @@ def generate_comment_reply(comment_text: str, commenter_name: str = "", post_mes
 
 
     has_explicit_order_verb = any(v in lower_text for v in ["รับชุด", "เอาชุด", "สั่งชุด", "รับ 1", "เอา 1", "สั่ง 1", "รับ 500", "เอา 500", "สั่ง 500", "รับ 2", "เอา 2", "สั่ง 2", "สั่งแบบเก็บเงินปลายทาง"])
+    has_gift_card_keyword = any(
+        gk in lower_text
+        for gk in [
+            "ของขวัญ", "ของฝากปีใหม่", "ของฝากผู้ใหญ่", "ส่งให้พ่อแม่", "ส่งให้แม่", "ส่งให้พ่อ",
+            "ฝากพ่อแม่", "เขียนการ์ด", "การ์ดอวยพร", "แนบการ์ด", "ส่งเป็นของขวัญ", "สวัสดีปีใหม่",
+            "เซ็ตปีใหม่", "ชุดของขวัญ", "ชุดปีใหม่", "กระเช้าปีใหม่",
+        ]
+    )
 
-
-
-    if not is_short_pkg_choice and (has_question_word or not has_explicit_order_verb):
+    if not is_short_pkg_choice and (has_question_word or not has_explicit_order_verb or has_gift_card_keyword):
 
 
 
@@ -1823,13 +1834,10 @@ def generate_comment_reply(comment_text: str, commenter_name: str = "", post_mes
 
 
     if any(k in lower_text for k in ["กี่ตัว", "โลละกี่ตัว", "ตัวละ", "ราคาตัวละ", "ขายเป็นตัว", "แยกตัว", "ตัวใหญ่ไหม", "ตัวใหญ่มั้ย", "ไซส์ไหน", "ขนาดไหน"]):
-
-
-
         reply = (
-            f"{greeting} ปลาสลิดสุพรรณธรรมชาติแท้ ไซส์จัมโบ้คัดพิเศษ (4 ตัวโล ตัวใหญ่เท่าฝ่ามือ ตัดหัวไร้ไส้ เนื้อล้วน 100% เค็มน้อย 3% ไม่ใช่ปลาตัวเล็ก 8–10 ตัวโลจ้า) 🐟✨\n"
-            f"🔥 ชุดขายดีสุดคุ้ม 1 กิโล (4 ตัวจัมโบ้): โอน 550.- ส่งฟรี EMS ด่วนพิเศษ + ซองฟอยล์เก็บความเย็น มูลค่า 82.- ฟรี! (เพิ่มจากชุดครึ่งโลแค่ 160.- ได้ปลาเพิ่มเท่าตัว!) ⭐ | ชุดทดลอง 500g (2 ตัวใหญ่) = 390.- ส่งฟรี | ชุด 2 กก. = 1,090.- ส่งฟรีรถห้องเย็น\n"
-            f"👉 รับชุดสุดคุ้ม 1 โล (พิมพ์ 2) หรือ ครึ่งโล (พิมพ์ 1) พร้อมแจ้ง ชื่อ-ที่อยู่-เบอร์โทร (หรือถ่ายรูปหน้ากล่องพัสดุเดิม) ส่งมาได้เลยจ้า (เก็บปลายทาง +20 บาท) 📦💕"
+            f"{greeting} ปลาสลิดสุพรรณธรรมชาติแท้ ไซส์จัมโบ้คัดพิเศษ (4–6 ตัวโล ตัวใหญ่เนื้อล้วน 100% ตัดหัวไร้ไส้ เค็มน้อย 3% ไม่ใช่ปลาตัวเล็ก 8–10 ตัวโลจ้า) 🐟✨\n"
+            f"🔥 ชุดขายดีสุดคุ้ม 1 กิโล (4–6 ตัวใหญ่): โอน 550.- ส่งฟรี EMS ด่วนพิเศษ + ซองฟอยล์เก็บความเย็น มูลค่า 82.- ฟรี! (เพิ่มจากชุดครึ่งโลแค่ 160.- ได้ปลาเพิ่มเท่าตัว!) ⭐ | ชุดทดลอง 500g (2–3 ตัวใหญ่) = 390.- ส่งฟรี | ชุด 2 กก. = 1,090.- ส่งฟรีรถห้องเย็น\n"
+            f"👉 รับชุดสุดคุ้ม 1 โล (พิมพ์ 2) หรือ ครึ่งโล (พิมพ์ 1) พร้อมแจ้ง ชื่อ-ที่อยู่-เบอร์โทร (หรือถ่ายรูปหน้ากล่องพัสดุเดิม) ส่งมาได้เลยจ้า (โอนส่งฟรีทุกชุด งดรับ COD) 📦💕"
         )
         return reply, None
 
@@ -2508,6 +2516,9 @@ def generate_private_offer_message(comment_text: str, commenter_name: str = "", 
 
 
     """
+
+    if is_fb_chat_only_mode():
+        return ""
 
 
 
@@ -4131,7 +4142,8 @@ def scan_and_reply_comments(limit_posts: int = 12) -> dict:
 
 
 
-                    is_fish_post
+                    not is_fb_chat_only_mode()
+                    and is_fish_post
 
 
 
@@ -5341,7 +5353,7 @@ def scan_and_reply_inbox_messages(limit_threads: int = 10) -> int:
                     {"content_type": "text", "title": "❄️ ชุด 2 กก.รถเย็น", "payload": "QR_PKG_2KG"},
                 ]
                 msg_payload = {"text": reply_text}
-                if "แชทนี้บันทึกไว้ให้แล้ว" not in reply_text:
+                if not is_fb_chat_only_mode() and "แชทนี้บันทึกไว้ให้แล้ว" not in reply_text:
                     msg_payload["quick_replies"] = qr_buttons
 
                 # ส่งข้อความตัวอักษรแบบกระชับ 3 บรรทัด + Quick Reply (ข้อความไม่โดนตัดบนมือถือ 100% และไม่ส่งซ้ำสองเด้ง)
