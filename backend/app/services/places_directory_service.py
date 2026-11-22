@@ -8,13 +8,14 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 import urllib.parse
 from typing import Dict, List, Optional, Tuple
 
 import httpx
 
-from app.services.hospital_directory_service import extract_location_criteria
+from app.services.hospital_directory_service import ALL_77_PROVINCES, PROVINCE_ALIASES, extract_location_criteria
 
 logger = logging.getLogger(__name__)
 
@@ -123,21 +124,124 @@ def is_places_query(text: str) -> bool:
     return detect_place_category(text) is not None
 
 
-def _extract_place_location(text: str) -> Tuple[str, Optional[str], Optional[str]]:
-    """สกัดชื่อพื้นที่/จังหวัด คืนค่า (loc_display, province, area)"""
-    t = (text or "").strip().lower()
-    for area, (prov, kw) in EXTRA_TOURIST_AREAS.items():
-        if area in t:
-            return f"{kw} {prov}", prov, kw
+_FILLER_WORDS = (
+    "ใกล้ฉัน", "ใกล้ผม", "แถวนี้", "แถว", "บริเวณ", "ในเขต", "ในตัว", "ตัวเมือง",
+    "แนะนำ", "อร่อยๆ", "อร่อย", "ดังๆ", "ดัง", "ดีๆ", "ราคาถูก", "ถูกๆ",
+    "ช่วยหา", "ขอพิกัด", "พิกัด", "แผนที่", "ค้นหา", "อยากไป", "มีไหม", "ไหม", "มั้ย",
+    "หน่อย", "ครับ", "ค่ะ", "คะ", "จ้า", "นะ", "ที", "ที่", "ใน", "ของ",
+)
 
-    crit = extract_location_criteria(text)
-    prov = crit.get("province")
-    area = crit.get("area")
-    if area and prov:
-        return f"{area} {prov}", prov, area
-    if prov:
-        return prov, prov, None
-    return "ใกล้ฉัน", None, None
+
+def extract_detailed_place_location(text: str) -> Dict[str, object]:
+    """แยกพิกัดละเอียด: ตำบล/แขวง | อำเภอ/เขต | ย่าน | จังหวัด"""
+    working = (text or "").strip()
+    tambon = ""
+    amphoe = ""
+    province = ""
+    area = ""
+
+    # 1. ตำบล / ต. / แขวง
+    m_tambon = re.search(r"(?:ตำบล|ต\.|แขวง)\s*([ก-๙a-zA-Z0-9]+?)(?=\s|$|อ\.|อำเภอ|เขต|จ\.|จังหวัด)", working)
+    if m_tambon:
+        prefix = "แขวง" if m_tambon.group(0).startswith("แขวง") else "ต."
+        tambon = prefix + m_tambon.group(1).strip()
+        working = working.replace(m_tambon.group(0), " ", 1)
+
+    # 2. อำเภอ / อ. / เขต
+    m_amphoe = re.search(r"(?:อำเภอ|อ\.|เขต)\s*([ก-๙a-zA-Z0-9]+?)(?=\s|$|ต\.|ตำบล|แขวง|จ\.|จังหวัด)", working)
+    if m_amphoe:
+        prefix = "เขต" if m_amphoe.group(0).startswith("เขต") else "อ."
+        amphoe = prefix + m_amphoe.group(1).strip()
+        working = working.replace(m_amphoe.group(0), " ", 1)
+
+    # 3. จังหวัด (ทั้งแบบมี จ./จังหวัด และไม่มี)
+    m_prov = re.search(r"(?:จังหวัด|จ\.)\s*([ก-๙]+)", working)
+    if m_prov:
+        cand = m_prov.group(1).strip()
+        if cand in PROVINCE_ALIASES:
+            province = PROVINCE_ALIASES[cand]
+            working = working.replace(m_prov.group(0), " ", 1)
+        else:
+            for p in ALL_77_PROVINCES:
+                if p == cand or cand in p:
+                    province = p
+                    working = working.replace(m_prov.group(0), " ", 1)
+                    break
+
+    if not province:
+        for p in sorted(ALL_77_PROVINCES, key=len, reverse=True):
+            if p in working:
+                province = p
+                working = working.replace(p, " ", 1)
+                break
+
+    if not province:
+        for alias, std in sorted(PROVINCE_ALIASES.items(), key=lambda kv: len(kv[0]), reverse=True):
+            if alias in working.lower():
+                province = std
+                working = re.sub(re.escape(alias), " ", working, count=1, flags=re.IGNORECASE)
+                break
+
+    # 4. ย่านท่องเที่ยวยอดนิยม
+    for ak, (prov_val, kw_val) in sorted(EXTRA_TOURIST_AREAS.items(), key=lambda kv: len(kv[0]), reverse=True):
+        if ak in working:
+            area = kw_val
+            if not province:
+                province = prov_val
+            working = working.replace(ak, " ", 1)
+            break
+
+    if not province or not area:
+        crit = extract_location_criteria(text)
+        if not province and crit.get("province"):
+            province = crit["province"]
+        if not area and crit.get("area"):
+            area = crit["area"]
+
+    # 5. ชื่ออำเภอ/ตำบล/ย่านที่ไม่ได้พิมพ์ อ./ต. นำหน้า
+    if not tambon and not amphoe and not area:
+        cleaned = working.lower()
+        all_kws = sorted(
+            RESTAURANT_TRIGGERS + ATTRACTION_TRIGGERS + HOTEL_TRIGGERS + _FILLER_WORDS,
+            key=len,
+            reverse=True,
+        )
+        for kw in all_kws:
+            cleaned = cleaned.replace(kw.lower(), " ")
+        cleaned = re.sub(r"[^ก-๙a-zA-Z0-9\s]", " ", cleaned)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        if 2 <= len(cleaned) <= 35:
+            area = cleaned
+
+    display_parts: List[str] = []
+    query_parts: List[str] = []
+    if tambon:
+        display_parts.append(tambon)
+        query_parts.append(re.sub(r"^ต\.", "ตำบล", tambon))
+    if amphoe:
+        display_parts.append(amphoe)
+        query_parts.append(re.sub(r"^อ\.", "อำเภอ", amphoe))
+    if area and area not in (amphoe, tambon):
+        display_parts.append(area)
+        query_parts.append(area)
+    if province:
+        prov_label = province if province == "กรุงเทพมหานคร" else f"จ.{province}"
+        display_parts.append(prov_label)
+        query_parts.append(province)
+
+    is_specific = bool(tambon or amphoe or area)
+    display_label = " | ".join(display_parts) if display_parts else "ใกล้ฉัน (ไม่ได้ระบุพื้นที่)"
+    map_query_loc = " ".join(query_parts) if query_parts else "ใกล้ฉัน"
+
+    return {
+        "tambon": tambon,
+        "amphoe": amphoe,
+        "area": area,
+        "province": province or None,
+        "is_specific": is_specific,
+        "display_label": display_label,
+        "map_query_loc": map_query_loc,
+    }
 
 
 def _pick_search_keyword(cat: str, text: str) -> str:
@@ -232,44 +336,49 @@ def _fetch_nominatim_places(
 
 
 def format_places_directory_reply(text: str, max_results: int = 2) -> str:
-    """สร้างคำตอบพิกัด ร้านอาหาร / สถานที่ท่องเที่ยว / โรงแรม แบบสั้น อ่านง่าย กดนำทางได้ทันที"""
+    """สร้างคำตอบพิกัด ร้านอาหาร / สถานที่ท่องเที่ยว / โรงแรม แบบแยก ตำบล | อำเภอ | จังหวัด ชัดเจน"""
     cat = detect_place_category(text) or "attraction"
-    loc_display, prov, area = _extract_place_location(text)
+    loc = extract_detailed_place_location(text)
+    loc_display = str(loc["display_label"])
+    map_query_loc = str(loc["map_query_loc"])
+    prov = loc["province"]
+    is_specific = bool(loc["is_specific"])
     search_kw = _pick_search_keyword(cat, text)
 
-    maps_query = f"{search_kw} {loc_display}"
+    maps_query = f"{search_kw} {map_query_loc}"
     maps_all = f"https://www.google.com/maps/search/{urllib.parse.quote(maps_query)}"
 
-    # ดึงพิกัดจริงจาก Nominatim เฉพาะกรณีที่ระบุจังหวัด/ย่านชัดเจน
     live_places: List[Dict[str, str]] = []
-    if prov or area:
+    if prov or is_specific:
         osm_kw = {
             "restaurant": "restaurant",
             "attraction": "tourism",
             "hotel": "hotel",
         }.get(cat, search_kw)
-        live_places = _fetch_nominatim_places(f"{search_kw} {loc_display}", cat=cat, province=prov, max_results=max_results)
+        live_places = _fetch_nominatim_places(f"{search_kw} {map_query_loc}", cat=cat, province=prov, max_results=max_results)
         if not live_places:
-            live_places = _fetch_nominatim_places(f"{osm_kw} {loc_display}", cat=cat, province=prov, max_results=max_results)
+            live_places = _fetch_nominatim_places(f"{osm_kw} {map_query_loc}", cat=cat, province=prov, max_results=max_results)
 
     if cat == "restaurant":
-        header = f"🍜 {search_kw} ({loc_display}):"
-        all_label = f"🗺️ ดูร้านแนะนำทั้งหมด + รีวิว: {maps_all}"
-        tip = "💡 กดลิงก์เพื่อดูรีวิว เวลาเปิด-ปิด และกดนำทางได้เลยค่ะ"
+        header = f"🍜 {search_kw}"
+        all_label = f"🗺️ ดูร้านแนะนำ + รีวิว: {maps_all}"
+        sample_prefix = "ร้านอาหาร"
     elif cat == "attraction":
-        header = f"🗺️ {search_kw} ({loc_display}):"
-        all_label = f"🗺️ ดูที่เที่ยวทั้งหมด + รีวิว: {maps_all}"
-        tip = "💡 แนะนำเช็กเวลาเปิด-ปิดและสภาพอากาศก่อนเดินทางนะคะ"
+        header = f"🗺️ {search_kw}"
+        all_label = f"🗺️ ดูที่เที่ยว + รีวิว: {maps_all}"
+        sample_prefix = "ที่เที่ยว"
     else:
-        header = f"🏨 {search_kw} ({loc_display}):"
-        all_label = f"🗺️ ดูที่พักทั้งหมด + รีวิว/ราคา: {maps_all}"
-        tip = "💡 กดลิงก์เพื่อดูรูปห้องพัก รีวิว และเปรียบเทียบราคาได้เลยค่ะ"
+        header = f"🏨 {search_kw}"
+        all_label = f"🗺️ ดูที่พัก + รีวิว/ราคา: {maps_all}"
+        sample_prefix = "โรงแรม"
 
-    lines = [header]
+    lines = [header, f"📍 พื้นที่: {loc_display}"]
     for p in live_places[:max_results]:
         lines.append(f"• {p['name']}")
         lines.append(f"  🗺️ {p['google_maps']}")
 
     lines.append(all_label)
-    lines.append(tip)
+    if not is_specific:
+        prov_sample = str(prov or "อยุธยา").replace("พระนครศรี", "")
+        lines.append(f'🔎 ระบุเจาะจงพื้นที่ได้นะคะ เช่น "{sample_prefix} อ.เมือง {prov_sample}" หรือ "{sample_prefix} ต.เสาธง อ.บางปะหัน {prov_sample}"')
     return "\n".join(lines).strip()
