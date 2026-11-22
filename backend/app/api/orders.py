@@ -2,11 +2,12 @@
 """Order API for Direct Products (e.g. ปลาแดดเดียว ป้าเข็ม คัดพิเศษ).
 
 Handles 100% Direct Selling (D2C):
-- Direct Customer Order submission (COD / PromptPay)
+- Direct Customer Order submission (ปิดรับออเดอร์แล้ว — เก็บไว้เพื่อประวัติ)
 - Supabase PostgreSQL persistence (direct_orders table)
 - Instant Telegram Commander Alert
 - Admin Order Management & Courier Shipping Label Export (CSV)
 """
+from app.services.sales_status import closed_notice
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse, HTMLResponse
 from pydantic import BaseModel, Field
@@ -48,8 +49,8 @@ class FishOrderRequest(BaseModel):
     address: str = Field(..., description="ที่อยู่จัดส่ง")
     package: str = Field("1kg", description="แพ็กเกจที่เลือก: 500g, 1kg, 2kg")
     package_name: Optional[str] = None
-    price: float = Field(550.0, description="ยอดรวม (บาท)")
-    payment_method: str = Field("TRANSFER", description="TRANSFER / PROMPTPAY หรือ COD (เฉพาะชุด 500g/1kg +20 บาท)")
+    price: float = Field(0.0, description="ยอดรวม (บาท) — ร้านปิดรับออเดอร์")
+    payment_method: str = Field("TRANSFER", description="ปิดรับออเดอร์ — ไม่มีบริการเก็บเงินปลายทาง")
     note: Optional[str] = None
 
 
@@ -60,83 +61,11 @@ class OrderStatusUpdate(BaseModel):
 
 @router.post("/fish")
 def create_fish_order(order: FishOrderRequest, db: Session = Depends(get_db)):
-    phone_check = validate_thai_phone(order.phone)
-    if not phone_check["valid"]:
-        raise HTTPException(
-            status_code=400,
-            detail=f"เบอร์โทรศัพท์ไม่ถูกต้อง ({phone_check['reason']}) กรุณาระบุเบอร์โทรศัพท์จริง 10 หลักค่ะ",
-        )
-    enriched_addr = enrich_thai_address(order.address)
-    if not has_complete_thai_address(enriched_addr):
-        raise HTTPException(
-            status_code=400,
-            detail="ที่อยู่จัดส่งยังไม่ครบถ้วน กรุณาระบุ บ้านเลขที่ ตำบล/แขวง อำเภอ/เขต และจังหวัด ให้ครบถ้วนค่ะ",
-        )
-    order.phone = phone_check["phone"]
-    order.address = enriched_addr
-
-    now = datetime.datetime.now()
-    now_str = now.strftime("%d/%m/%Y %H:%M:%S")
-    order_id = f"PKF-{now.strftime('%m%d%H%M%S')}"
-
-    pkg_name = order.package_name or f"ปลาแดดเดียว ชุด {order.package}"
-    pay_badge = "🚚 เก็บเงินปลายทาง (COD)" if order.payment_method.upper() == "COD" else "💳 โอนเงิน / PromptPay"
-
-    # 1. บันทึกลงฐานข้อมูล Supabase PostgreSQL (ตาราง direct_orders)
-    db_order = models.DirectOrder(
-        order_code=order_id,
-        product_name="ปลาแดดเดียวสูตรโบราณ ป้าเข็ม คัดพิเศษ",
-        package_code=order.package,
-        package_name=pkg_name,
-        price=order.price,
-        customer_name=order.name,
-        phone=order.phone,
-        address=order.address,
-        payment_method=order.payment_method.upper(),
-        status="PENDING",
-        note=order.note,
-        created_at=datetime.datetime.now(datetime.UTC)
-    )
-    db.add(db_order)
-    db.commit()
-    db.refresh(db_order)
-
-    # 2. ส่งแจ้งเตือนด่วนเข้า Telegram Commander แอดมิน
-    alert_msg = (
-        f"🐟 **[ออเดอร์ใหม่] ปลาแดดเดียว ป้าเข็ม (สินค้าตัวเอง 100%)**\n"
-        f"━━━━━━━━━━━━━━━━━━━\n"
-        f"🔖 รหัสสั่งซื้อ: `{order_id}`\n"
-        f"⏰ เวลา: {now_str}\n"
-        f"👤 ลูกค้า: **{order.name}**\n"
-        f"📞 โทร: `{order.phone}`\n"
-        f"📦 สินค้า: {pkg_name}\n"
-        f"💰 ยอดเก็บเงิน: **{order.price:,.2f} บาท**\n"
-        f"💵 วิธีชำระ: **{pay_badge}**\n"
-        f"📍 ที่อยู่จัดส่ง:\n`{order.address}`\n"
-    )
-    if order.note:
-        alert_msg += f"📝 โน้ต: {order.note}\n"
-    alert_msg += (
-        f"━━━━━━━━━━━━━━━━━━━\n"
-        f"👉 เตรียมแพ็คซีลสูญญากาศและส่งรถเย็นรอบถัดไปได้เลยค่ะ"
-    )
-
-    try:
-        send_telegram_alert(alert_msg, parse_mode="Markdown")
-    except Exception as e:
-        print(f"[Order] Telegram notify error: {e}")
-
+    """ร้านยุติการจำหน่ายแล้ว — ปิดรับออเดอร์ออนไลน์ (ไม่สร้างออเดอร์/ไม่คิดราคา)."""
     return {
-        "ok": True,
-        "order_id": order_id,
-        "message": "บันทึกออเดอร์สำเร็จเรียบร้อยค่ะ ป้าเข็มกำลังจัดเตรียมปลาแดดเดียวส่งตรงถึงบ้านคุณนะคะ!",
-        "customer": {
-            "name": order.name,
-            "phone": order.phone,
-            "package": pkg_name,
-            "price": order.price,
-            "payment_method": order.payment_method
-        }
+        "ok": False,
+        "sales_closed": True,
+        "message": closed_notice(),
     }
 
 
@@ -200,17 +129,17 @@ def export_shipping_csv(db: Session = Depends(get_db)):
     output = io.StringIO()
     output.write("\ufeff")  # UTF-8 BOM สำหรับ Excel ภาษาไทย
     writer = csv.writer(output)
-    writer.writerow(["รหัสสั่งซื้อ", "ชื่อผู้รับ", "เบอร์โทรศัพท์", "ที่อยู่จัดส่ง", "สินค้า", "ยอดเรียกเก็บ (COD)", "วิธีชำระเงิน", "หมายเหตุ"])
+    writer.writerow(["รหัสสั่งซื้อ", "ชื่อผู้รับ", "เบอร์โทรศัพท์", "ที่อยู่จัดส่ง", "สินค้า", "ยอดเรียกเก็บ", "วิธีชำระเงิน", "หมายเหตุ"])
 
     for o in orders:
-        cod_amount = f"{float(o.price):.2f}" if o.payment_method == "COD" else "0.00"
+        collect_amount = f"{float(o.price):.2f}" if o.payment_method != "TRANSFER" else "0.00"
         writer.writerow([
             o.order_code,
             o.customer_name,
             o.phone,
             o.address,
             o.package_name,
-            cod_amount,
+            collect_amount,
             o.payment_method,
             o.note or ""
         ])
@@ -257,7 +186,7 @@ def book_flash_courier_endpoint(order_id: int, db: Session = Depends(get_db)):
             f"📦 สินค้า: {order.package_name}\n"
             f"🏷️ เลขพัสดุ: `{order.tracking_number}`\n"
             f"🔍 เช็คสถานะ: {res.get('tracking_url')}\n"
-            f"💵 COD: {res.get('cod_amount'):,.2f} บาท\n"
+            f"💵 ยอดเรียกเก็บ: {res.get('collect_amount'):,.2f} บาท\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
             f"👉 สามารถคลิกพิมพ์ใบปะหน้า 100x180mm ได้จากแดชบอร์ดเลยค่ะ"
         )

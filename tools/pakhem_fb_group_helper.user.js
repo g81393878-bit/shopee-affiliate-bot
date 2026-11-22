@@ -33,25 +33,13 @@
         fried: "https://watt29.github.io/pakhem-shop/fish_fried_plate.jpg"
     };
 
+    const CLOSED_NOTICE = `🙏 ขอขอบพระคุณที่ให้ความสนใจนะคะ ขณะนี้ทางร้านได้ยุติการจำหน่ายและปิดรับออเดอร์ทุกรายการเรียบร้อยแล้ว จึงยังไม่มีสินค้าและราคาให้เสนอในตอนนี้ค่ะ ❤️`;
+
     const MESSENGER_REPLIES = {
-        price: `🐟 ปลาสลิดสุพรรณแท้ ป้าเข็ม (ไซส์จัมโบ้ เนื้อล้วน เค็มน้อย 3%)
-1️⃣ 500g (2-3 ตัวใหญ่): โอน 390.- ส่งฟรี (งดรับ COD)
-2️⃣ 1 กก. (4-6 ตัวใหญ่): โอน 550.- ส่งฟรี ⭐ขายดี (งดรับ COD)
-3️⃣ 2 กก. (8-12 ตัวใหญ่): โอน 1,090.- ส่งฟรีรถห้องเย็น! (งดรับ COD)
-👉 รับชุดไหน พิมพ์เลข 1, 2 หรือ 3 ได้เลยจ้า`,
-
-        bank: `🏦 โอนเงินส่งฟรี ร้านป้าเข็ม:
-• ธ.กรุงไทย: 038-0-25363-1 (นายจีรวัฒน์ พลอาจ)
-👉 โอนแล้วส่งสลิป + พิมพ์ชื่อ-ที่อยู่-เบอร์โทร ได้เลยจ้า 🙏`,
-
-        askAddress: `📍 พิมพ์แจ้งข้อมูลเพื่อจัดส่งได้เลยจ้า:
-1️⃣ ชุดที่รับ: พิมพ์ 1 (500g) / 2 (1 กก.) / 3 (2 กก.)
-2️⃣ โอนชำระเงินส่งฟรี: ธ.กรุงไทย 038-0-25363-1 นายจีรวัฒน์ พลอาจ (งดรับ COD)
-3️⃣ ชื่อ - ที่อยู่จัดส่ง - เบอร์โทร 10 หลัก (หรือส่งรูปหน้าซองจดหมายได้จ้า)`,
-
-        shipping: `❄️ ซีลสูญญากาศแช่แข็ง -18°C แพ็กซองฟอยล์เก็บความเย็น
-🚚 จัดส่ง 1-2 วันถึงบ้าน (เสียเคลมฟรี 100%)
-👉 พิมพ์เลข 1 (500g), 2 (1 กก.) หรือ 3 (2 กก.) เพื่อสั่งซื้อได้เลยจ้า`
+        price: CLOSED_NOTICE,
+        bank: CLOSED_NOTICE,
+        askAddress: CLOSED_NOTICE,
+        shipping: CLOSED_NOTICE
     };
 
     let cachedPricePngBlob = null;
@@ -362,8 +350,8 @@
         }
 
         // 5. สกัดแพ็กเกจและวิธีชำระเงินจากบริบทแชท
-        // 5. สกัดแพ็กเกจจากบริบทแชท (โอนเงินส่งฟรี 100% งดรับ COD ทุกกรณี)
-        let detectedPkgValue = "SKU-SLID-MD-1KG|TRANSFER|550|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (โอนส่งฟรี)";
+        // 5. สกัดแพ็กเกจจากบริบทแชท (ร้านยุติการจำหน่าย — ไม่มีราคา/ไม่รับชำระเงิน)
+        let detectedPkgValue = "SKU-SLID-MD-1KG|TRANSFER|0|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (ปิดรับออเดอร์)";
 
         if (
             customerText.includes("2 โล") ||
@@ -376,7 +364,7 @@
             customerText.includes("ชุด 3") ||
             customerText.includes("ชุดที่ 3")
         ) {
-            detectedPkgValue = "SKU-SLID-MD-2KG|TRANSFER|1090|ปลาสลิดแดดเดียว ชุดตุนสุดคุ้ม 2 กิโลกรัม (ส่งฟรีรถห้องเย็น)";
+            detectedPkgValue = "SKU-SLID-MD-2KG|TRANSFER|0|ปลาสลิดแดดเดียว ชุดตุนสุดคุ้ม 2 กิโลกรัม (ปิดรับออเดอร์)";
         } else if (
             customerText.includes("ครึ่งโล") ||
             customerText.includes("500") ||
@@ -384,9 +372,9 @@
             customerText.includes("ชุด 1") ||
             customerText.includes("ชุดที่ 1")
         ) {
-            detectedPkgValue = "SKU-SLID-MD-500G|TRANSFER|390|ปลาสลิดแดดเดียว ชุดพอดีมื้อ 500 กรัม (โอนส่งฟรี)";
+            detectedPkgValue = "SKU-SLID-MD-500G|TRANSFER|0|ปลาสลิดแดดเดียว ชุดพอดีมื้อ 500 กรัม (ปิดรับออเดอร์)";
         } else {
-            detectedPkgValue = "SKU-SLID-MD-1KG|TRANSFER|550|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (โอนส่งฟรี)";
+            detectedPkgValue = "SKU-SLID-MD-1KG|TRANSFER|0|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (ปิดรับออเดอร์)";
         }
 
         return {
@@ -520,7 +508,7 @@
         const payText =
             payMethod === "COD"
                 ? `เก็บปลายทาง ${priceNum.toLocaleString()}.-`
-                : `โอนส่งฟรี ${priceNum.toLocaleString()}.- (ธ.กรุงไทย 038-0-25363-1 นายจีรวัฒน์ พลอาจ)`;
+                : "ร้านยุติการจำหน่ายและปิดรับออเดอร์แล้ว";
 
         return `✅ รับออเดอร์เรียบร้อยจ้า (${orderId}) 🙏🐟
 1️⃣ สินค้า: ${pkgLabel}
@@ -598,11 +586,11 @@
                     <textarea id="pkh-ord-addr" placeholder="📍 ที่อยู่จัดส่ง (บ้านเลขที่ ตำบล อำเภอ จังหวัด รหัสปณ.)" style="width: 100%; height: 42px; padding: 5px 6px; font-size: 11px; border: 1px solid #ced4da; border-radius: 5px; background: #fff; color: #222; resize: none; margin-bottom: 4px; font-family: inherit; box-sizing: border-box;"></textarea>
 
                     <select id="pkh-ord-pkg" style="width: 100%; padding: 5px; font-size: 10.5px; font-weight: bold; border: 1px solid #28a745; border-radius: 5px; background: #e8f5e9; color: #1b5e20; margin-bottom: 6px; cursor: pointer; box-sizing: border-box;">
-                        <option value="SKU-SLID-MD-1KG|TRANSFER|550|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (โอนส่งฟรี)">⭐ ชุด 1 กก. (5-7 ตัว) — โอน 550.- ส่งฟรี</option>
-                        <option value="SKU-SLID-MD-1KG|TRANSFER|550|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (โอนเงินส่งฟรี)">📦 ชุด 1 กก. (4-6 ตัวใหญ่) — โอน 550.- ส่งฟรี</option>
-                        <option value="SKU-SLID-MD-500G|TRANSFER|390|ปลาสลิดแดดเดียว ชุดพอดีมื้อ 500 กรัม (โอนส่งฟรี)">🐟 ชุด 500g (3-4 ตัว) — โอน 390.- ส่งฟรี</option>
-                        <option value="SKU-SLID-MD-500G|TRANSFER|390|ปลาสลิดแดดเดียว ชุดพอดีมื้อ 500 กรัม (โอนเงินส่งฟรี)">📦 ชุด 500g (2-3 ตัวใหญ่) — โอน 390.- ส่งฟรี</option>
-                        <option value="SKU-SLID-MD-2KG|TRANSFER|1090|ปลาสลิดแดดเดียว ชุดตุนสุดคุ้ม 2 กิโลกรัม (ส่งฟรีรถห้องเย็น)">❄️ ชุด 2 กก. (10-14 ตัว) — โอน 1,090.- รถห้องเย็น</option>
+                        <option value="SKU-SLID-MD-1KG|TRANSFER|0|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (ปิดรับออเดอร์)">⭐ ชุด 1 กก. (5-7 ตัว)</option>
+                        <option value="SKU-SLID-MD-1KG|TRANSFER|0|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (ปิดรับออเดอร์)">📦 ชุด 1 กก. (4-6 ตัวใหญ่)</option>
+                        <option value="SKU-SLID-MD-500G|TRANSFER|0|ปลาสลิดแดดเดียว ชุดพอดีมื้อ 500 กรัม (ปิดรับออเดอร์)">🐟 ชุด 500g (3-4 ตัว)</option>
+                        <option value="SKU-SLID-MD-500G|TRANSFER|0|ปลาสลิดแดดเดียว ชุดพอดีมื้อ 500 กรัม (ปิดรับออเดอร์)">📦 ชุด 500g (2-3 ตัวใหญ่)</option>
+                        <option value="SKU-SLID-MD-2KG|TRANSFER|0|ปลาสลิดแดดเดียว ชุดตุนสุดคุ้ม 2 กิโลกรัม (ปิดรับออเดอร์)">❄️ ชุด 2 กก. (10-14 ตัว)</option>
                     </select>
 
                     <button type="button" id="pkh-btn-submit-order" style="width: 100%; background: linear-gradient(135deg, #1b5e20, #28a745); color: #fff; border: none; border-radius: 6px; padding: 8px 4px; font-weight: bold; font-size: 11.5px; cursor: pointer; box-shadow: 0 2px 6px rgba(40,167,69,0.3);">
@@ -943,9 +931,9 @@
             const pkgRaw =
                 ordPkgSelect && ordPkgSelect.value
                     ? ordPkgSelect.value
-                    : "SKU-SLID-MD-1KG|TRANSFER|550|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (โอนส่งฟรี)";
+                    : "SKU-SLID-MD-1KG|TRANSFER|0|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (ปิดรับออเดอร์)";
             const [sku, payMethod, priceStr, pkgLabel] = pkgRaw.split("|");
-            const priceNum = parseFloat(priceStr) || 550;
+            const priceNum = parseFloat(priceStr) || 0;
 
             if (!/^0\d{8,9}$/.test(phone)) {
                 showToast("⚠️ กรุณากรอก <b>เบอร์โทรศัพท์ 10 หลัก</b> ของลูกค้าให้ถูกต้องก่อนครับ", "#721c24", "#f8d7da");
@@ -1507,24 +1495,13 @@
         let isReplyingComments = false;
 
         function buildShortGuidedCommentReply(commentText, commenterName) {
+
             const cleanName = (commenterName || "").trim();
-            const greet = cleanName ? `สวัสดีค่ะคุณ ${cleanName} 🙏🐟` : `สวัสดีค่ะคุณลูกค้า 🙏🐟`;
-            const lower = (commentText || "").trim().toLowerCase();
 
-            if (lower === "1" || lower.includes("ชุด 1") || lower.includes("ชุด1") || lower.includes("500") || lower.includes("ครึ่งโล")) {
-                return `${greet} รับชุด 1️⃣ (500g / 2-3 ตัวใหญ่) โอน 390.- ส่งฟรี (งดรับ COD) จ้า\n👉 แจ้ง ชื่อ-ที่อยู่-เบอร์โทร ทางแชทเพจคลิก: https://m.me/1307380735783361 ได้เลยจ้า`;
-            }
-            if (lower === "2" || lower.includes("ชุด 2") || lower.includes("ชุด2") || lower.includes("1 โล") || lower.includes("1โล") || lower.includes("1 กก")) {
-                return `${greet} รับชุด 2️⃣ ขายดี (1 กก. / 4-6 ตัวใหญ่) โอน 550.- ส่งฟรี ⭐ (งดรับ COD)\n👉 แจ้ง ชื่อ-ที่อยู่-เบอร์โทร ทางแชทเพจคลิก: https://m.me/1307380735783361 ได้เลยจ้า`;
-            }
-            if (lower === "3" || lower.includes("ชุด 3") || lower.includes("ชุด3") || lower.includes("2 โล") || lower.includes("2โล") || lower.includes("2 กก")) {
-                return `${greet} รับชุด 3️⃣ สุดคุ้ม (2 กก. / 10-14 ตัว) โอน 1,090.- ส่งฟรีรถห้องเย็นจ้า ❄️\n🏦 ธ.กรุงไทย 038-0-25363-1 (นายจีรวัฒน์ พลอาจ)\n👉 ส่งสลิป + ชื่อ-ที่อยู่ ทางแชทเพจคลิก: https://m.me/1307380735783361 ได้เลยจ้า`;
-            }
-            if (lower.includes("เค็ม") || lower.includes("รสชาติ") || lower.includes("สาบ") || lower.includes("โคลน")) {
-                return `${greet} ไม่เค็มจัดและไร้กลิ่นโคลนจ้า เนื้อปลา 97% + เกลือสมุทร 3% (ไร้สารกันบูด 0%)\n1️⃣ 500g (2-3 ตัวใหญ่): โอน 390.- ส่งฟรี (งดรับ COD)\n2️⃣ 1 กก. (4-6 ตัวใหญ่): โอน 550.- ส่งฟรี ⭐ขายดี (งดรับ COD)\n3️⃣ 2 กก. (10-14 ตัว): โอน 1,090.- ส่งฟรีรถห้องเย็น!\n👉 รับชุดไหน พิมพ์เลข 1, 2, 3 หรือทักแชท: https://m.me/1307380735783361 จ้า`;
-            }
+            const greet = cleanName ? `สวัสดีค่ะคุณ ${cleanName} 🙏` : "สวัสดีค่ะ 🙏";
 
-            return `${greet} ปลาสลิดสุพรรณแท้ ป้าเข็ม (ไซส์จัมโบ้ เนื้อล้วน เค็มน้อย 3%)\n1️⃣ 500g (2-3 ตัวใหญ่): โอน 390.- ส่งฟรี (งดรับ COD)\n2️⃣ 1 กก. (4-6 ตัวใหญ่): โอน 550.- ส่งฟรี ⭐ขายดี (งดรับ COD)\n3️⃣ 2 กก. (10-14 ตัว): โอน 1,090.- ส่งฟรีรถห้องเย็น!\n👉 รับชุดไหน พิมพ์เลข 1, 2, 3 หรือทักแชทเพจ: https://m.me/1307380735783361 จ้า`;
+            return `${greet} 🙏 ขอขอบพระคุณที่ให้ความสนใจนะคะ ขณะนี้ทางร้านได้ยุติการจำหน่ายและปิดรับออเดอร์ทุกรายการเรียบร้อยแล้ว จึงยังไม่มีสินค้าและราคาให้เสนอในตอนนี้ค่ะ ❤️`;
+
         }
 
         function getRepliedDomComments() {

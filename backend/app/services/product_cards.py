@@ -323,15 +323,15 @@ def build_direct_fish_card() -> FlexSendMessage:
                     "contents": [
                         {
                             "type": "text",
-                            "text": "ราคาเริ่มต้น",
+                            "text": "สถานะร้าน",
                             "size": "xs",
                             "color": "#9CA3AF"
                         },
                         {
                             "type": "text",
-                            "text": "โอน 390.- / 550.- / 1,090.- ส่งฟรี! (COD +20.-)",
+                            "text": "ยุติการจำหน่ายแล้ว",
                             "size": "sm",
-                            "color": "#C2410C",
+                            "color": "#6B7280",
                             "weight": "bold",
                             "align": "end"
                         }
@@ -350,19 +350,9 @@ def build_direct_fish_card() -> FlexSendMessage:
                     "color": "#C2410C",
                     "height": "sm",
                     "action": {
-                        "type": "uri",
-                        "label": "🛒 สั่งซื้อทันที (โอนส่งฟรี / COD)",
-                        "uri": order_url
-                    }
-                },
-                {
-                    "type": "button",
-                    "style": "secondary",
-                    "height": "sm",
-                    "action": {
                         "type": "message",
-                        "label": "💬 สั่งทางแชทนี้ (1 กิโลกรัม)",
-                        "text": "สั่งปลาแดดเดียว 1kg ค่ะ"
+                        "label": "💬 ทักแชทสอบถาม",
+                        "text": "สอบถามข้อมูลสินค้าค่ะ"
                     }
                 }
             ]

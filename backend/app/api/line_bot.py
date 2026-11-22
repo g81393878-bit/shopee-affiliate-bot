@@ -26,6 +26,7 @@ from app.services.category import guess_category, CATEGORY_KEYWORDS, normalize_q
 from app.services.web_search import web_search_answer
 from app.services.hermes_brain import load_skills_safe, market_emphasis
 from app.config import settings
+from app.services.sales_status import closed_notice, is_sales_closed
 from app.services.bot_profile import BOT_NAME, BOT_SLOGAN, owner_contact_text
 from app.services.slip_ocr import extract_slip_info, verify_and_extract_slip, amount_matches
 
@@ -331,26 +332,7 @@ FISH_COLD_PACK_KEYWORDS = (
     "ส่งไกล", "เดินทางไกล", "อากาศร้อน", "รถห้องเย็น", "รถเย็น", "ควบคุมอุณหภูมิ",
 )
 
-FISH_COLD_PACK_REPLY = (
-    "🧊 [พี่วิน - ฝ่ายจัดส่งและคลังสินค้าห้องเย็น]\n"
-    "ส่งต่างจังหวัดไกลแค่ไหนก็ไม่เสีย ไม่บูด ไม่เน่า 100% ครับคุณลูกค้า! 🚚❄️\n"
-    "━━━━━━━━━━━━━━━━━━\n"
-    "🛡️ มาตรฐานแพ็กเย็น 6 ขั้นตอน (Cold-Chain Packaging):\n"
-    "1️⃣ ซีลสูญญากาศถุง PA/PE หนาพิเศษ แยกแพ็กสะอาด ป้องกันอากาศและแบคทีเรีย 100%\n"
-    "2️⃣ แช่เยือกแข็ง (Deep Freeze ≤ -18°C) อย่างน้อย 12 ชม. จนเนื้อปลาแข็งจัดก่อนส่ง\n"
-    "3️⃣ บรรจุซองฟอยล์เก็บอุณหภูมิ สะท้อนความร้อนภายนอก รักษาความเย็นตลอดเส้นทาง\n"
-    "4️⃣ ปิดผนึกกล่องพัสดุมิดชิด จัดส่งด่วนถึงหน้าบ้านภายใน 1–2 วันหลังจัดส่ง\n"
-    "5️⃣ สำหรับพื้นที่จัดส่ง 3–4 วัน ส่งด้วยรถควบคุมอุณหภูมิ (รถห้องเย็น) สดใหม่ 100%\n"
-    "6️⃣ ชุด 2 กก. (1,090.-) ส่งฟรีรถห้องเย็นถึงหน้าบ้าน! (ชุด 500g / 1kg ส่งด่วนซองฟอยล์ หรืออัปเกรดรถห้องเย็นได้ +100.-)\n"
-    "━━━━━━━━━━━━━━━━━━\n"
-    "💯 รับประกันความสด 100% โดยป้าเข็ม:\n"
-    "หากเปิดกล่องมาพบถุงซีลรั่ว หรือปลาเสียหายจากการขนส่ง ทางร้านส่งชุดใหม่ให้ฟรีทันที 100% ไม่มีค่าใช้จ่ายครับ!\n\n"
-    "🔥 โปรโมชั่นโอนเงินส่งฟรีทุกชุด:\n"
-    "• ชุดพอดีมื้อ 500 กรัม (ประมาณ 2–3 ตัวใหญ่): โอน 390.- ส่งฟรี! (งดรับ COD)\n"
-    "• ชุดยอดฮิต 1 กิโลกรัม (ประมาณ 4–6 ตัวใหญ่): โอน 550.- ส่งฟรี! ⭐ (งดรับ COD)\n"
-    "• ชุดตุนสุดคุ้ม 1.8-2.0 กิโลกรัม (ประมาณ 10-14 ตัว): โอน 1,090.- ส่งฟรีรถห้องเย็น! (รับเฉพาะโอนเงิน)\n\n"
-    "🛒 พิมพ์ชุดที่รับพร้อม ชื่อ-ที่อยู่-เบอร์โทร ในแชทนี้ หรือสั่งผ่านเว็บ https://watt29.github.io/pakhem-shop/fish.html ได้เลยครับ 😊"
-)
+FISH_COLD_PACK_REPLY = closed_notice()
 
 
 def is_fish_cold_pack_query(text: str) -> bool:
@@ -558,15 +540,8 @@ def greeting_text_for(user_name: str, tone: str = "neutral") -> str:
 
 
 def nosearch_fallback_text(user_text: str, tone: str = "neutral") -> str:
-    """ยังไม่มีในร้าน — โยงเข้าปลาสลิดแดดเดียวสุพรรณแท้ 100%"""
-    return (
-        "🐟 ตอนนี้ทางร้านมี 'ปลาสลิดแดดเดียว สุพรรณบุรีแท้ ป้าเข็ม คัดพิเศษ' ไซส์จัมโบ้ 5-7 ตัว/กก. (เนื้อหนาฟู มันแทรก เค็มน้อย 3% ทอดกรอบอร่อยมากค่ะ)\n\n"
-        "🌟 เมนูแนะนำ (โอนส่งฟรีถึงบ้านทุกชุด งดรับ COD):\n"
-        "1️⃣ ชุดพอดีมื้อ 500 กรัม (ประมาณ 2–3 ตัวใหญ่) : โอน 390.- ส่งฟรี! (งดรับ COD)\n"
-        "2️⃣ ชุดยอดฮิต 1 กิโลกรัม (ประมาณ 4–6 ตัวใหญ่) : โอน 550.- ส่งฟรี! ⭐ (งดรับ COD)\n"
-        "3️⃣ ชุดตุนสุดคุ้ม 2 กิโลกรัม (ประมาณ 8–12 ตัวใหญ่) : โอน 1,090.- ส่งฟรีรถห้องเย็น!\n\n"
-        "👉 คุณลูกค้าสนใจรับชุดไหน พิมพ์ 'ชื่อ-ที่อยู่-เบอร์โทร' ในแชทนี้ได้เลยนะคะ หรือกดดูที่ https://watt29.github.io/pakhem-shop/fish.html จ้า 💕"
-    )
+    """ร้านยุติการจำหน่ายแล้ว — ตอบเพียงประกาศปิดรับออเดอร์."""
+    return closed_notice()
 
 
 def nosearch_alt_text(user_text: str, category: str, tone: str = "neutral") -> str:
@@ -777,18 +752,7 @@ LEAVE_MESSAGE_PHRASES = (
     "ฝากคำถาม", "ฝากข้อความ", "อยากถาม", "มีคำถามจะถาม",
 )
 CONTACT_PHRASES = ("คุยกับป้าเข็ม", "คุยกับแม่เข็ม") + OWNER_CONTACT_PHRASES + LEAVE_MESSAGE_PHRASES
-BOT_MANUAL = (
-    "🐟 [ร้านปลาสลิดแดดเดียว สุพรรณบุรีแท้ ป้าเข็ม คัดพิเศษ] 💕\n\n"
-    "ยินดีให้บริการคุณลูกค้าตลอด 24 ชั่วโมงค่ะ 🙏✨\n"
-    "━━━━━━━━━━━━━━━━━━\n"
-    "🌟 เมนูแพ็กเกจไซส์จัมโบ้คัดพิเศษ (โอนเงินส่งด่วนเก็บความเย็นฟรีทุกชุด!):\n"
-    "1️⃣ 🏷️ ชุดพอดีมื้อ 500 กรัม (ประมาณ 2–3 ตัวใหญ่) : โอน 390.- ส่งฟรี! (งดรับ COD)\n"
-    "2️⃣ ⭐ ชุดยอดฮิต 1 กิโลกรัม (ประมาณ 4–6 ตัวใหญ่) : โอน 550.- ส่งฟรี! ⭐ (งดรับ COD)\n"
-    "3️⃣ ❄️ ชุดสุดคุ้มตุนฟรีซ 2 กิโลกรัม (ประมาณ 8–12 ตัวใหญ่) : โอน 1,090.- ส่งฟรีรถห้องเย็น!\n"
-    "━━━━━━━━━━━━━━━━━━\n"
-    "👉 สั่งซื้อง่ายๆ: พิมพ์ 'ชื่อ-ที่อยู่-เบอร์โทร' ในแชทนี้ได้เลยนะคะ (โอนเงินส่งฟรี งดรับ COD)\n"
-    "🛒 หรือกดสั่งซื้อออนไลน์ได้ที่: https://watt29.github.io/pakhem-shop/fish.html"
-)
+BOT_MANUAL = closed_notice()
 
 PACKAGE_KWS = (
     "ค่าบริการ", "แพ็กเกจราคา", "ราคาแพ็กเกจ", "ราคาบอท",
@@ -1008,23 +972,6 @@ def _is_cancel_purchase(text: str) -> bool:
     return any(p in t for p in CANCEL_PURCHASE_PHRASES)
 
 
-def _track_bot_purchase(db, line_user_id: str, text: str) -> None:
-    """ลูกค้ากด 'สนใจแพ็กเกจนี้'/'ยอด <key>' → บันทึกสถานะสนใจ (ไม่ลดระดับถ้าจ่ายแล้ว/ยืนยันแล้ว)"""
-    key = package_payment_key(text)
-    if not key:
-        return
-    purchase = _get_purchase(db, line_user_id)
-    if purchase and purchase.status in ("paid_pending", "confirmed"):
-        return  # ไปไกลกว่าแล้ว ไม่ย้อนกลับ
-    if not purchase:
-        purchase = models.BotPurchase(line_user_id=line_user_id, package_key=key, status="interested")
-        db.add(purchase)
-    else:
-        purchase.package_key = key
-        purchase.status = "interested"
-    db.commit()
-
-
 _telegram_rate_cache: dict = {}  # throttle_key -> timestamp
 
 
@@ -1058,29 +1005,6 @@ def _send_telegram(text: str, throttle_key: str = None, cooldown_seconds: int = 
     except Exception as e:
         logger.warning(f"Telegram notify failed: {e}")
         return False
-
-
-def _notify_owner_payment_intent(user, text: str = "") -> None:
-    """แจ้งเตือนเจ้าของร้านผ่าน Telegram ทันทีเมื่อลูกค้ากดปุ่มชำระเงิน (มี Anti-Spam 60 วินาที/คน)"""
-    try:
-        uid = user.line_user_id
-        name = user.name or "ลูกค้า LINE"
-        key = package_payment_key(text) if text else None
-        pkg = _purchase_package_name(key) if key else (text or "สอบถามวิธีชำระเงิน/เลขบัญชี")
-        
-        msg = (
-            f"💳 [ลูกค้ากดปุ่มชำระเงิน / ดูเลขบัญชี]\n"
-            f"━━━━━━━━━━━━━━━━━━\n"
-            f"• 👤 ชื่อลูกค้า: {name}\n"
-            f"• 🆔 User ID: {uid}\n"
-            f"• 📦 สนใจรายการ: {pkg}\n"
-            f"• ⏰ เวลา: {_fmt_bkk(datetime.datetime.utcnow())} น.\n"
-            f"• 💬 ตอบกลับลูกค้าได้ทันที: `/reply {uid} <ข้อความ>`\n"
-            f"━━━━━━━━━━━━━━━━━━"
-        )
-        _send_telegram(msg, throttle_key=f"pay_intent_{uid}_{key}", cooldown_seconds=60)
-    except Exception as e:
-        logger.warning(f"Payment intent notify failed: {e}")
 
 
 def _notify_owner_purchase(user, package_key: str, status: str) -> None:
@@ -1137,23 +1061,6 @@ class _SlipTooLarge(Exception):
     """รูปสลิปเกิน SLIP_MAX_BYTES"""
 
 
-def _download_slip(message_id: str, timeout: int = 30) -> Tuple[bytes, str]:
-    """ดาวน์โหลดรูปสลิปจาก LINE Content API (streaming + จำกัดขนาด)
-    คืน (bytes, content-type) — ยก _SlipTooLarge ถ้าเกิน SLIP_MAX_BYTES"""
-    content = line_bot_api.get_message_content(message_id, timeout=timeout)
-    content_type = (content.content_type or "image/jpeg").split(";")[0].strip()
-    chunks = []
-    total = 0
-    for chunk in content.iter_content(chunk_size=256 * 1024):
-        total += len(chunk)
-        if total > SLIP_MAX_BYTES:
-            raise _SlipTooLarge()
-        chunks.append(chunk)
-    if not chunks:
-        raise ValueError("slip content empty")
-    return b"".join(chunks), content_type
-
-
 def _expected_amount(package_key: str):
     """ยอดที่คาดว่าจะโอนตามแพ็กเกจ (ไว้ให้เจ้าของเทียบกับสลิป) — OCR จะทับด้วยยอดจริงจากสลิป"""
     for p in PACKAGE_PAYMENTS:
@@ -1182,96 +1089,6 @@ def slip_view_url(slip_id: int) -> str:
     if token:
         url += f"?token={token}"
     return url
-
-
-def _notify_owner_slip(user, purchase, size_bytes: int, content_type: str,
-                      expected: str = None, matched: bool = False) -> None:
-    """แจ้งเจ้าของว่าลูกค้าส่งรูปสลิปมา — ส่งเป็น Flex การ์ด (แตะปุ่มดูสลิปได้ทันทีในแอป LINE
-    ไม่ต้องคัดลอกลิงก์) + ข้อความ /ยืนยัน <userId> สำหรับสั่งยืนยัน"""
-    if "mock" in LINE_ACCESS_TOKEN.lower():
-        return
-    try:
-        uid = user.line_user_id
-        name = user.name or uid
-        pkg = _purchase_package_name(purchase.package_key)
-        if size_bytes < 1024 * 1024:
-            size_txt = f"{max(size_bytes / 1024, 0.1):.0f} KB"
-        else:
-            size_txt = f"{size_bytes / (1024 * 1024):.1f} MB"
-        lines = [f"📸 ลูกค้า {name} ({uid}) ส่งรูปสลิปมาแล้ว ({content_type}, {size_txt})!",
-                 f"แพ็กเกจ: {pkg}"]
-        if purchase.amount:
-            if matched:
-                lines.append(f"💵 ยอดจากสลิป: {purchase.amount} บาท ✓ ตรงกับยอดคาด ({expected})")
-            else:
-                lines.append(f"⚠️ ยอดจากสลิป ({purchase.amount} บาท) ไม่ตรงกับยอดคาด ({expected}) — เช็คให้ดีก่อนยืนยัน")
-        else:
-            lines.append(f"💵 อ่านยอดจากสลิปไม่ได้ (ยอดคาด: {expected}) — ดูจากลิงก์ด้านล่าง")
-        if purchase.ref_no:
-            lines.append(f"🔢 เลขอ้างอิง: {purchase.ref_no}")
-        if purchase.slip_url:
-            lines.append(f"ดูสลิป: {purchase.slip_url}")
-        alt_text = "\n".join(lines)
-        if purchase.slip_url:
-            # การ์ด Flex — ปุ่ม "เปิดดูสลิป" แตะแล้วเปิดในแอป LINE ได้เลย
-            amount_text = purchase.amount or f"อ่านยอดไม่ได้ (ยอดคาด: {expected})"
-            amount_color = "#27ae60" if matched else "#e74c3c"
-            contents = {
-                "type": "bubble",
-                "header": {
-                    "type": "box", "layout": "vertical", "backgroundColor": "#27ae60",
-                    "contents": [
-                        {"type": "text", "text": f"📸 สลิปจาก {name}", "color": "#FFFFFF",
-                         "weight": "bold", "size": "md", "align": "center"},
-                    ],
-                },
-                "body": {
-                    "type": "box", "layout": "vertical", "spacing": "sm",
-                    "contents": [
-                        {"type": "text", "text": f"ลูกค้า: {name}", "size": "sm", "wrap": True},
-                        {"type": "text", "text": f"{uid} · {content_type} · {size_txt}", "size": "xs",
-                         "color": "#888888", "wrap": True},
-                        {"type": "text", "text": f"แพ็กเกจ: {pkg}", "size": "sm", "wrap": True},
-                        {"type": "text", "text": f"ยอดจากสลิป (OCR): {amount_text}", "size": "sm",
-                         "wrap": True, "color": amount_color, "weight": "bold"},
-                    ],
-                },
-                "footer": {
-                    "type": "box", "layout": "vertical",
-                    "contents": [
-                        {"type": "button", "style": "primary", "color": "#27ae60", "height": "sm",
-                         "action": {"type": "uri", "label": "🔍 เปิดดูสลิปเต็มขนาด",
-                                     "uri": purchase.slip_url}},
-                    ],
-                },
-            }
-
-        # ส่งเข้า Telegram Commander ทันที (ฟรี 100% พร้อมลิงก์สลิป)
-        tg_text = (
-            f"🔔 [แจ้งเตือนสลิปโอนเงินใหม่ 🔥]\n"
-            f"━━━━━━━━━━━━━━━━━━\n"
-            f"• 👤 ลูกค้า: {name}\n"
-            f"• 🆔 User ID: {uid}\n"
-            f"• 📦 แพ็กเกจ: {pkg}\n"
-            f"• 💵 ยอดจากสลิป: {amount_text}\n"
-            f"• 🔍 ลิงก์ดูรูปสลิป: {purchase.slip_url or 'ไม่มี'}\n"
-            f"• ✅ คำสั่งยืนยันระบบ: /ยืนยัน {uid}\n"
-            f"━━━━━━━━━━━━━━━━━━"
-        )
-        _send_telegram(tg_text)
-
-        if "mock" not in LINE_ACCESS_TOKEN.lower():
-            if purchase.slip_url:
-                line_bot_api.push_message(ADMIN_LINE_USER_ID, [
-                    FlexSendMessage(alt_text=alt_text, contents=contents),
-                    TextSendMessage(text=f"เช็คยอดแล้วยืนยัน: /ยืนยัน {uid}"),
-                ])
-            else:
-                # ไม่มีลิงก์สลิป (กันไว้) — ข้อความเดิม
-                alt_text += f"\nเช็คยอดแล้วยืนยัน: /ยืนยัน {uid}"
-                line_bot_api.push_message(ADMIN_LINE_USER_ID, TextSendMessage(text=alt_text))
-    except Exception as e:
-        logger.warning(f"owner slip notify failed: {e}")
 
 
 # --- เสิร์ฟรูปสลิป (ลิงก์เปิดดูจากข้อความแจ้งเจ้าของ) — ติดตั้งที่ /api ใน main.py ---
@@ -1307,15 +1124,6 @@ def _queue_number(db, line_user_id: str):
         if p.line_user_id == line_user_id:
             return i + 1
     return None
-
-
-def _append_queue_line(reply, q: int):
-    """แนบเลขคิวท้ายข้อความ (ลูกค้าเพิ่งแตะ 'สนใจแพ็กเกจนี้')"""
-    line = f"🧾 คุณคือคิวที่ {q} — เจ้าของร้านจะเริ่มทำตามลำดับคิวจ๊ะ"
-    msg = reply[0] if isinstance(reply, list) else reply
-    if hasattr(msg, "text"):
-        msg.text = (msg.text or "") + "\n\n" + line
-    return reply
 
 
 def _fmt_bkk(dt) -> str:
@@ -1355,36 +1163,6 @@ CUSTOMER_QUEUE_KWS = (
     "คิวของฉัน", "คิวของหนู", "คิวฉัน", "คิวเท่าไหร่", "คิวที่เท่าไหร่",
     "เช็คคิว", "ดูคิว",
 )
-
-
-def is_customer_queue_request(text: str) -> bool:
-    t = (text or "").strip().lower().replace(" ", "")
-    return any(k in t for k in CUSTOMER_QUEUE_KWS)
-
-
-def customer_queue_text(db, line_user_id: str) -> str:
-    """ลูกค้าเช็คคิว/ระยะเวลาทำของตัวเอง — ไม่มีคำสั่งซื้อ → ชี้ไปถามราคาบอท"""
-    purchase = _get_purchase(db, line_user_id)
-    if not purchase or purchase.status not in PURCHASE_ACTIVE_STATUSES:
-        return ('🧾 ยังไม่มีคำสั่งซื้อในคิวจ๊ะ — '
-                'ถาม "ราคาบอท" แล้วแตะแพ็กเกจที่สนใจได้เลยจ๊ะ 💕')
-    q = _queue_number(db, line_user_id)
-    pkg = _purchase_package_name(purchase.package_key)
-    leadtime = next((p["leadtime"] for p in PACKAGES if p["key"] == purchase.package_key), "")
-    status = {"interested": "สนใจ (ยังไม่จ่าย)", "paid_pending": "โอนแล้ว รอยืนยันยอด"}.get(purchase.status, purchase.status)
-    lines = [f"🧾 คุณคือคิวที่ {q} จ๊ะ"]
-    lines.append(f"📦 แพ็กเกจ: {pkg}")
-    if leadtime:
-        lines.append(f"⏱️ {leadtime}")
-    lines.append(f"สถานะ: {status}")
-    lines.append(f"🕐 รับเรื่องเมื่อ: {_fmt_bkk(purchase.created_at)}")
-    if purchase.paid_at:
-        lines.append(f"💸 โอนเมื่อ: {_fmt_bkk(purchase.paid_at)}")
-    if purchase.confirmed_at:
-        lines.append(f"✅ เริ่มทำเมื่อ: {_fmt_bkk(purchase.confirmed_at)}")
-    lines.append("⏳ ระยะเวลาอาจบวกลบ 1–2 วันตามคิวงานช่วงนั้นนะจ๊ะ")
-    lines.append("เจ้าของร้านจะเริ่มทำตามลำดับคิวนะคะ 😊")
-    return "\n".join(lines)
 
 
 def handle_owner_confirm(raw: str):
@@ -1453,7 +1231,7 @@ WHY_490_KWS = (
 )
 
 BOT_MANUAL_SECTIONS = [
-    (("ค้น", "หา"), "🐟 สนใจปลาสลิดแดดเดียวสุพรรณแท้ ป้าเข็ม มี 3 แพ็กเกจคัดพิเศษ (500g 390.- / 1kg 550.- / 2kg 1,090.- โอนส่งฟรีทุกชุด) พิมพ์ชุดที่ต้องการได้เลยจ้า"),
+    (("ค้น", "หา"), "🙏 ขณะนี้ร้านป้าเข็มยุติการจำหน่ายและปิดรับออเดอร์ทุกรายการแล้ว จึงยังไม่มีสินค้าและราคาให้เสนอในตอนนี้ค่ะ"),
     (("เทียบ", "เปรียบเทียบ"), "⚖️ เทียบสินค้าค่ะ — พิมพ์ \"เทียบ A กับ B\" เช่น \"เทียบกระติก ESKIMO กับ YTL\" ป้าเข็มเทียบ ราคา/ยอดขาย/ขนาด ให้ดูจ๊ะ"),
     (("ขายดี", "อันดับ"), "⭐ \"วันนี้ขายอะไรดี\" = ป้าเข็มแนะนำของดี / 🔥 \"อันดับขายดี\" = เรียงยอดขายสูงสุด — แตะปุ่มด้านล่างได้เลยจ๊ะ"),
     (("จำ",), "🧠 จำไว้จ๊ะ — พิมพ์บอกป้าเข็มได้เลย เช่น ชอบปลาทอดกรอบ หรือชอบเค็มน้อย ป้าเข็มจะคัดปลาสวยๆ ให้จ้า"),
@@ -1504,7 +1282,7 @@ BOT_MANUAL_SECTIONS = [
      "🛡️ การรับประกันความสดและคุณภาพ 100% โดยร้านป้าเข็มจ๊ะ — หากเสียหายจากการขนส่งเคลมส่งชุดใหม่ฟรีทันที "
      "(ป้าเข็มเป็นนายหน้า ช่วยชี้ทางติดต่อร้านค้าเองจ๊ะ)"),
     (("จ่ายปลายทาง", "เก็บปลายทาง", "cod", "ปลายทาง"),
-     "🚚 ทางร้านจัดส่งแบบโอนเงินล่วงหน้า ส่งฟรีถึงหน้าบ้านทุกชุดค่ะ (งดรับเก็บเงินปลายทาง COD ทุกกรณี 100% เพื่อรักษาความสดใหม่ของอาหารแช่แข็งค่ะ)"),
+     "🚚 ร้านยุติการจำหน่ายและปิดรับออเดอร์แล้ว จึงยังไม่มีกำหนดการจัดส่งในตอนนี้ค่ะ ขอบพระคุณที่ให้ความสนใจนะคะ"),
     (("โค้ดจากไหน", "โค้ดอยู่ไหน", "โค้ดหน่อย", "โค้ดของบอท", "โค้ด", "ดาวน์โหลด", "github", "ซอร์ส", "source"),
      "💻 ร้านป้าเข็มเป็นระบบแนะนำสินค้าอัตโนมัติ สำหรับค้นหาและสั่งซื้อสินค้าคัดพิเศษจากร้านป้าเข็มจ้า สนใจสินค้าอะไรพิมพ์บอกป้าได้เลยนะคะ"),
     (("ขอบคุณ", "ขอบใจ"),
@@ -1541,7 +1319,7 @@ BOT_MANUAL_SECTIONS = [
      "↩️ การคืนเงิน/เคลมสินค้า รับประกันความสด 100% จ๊ะ — หากถุงซีลรั่วหรือเสียหายจากการขนส่ง แจ้งเคลมในแชทนี้ได้เลย "
      "→ ขอคืนเงิน/คืนสินค้า (ป้าเข็มเป็นนายหน้า ไม่รับของ/เงินเอง)"),
     (("ค่าส่ง", "ค่าจัดส่ง", "ส่งฟรี", "ขนส่ง"),
-     "📦 โอนเงินล่วงหน้าส่งฟรีทุกชุดทั่วไทยจ๊ะ! (COD +20 บาท เฉพาะชุด 500g และ 1kg) ป้าเข็มไม่คิดเพิ่มจ๊ะ"),
+     "🙏 ขณะนี้ทางร้านยุติการจำหน่ายและปิดรับออเดอร์ทุกรายการแล้วค่ะ จึงยังไม่มีค่าส่งหรือเงื่อนไขการสั่งซื้อให้แจ้งในตอนนี้"),
     (("คูปอง", "โปรโมชั่น", "โปร", "ส่วนลด", "ลดราคา", "มีโปร", "ของลดราคา"),
      "🏷️ โปรโมชันเปลี่ยนได้ตามตัวเลือกแพ็กเกจ — แตะการ์ดเพื่อดูราคาล่าสุดที่หน้าร้าน "
      "หรือถาม \"มีอะไรใหม่\" ได้เลยจ๊ะ"),
@@ -1569,14 +1347,14 @@ BOT_MANUAL_SECTIONS = [
      "💬 ลูกค้าใช้งานค้นหาสินค้ากับร้านป้าเข็มผ่าน LINE ฟรี 100% ไม่มีค่าบริการใดๆ ทั้งสิ้นจ้า 😊"),
     (("เชื่อถือ", "น่าเชื่อ", "ไว้ใจ", "โกง", "มิจฉาชีพ", "หลอกลวง", "เชื่อได้ไหม", "โดนหลอก"),
      "🤝 ร้านป้าเข็มคือร้านจริง ไม่ใช่สแกมจ๊ะ:\n"
-     "• ร้านป้าเข็มจัดส่งสินค้าตรงถึงบ้าน โอนเงินส่งฟรีทุกชุด หรือเลือกเก็บเงินปลายทาง (COD) ได้\n"
+     "• ร้านป้าเข็มยุติการจำหน่ายและปิดรับออเดอร์ทุกรายการแล้ว\n"
      "• ราคามาตรฐานชัดเจนตามแพ็กเกจหน้าร้าน ป้าไม่บวกเพิ่ม\n"
      "• เก็บข้อมูลเฉพาะชื่อ + ข้อความ (90 วัน) ตาม PDPA ลบได้ทุกเมื่อ\n"
      "• ของโชว์ = ลิงก์ที่ตรวจแล้วเท่านั้น (ลิงก์ตาย/ปลอมไม่ขึ้น)\n\n"
      "ลองพิมพ์ชื่อสินค้าที่อยากได้ แล้วดูรีวิว/ยอดขายจริงได้เลยจ๊ะ 😊"),
     (("บวกเพิ่ม", "บวกเงิน", "บวกราคา", "เท่ากับแอป", "ราคาเดียวกัน", "ขึ้นราคา", "คิดเงิน"),
      "💰 ป้าเข็มแสดงราคาโปร่งใสตามแพ็กเกจหน้าร้านและไม่บวกเพิ่มจ๊ะ\n"
-     "โอนเงินล่วงหน้าส่งฟรีทุกชุดทั่วไทย (500g 390.- / 1kg 550.- / 2kg 1,090.-)\n"
+     "ขอบพระคุณลูกค้าทุกท่านที่ให้การสนับสนุนด้วยดีตลอดมาค่ะ\n"
      "สั่งซื้อผ่านแชทนี้หรือหน้าเว็บของร้านโดยตรงได้เลยจ๊ะ"),
     (BUILD_TIME_KWS, "⏱️ บอทป้าเข็มพร้อมบริการค้นหาสินค้าและตอบคำถามตลอด 24 ชั่วโมงแบบเรียลไทม์จ้า ไม่ต้องรอคิวเลยนะคะ 😊"),
     (PACKAGE_KWS, "🛍️ ร้านป้าเข็มเป็นร้านจำหน่ายสินค้าคัดพิเศษโดยตรงจ้า ไม่มีจำหน่ายระบบบอทแล้วนะคะ อยากได้สินค้าตัวไหนบอกป้าได้เลยจ๊ะ 💕"),
@@ -1637,11 +1415,6 @@ def _wants_code_buttons(text: str) -> bool:
     t = (text or "").strip().lower().replace(" ", "")
     return any(k in t for k in INSTALL_KWS) or \
         any(k in t for k in ("โค้ด", "github", "ดาวน์โหลด", "ซอร์ส", "source"))
-
-
-def _github_button_card():
-    """การ์ดแพ็กเกจ (รายเดือน 4 ระดับ + ขายขาด — เดิมเป็นการ์ดโค้ด GitHub)"""
-    return package_flex_card()
 
 
 # ข้อมูลแพ็กเกจ 5 ทางเลือก สำหรับการ์ด LINE Flex (สีแยกชัด: เหลือง/เขียว/น้ำเงิน/ม่วง/แดง)
@@ -1761,11 +1534,6 @@ def package_summary_text() -> str:
         "และแนะนำโปรโมชั่นพิเศษจากหน้าร้านป้าเข็มโดยตรงฟรี 100% จ้า\n\n"
         "พิมพ์ชื่อสินค้าที่กำลังมองหา หรือแตะปุ่มด้านล่างได้เลยนะจ๊ะ 😊"
     )
-
-
-def package_summary_quick_reply() -> QuickReply:
-    """ปุ่มลัดนำทางกลับสู่การช้อปปิ้ง"""
-    return quick_reply_items()
 
 
 # หัวข้อที่ตอบละเอียดเฉพาะเจ้าของร้าน/คนอยากเปิดร้านเอง — ลูกค้าทั่วไปถาม → ตอบสั้นชี้ทางแทน
@@ -3052,7 +2820,7 @@ CANCEL_CONFIRM = "รับทราบจ๊ะ กลับมาเมนู�
 # ป้าเข็มตอบเรื่องร้าน/สั่งซื้อเอง (นายหน้า ไม่มีข้อมูลสั่งซื้อ/พัสดุของลูกค้า)
 STORE_QUESTION_SELF_SERVICE = (
     "🤗 เรื่องร้าน/สั่งซื้อป้าเข็มช่วยตอบได้จ๊ะ:\n\n"
-    "• ราคาโปร่งใสตามแพ็กเกจหน้าร้าน (500g 390.- / 1kg 550.- / 2kg 1,090.- โอนส่งฟรีทุกชุด)\n"
+    "• ร้านยุติการจำหน่ายแล้ว — ไม่มีราคาและแพ็กเกจให้เสนอในขณะนี้\n"
     "• สั่งซื้อ/จ่ายเงิน/แจ้งสลิป → พิมพ์ชื่อ-ที่อยู่-เบอร์โทร หรือส่งรูปสลิปในแชทนี้ได้เลยค่ะ\n"
     "• ติดตามพัสดุ/เลขสั่งซื้อ → พิมพ์รหัส PKF-xxxx หรือเบอร์โทร 10 หลักในแชทได้เลยค่ะ\n\n"
     "ถ้าอยากให้ป้าช่วยหาสินค้า พิมพ์ชื่อของมาได้เลยนะคะ 😊"
@@ -3327,12 +3095,7 @@ def message_text(event):
     ])
 
     if is_purchase_inquiry(normalized_text) or any(k in normalized_text.lower() for k in ("ปลา", "ปลาสลิด", "กี่โล", "ราคา", "สั่งซื้อ")):
-        _CLOSED_NOTICE = (
-            "🙏 สวัสดีค่ะ ขอขอบพระคุณที่แวะมาสอบถามร้านป้าเข็มนะคะ 💕\n\n"
-            "ขณะนี้ทางร้านได้ \"ยุติการจำหน่ายและเลิกขายปลาสลิดทุกรายการเรียบร้อยแล้วค่ะ\" "
-            "(ไม่มีสินค้าจำหน่าย และปิดรับออเดอร์ทุกช่องทางแล้วนะคะ)\n\n"
-            "แต่คุณพี่ยังสามารถแวะมาพูดคุยทักทาย หรือพิมพ์ชื่อจังหวัดเพื่อค้นหาโรงพยาบาลคน & สัตว์ ทั่วไทย (77 จังหวัด) ได้เสมอนะคะ 😊💐"
-        )
+        _CLOSED_NOTICE = closed_notice()
         try:
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=_CLOSED_NOTICE, quick_reply=line_quick_reply))
         except Exception as e:
@@ -3697,91 +3460,6 @@ def sticker_text(event):
 
 
 @handler.add(MessageEvent, message=ImageMessage)
-def image_slip(event):
-    """ลูกค้าส่งรูปภาพ -> ใช้ AI Vision ตรวจสอบว่าเป็นสลิปโอนเงินจริงหรือไม่ ก่อนอัปโหลดและแจ้งเตือน"""
-    line_user_id = event.source.user_id
-    message_id = event.message.id
-    slip_url = None
-    vision = {"is_slip": False, "category": "other", "amount": None, "bank": None, "ref_no": None, "description": "รูปภาพทั่วไป"}
-
-    try:
-        if "mock" not in LINE_ACCESS_TOKEN.lower():
-            content_resp = line_bot_api.get_message_content(message_id)
-            img_bytes = content_resp.content
-            vision = verify_and_extract_slip(img_bytes, "image/jpeg")
-
-            if vision.get("is_slip"):
-                supa_url = settings.SUPABASE_URL or "https://usqhvujqmnxqrdoovvnp.supabase.co"
-                supa_key = (
-                    settings.SUPABASE_SECRET_KEY
-                    or settings.SUPABASE_PUBLISHABLE_KEY
-                    or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzcWh2dWpxbW54cXJkb292dm5wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyOTc4NjAsImV4cCI6MjA2OTg3Mzg2MH0.3kCGGAe1OoSJ_SCN_NDSdnKep1hXIMgMxR1lBd_i2eI"
-                )
-                upload_target = f"{supa_url}/storage/v1/object/slips/line_{message_id}.jpg"
-                resp = httpx.post(
-                    upload_target,
-                    headers={
-                        "apikey": supa_key,
-                        "Authorization": f"Bearer {supa_key}",
-                        "Content-Type": "image/jpeg",
-                    },
-                    content=img_bytes,
-                    timeout=15.0,
-                )
-                if resp.status_code in (200, 201):
-                    slip_url = f"{supa_url}/storage/v1/object/public/slips/line_{message_id}.jpg"
-    except Exception as e:
-        logger.error(f"Image slip verification/upload error: {e}")
-
-    if not vision.get("is_slip"):
-        desc = vision.get("description") or "รูปภาพทั่วไป"
-        _send_telegram(
-            f"📸 [ลูกค้าส่งรูปภาพทั่วไปใน LINE OA — ไม่ใช่สลิปโอนเงิน]\n"
-            f"━━━━━━━━━━━━━━━━━━\n"
-            f"• 🆔 LINE UID: {line_user_id}\n"
-            f"• 🔍 AI ตรวจพบเป็น: {desc} (หมวด: {vision.get('category') or 'other'})\n"
-            f"• ⏰ เวลา: {_fmt_bkk(datetime.datetime.utcnow())} น.\n"
-            f"━━━━━━━━━━━━━━━━━━"
-        )
-        reply = TextSendMessage(
-            text=f"📸 แอดมินได้รับรูปภาพของคุณลูกค้าแล้วค่ะ\n"
-                 f"(🔍 ระบบ AI ตรวจพบว่าเป็น: {desc} — ไม่ใช่สลิปโอนเงินธนาคารนะคะ 😊)\n\n"
-                 f"• หากต้องการสั่งซื้อปลาสลิดแดดเดียว หรือสอบถามข้อมูล พิมพ์แจ้งในแชทนี้ได้เลยค่ะ\n"
-                 f"• หากต้องการแจ้งโอนเงิน กรุณาโอนเข้า ธ.กรุงไทย 038-0-25363-1 (นายจีรวัฒน์ พลอาจ) แล้วส่งภาพ 'สลิปโอนเงินที่มีรายการโอนสำเร็จและยอดเงินชัดเจน' เข้ามาอีกครั้งนะคะ 🙏💕",
-            quick_reply=quick_reply_items()
-        )
-        _send_reply(event.reply_token, reply, label="image_non_slip")
-        return
-
-    amt_txt = f"{vision['amount']} บาท" if vision.get("amount") else "ไม่ระบุ"
-    bank_txt = f" ({vision['bank']})" if vision.get("bank") else ""
-    ref_txt = f"• 🔢 เลขอ้างอิง: {vision['ref_no']}\n" if vision.get("ref_no") else ""
-    admin_msg = (
-        f"🧾 [ยืนยันสลิปโอนเงินจริงจาก LINE OA ✅] 🐟\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"• 🆔 LINE UID: {line_user_id}\n"
-        f"• 💵 ยอดในสลิป (AI OCR): {amt_txt}{bank_txt}\n"
-        f"{ref_txt}"
-        f"• ⏰ เวลา: {_fmt_bkk(datetime.datetime.utcnow())} น.\n"
-    )
-    if slip_url:
-        admin_msg += f"• 🖼️ ดูรูปสลิป: {slip_url}\n"
-    admin_msg += (
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"👉 ตรวจสอบในระบบหลังบ้าน: https://watt29.github.io/pakhem-shop/admin.html"
-    )
-    _send_telegram(admin_msg)
-
-    reply = TextSendMessage(
-        text=f"✅ ป้าเข็มตรวจสอบสลิปโอนเงินจริงเรียบร้อยแล้วจ้า! 🙏💕\n"
-             f"• 💵 ยอดเงินที่ตรวจพบ: {amt_txt}{bank_txt}\n"
-             f"{ref_txt}\n"
-             f"แอดมินกำลังจัดเตรียมปลาสดใหม่ซีลสูญญากาศส่งให้ทันทีนะคะ 🥰",
-        quick_reply=quick_reply_items()
-    )
-    _send_reply(event.reply_token, reply, label="image_slip")
-
-
 @handler.add(FollowEvent)
 def follow_event(event):
     """ข้อความต้อนรับแรก (สากล): เมื่อลูกค้าแอดเพื่อน -> ส่งทักทาย + ปุ่มให้แตะทันที
