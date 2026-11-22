@@ -249,7 +249,7 @@ MAIN_SHOP_URL = "https://watt29.github.io/pakhem-shop/"
 # Anti-duplicate: เก็บ timestamp ล่าสุดที่ Inbox Poller ส่งข้อความให้แต่ละ sender
 # ถ้า webhook ตอบไปแล้ว หรือ poller ตอบไปภายใน 5 นาที → ข้ามไม่ส่งซ้ำ
 _INBOX_SENDER_COOLDOWN: dict[str, float] = {}
-_INBOX_COOLDOWN_SECS = 300  # 5 นาที
+_INBOX_COOLDOWN_SECS = 5  # 5 วินาที (คุยโต้ตอบต่อเนื่องได้ มี replied_history[mid] กันตอบซ้ำอยู่แล้ว)
 
 
 
@@ -5283,7 +5283,7 @@ def scan_and_reply_inbox_messages(limit_threads: int = 10) -> int:
 
 
 
-                    if age_sec < 20:
+                    if age_sec < 3:
 
 
 
@@ -6967,7 +6967,7 @@ if __name__ == "__main__":
 
 
 
-                run_comment_responder_loop(interval_seconds=30)
+                run_comment_responder_loop(interval_seconds=15)
 
 
 
@@ -6983,7 +6983,7 @@ if __name__ == "__main__":
 
 
 
-            run_comment_responder_loop(interval_seconds=30)
+            run_comment_responder_loop(interval_seconds=15)
 
 
 
