@@ -108,16 +108,26 @@ _NOMINATIM_CACHE: Dict[str, Tuple[float, List[Dict[str, str]]]] = {}
 _CACHE_TTL_SECS = 3600
 
 
+_SHORT_FOOD = ("กิน", "ข้าว", "อาหาร")
+_SHORT_HOTEL = ("นอน", "พัก", "ห้อง")
+_SHORT_TRAVEL = ("เที่ยว", "วัด")
+
+
+def _match_short_trigger(t: str, words: Tuple[str, ...]) -> bool:
+    s = (t or "").strip().lower()
+    return any(s == w or s.startswith(w + " ") or s.endswith(" " + w) or f" {w} " in s for w in words)
+
+
 def detect_place_category(text: str) -> Optional[str]:
     """คืนค่า 'hotel' | 'restaurant' | 'attraction' | None"""
     t = (text or "").strip().lower()
     if not t:
         return None
-    if any(k in t for k in HOTEL_TRIGGERS):
+    if any(k in t for k in HOTEL_TRIGGERS) or _match_short_trigger(t, _SHORT_HOTEL):
         return "hotel"
-    if any(k in t for k in RESTAURANT_TRIGGERS):
+    if any(k in t for k in RESTAURANT_TRIGGERS) or _match_short_trigger(t, _SHORT_FOOD):
         return "restaurant"
-    if any(k in t for k in ATTRACTION_TRIGGERS):
+    if any(k in t for k in ATTRACTION_TRIGGERS) or _match_short_trigger(t, _SHORT_TRAVEL):
         return "attraction"
     return None
 
