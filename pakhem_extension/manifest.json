@@ -1,24 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "🐟 ป้าเข็ม — ผู้ช่วยปิดการขายในแชท & เปิดบิลรับออเดอร์",
-  "version": "8.7",
-  "description": "ผู้ช่วยปิดการขายในแชท Messenger / Inbox + กดเชิญคนถูกใจโพสต์ให้ติดตามเพจ 1-คลิก + ดึงชื่อ-ที่อยู่-เบอร์โทร + บันทึกออเดอร์เข้าฐานข้อมูล/Telegram",
+  "name": "🐟 ป้าเข็ม — (ปิดใช้งานแล้ว / DISABLED)",
+  "version": "8.8",
+  "description": "ส่วนขยายนี้ถูกปิดการใช้งานถาวร: ร้านป้าเข็มยุติการจำหน่ายแล้ว ไม่มีการโพสต์ขาย/เปิดบิล/ตอบแชทอัตโนมัติจากเบราว์เซอร์อีก",
   "permissions": [
-    "tabs",
-    "activeTab",
-    "storage",
-    "clipboardWrite"
+    "storage"
   ],
-  "host_permissions": [
-    "https://*.facebook.com/*",
-    "https://*.messenger.com/*",
-    "https://usqhvujqmnxqrdoovvnp.supabase.co/*",
-    "https://script.google.com/*",
-    "https://script.googleusercontent.com/*"
-  ],
-  "background": {
-    "service_worker": "service-worker.js"
-  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -31,24 +18,5 @@
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  },
-  "commands": {
-    "_execute_action": {
-      "suggested_key": {
-        "default": "Ctrl+Shift+P",
-        "mac": "Command+Shift+P"
-      },
-      "description": "เปิดแผงผู้ช่วยปิดการขายในแชท & เปิดบิลรับออเดอร์ ป้าเข็ม"
-    }
-  },
-  "content_scripts": [
-    {
-      "matches": [
-        "https://*.facebook.com/*",
-        "https://*.messenger.com/*"
-      ],
-      "js": ["content.js"],
-      "run_at": "document_idle"
-    }
-  ]
+  }
 }
