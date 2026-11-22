@@ -21,7 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger("TunnelWatchdog")
 
 LINE_TOKEN = "4FYHfbu8+iE7CaOo+lCEG6pBZuxiOIPXlgKQ3tQSQIxZZOpX63qY/Xp8W+1GGftkB9VXpmb88HtHVmr8BAv5qKmDYgNnaVi322Jj9Bc2g6o3ePUa/R5mX8a+u8HyE7c8g8hLAi20pgHIrnYTV9u9MgdB04t89/1O/w1cDnyilFU="
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or "8648538339:AAGDjwjHlrYRj-g3XrqZ_nAxfJV0S-d3yfk"
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or "8939151149:AAGrVkCv0xZrlvtRPO8mzelOYsp5ah5M13U"
 TELEGRAM_CHAT_ID = "6734965582"
 URL_CACHE_FILE = "/tmp/tunnel_url.txt"
 CHECK_INTERVAL = 15  # วินาที
@@ -61,9 +61,17 @@ def update_line_webhook(url):
         return False
 
 
+_last_tunnel_alert_ts: float = 0.0
+
+
 def notify_telegram(msg):
-    """แจ้งเตือน Telegram"""
+    """แจ้งเตือน Telegram (มี Cooldown 5 นาที ป้องกันการส่งซ้ำกรณีเน็ตหลุดต่อใหม่รัวๆ)"""
+    global _last_tunnel_alert_ts
     if not TELEGRAM_BOT_TOKEN or "mock" in TELEGRAM_BOT_TOKEN.lower():
+        return
+    now = time.time()
+    if (now - _last_tunnel_alert_ts) < 300:
+        logger.info("[ANTI-SPAM] Throttled tunnel alert (cooldown 5 mins)")
         return
     try:
         payload = json.dumps({
@@ -77,6 +85,7 @@ def notify_telegram(msg):
             headers={"Content-Type": "application/json"}
         )
         urllib.request.urlopen(req, timeout=5)
+        _last_tunnel_alert_ts = now
     except Exception:
         pass
 

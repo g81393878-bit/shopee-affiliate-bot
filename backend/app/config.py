@@ -3,8 +3,14 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
+# CRITICAL: When running under pytest (PYTEST_RUNNING=1 or temp sqlite DATABASE_URL),
+# do NOT override test environment variables with production .env values!
 env_path = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(dotenv_path=env_path, override=True)
+_is_pytest = bool(os.environ.get("PYTEST_RUNNING") or "pytest" in os.environ.get("_", "").lower())
+_pre_db = os.environ.get("DATABASE_URL", "")
+load_dotenv(dotenv_path=env_path, override=not _is_pytest)
+if _pre_db.startswith("sqlite:///"):
+    os.environ["DATABASE_URL"] = _pre_db
 
 class Settings:
     PORT: int = int(os.getenv("PORT", 8000))
@@ -60,7 +66,7 @@ class Settings:
     # =========================================================================
     # White-Label & Commercial Branding (ปรับแต่งแบรนด์สำหรับขายต่อ)
     # =========================================================================
-    BOT_NAME: str = os.getenv("BOT_NAME", "ป้าเข็ม ขายของ")
+    BOT_NAME: str = os.getenv("BOT_NAME", "ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้")
     BRAND_SLOGAN: str = os.getenv("BRAND_SLOGAN", "คัดของดี ของเด็ด Shopee แท้ 100% • รีวิวแน่น")
     TTS_VOICE: str = os.getenv("TTS_VOICE", "th-TH-PremwadeeNeural")  # th-TH-PremwadeeNeural (หญิง) / th-TH-NiwatNeural (ชาย)
     BRAND_COLOR: str = os.getenv("BRAND_COLOR", "#EE4D2D")  # โทนสีแบรนด์ (Default: สีส้ม Shopee)
@@ -68,4 +74,3 @@ class Settings:
     ADMIN_DASHBOARD_PASSWORD: str = os.getenv("ADMIN_DASHBOARD_PASSWORD", "")
 
 settings = Settings()
-

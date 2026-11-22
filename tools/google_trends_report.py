@@ -93,7 +93,11 @@ def rank_topics(rows, history=(), now=None):
         category = next((group for group, words in GROUPS.items() if any(w in title.casefold() for w in words)), "ต้องตรวจหมวด")
         traffic = traffic_number(row.get("traffic", ""))
         try:
-            published = parsedate_to_datetime(row.get("published_at", ""))
+            value = row.get("published_at", "")
+            try:
+                published = parsedate_to_datetime(value)
+            except (ValueError, TypeError):
+                published = datetime.fromisoformat(value.replace('Z', '+00:00'))
             age = (now - published).total_seconds() / 3600 if published.tzinfo else None
         except (ValueError, TypeError, OverflowError):
             age = None

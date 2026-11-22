@@ -38,6 +38,8 @@ class ProductBase(BaseModel):
     sales_count: Optional[int] = Field(default=0)
     commission: Optional[Decimal] = Field(default=Decimal("0.00"))
     affiliate_url: Optional[str] = Field(None)
+    image_url: Optional[str] = Field(None)
+    link_status: Optional[str] = Field("ok")
 
 class ProductCreate(ProductBase):
     pass

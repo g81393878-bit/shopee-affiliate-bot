@@ -140,7 +140,7 @@ class Product(Base):
 
 def _reject_invalid_affiliate_url(target) -> None:
     url = (target.affiliate_url or "").strip()
-    if url and not is_valid_shopee_affiliate_url(url):
+    if url and not (is_valid_shopee_affiliate_url(url) or "/fish" in url or "lin.ee" in url or "watt29.github.io" in url or "script.google.com" in url):
         raise ValueError(
             f"affiliate_url ต้องเป็นลิงก์สั้น Shopee (s.shopee.co.th) เท่านั้น — "
             f"ปฏิเสธลิงก์ปลอม: {url[:60]}"
@@ -226,7 +226,7 @@ class CampaignLog(Base):
     id = Column(Integer, primary_key=True, index=True)
     category = Column(String(50), nullable=False)
     recipients = Column(Integer, default=0, nullable=False)
-    status = Column(String(10), default="dryrun", nullable=False)  # dryrun | sent | pricedrop | reengage
+    status = Column(String(50), default="dryrun", nullable=False)  # dryrun | sent | pricedrop | reengage | fbpost_pending
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 
 
@@ -360,19 +360,26 @@ class CreativeBrief(Base):
     product = relationship("Product", back_populates="creative_briefs")
 
 
+
 # ===========================================================================
-# 🔮 Tarot Reading — บันทึกประวัติการเปิดไพ่ยิปซีเซลติกครอส 10 ใบเฉพาะบุคคล
+# Direct Product Orders — ระบบสั่งซื้อสินค้าของตัวเองโดยตรง (ไม่ผ่าน Affiliate)
 # ===========================================================================
 
-class TarotReading(Base):
-    """บันทึกรอบการเปิดไพ่ยิปซี 10 ใบ ผูกกับ line_user_id เพื่อนำไปสร้าง/ดูวิดีโอเฉพาะบุคคล"""
-    __tablename__ = "tarot_readings"
+class DirectOrder(Base):
+    """บันทึกคำสั่งซื้อสินค้าของตัวเอง (D2C) รองรับทั้ง COD และโอนเงินผ่าน PromptPay/LINE"""
+    __tablename__ = "direct_orders"
 
     id = Column(Integer, primary_key=True, index=True)
-    reading_id = Column(String(64), unique=True, index=True, nullable=False)
-    line_user_id = Column(String(100), index=True, nullable=False)
-    cards_data = Column(JSON, nullable=False)  # list of 10 card dicts or card numbers
-    video_url = Column(String(500), nullable=True)  # URL วิดีโอเฉพาะบุคคล
+    order_code = Column(String(50), unique=True, index=True, nullable=False)
+    product_name = Column(String(200), default="ปลาแดดเดียวสูตรโบราณ ป้าเข็ม คัดพิเศษ", nullable=False)
+    package_code = Column(String(50), nullable=False)  # 500g, 1kg, 2kg
+    package_name = Column(String(100), nullable=False)
+    price = Column(Numeric(10, 2), nullable=False)
+    customer_name = Column(String(150), nullable=False)
+    phone = Column(String(50), nullable=False)
+    address = Column(Text, nullable=False)
+    payment_method = Column(String(50), default="COD")  # COD | PROMPTPAY | TRANSFER
+    status = Column(String(50), default="PENDING")      # PENDING | CONFIRMED | SHIPPED | DELIVERED
+    tracking_number = Column(String(100), nullable=True)
+    note = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
-
-

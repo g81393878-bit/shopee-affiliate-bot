@@ -2252,6 +2252,16 @@ def _handle_event(event: dict, page_id: str = "") -> None:
 
     now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
+    # 0.1 ตรวจจับคำถามค้นหาสถานพยาบาล (แยกแยะคนและสัตว์ชัดเจน 100% ข้ามโหมดปิดร้าน)
+    try:
+        from app.services.hospital_directory_service import is_any_hospital_query, format_hospital_directory_reply
+        if is_any_hospital_query(text):
+            hosp_reply = format_hospital_directory_reply(text, max_results=5)
+            _reply_to_facebook(sender, hosp_reply, None, page_id=page_id)
+            return
+    except Exception as e:
+        logger.error(f"[facebook] error in hospital directory lookup: {e}")
+
     # 0. ยุติการจำหน่ายและปิดรับออเดอร์ (Ceased Sales Guard)
     _CLOSED_NOTICE = (
         "🙏 สวัสดีค่ะ ขอขอบพระคุณที่ให้ความสนใจร้านป้าเข็มนะคะ\n\n"

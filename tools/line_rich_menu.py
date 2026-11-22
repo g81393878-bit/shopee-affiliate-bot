@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ตั้ง Rich Menu 6 ช่องพรีเมียม (Full Grid 2500x1686) ให้บอท LINE — ป้าเข็ม ขายของ
+ตั้ง Rich Menu 6 ช่องพรีเมียม (Full Grid 2500x1686) ให้บอท LINE — ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้
 =============================================================================
 โครงสร้าง 6 ช่อง (2 แถว x 3 คอลัมน์) โทนอาหารไทยพรีเมียม ส้มทอง-แดง-ขาว:
   [ แถวบน - ปิดการขาย ]
@@ -138,58 +138,60 @@ def draw_rich_menu(output_path: str):
     infographic_path = WEB_DIR / "vacuum_seal_infographic.png"
 
     CARDS = [
-        # --- แถวบน (Row 0) ---
+        # --- แถวบน (Row 0) : เลือกสั่ง 3 แพ็กเกจชัดเจน ไม่สับสน ---
         {
             "col": 0, "row": 0,
-            "badge": "⭐ สุพรรณบุรีแท้ ไซส์จัมโบ้",
-            "title": "ปลาสลิด 6 ตัวโล",
-            "sub": "เริ่ม 390.- ส่งด่วนเจลเย็นฟรี!",
-            "cta": "ดูแพ็กเกจ & สั่งซื้อ  ›",
+            "badge": "• ชุดที่ 1 : ประมาณ 3–4 ตัว •",
+            "title": "ชุด 500 กรัม",
+            "sub": "โอน 390.- ส่งฟรี!",
+            "cta": "สั่งชุด 500 กรัม  ›",
             "c_start": (245, 158, 11, 255),  # Golden Amber
             "c_end": (180, 83, 9, 255),      # Deep Burnt Gold
-            "type": "image_thumb",
-            "img_path": fried_fish_path,
-            "border_color": (254, 240, 138, 255)  # Gold ring
+            "type": "deal_badge",
+            "price": "390.-",
+            "deal_sub": "โอนส่งฟรี!"
         },
         {
             "col": 1, "row": 0,
-            "badge": "🏆 ขายดีอันดับ 1 (คุ้มสุด)",
-            "title": "ชุดยอดฮิต 1 กก.",
-            "sub": "เพียง 550.- (🔥 จัดส่งฟรี)",
-            "cta": "รับชุด 1 กก. ทันที  ›",
+            "badge": "• ชุดที่ 2 : ขายดี (5–7 ตัว) •",
+            "title": "ชุด 1 กิโลกรัม",
+            "sub": "โอน 550.- ส่งฟรี!",
+            "cta": "สั่งชุด 1 กิโลกรัม  ›",
             "c_start": (239, 68, 68, 255),   # Bright Ruby Crimson
             "c_end": (185, 28, 28, 255),     # Deep Wine Red
             "type": "deal_badge",
             "price": "550.-",
-            "deal_sub": "🔥 ส่งฟรีทั่วไทย"
+            "deal_sub": "โอนส่งฟรี!"
         },
         {
             "col": 2, "row": 0,
-            "badge": "🌐 สั่งผ่านเว็บ 24 ชม.",
-            "title": "หน้าร้านออนไลน์",
-            "sub": "เลือกดูสินค้า & สั่งซื้อ (COD/โอน)",
-            "cta": "แตะเปิดหน้าร้าน  ›",
+            "badge": "• ชุดที่ 3 : สุดคุ้ม (10–14 ตัว) •",
+            "title": "ชุด 2 กิโลกรัม",
+            "sub": "โอน 1,090.- ส่งฟรีรถห้องเย็น!",
+            "cta": "สั่งชุด 2 กิโลกรัม  ›",
             "c_start": (249, 115, 22, 255),  # Vibrant Sunset Orange
             "c_end": (194, 65, 12, 255),     # Deep Rust Amber
-            "type": "shop_icon"
+            "type": "deal_badge",
+            "price": "1,090.-",
+            "deal_sub": "ส่งฟรีรถเย็น!"
         },
 
-        # --- แถวล่าง (Row 1) ---
+        # --- แถวล่าง (Row 1) : การจัดส่ง • วิธีเก็บ • เช็คพัสดุ ---
         {
             "col": 0, "row": 1,
-            "badge": "🚚 ส่งรถเย็น / รถด่วน",
-            "title": "เช็คสถานะพัสดุ",
-            "sub": "พิมพ์เลขหรือเบอร์โทรเช็คสด",
-            "cta": "ตรวจเลขพัสดุ  ›",
+            "badge": "1–2 วันซองฟอยล์ | 3–4 วันรถห้องเย็น",
+            "title": "เงื่อนไขการจัดส่ง",
+            "sub": "1–2 วันรับ COD • 3–4 วันโอนส่งรถเย็น",
+            "cta": "ดูเงื่อนไขการส่ง  ›",
             "c_start": (79, 70, 229, 255),   # Royal Indigo
             "c_end": (55, 48, 163, 255),     # Deep Navy Indigo
             "type": "track_icon"
         },
         {
             "col": 1, "row": 1,
-            "badge": "🇯🇵 ถุง PA/PE ไร้สาร BPA",
+            "badge": "ซีลสูญญากาศ • แช่แข็ง ≤-18°C",
             "title": "วิธีเก็บรักษา",
-            "sub": "ซีลสุญญากาศ ตุนฟรีซ 6-12 ด.",
+            "sub": "เก็บช่องฟรีซนาน 6–12 เดือน",
             "cta": "ดูวิธีเก็บ & ทอด  ›",
             "c_start": (13, 148, 136, 255),  # Deep Teal / Emerald
             "c_end": (15, 118, 110, 255),    # Dark Sea Green
@@ -199,10 +201,10 @@ def draw_rich_menu(output_path: str):
         },
         {
             "col": 2, "row": 1,
-            "badge": "👵 ตอบไว ตลอด 24 ชม.",
-            "title": "คุยกับป้าเข็ม",
-            "sub": "สอบถาม สั่งซื้อ หรือปรึกษา",
-            "cta": "แชทถามป้าเข็ม  ›",
+            "badge": "ตรวจเลขพัสดุ • เลขบัญชีร้าน",
+            "title": "เช็คพัสดุ • เลขบัญชี",
+            "sub": "เช็คสถานะส่ง หรือดูเลขบัญชีโอนเงิน",
+            "cta": "เช็คพัสดุ / เลขบัญชี  ›",
             "c_start": (168, 85, 247, 255),  # Vivid Purple
             "c_end": (126, 34, 206, 255),    # Deep Royal Plum
             "type": "image_thumb",
@@ -236,12 +238,12 @@ def draw_rich_menu(output_path: str):
         cx = x0 + cw // 2
 
         # 1. Badge ด้านบน
-        badge_w, badge_h = 440, 62
+        badge_w, badge_h = 560, 62
         bx0 = cx - badge_w // 2
         by0 = y0 + 36
         d.rounded_rectangle([bx0, by0, bx0 + badge_w, by0 + badge_h],
                             radius=31, fill=(0, 0, 0, 95), outline=(255, 255, 255, 80), width=2)
-        f_badge = load_font(33, "medium")
+        f_badge = load_font(30, "medium")
         bb = d.textbbox((0, 0), item["badge"], font=f_badge)
         d.text((cx - (bb[2] - bb[0]) / 2, by0 + (badge_h - (bb[3] - bb[1])) / 2 - bb[1] - 2),
                item["badge"], fill="#FFFFFF", font=f_badge)
@@ -256,45 +258,47 @@ def draw_rich_menu(output_path: str):
             img.paste(thumb, (cx - 115, icon_cy - 115), thumb)
 
         elif item["type"] == "deal_badge":
-            # ตราโปรโมชั่น 290.- ส่งฟรี
+            # ตราโปรโมชั่น
             circle_r = 115
             d.ellipse([cx - circle_r, icon_cy - circle_r, cx + circle_r, icon_cy + circle_r],
                       fill=(255, 255, 255, 45), outline=(254, 240, 138, 255), width=7)
             d.ellipse([cx - circle_r + 10, icon_cy - circle_r + 10, cx + circle_r - 10, icon_cy + circle_r - 10],
-                      fill=(220, 38, 38, 240))
-            f_price = load_font(72, "bold")
+                      fill=item["c_end"])
+            p_size = 56 if len(item["price"]) > 5 else 72
+            f_price = load_font(p_size, "bold")
             bb = d.textbbox((0, 0), item["price"], font=f_price)
-            d.text((cx - (bb[2] - bb[0]) / 2, icon_cy - 48 - bb[1]), item["price"], fill="#FEF08A", font=f_price)
+            d.text((cx - (bb[2] - bb[0]) / 2, icon_cy - 44 - bb[1]), item["price"], fill="#FEF08A", font=f_price)
 
-            f_deal = load_font(32, "bold")
+            f_deal = load_font(30, "bold")
             bb = d.textbbox((0, 0), item["deal_sub"], font=f_deal)
             d.text((cx - (bb[2] - bb[0]) / 2, icon_cy + 30 - bb[1]), item["deal_sub"], fill="#FFFFFF", font=f_deal)
 
         elif item["type"] == "shop_icon":
             # ไอคอนหน้าร้าน / ตะกร้าช้อปปิ้งพรีเมียม
-            d.ellipse([cx - 100, icon_cy - 100, cx + 100, icon_cy + 100],
-                      fill=(255, 255, 255, 40), outline=(255, 255, 255, 140), width=5)
-            # ถุงช้อปปิ้ง
-            d.arc([cx - 26, icon_cy - 55, cx + 26, icon_cy - 10], start=180, end=0, fill="#FFFFFF", width=8)
-            d.rounded_rectangle([cx - 48, icon_cy - 16, cx + 48, icon_cy + 52], radius=14, fill="#FFFFFF")
-            d.arc([cx - 22, icon_cy + 6, cx + 22, icon_cy + 30], start=0, end=180, fill=item["c_end"], width=7)
-            d.ellipse([cx + 28, icon_cy - 30, cx + 38, icon_cy - 20], fill="#FFFFFF")
+            d.ellipse([cx - 108, icon_cy - 108, cx + 108, icon_cy + 108],
+                      fill=(154, 52, 18, 245), outline=(254, 215, 170, 255), width=6)
+            # หูหิ้วถุงช้อปปิ้ง
+            d.arc([cx - 28, icon_cy - 66, cx + 28, icon_cy - 12], start=180, end=0, fill="#FFFFFF", width=9)
+            # ตัวถุงช้อปปิ้ง
+            d.rounded_rectangle([cx - 52, icon_cy - 22, cx + 52, icon_cy + 56], radius=14, fill="#FFFFFF")
+            # รอยยิ้มบนถุง
+            d.arc([cx - 24, icon_cy + 4, cx + 24, icon_cy + 34], start=0, end=180, fill=(194, 65, 12, 255), width=8)
 
         elif item["type"] == "track_icon":
-            # ไอคอนรถส่งของด่วน / พัสดุ
-            d.ellipse([cx - 100, icon_cy - 100, cx + 100, icon_cy + 100],
-                      fill=(255, 255, 255, 40), outline=(255, 255, 255, 140), width=5)
-            # รถตู้ส่งของ (Delivery Van)
-            d.rounded_rectangle([cx - 55, icon_cy - 28, cx + 15, icon_cy + 32], radius=10, fill="#FFFFFF")
-            d.rounded_rectangle([cx + 15, icon_cy - 10, cx + 55, icon_cy + 32], radius=8, fill="#FFFFFF")
+            # ไอคอนรถส่งของด่วน / รถห้องเย็น
+            d.ellipse([cx - 108, icon_cy - 108, cx + 108, icon_cy + 108],
+                      fill=(49, 46, 129, 245), outline=(199, 210, 254, 255), width=6)
+            # ตู้ทึบห้องเย็น + หัวรถ
+            d.rounded_rectangle([cx - 58, icon_cy - 32, cx + 14, icon_cy + 30], radius=10, fill="#FFFFFF")
+            d.rounded_rectangle([cx + 12, icon_cy - 12, cx + 58, icon_cy + 30], radius=8, fill="#FFFFFF")
             # หน้าต่างรถ
-            d.rounded_rectangle([cx + 20, icon_cy - 4, cx + 46, icon_cy + 12], radius=4, fill=item["c_end"])
+            d.rounded_rectangle([cx + 20, icon_cy - 5, cx + 48, icon_cy + 12], radius=4, fill=(49, 46, 129, 255))
+            # สัญลักษณ์ความเย็น/ด่วนบนตู้รถ
+            d.line([cx - 40, icon_cy - 10, cx - 4, icon_cy - 10], fill=(79, 70, 229, 255), width=6)
+            d.line([cx - 40, icon_cy + 6, cx - 14, icon_cy + 6], fill=(56, 189, 248, 255), width=6)
             # ล้อรถ
-            d.ellipse([cx - 36, icon_cy + 22, cx - 14, icon_cy + 44], fill="#1E293B", outline="#FFFFFF", width=4)
-            d.ellipse([cx + 22, icon_cy + 22, cx + 44, icon_cy + 44], fill="#1E293B", outline="#FFFFFF", width=4)
-            # เส้นความเร็ว
-            d.line([cx - 75, icon_cy - 10, cx - 62, icon_cy - 10], fill="#FFFFFF", width=5)
-            d.line([cx - 82, icon_cy + 6, cx - 62, icon_cy + 6], fill="#FFFFFF", width=5)
+            d.ellipse([cx - 40, icon_cy + 20, cx - 14, icon_cy + 46], fill="#1E293B", outline="#FFFFFF", width=5)
+            d.ellipse([cx + 20, icon_cy + 20, cx + 46, icon_cy + 46], fill="#1E293B", outline="#FFFFFF", width=5)
 
         # 3. Main Title ข้อความหลัก
         f_main = load_font(74, "bold")
@@ -360,10 +364,10 @@ def main():
 
     # 3. กำหนดพื้นที่ 6 ปุ่ม (2 แถว x 3 คอลัมน์)
     areas = [
-        # แถวบน (Row 0)
+        # แถวบน (Row 0) : สั่ง 3 แพ็กเกจชัดเจน (500g / 1kg / 2kg)
         {
             "bounds": {"x": 0, "y": 0, "width": COL_W, "height": ROW_H},
-            "action": {"type": "message", "text": "ปลาแดดเดียว"}
+            "action": {"type": "message", "text": "รับชุดพอดีมื้อ 500 กรัม"}
         },
         {
             "bounds": {"x": COL_W, "y": 0, "width": COL_W, "height": ROW_H},
@@ -371,13 +375,13 @@ def main():
         },
         {
             "bounds": {"x": COL_W * 2, "y": 0, "width": W - (COL_W * 2), "height": ROW_H},
-            "action": {"type": "uri", "uri": "https://watt29.github.io/pakhem-shop/fish.html"}
+            "action": {"type": "message", "text": "สั่งซื้อปลาแดดเดียว 2 กิโลกรัม"}
         },
 
-        # แถวล่าง (Row 1)
+        # แถวล่าง (Row 1) : เงื่อนไขการจัดส่ง / วิธีเก็บรักษา / เช็คพัสดุ•เลขบัญชี
         {
             "bounds": {"x": 0, "y": ROW_H, "width": COL_W, "height": H - ROW_H},
-            "action": {"type": "message", "text": "เช็คพัสดุ"}
+            "action": {"type": "message", "text": "เงื่อนไขการจัดส่ง"}
         },
         {
             "bounds": {"x": COL_W, "y": ROW_H, "width": COL_W, "height": H - ROW_H},
@@ -385,7 +389,7 @@ def main():
         },
         {
             "bounds": {"x": COL_W * 2, "y": ROW_H, "width": W - (COL_W * 2), "height": H - ROW_H},
-            "action": {"type": "message", "text": "ถามได้ทุกเรื่อง"}
+            "action": {"type": "message", "text": "เช็คพัสดุ"}
         },
     ]
 

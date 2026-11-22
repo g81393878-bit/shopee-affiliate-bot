@@ -96,3 +96,19 @@
 
 * **แยกแยะวันและราศีอัตโนมัติ**: ระบบรับรู้ว่า `วันจันทร์`, `วันอังคาร`... `วันอาทิตย์` และ `ราศีเมษ`, `ราศีพิจิก`... เป็นคนละเรื่องกัน จะไม่ถูกบล็อกว่าเป็นเรื่องซ้ำ
 * **ระบบหมุนเวียน Index (`last_horo_index.txt`)**: หมุนเวียนหัวข้อใหม่อย่างราบรื่นและต่อเนื่อง 100%
+
+---
+
+## 💻 5. ขั้นตอนการจัดการโค้ด Google Apps Script ด้วย clasp (CLI Workflow)
+
+สำหรับโปรเจกต์ `tools/shopee_pakhem_bot.gs` สามารถจัดการซอร์สโค้ดและควบคุมเวอร์ชันได้ดังนี้:
+
+1. **เตรียมความพร้อม (Prerequisites)**:
+   - ตรวจสอบ Node.js และ npm
+   - เปิดสิทธิ์ Apps Script API ที่ [script.google.com/home/usersettings](https://script.google.com/home/usersettings) ให้เป็น **ON**
+   - เครื่องนี้ติดตั้ง clasp ไว้แล้วที่ `C:\Users\Lenovo\AppData\Roaming\npm\clasp`
+2. **การ Sync โค้ดขึ้น Apps Script Editor**:
+   - นำโค้ดที่อัปเดตแล้วใน [`tools/shopee_pakhem_bot.gs`](file:///d:/Shopee_Web_Scraping/tools/shopee_pakhem_bot.gs) ไปบันทึกลงในโปรเจกต์ Apps Script
+   - กด **Deploy > Manage deployments** และเลือกเวอร์ชัน **New** เพื่อให้โค้ดใหม่มีผลต่อ LINE Webhook ทันที
+
+

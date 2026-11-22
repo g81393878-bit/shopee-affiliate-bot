@@ -38,12 +38,16 @@ def main():
                 cwd=str(PROJECT_ROOT),
                 capture_output=False
             )
-            log(f"✅ ทำงานเสร็จสิ้นในรอบนี้ (Exit Code: {res.returncode})")
+            if res.returncode != 0:
+                log(f"หยุดระบบเพื่อให้ตรวจผลรอบล่าสุด (Exit Code: {res.returncode}); ไม่ลองโพสต์ซ้ำ")
+                return res.returncode
+            log("ตรวจคิวรอบนี้เสร็จแล้ว")
         except Exception as e:
             log(f"⚠️ เกิดข้อผิดพลาดในลูป: {e}")
+            return 1
 
         log(f"⏳ พักรอเป็นเวลา 45 นาที ก่อนเริ่มรอบถัดไป...")
         time.sleep(interval_seconds)
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

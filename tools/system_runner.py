@@ -18,6 +18,13 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
+# pythonw has no console streams; retain output and tracebacks in a local log.
+if sys.stdout is None or sys.stderr is None:
+    runtime_logs = ROOT_DIR / "artifacts" / "trend_autopilot"
+    runtime_logs.mkdir(parents=True, exist_ok=True)
+    runtime_stream = open(runtime_logs / "runner_background.log", "a", encoding="utf-8", buffering=1)
+    sys.stdout = runtime_stream
+    sys.stderr = runtime_stream
 BACKEND_DIR = ROOT_DIR / "backend"
 REELS_DIR = ROOT_DIR / "reels_uploader"
 TOOLS_DIR = ROOT_DIR / "tools"
@@ -25,6 +32,7 @@ TOOLS_DIR = ROOT_DIR / "tools"
 sys.path.insert(0, str(BACKEND_DIR))
 sys.path.insert(0, str(TOOLS_DIR))
 sys.path.insert(0, str(REELS_DIR))
+from product_post_history import serialize_broadcast
 
 # บังคับ UTF-8 สำหรับ Windows Console
 if hasattr(sys.stdout, "reconfigure"):
@@ -68,11 +76,11 @@ def is_active_hours() -> bool:
 
 def run_prebuffer_producer_loop():
     """เธรดตรวจสอบและผลิตคลิปสำรองไว้ใน pending_videos/ ล่วงหน้าเสมอ (3-5 คลิป)
-    โหมด Autopilot 100%: ผลิตคลิปอัตโนมัติ (90% ไวรัล 3 วิ / 10% สินค้า Shopee) ผู้ใช้ไม่ต้องทำอะไร
+    โหมด 100% Shopee Affiliate Product Reels: คัดสินค้า Extra Commission และสินค้าขายดีตรงปก
     """
     enable_producer = os.getenv("ENABLE_PREBUFFER_PRODUCER", "true").lower() in ("true", "1", "yes")
     if enable_producer:
-        logger.info("🏭 ระบบ Auto Pre-buffer Producer: ACTIVE (โหมด: 100% Autopilot ผลิตคลิปอัตโนมัติ)")
+        logger.info("🏭 ระบบ Auto Pre-buffer Producer: ACTIVE (โหมด: 100% Shopee Affiliate Products)")
     else:
         logger.info("⏸️ ระบบ Pre-buffer Producer: STANDBY (โหมด: ผู้ใช้จัดการไฟล์วิดีโอเอง)")
 
@@ -88,34 +96,73 @@ def run_prebuffer_producer_loop():
             import standalone_content_generator
             import random
 
-            pending = uploader.list_pending()
+            from product_post_history import posted_product_ids, product_id
+            posted_ids = posted_product_ids(REELS_DIR, TOOLS_DIR)
+            raw_pending = uploader.list_pending()
+
+            # Clean up already posted files sitting in pending_videos
+            history_file = TOOLS_DIR / "posted_tiktok_history.json"
+            global_posted_files = set()
+            if history_file.exists():
+                try:
+                    h_data = json.loads(history_file.read_text(encoding="utf-8"))
+                    for h_v in h_data.values():
+                        if isinstance(h_v, list): global_posted_files.update(h_v)
+                except Exception:
+                    pass
+
+            pending = []
+            for pf in raw_pending:
+                if pf.suffix.lower() == ".mp4":
+                    if pf.name in global_posted_files:
+                        try:
+                            dst = REELS_DIR / "posted" / pf.name
+                            if not dst.exists():
+                                shutil.move(str(pf), str(dst))
+                            else:
+                                pf.unlink(missing_ok=True)
+                            txt_pair = pf.with_suffix(".txt")
+                            if txt_pair.exists():
+                                txt_dst = REELS_DIR / "posted" / txt_pair.name
+                                if not txt_dst.exists():
+                                    shutil.move(str(txt_pair), str(txt_dst))
+                                else:
+                                    txt_pair.unlink(missing_ok=True)
+                        except Exception:
+                            pass
+                        continue
+                    pid = product_id(pf.name)
+                    if pid is not None and pid in posted_ids:
+                        continue
+                pending.append(pf)
+
             if len(pending) < 4:
                 needed = 4 - len(pending)
-                logger.info(f"📦 คิวคลิปพร้อมโพสต์เหลือ {len(pending)} คลิป — กำลังผลิตเติมคลัง {needed} คลิป (สินค้า Shopee 10% / ไวรัล 90%)...")
+                logger.info(f"📦 คิวคลิปพร้อมโพสต์เหลือ {len(pending)} คลิป — กำลังผลิตเติมคลัง {needed} คลิป (สินค้า Shopee 100%)...")
                 for _ in range(needed):
-                    from trend_autopilot import BASE, read_json, save_json, produce_one
-                    cycle_path = BASE / "production_cycle.json"
-                    cycle = read_json(cycle_path)
-                    completed = int(cycle.get("completed", 0))
-                    # Persist the successful production count: exactly one product per ten completions.
-                    mode = "PRODUCT" if completed % 10 == 9 else "STANDALONE"
                     produced = False
-                    if mode == "PRODUCT":
+                    # 1. ลำดับแรก: ผลิตคลิป Extra Commission สูง (฿150 - ฿700+) สไตล์ Shopee Video
+                    try:
+                        from shopee_extra_commission import produce_top_extra_commission_reel
+                        extra_res = produce_top_extra_commission_reel()
+                        if extra_res:
+                            produced = True
+                            logger.info(f"💎 ผลิตคลิป Extra Commission สำเร็จ: #{extra_res.get('product_id')} (ค่าคอม {extra_res.get('commission')})")
+                    except Exception as ee_err:
+                        logger.debug(f"Extra commission auto-produce fallback: {ee_err}")
+
+                    # 2. ลำดับสอง: สำรองด้วยคลิปสินค้าขายดีจากคลัง Shopee ตรงปก
+                    if not produced:
                         try:
-                            prods = generate_product_reels(limit=1)
+                            prods = generate_product_reels(limit=1, selection=product_selection_mode())
                             if prods:
                                 produced = True
                                 logger.info(f"✨ ผลิตคลิปสินค้า Shopee สำเร็จ: {prods[0].get('name', '')[:40]}")
                         except Exception as pe:
                             logger.warning(f"⚠️ Product reel gen warning: {pe}")
-                    else:
-                        res = produce_one()
-                        produced = res.get("status") == "queued"
-                        logger.info("Trend producer: %s", res.get("status"))
-                    if produced:
-                        save_json(cycle_path, {"completed": completed + 1})
-                    else:
-                        break  # Retry on the next loop; never invent filler or change the ratio.
+
+                    if not produced:
+                        break  # พักรอรอบถัดไปหากยังไม่สามารถผลิตได้
         except Exception as e:
             logger.warning(f"⚠️ Pre-buffer producer warning: {e}")
         time.sleep(90)  # ตรวจสอบทุก 90 วินาที
@@ -167,6 +214,8 @@ def generate_smart_caption_for_user_video(video_title: str) -> str:
     return f"✨ {clean_title}\n\nสาระดีๆ ที่ไม่ควรพลาด! กดติดตามไว้เพื่ออัปเดตเรื่องใหม่ๆ กันได้เลยครับ\n#สาระน่ารู้ #เรื่องนี้ต้องดู #ความรู้รอบตัว #เทรนด์วันนี้"
 
 
+@serialize_broadcast(lambda: REELS_DIR / ".unified_broadcast.lock",
+                     {"success": False, "error": "Broadcast already running"})
 def execute_unified_broadcast(
     custom_video: Path | str | None = None,
     custom_caption: str | None = None,
@@ -178,12 +227,16 @@ def execute_unified_broadcast(
     2. คัดเลือกบัญชี TikTok ที่ถึงคิวและยังไม่เต็มโควตาประจำวัน (8 คลิป/ช่อง/วัน)
     3. เตรียมแคปชั่นคุณภาพสูง + LINE OA CTA + ชุดแท็กโปรโมทไวรัล
     4. ยิงขึ้น TikTok บัญชีเป้าหมาย (Playwright Studio Web)
-    5. ซิงค์วิดีโอตัวเดียวกันทันทีขึ้น Facebook Reels (2 เพจ) และ YouTube Shorts (หมุนเวียน 6 ช่อง)
+    5. ซิงค์วิดีโอตัวเดียวกันทันทีขึ้น Facebook Reels (2 เพจ)
     6. ย้ายคลิปเข้า posted/ และส่งแจ้งเตือนสรุปผลครบวงจรเข้า Telegram Commander
     """
+    if (REELS_DIR / ".posting_paused").exists():
+        return {"success": False, "error": "Posting paused for video quality review"}
     import shutil
     import uploader
     import tiktok_studio_uploader
+    from broadcast_receipts import held, reserve, finish
+    from app.services.video_publish_policy import publication_block_reason
     from app.services.content_safety_filter import is_sensitive_forbidden_topic
 
     daily_target = int(os.getenv("TIKTOK_DAILY_TARGET_PER_CHANNEL", "8"))
@@ -212,10 +265,10 @@ def execute_unified_broadcast(
         except Exception:
             pass
 
-    accounts = tiktok_studio_uploader.get_available_tiktok_accounts()
-    if not accounts:
-        logger.warning("❌ [Unified Broadcast] ไม่พบบัญชี TikTok ในระบบ (ไม่พบไฟล์คุกกี้)")
-        return {"success": False, "error": "No TikTok accounts found"}
+    enable_tiktok = os.getenv("ENABLE_TIKTOK", "false").lower() in ("true", "1", "yes")
+    accounts = tiktok_studio_uploader.get_available_tiktok_accounts() if enable_tiktok else []
+    if not accounts and enable_tiktok:
+        logger.warning("TikTok unavailable; continuing Facebook")
 
     tt_account_index = 0
     if index_file.exists():
@@ -227,7 +280,7 @@ def execute_unified_broadcast(
     # 2. คัดเลือกบัญชี TikTok ที่มีสิทธิ์โพสต์
     active_cookie = None
     account_key = "tiktok_cookies"
-    if target_account_id:
+    if target_account_id and accounts:
         target_name = f"tiktok_cookies_{target_account_id}.json" if target_account_id > 1 else "tiktok_cookies.json"
         for a in accounts:
             if a.name == target_name:
@@ -242,10 +295,10 @@ def execute_unified_broadcast(
             if force or daily_data["counts"].get(acc.stem, 0) < daily_target
         ]
         if not eligible_accounts:
-            logger.info(f"🎉 [TikTok-Led] วันนี้ทุกช่องโพสต์ครบโควตา {daily_target} คลิป/ช่องแล้ว รอเริ่มวันใหม่")
-            return {"success": False, "error": f"Daily quota reached for all {len(accounts)} TikTok channels"}
-        active_cookie = eligible_accounts[tt_account_index % len(eligible_accounts)]
-        account_key = active_cookie.stem
+            logger.info("TikTok unavailable/quota reached; continuing Facebook Reels")
+        else:
+            active_cookie = eligible_accounts[tt_account_index % len(eligible_accounts)]
+            account_key = active_cookie.stem
 
     display_channel = TT_CHANNEL_NAMES.get(account_key, f"TikTok ({account_key})")
 
@@ -259,6 +312,8 @@ def execute_unified_broadcast(
             products_meta = {}
 
     candidate = None
+    from product_post_history import posted_product_ids, product_id
+    posted_ids = posted_product_ids(REELS_DIR, TOOLS_DIR)
     if custom_video:
         c_path = Path(custom_video).resolve()
         if c_path.exists() and c_path.is_file():
@@ -295,14 +350,24 @@ def execute_unified_broadcast(
         for s_dir in search_dirs:
             if s_dir.exists():
                 for f in sorted(s_dir.glob("*.mp4")):
-                    if f.is_file() and f.stat().st_size > 500 * 1024:
+                    if f.is_file() and f.stat().st_size > 100 * 1024:
                         if f not in pending_videos:
                             pending_videos.append(f)
 
         for v in pending_videos:
+            v_info = products_meta.get(v.name, {})
+            sidecar = v.with_suffix(".txt")
+            if not sidecar.exists():
+                alt_txt = v.parent / f"{v.stem}.txt"
+                if alt_txt.exists():
+                    sidecar = alt_txt
+            review_caption = sidecar.read_text(encoding="utf-8") if sidecar.exists() else (uploader.build_caption(v_info) if v_info else "")
+            if publication_block_reason(v, review_caption, v_info) or held(v, TOOLS_DIR):
+                continue
+            if product_id(v.name) in posted_ids:
+                continue
             if v.name in global_posted_files:
                 continue
-            v_info = products_meta.get(v.name, {})
             v_title = v_info.get("product_name") or v.stem
 
             # กรองความปลอดภัย
@@ -313,7 +378,7 @@ def execute_unified_broadcast(
 
             # กรองความซ้ำซ้อน
             clean_title_sig = re.sub(r'[^\u0E00-\u0E7Fa-zA-Z0-9]', '', v_title).lower() if v_title else ""
-            if not force and clean_title_sig:
+            if clean_title_sig:
                 if clean_title_sig in posted_title_signatures or clean_title_sig in posted_titles:
                     continue
 
@@ -337,10 +402,13 @@ def execute_unified_broadcast(
     if not candidate or not candidate.exists():
         return {"success": False, "error": "No available video candidate found"}
 
+    if product_id(candidate.name) in posted_ids:
+        return {"success": False, "error": "Product already posted; duplicate blocked"}
+
     # 4. ดึงข้อมูล Metadata และสร้างแคปชั่น
     v_info = products_meta.get(candidate.name, {})
     if not v_info:
-        m_id = re.match(r'^prod_(\d+)_', candidate.name)
+        m_id = re.match(r'^(?:prod|shopee_(?:extracomm|high_conv|pilot))_(\d+)_', candidate.name)
         if m_id:
             try:
                 from app.db import SessionLocal
@@ -394,13 +462,14 @@ def execute_unified_broadcast(
 
     # บังคับใส่ LINE OA CTA
     line_cta = "👉 ทักแชทถามป้าเข็มได้ที่ LINE: @137gsref 👉 https://lin.ee/o9Kjp1N"
-    if "@137gsref" not in clean_caption:
+    if not v_info.get("is_pure_content") and "@137gsref" not in clean_caption:
         clean_caption = f"{clean_caption.strip()}\n\n{line_cta}"
 
     # เตรียมแคปชั่นสำหรับ TikTok (Presets + Hashtags)
     try:
         from tiktok_promo_presets import format_tiktok_caption
-        tt_caption = format_tiktok_caption(clean_caption, index=tt_account_index)
+        tt_caption = format_tiktok_caption(clean_caption, index=tt_account_index,
+                                           is_pure_content=bool(v_info.get("is_pure_content")))
     except Exception:
         tt_caption = clean_caption
 
@@ -418,147 +487,156 @@ def execute_unified_broadcast(
                 pass
             return {"success": False, "error": f"Audio verification failed: {audio_reason}"}
     except Exception as e_vfy:
-        logger.warning(f"⚠️ ตรวจสอบเสียงล้มเหลว ({e_vfy}) — ดำเนินการต่อ")
+        logger.warning("Audio check unavailable; skip this attempt")
+        return {"success": False, "error": "Audio verification unavailable"}
 
-    # โพสต์ขึ้น TikTok (Lead Platform / Multi-Node Ready)
-    cur_ch_count = daily_data["counts"].get(account_key, 0) + 1
-    logger.info(f"⚫ [TikTok: {display_channel}] กำลังประมวลผลโพสต์คลิปที่ {cur_ch_count}/{daily_target} ของวันนี้: {candidate.name}")
+    blocked = publication_block_reason(candidate, clean_caption, v_info)
+    if blocked:
+        return {"success": False, "error": blocked}
+    attempt_key = reserve(candidate, TOOLS_DIR)
+    res_tt = {"success": False, "error": "Upload did not complete"}
+    uploader.LAST_BROADCAST_RESULT = {"fb": [], "yt": [], "complete": False}
 
-    # หากเปิดใช้งาน TikTok Web Automation
-    try:
-        res_tt = tiktok_studio_uploader.upload_video_via_web(candidate, caption=tt_caption, cookie_file=active_cookie)
-        tt_success = res_tt.get("success", False)
-    except Exception as e_tt_err:
-        logger.warning(f"⚠️ [TikTok: {display_channel}] Web Upload Error ({e_tt_err}) — ปลอดภัยสำหรับ FB/YT")
-        tt_success = False
-
-    history = {}
-    if history_file.exists():
+    # โพสต์ขึ้น TikTok (ข้ามทันทีเมื่อปิดใช้งาน: ลบออกทุกที่)
+    if enable_tiktok:
+        cur_ch_count = daily_data["counts"].get(account_key, 0) + 1
+        logger.info(f"⚫ [TikTok: {display_channel}] กำลังประมวลผลโพสต์คลิปที่ {cur_ch_count}/{daily_target} ของวันนี้: {candidate.name}")
         try:
-            history = json.loads(history_file.read_text(encoding="utf-8"))
-        except Exception:
-            history = {}
+            if active_cookie is None:
+                res_tt = {"success": False, "error": "ข้าม: ไม่มีบัญชี TikTok พร้อมใช้หรือครบโควตาแล้ว"}
+            else:
+                res_tt = tiktok_studio_uploader.upload_video_via_web(candidate, caption=tt_caption, cookie_file=active_cookie)
+            tt_success = res_tt.get("success", False)
+        except Exception as e_tt_err:
+            logger.warning(f"⚠️ [TikTok: {display_channel}] Web Upload Error ({e_tt_err}) — ปลอดภัยสำหรับ FB")
+            tt_success = False
+            res_tt = {"success": False, "error": "TikTok upload exception; outcome unverified"}
 
-    if tt_success:
-        logger.info(f"✅ [TikTok: {display_channel}] โพสต์สำเร็จ ({cur_ch_count}/{daily_target}): {candidate.name}")
-        if account_key not in history:
-            history[account_key] = []
-        history[account_key].append(candidate.name)
-        history_file.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
-
-        daily_data["counts"][account_key] = cur_ch_count
-        daily_tracker_file.write_text(json.dumps(daily_data, ensure_ascii=False, indent=2), encoding="utf-8")
-
-        tt_account_index += 1
-        try:
-            index_file.write_text(str(tt_account_index), encoding="utf-8")
-        except Exception:
-            pass
-    else:
-        logger.warning(f"⚠️ [TikTok: {display_channel}] โพสต์ไม่สำเร็จ: {res_tt.get('error')}")
-        tt_account_index += 1
-
-    # 6. ซิงค์วิดีโอตัวเดียวกันขึ้น Facebook Reels (2 เพจ) และ YouTube Shorts (หมุนเวียน 6 ช่อง)
-    # ตรวจสอบก่อนว่าหัวข้อนี้เคยขึ้น FB/YT ไปแล้วหรือไม่ เพื่อป้องกันการโพสต์ซ้ำ 4-5 ครั้ง
-    clean_fby_sig = re.sub(r'[^\u0E00-\u0E7Fa-zA-Z0-9]', '', v_title).lower() if v_title else ""
-    posted_fb_yt_titles = uploader.get_posted_titles()
-    already_on_fb_yt = bool(clean_fby_sig and clean_fby_sig in posted_fb_yt_titles)
-
-    if already_on_fb_yt and not force:
-        logger.info(f"⏭️ [Unified Broadcast] คลิป {candidate.name} ({v_title[:30]}) เคยโพสต์บน FB/YT แล้ว — ข้ามการซิงค์ซ้ำ")
-        res_fb_yt = 0
-    else:
-        logger.info(f"🚀 [Unified Broadcast] ซิงค์คลิป {candidate.name} ไปยัง Facebook Reels & YouTube Shorts...")
-        res_fb_yt = uploader.post_next(
-            dry_run=False,
-            custom_video=str(candidate),
-            custom_caption=clean_caption,
-            force=force,
-            normalize=True,
-            broadcast_all_yt=False,
-            notify=False
-        )
-
-    # 7. ย้ายไฟล์ไปยัง posted/ เพื่อป้องกันการหยิบซ้ำ 100%
-    if candidate.exists():
-        POSTED_DIR = REELS_DIR / "posted"
-        POSTED_DIR.mkdir(parents=True, exist_ok=True)
-        posted_dst = POSTED_DIR / candidate.name
-        if posted_dst.exists():
-            posted_dst = POSTED_DIR / f"{int(time.time())}_{candidate.name}"
-        try:
-            shutil.move(str(candidate), str(posted_dst))
-            logger.info(f"📦 [Cleanup] ย้ายคลิปที่เผยแพร่แล้วไป posted/: {posted_dst.name}")
-        except Exception as e_mv:
-            logger.warning(f"⚠️ ย้ายคลิปเข้า posted/ ล้มเหลว: {e_mv}")
-
-    # 8. ดึง URL ตรงจากทุกช่องทางที่เผยแพร่สำเร็จ
-    TT_HANDLE_MAP = {
-        "tiktok_cookies": "https://www.tiktok.com/@healthgooddeals",
-        "tiktok_cookies_2": "https://www.tiktok.com/@cheepao.review",
-        "tiktok_cookies_3": "https://www.tiktok.com/@pakhem.review99",
-        "tiktok_cookies_4": "https://www.tiktok.com/@khonyangmefan",
-    }
-    raw_tt = res_tt.get("video_url") or ""
-    if not raw_tt or "/@me" in raw_tt:
-        tt_url = TT_HANDLE_MAP.get(account_key, "https://www.tiktok.com/@cheepao.review")
-    else:
-        tt_url = raw_tt
-
-    fb_urls = []
-    yt_urls = []
-    for candidate_urls_file in [ROOT_DIR / "last_broadcast_urls.json", ROOT_DIR / "reels_uploader" / "last_broadcast_urls.json"]:
-        if candidate_urls_file.exists():
+        history = {}
+        if history_file.exists():
             try:
-                u_data = json.loads(candidate_urls_file.read_text(encoding="utf-8"))
-                if u_data.get("fb") or u_data.get("yt"):
-                    fb_urls = u_data.get("fb", [])
-                    yt_urls = u_data.get("yt", [])
-                    break
+                history = json.loads(history_file.read_text(encoding="utf-8"))
+            except Exception:
+                history = {}
+
+        if tt_success:
+            logger.info(f"✅ [TikTok: {display_channel}] โพสต์สำเร็จ ({cur_ch_count}/{daily_target}): {candidate.name}")
+            if account_key not in history:
+                history[account_key] = []
+            history[account_key].append(candidate.name)
+            history_file.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            daily_data["counts"][account_key] = cur_ch_count
+            daily_tracker_file.write_text(json.dumps(daily_data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            tt_account_index += 1
+            try:
+                index_file.write_text(str(tt_account_index), encoding="utf-8")
             except Exception:
                 pass
+        else:
+            logger.warning(f"⚠️ [TikTok: {display_channel}] โพสต์ไม่สำเร็จ: {res_tt.get('error')}")
+            tt_account_index += 1
+            try:
+                index_file.write_text(str(tt_account_index), encoding="utf-8")
+            except OSError:
+                logger.exception("Cannot save TikTok rotation; continuing other platforms")
+    else:
+        tt_success = False
+        res_tt = {"success": False, "error": "TikTok disabled"}
+
+    # 6. ซิงค์วิดีโอตัวเดียวกันขึ้น Facebook Reels (2 เพจ)
+    # ตรวจสอบก่อนว่าหัวข้อนี้เคยขึ้น FB ไปแล้วหรือไม่ เพื่อป้องกันการโพสต์ซ้ำ 4-5 ครั้ง
+    clean_fby_sig = re.sub(r'[^\u0E00-\u0E7Fa-zA-Z0-9]', '', v_title).lower() if v_title else ""
+    posted_fb_yt_titles = uploader.get_posted_titles()
+    already_on_fb = bool(clean_fby_sig and clean_fby_sig in posted_fb_yt_titles)
+
+    if already_on_fb and not force:
+        logger.info(f"⏭️ [Unified Broadcast] คลิป {candidate.name} ({v_title[:30]}) เคยโพสต์บน FB แล้ว — ข้ามการซิงค์ซ้ำ")
+        res_fb_yt = 0
+    else:
+        logger.info(f"🚀 [Unified Broadcast] ซิงค์คลิป {candidate.name} ไปยัง Facebook Reels...")
+        try:
+            res_fb_yt = uploader.post_next(
+                dry_run=False,
+                custom_video=str(candidate),
+                custom_caption=clean_caption,
+                force=force,
+                normalize=True,
+                broadcast_all_yt=False,
+                notify=False
+            )
+        except Exception as exc:
+            logger.exception("Facebook attempt failed; completing report and continuing next round")
+            res_fb_yt = 1
+            uploader.LAST_BROADCAST_RESULT["error"] = type(exc).__name__
+
+    receipt = uploader.LAST_BROADCAST_RESULT
+    fb_urls = receipt.get("fb", [])
+    yt_urls = []
+    status = finish(attempt_key, TOOLS_DIR, res_tt, receipt)
+    if (status == "posted" or (status == "partial" and (fb_urls or tt_success))) and candidate.exists():
+        destination = REELS_DIR / "posted" / candidate.name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if not destination.exists():
+            shutil.move(str(candidate), str(destination))
+        else:
+            try:
+                candidate.unlink(missing_ok=True)
+            except Exception:
+                pass
+        try:
+            candidate.with_suffix(".txt").unlink(missing_ok=True)
+        except Exception:
+            pass
+        logger.info("Verified broadcast archived: %s (status: %s)", candidate.name, status)
+    else:
+        logger.warning("Broadcast %s; keeping source and holding automatic retries: %s", status, candidate.name)
+    tt_url = res_tt.get("video_url") or ""
 
     # จัดรูปแบบแสดงผลลิงก์ของแต่ละช่องทาง
     channels_lines = []
-    if tt_success:
-        channels_lines.append(f"  • ⚫ TikTok: ✅ โพสต์สำเร็จ ({display_channel})\n    👉 {tt_url}")
-    else:
-        channels_lines.append(f"  • ⚫ TikTok: ⚠️ {res_tt.get('error', 'ไม่สำเร็จ')} ({display_channel})")
+    if enable_tiktok:
+        if tt_success:
+            channels_lines.append(f"  • ⚫ TikTok: ✅ โพสต์สำเร็จ ({display_channel})\n    👉 {tt_url}")
+        else:
+            channels_lines.append(f"  • ⚫ TikTok: ⚠️ {res_tt.get('error', 'ไม่สำเร็จ')} ({display_channel})")
 
     if fb_urls:
         fb_sub = "\n".join([f"    👉 {u}" for u in fb_urls])
         channels_lines.append(f"  • 🔵 Facebook Reels ({len(fb_urls)} เพจ):\n{fb_sub}")
     else:
-        fb_yt_badge = "✅ โพสต์สำเร็จ 100%" if res_fb_yt == 0 else "⚠️ ตรวจสอบผลลัพธ์"
+        fb_yt_badge = "ยังไม่มีหลักฐานยืนยันการเผยแพร่ในรอบนี้"
         channels_lines.append(f"  • 🔵 Facebook Reels: {fb_yt_badge}")
 
-    if yt_urls:
-        yt_sub = "\n".join([f"    👉 {u}" for u in yt_urls])
-        channels_lines.append(f"  • 🔴 YouTube Shorts:\n{yt_sub}")
-    else:
-        fb_yt_badge = "✅ โพสต์สำเร็จ 100%" if res_fb_yt == 0 else "⚠️ ตรวจสอบผลลัพธ์"
-        channels_lines.append(f"  • 🔴 YouTube Shorts: {fb_yt_badge}")
-
     channels_text = "\n".join(channels_lines)
+    skipped = receipt.get("skipped", [])
+    if receipt.get("error"):
+        skipped = [*skipped, f"Facebook: {receipt['error']}"]
+    if skipped:
+        channels_text += "\n" + "\n".join(f"  • ⏭️ {reason}" for reason in skipped)
 
     # 9. ส่งแจ้งเตือนสรุปครบทุกแพลตฟอร์มเข้า Telegram Commander
     try:
         from telegram_notifier import send_telegram_notification
-        counts_list = []
-        for idx, acc_file in enumerate(accounts, 1):
-            c_val = daily_data["counts"].get(acc_file.stem, 0)
-            counts_list.append(f"ช่อง {idx}={c_val}/{daily_target}")
-        counts_summary = " | ".join(counts_list)
+        tiktok_block = ""
+        if enable_tiktok:
+            counts_list = []
+            for idx, acc_file in enumerate(accounts, 1):
+                c_val = daily_data["counts"].get(acc_file.stem, 0)
+                counts_list.append(f"ช่อง {idx}={c_val}/{daily_target}")
+            counts_summary = " | ".join(counts_list)
+            tiktok_block = f"📊 สรุปยอดโพสต์ TikTok วันนี้:\n  • {counts_summary}\n"
+
         remaining_pending = len(uploader.list_pending())
 
         msg_tg = (
-            f"🚀 [TikTok-Led Unified Broadcast สำเร็จ]\n"
+            f"📊 [Broadcast: {status}]\n"
             f"━━━━━━━━━━━━━━━━━━\n"
             f"🎬 คลิป: {v_title[:50]}\n\n"
-            f"🌐 ลิงก์ที่เผยแพร่ตามช่องทางต่างๆ:\n"
+            f"🌐 ลิงก์ที่เผยแพร่:\n"
             f"{channels_text}\n\n"
-            f"📊 สรุปยอดโพสต์ TikTok วันนี้:\n"
-            f"  • {counts_summary}\n"
+            f"{tiktok_block}"
             f"  • 📦 คลิปในคลังคงเหลือ: {remaining_pending} คลิป\n"
             f"━━━━━━━━━━━━━━━━━━\n"
             f"⏱️ รอบถัดไป: อีก {interval_minutes} นาที ระบบจะหมุนเวียนอัตโนมัติ"
@@ -582,13 +660,14 @@ def execute_unified_broadcast(
             fb_reel_1=p1_link,
             fb_reel_2=p2_link,
             yt_shorts_url=yt_link,
-            status="✅ เผยแพร่สำเร็จ 100%"
+            status=status
         )
     except Exception as e_sheet:
         logger.warning(f"⚠️ เรียกบันทึก Google Sheets ไม่สำเร็จ: {e_sheet}")
 
     return {
-        "success": tt_success or (res_fb_yt == 0),
+        "success": status == "posted",
+        "status": status,
         "video": candidate.name,
         "tiktok": res_tt,
         "fb_yt_code": res_fb_yt,
@@ -607,17 +686,26 @@ def run_tiktok_led_unified_loop():
     • หมุนเวียนรอบละ 45 นาที (8 คลิป/ช่อง/วัน x 4 ช่อง = 32 รอบ/วัน สำหรับ TikTok)
     • ทุกรอบจะเลือก 1 คลิปเป้าหมายจาก pending_videos/
     • ยิงขึ้น TikTok ตามคิวบัญชีที่ยังไม่เต็มโควตาประจำวัน
-    • พร้อมซิงค์วิดีโอตัวเดียวกันทันทีขึ้น Facebook Reels (2 เพจ) และ YouTube Shorts (หมุนเวียน 6 ช่อง)
+    • พร้อมซิงค์วิดีโอตัวเดียวกันทันทีขึ้น Facebook Reels (2 เพจ)
     • ย้ายคลิปเข้า posted/ และแจ้งเตือนสรุปครบทุกแพลตฟอร์มเข้า Telegram
     """
     enable_broadcast = os.getenv("ENABLE_AUTO_BROADCAST", "false").lower() in ("true", "1", "yes")
     if not enable_broadcast:
         logger.info("⏸️ ระบบ Auto Reels Broadcast: STANDBY (ปิดการกระจายอัตโนมัติ — แจ้งเตือนเฉพาะออเดอร์)")
         return
-    logger.info("🚀 เริ่มต้นระบบ TikTok-Led Unified Master Orchestrator (รอบหมุนเวียนทุก 45 นาที)")
+    logger.info("🚀 เริ่มต้นระบบ Facebook Reels Master Orchestrator (รอบหมุนเวียนทุก 45 นาที)")
     interval_minutes = int(os.getenv("TIKTOK_INTERVAL_MINUTES", "45"))
     # ให้เวลา Pre-buffer Producer ตรวจสอบสต็อกและเริ่มทำงานก่อน 10 วินาที
     time.sleep(10)
+    # Restarting after a repair must not trigger an extra broadcast immediately.
+    last_post = REELS_DIR / "last_post_time.txt"
+    try:
+        remaining = float(last_post.read_text(encoding="utf-8")) + interval_minutes * 60 - time.time()
+    except (OSError, ValueError):
+        remaining = 0
+    if remaining > 0:
+        logger.info("Waiting %.0f seconds until the next scheduled broadcast", remaining)
+        time.sleep(remaining)
     
     while True:
         try:
@@ -680,10 +768,9 @@ def get_system_health_summary(title: str = "รายงานสถานะร
         f"  • 📈 ยอดโพสต์วันนี้: {today_count} รอบ (อัตราสำเร็จ 100%)\n"
         f"  • ⏱️ รอบเวลาการโพสต์: จังหวะ TikTok ทุก 45 นาที (24 ชม.)\n\n"
         f"🟢 สถานะบริการ & แพลตฟอร์มบรอดแคสต์:\n"
-        f"  • 🎬 โรงงานผลิตคลิป (Pre-buffer): 🟢 ออนไลน์ (90% ไวรัล / 10% สินค้า)\n"
+        f"  • 🎬 โรงงานผลิตคลิป (Pre-buffer): 🟢 ออนไลน์ (สินค้า Shopee 100%)\n"
         f"  • ⚫ TikTok Studio: 🟢 ปกติ (4 ช่องหมุนเวียน โควตา 8 คลิป/ช่อง/วัน)\n"
         f"  • 📍 Facebook Reels: 🟢 ปกติ (2 เพจหลักพร้อมยิงซิงค์ตรง)\n"
-        f"  • 🔴 YouTube Shorts: 🟢 ปกติ (6 ช่องหมุนเวียนเฉลี่ยโควต้า)\n"
         f"  • 🎙️ เสียงพากย์ไทย: Microsoft Edge Neural TTS (th-TH-PremwadeeNeural)\n"
         f"  • 🧠 สมองกล AI Caption: Groq AI Multi-Key (7 Keys Failover)\n\n"
         f"📦 สถานะคลังคลิปพร้อมโพสต์:\n"
@@ -792,11 +879,11 @@ def run_performance_learning_loop():
 
 
 def print_banner():
-    bot_name = os.getenv("BOT_NAME", "ป้าเข็ม ขายของ")
+    bot_name = os.getenv("BOT_NAME", "ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้")
     slogan = os.getenv("BRAND_SLOGAN", "คัดของดี ของเด็ด Shopee แท้ 100%")
     voice = os.getenv("TTS_VOICE", "th-TH-PremwadeeNeural")
     print("=" * 68)
-    print(f"🎬  ระบบอัตโนมัติ TikTok-Led Unified Master Broadcast (24/7)")
+    print(f"🎬  ระบบอัตโนมัติ Facebook Reels Master Broadcast (24/7)")
     print(f"🏷️   แบรนด์: {bot_name}")
     print(f"📢  สโลแกน: {slogan}")
     print(f"🎙️  เสียงพากย์: {voice}")
@@ -805,12 +892,9 @@ def print_banner():
     prod_status = "🟢 ACTIVE (100% Full Autopilot — บอทผลิตและโพสต์อัตโนมัติ)" if enable_producer else "⏸️ STANDBY (ผู้ใช้จัดการไฟล์วิดีโอเอง)"
     print("📊 สถานะระบบย่อย:")
     print(f"  [1] Pre-buffer Producer: {prod_status}")
-    print("  [2] TikTok-Led Unified Orchestrator: 🟢 ACTIVE")
-    print("      • TikTok Studio: 4 บัญชีหมุนเวียน (8 คลิป/ช่อง/วัน)")
-    print("      • Facebook Reels: 2 เพจหลักซิงค์พร้อมกัน")
-    print("      • YouTube Shorts: 6 ช่องหมุนเวียนเฉลี่ยโควต้า")
+    print("  [2] Facebook Reels Orchestrator: 🟢 ACTIVE (2 เพจหลักซิงค์พร้อมกัน)")
     print("  [3] Auto-Recovery & Content Safety Guard: 🟢 ONLINE")
-    print("  [4] Telegram Commander 24/7 (@pakhem_commander_bot): 🟢 ONLINE")
+    print("  [4] Telegram Commander 24/7 (@pakhem_fish_bot): 🟢 ONLINE")
     print("=" * 68)
     print("💡 กด Ctrl + C เพื่อหยุดการทำงาน\n")
 
@@ -822,8 +906,8 @@ def main():
     t_producer = threading.Thread(target=run_prebuffer_producer_loop, daemon=True, name="ReelsPrebuffer")
     t_producer.start()
 
-    # 2. รันเธรดวาทยกรหลัก TikTok-Led Unified Broadcast (หมุนเวียนทุก 45 นาที ซิงค์ครบ 3 แพลตฟอร์ม)
-    t_orchestrator = threading.Thread(target=run_tiktok_led_unified_loop, daemon=True, name="TikTokLedOrchestrator")
+    # 2. รันเธรดวาทยกรหลัก Facebook Reels Master Broadcast (หมุนเวียนทุก 45 นาที)
+    t_orchestrator = threading.Thread(target=run_tiktok_led_unified_loop, daemon=True, name="ReelsOrchestrator")
     t_orchestrator.start()
 
     # 3. รันเธรดรายงานสรุปประจำเวลา (08:00 / 20:00 น.)
@@ -843,9 +927,34 @@ def main():
     except Exception as e:
         logger.warning(f"⚠️ Telegram Commander launch error: {e}")
 
+    # 6. รันเธรดตรวจจับและตอบคอมเมนต์ใต้โพสต์/คลิป Facebook อัตโนมัติ 24/7
+    try:
+        from fb_comment_responder import run_comment_responder_loop
+        t_comment_bot = threading.Thread(target=run_comment_responder_loop, daemon=True, name="FBCommentResponder")
+        t_comment_bot.start()
+        logger.info("💬 เธรด FB Comment Auto-Responder 24/7 เริ่มต้นทำงานเรียบร้อยแล้ว")
+    except Exception as e:
+        logger.warning(f"⚠️ FB Comment Responder launch error: {e}")
+
+    workers = {
+        "ReelsPrebuffer": (run_prebuffer_producer_loop, t_producer),
+        "ReelsOrchestrator": (run_tiktok_led_unified_loop, t_orchestrator),
+        "SystemReporter": (run_daily_reporter_loop, t_reporter),
+        "PerformanceLearner": (run_performance_learning_loop, t_learning),
+    }
+    if 't_commander' in locals():
+        workers["TelegramCommander"] = (run_telegram_commander_loop, t_commander)
+    if 't_comment_bot' in locals():
+        workers["FBCommentResponder"] = (run_comment_responder_loop, t_comment_bot)
     try:
         while True:
-            time.sleep(1)
+            time.sleep(30)
+            for name, (target, worker) in list(workers.items()):
+                if not worker.is_alive():
+                    logger.error("Worker %s stopped; restarting", name)
+                    worker = threading.Thread(target=target, daemon=True, name=name)
+                    worker.start()
+                    workers[name] = (target, worker)
     except KeyboardInterrupt:
         logger.info("🛑 ปิดการทำงานระบบ System Runner")
         sys.exit(0)

@@ -39,7 +39,7 @@ Built with **FastAPI**, **Pillow**, **ffmpeg**, **edge-tts**, **Supabase Postgre
 ### 1. ตั้งค่า `.env`
 คัดลอกไฟล์ `.env.example` เป็น `.env` แล้วกรอกค่าที่ต้องการ:
 ```env
-BOT_NAME="ป้าเข็ม ขายของ"
+BOT_NAME="ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้"
 BRAND_SLOGAN="คัดของดี ของเด็ด Shopee แท้ 100% • รีวิวแน่น"
 BRAND_COLOR="#EE4D2D"
 TTS_VOICE="th-TH-PremwadeeNeural"

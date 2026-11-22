@@ -120,6 +120,27 @@ def main() -> int:
         print("[POST] กำลังโพสต์ลงเพจป้าเข็ม ...")
         if poster:
             res = post_photo(caption, file_path=poster)
+            from app.services.facebook_poster import configured_pages
+            for p in configured_pages():
+                if p["index"] > 1:
+                    import httpx
+                    from app.services.facebook_poster import GRAPH_URL, sanitize_post_text
+                    msg_clean = sanitize_post_text(caption or "")
+                    ext = os.path.splitext(poster)[1].lower().lstrip(".") or "png"
+                    mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}.get(ext, "image/png")
+                    with open(poster, "rb") as fh:
+                        img_bytes = fh.read()
+                    r2 = httpx.post(
+                        f"{GRAPH_URL}/{p['id']}/photos",
+                        params={"access_token": p["token"]},
+                        data={"message": msg_clean} if msg_clean else {},
+                        files={"source": (os.path.basename(poster), img_bytes, mime)},
+                        timeout=60,
+                    )
+                    b2 = r2.json() if r2.status_code == 200 else {}
+                    pid2 = b2.get("post_id") or b2.get("id")
+                    if pid2:
+                        print(f"[OK] เพจ {p['index']} โพสต์สำเร็จ: https://www.facebook.com/{pid2}")
         elif args.image_url:
             res = post_photo(caption, image_url=args.image_url)
         else:
@@ -128,7 +149,7 @@ def main() -> int:
             print(f"[ERROR] โพสต์ล้ม: {res.get('error')}")
             return 1
         post_url = f"https://www.facebook.com/{res['post_id']}"
-        print(f"[OK] โพสต์สำเร็จ: {post_url}")
+        print(f"[OK] เพจ 1 โพสต์สำเร็จ: {post_url}")
 
     if post_url:
         print(f"POST_URL={post_url}")

@@ -15,19 +15,11 @@ import re
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT_DIR, "backend"))
-sys.path.insert(0, os.path.join(ROOT_DIR, "tools"))
-
-import render_set_env
-
 def init_env():
-    print("🔄 กำลังโหลดค่าคอนฟิกและ Credential จากระบบ...")
-    render_set_env.API_KEY = render_set_env.get_api_key()
-    items = render_set_env.fetch_env_vars()
-    for it in items:
-        k, v = render_set_env.decode_env_var(it.get("envVar"))
-        if k:
-            os.environ[k] = v
-    print("✅ โหลดการตั้งค่าเรียบร้อยแล้ว!")
+    # โหลดค่าคอนฟิกและ Credential จาก .env โดยตรง
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(ROOT_DIR, "backend", ".env"))
+    print("✅ โหลดการตั้งค่าจาก .env เรียบร้อยแล้ว!")
 
 def main():
     try:

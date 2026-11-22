@@ -299,6 +299,11 @@ def upload_video_to_tiktok(
     Returns:
         Dict: {"success": bool, "publish_id": str, "status": str, "error": str}
     """
+    sys.path.insert(0, str(BACKEND_DIR))
+    from app.services.video_publish_policy import publication_block_reason
+    blocked = publication_block_reason(video_path, caption)
+    if blocked:
+        return {"success": False, "error": blocked}
     video_file = pathlib.Path(video_path)
     if not video_file.exists():
         return {"success": False, "error": f"Video file not found: {video_file}"}

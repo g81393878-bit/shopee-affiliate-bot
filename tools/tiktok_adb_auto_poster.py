@@ -4,11 +4,12 @@
 
 คุณสมบัติระดับสตูดิโอ:
 1. ผู้ใช้ไม่ต้องกดอะไรแม้แต่นิ้วเดียว (Zero User Effort)
-2. ใช้ uiautomator2 + ADB Native Engine แบบเดียวกับ TAKTIK Bot (เสถียร แม่นยำ ไร้การโดนแบน)
-3. ระบบ Auto-Watcher ตรวจจับและปิดป๊อปอัปแจ้งเตือนบนหน้าจออัตโนมัติ
-4. ระบบ Multi-Directory Cleanup ล้างคลังมือถือให้มีเฉพาะคลิปใหม่ 100%
-5. ระบบ Auto-Archive ย้ายคลิปที่โพสต์แล้วเข้าคลัง posted_videos/ และลบออกจาก VPS ทันที ป้องกันคลิปซ้ำ
-6. รายงานผลสำเร็จเข้า Telegram Commander 24 ชม.
+2. รองรับระบบสลับหลายบัญชีอัตโนมัติ (Multi-Account Rotation / Round-Robin)
+3. ใช้ uiautomator2 + ADB Native Engine แบบเดียวกับ TAKTIK Bot (เสถียร แม่นยำ ไร้การโดนแบน)
+4. ระบบ Auto-Watcher ตรวจจับและปิดป๊อปอัปแจ้งเตือนบนหน้าจออัตโนมัติ
+5. ส่งคลิปเข้า Movies/PaKhemBot โดยไม่ลบวิดีโอส่วนตัว
+6. ระบบ Auto-Archive ย้ายคลิปที่โพสต์แล้วเข้าคลัง posted_videos/ และลบออกจาก VPS ทันที ป้องกันคลิปซ้ำ
+7. รายงานผลสำเร็จเข้า Telegram Commander 24 ชม.
 """
 
 import os
@@ -29,11 +30,15 @@ if hasattr(sys.stdout, "reconfigure"):
         pass
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT / "tools"))
+from android_runtime import settings as android_settings, adb as shared_adb
+from tiktok_mobile_history import inspect as inspect_history, record as record_history
 LOCAL_PENDING_DIR = PROJECT_ROOT / "pending_videos"
 LOCAL_PENDING_DIR.mkdir(parents=True, exist_ok=True)
 ARCHIVE_DIR = PROJECT_ROOT / "posted_videos"
 ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
 HISTORY_FILE = PROJECT_ROOT / "tools" / "posted_tiktok_mobile_history.json"
+ACCOUNT_STATE_FILE = PROJECT_ROOT / "tools" / "tiktok_mobile_account_state.json"
 
 VPS_HOST = "root@119.10.140.161"
 VPS_PENDING_DIR = "/root/shopee-affiliate-bot/reels_uploader/pending_videos"
@@ -53,26 +58,26 @@ def log(msg: str):
 
 def run_adb(args: List[str], device_id: Optional[str] = None, timeout: int = 30) -> str:
     """รันคำสั่ง ADB บนอุปกรณ์"""
-    cmd = ["adb"]
-    if device_id:
-        cmd.extend(["-s", device_id])
-    cmd.extend(args)
     try:
-        res = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", timeout=timeout)
-        return res.stdout.strip()
-    except Exception as e:
-        log(f"⚠️ ADB Error ({cmd}): {e}")
-        return ""
+        return shared_adb(args, serial=device_id, timeout=timeout)
+    except Exception as exc:
+        raise RuntimeError("ADB command failed; stopping this attempt") from exc
+
 
 
 def get_connected_device() -> Optional[str]:
     """ดึง ID มือถือที่เชื่อมต่ออยู่"""
     output = run_adb(["devices"])
     lines = output.split("\n")[1:]
-    for line in lines:
-        if "\tdevice" in line:
-            return line.split("\t")[0]
-    return None
+    devices = [parts[0] for line in lines if len(parts := line.split()) >= 2 and parts[1] == "device"]
+    requested = android_settings()["serial"]
+    if requested:
+        if requested not in devices:
+            raise RuntimeError("Configured TikTok device is not connected or authorized")
+        return requested
+    if len(devices) > 1:
+        raise RuntimeError("Multiple Android devices; configure TIKTOK_ANDROID_SERIAL")
+    return devices[0] if devices else None
 
 
 def clean_and_archive_old_pending_videos():
@@ -131,14 +136,14 @@ def sync_next_video_from_vps() -> Optional[pathlib.Path]:
 
 
 def push_video_to_mobile(device_id: str, video_path: pathlib.Path) -> str:
-    """ลบไฟล์วิดีโอเก่าทั้งหมดทุกโฟลเดอร์ในโทรศัพท์ เพื่อให้คลังภาพมีแค่คลิปใหม่คลิปเดียวเท่านั้น"""
+    """Copy one clip into the bot's directory without deleting personal media."""
+    video_path = pathlib.Path(video_path)
+    if not video_path.is_file():
+        raise FileNotFoundError(video_path)
     timestamp = int(time.time())
     safe_name = f"tiktok_video_{timestamp}.mp4"
-    target_path = f"/sdcard/Movies/{safe_name}"
-    
-    log("🧹 กำลังลบวิดีโอเก่าออกจากทุกโฟลเดอร์มือถือ (/sdcard/Movies, /sdcard/DCIM/Camera, /sdcard/Download)...")
-    run_adb(["shell", "rm", "-f", "/sdcard/Movies/*.mp4", "/sdcard/DCIM/Camera/*.mp4", "/sdcard/Download/*.mp4"], device_id=device_id)
-    time.sleep(1)
+    target_path = f"/sdcard/Movies/PaKhemBot/{safe_name}"
+    run_adb(["shell", "mkdir", "-p", "/sdcard/Movies/PaKhemBot"], device_id=device_id)
 
     log(f"📲 กำลังส่งวิดีโอใหม่ {video_path.name} -> {safe_name} เข้าสู่มือถือ...")
     run_adb(["push", str(video_path), target_path], device_id=device_id, timeout=60)
@@ -150,14 +155,127 @@ def push_video_to_mobile(device_id: str, video_path: pathlib.Path) -> str:
     return target_path
 
 
-def post_via_u2(d, video_path: pathlib.Path, caption: str = "") -> bool:
+def build_tiktok_caption(video_path: pathlib.Path) -> str:
+    """สร้างแคปชั่นภาษาไทยและชุดแฮชแท็กระดับท็อป (TikTok Creative Center + Official SEO) อัตโนมัติ"""
+    name = video_path.stem
+    clean_title = re.sub(r"_\d{9,12}$", "", name)
+
+    category = "general"
+    if clean_title.startswith("celebrity_trend_"):
+        clean_title = clean_title.replace("celebrity_trend_", "")
+        category = "celebrity"
+    elif clean_title.startswith("trending_news_"):
+        clean_title = clean_title.replace("trending_news_", "")
+        category = "news"
+    elif clean_title.startswith("shopee_") or clean_title.startswith("product_"):
+        clean_title = clean_title.replace("shopee_", "").replace("product_", "")
+        category = "product"
+
+    clean_title = clean_title.replace("_", " ").strip()
+
+    # ชุดแฮชแท็กคัดสรรตามร่องรอยดิจิทัล TikTok Thailand (SEO 2026)
+    if category == "celebrity":
+        hashtags = "#เทรนด์วันนี้ #เรื่องนี้ต้องดู #ข่าวดารา #tiktokคนบันเทิง #ข่าวtiktok #fyp"
+    elif category == "news":
+        hashtags = "#เทรนด์วันนี้ #เรื่องนี้ต้องดู #ข่าวtiktok #ข่าวด่วน #tiktoknews #fyp"
+    elif category == "product":
+        hashtags = "#ของดีบอกต่อ #TikTokป้ายยา #ของใช้ในบ้าน #พิกัดshopee #ขายดี #ป้าเข็มรีวิว"
+    else:
+        hashtags = "#เทรนด์วันนี้ #เรื่องนี้ต้องดู #TikTokUni #สาระน่ารู้ #ทริคดีๆ #fyp"
+
+    return f"{clean_title} 📌 {hashtags}"
+
+
+def rotate_or_switch_tiktok_account(d, target_account: Optional[str] = None) -> str:
+    """ระบบตรวจจับและสลับบัญชี TikTok แบบ Multi-Account Round-Robin อัตโนมัติ 100%"""
+    log("🔄 กำลังตรวจสอบและสลับบัญชี TikTok (Multi-Account Rotation)...")
+
+    # 1. ไปที่แท็บ 'โปรไฟล์'
+    if d(text="โปรไฟล์").exists:
+        d(text="โปรไฟล์").click()
+    elif d(descriptionContains="โปรไฟล์").exists:
+        d(descriptionContains="โปรไฟล์").click()
+    else:
+        w, h = d.window_size()
+        d.click(int(w * 0.9), int(h * 0.95))
+    time.sleep(2)
+
+    # 2. กดเปิดเมนู 'สลับบัญชี' ที่หัวข้อโปรไฟล์ด้านบน
+    w, h = d.window_size()
+    d.click(int(w * 0.5), int(h * 0.193))
+    time.sleep(2)
+
+    # 3. ดึงรายชื่อบัญชีทั้งหมดที่มีใน Sheet
+    accounts = []
+    for el in d(className="android.widget.TextView"):
+        try:
+            t = el.get_text()
+            if t and t not in ["สลับบัญชี", "เพิ่มบัญชี", "X", "ยกเลิก"] and not t.startswith("กำลังติดตาม"):
+                accounts.append(t.strip())
+        except Exception:
+            pass
+
+    # กรอง duplicate
+    seen = set()
+    unique_accounts = []
+    for a in accounts:
+        if a and a not in seen and len(a) < 30:
+            seen.add(a)
+            unique_accounts.append(a)
+
+    if not unique_accounts:
+        log("ℹ️ ตรวจไม่พบ Sheet สลับบัญชี ใช้บัญชีปัจจุบันที่ล็อกอินอยู่")
+        return "default"
+
+    log(f"📋 พบบัญชี TikTok ในระบบทั้งหมด ({len(unique_accounts)} บัญชี): {unique_accounts}")
+
+    # 4. คำนวณบัญชีถัดไป (Round-Robin)
+    state = {"last_account": "", "account_index": 0}
+    if ACCOUNT_STATE_FILE.exists():
+        try:
+            state = json.loads(ACCOUNT_STATE_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            state = {"last_account": "", "account_index": 0}
+
+    last_idx = state.get("account_index", 0)
+    next_idx = (last_idx + 1) % len(unique_accounts)
+    next_account = target_account if (target_account and target_account in unique_accounts) else unique_accounts[next_idx]
+
+    # 5. สลับไปยังบัญชีเป้าหมาย
+    log(f"🎯 กำลังสลับไปใช้บัญชีลำดับที่ {next_idx + 1}/{len(unique_accounts)}: @{next_account}")
+    if d(text=next_account).exists:
+        d(text=next_account).click()
+    else:
+        # Fallback กดตามตำแหน่งแถว
+        row_y = int(h * (0.86 + next_idx * 0.08))
+        d.click(int(w * 0.5), min(row_y, int(h * 0.95)))
+
+    time.sleep(3)
+
+    # บันทึก state
+    state["last_account"] = next_account
+    state["account_index"] = next_idx
+    state["total_accounts"] = len(unique_accounts)
+    ACCOUNT_STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    log(f"✅ สลับบัญชีสำเร็จ! บัญชีที่พร้อมโพสต์ปัจจุบันคือ: @{next_account}")
+    return next_account
+
+
+def post_via_u2(d, video_path: pathlib.Path, caption: str = "", remote_path: str = "") -> bool:
     """โพสต์วิดีโอผ่าน uiautomator2 Engine คุณภาพสูงสไตล์ TAKTIK Bot"""
+    sys.path.insert(0, str(PROJECT_ROOT / "backend"))
+    from app.services.video_publish_policy import publication_block_reason
+    blocked = publication_block_reason(video_path, caption)
+    if blocked:
+        log(blocked)
+        return False
     log("🚀 เริ่มต้นกระบวนการอัปโหลดผ่าน uiautomator2 Engine...")
     
     # 1. ตั้งค่า Auto-Watcher ดักจับและกดปิดป๊อปอัปอัตโนมัติ
     try:
         d.watcher.reset()
-        for txt in ["ไม่ใช่ตอนนี้", "ยกเลิก", "อนุญาต", "ปิด", "ตกลง", "ข้าม", "ไม่"]:
+        for txt in ["ไม่ใช่ตอนนี้", "ยกเลิก", "ปิด"]:
             d.watcher.when(txt).click()
         d.watcher.start(2.0)
     except Exception as e:
@@ -185,7 +303,18 @@ def post_via_u2(d, video_path: pathlib.Path, caption: str = "") -> bool:
             log("❌ ไม่สามารถเปิด TikTok ได้อย่างสมบูรณ์ ข้ามรอบนี้เพื่อความปลอดภัย ไม่แตะหน้าจอโฮมเด็ดขาด")
             return False
 
-    # 3. ค้นหาและกดปุ่ม '+' (สร้าง)
+    # Verify the account on its profile page before any upload navigation.
+    profile = d(description="โปรไฟล์")
+    if not profile.exists:
+        profile = d(text="โปรไฟล์")
+    if not profile.exists:
+        raise RuntimeError("Profile control not found")
+    profile.click()
+    expected = "@" + android_settings()["account"]
+    if not d(text=expected).wait(timeout=10):
+        raise RuntimeError("Expected TikTok account is not visible on the profile page")
+
+    # 4. ค้นหาและกดปุ่ม '+' (สร้าง)
     log("👉 กำลังกดปุ่มสร้าง (+) บน TikTok...")
     clicked_plus = False
     for _ in range(4):
@@ -209,7 +338,7 @@ def post_via_u2(d, video_path: pathlib.Path, caption: str = "") -> bool:
     
     time.sleep(4)
 
-    # 4. ตรวจสอบว่าเข้าหน้ากล้องถ่ายรูปสำเร็จ
+    # 5. ตรวจสอบว่าเข้าหน้ากล้องถ่ายรูปสำเร็จ
     if not (d(resourceIdMatches=".*upload.*").exists or d(textContains="อัปโหลด").exists):
         if d.app_current().get("package") == "com.ss.android.ugc.trill":
             log("⚠️ กำลังเข้าสู่หน้ากล้องถ่ายรูป...")
@@ -217,7 +346,7 @@ def post_via_u2(d, video_path: pathlib.Path, caption: str = "") -> bool:
             d.click(int(w * 0.5), int(h * 0.927))
             time.sleep(4)
 
-    # 5. กดปุ่ม 'อัปโหลด' คลังภาพ
+    # 6. กดปุ่ม 'อัปโหลด' คลังภาพ
     log("👉 กำลังเลือกปุ่ม 'อัปโหลด' คลังภาพ...")
     if d(resourceIdMatches=".*upload.*").exists:
         d(resourceIdMatches=".*upload.*").click()
@@ -229,21 +358,27 @@ def post_via_u2(d, video_path: pathlib.Path, caption: str = "") -> bool:
     
     time.sleep(4)
 
-    # 6. กดเลือกแท็บ 'วิดีโอ' เพื่อกรองเฉพาะไฟล์วิดีโอ (ตัดรูปภาพ/สกรีนช็อตออก 100%)
+    # 7. กดเลือกแท็บ 'วิดีโอ' เพื่อกรองเฉพาะไฟล์วิดีโอ (ตัดรูปภาพ/สกรีนช็อตออก 100%)
     if d(text="วิดีโอ").exists:
         log("🎬 กดแท็บ 'วิดีโอ' เพื่อกรองเฉพาะคลิป...")
         d(text="วิดีโอ").click()
         time.sleep(2)
 
-    # 7. เลือกคลิปแรกสุดในคลังภาพ (Row 1 Col 1: ช่องบนซ้ายสุด 133, 220)
-    log("🎯 เลือกคลิปวิดีโอล่าสุดในแกลเลอรี (Row 1 Col 1)...")
+    # 8. เลือกคลิปแรกสุดในคลังภาพ (Row 1 Col 1: ช่องบนซ้ายสุด 133, 220)
+    log("Checking the exact uploaded filename in the gallery")
     w, h = d.window_size()
-    target_x = int(w * 0.166) if w > 0 else 133
-    target_y = int(h * 0.164) if h > 0 else 220
-    d.click(target_x, target_y)
+    if not remote_path:
+        raise RuntimeError("Exact uploaded filename is required")
+    remote_name = pathlib.PurePosixPath(remote_path).name
+    target = d(text=remote_name)
+    if not target.exists:
+        target = d(description=remote_name)
+    if not target.exists or target.count != 1:
+        raise RuntimeError("Gallery does not expose the exact uploaded filename; selection needs verification")
+    target.click()
     time.sleep(3)
 
-    # 8. กดปุ่ม 'ถัดไป' ในหน้าแกลเลอรี
+    # 9. กดปุ่ม 'ถัดไป' ในหน้าแกลเลอรี
     log("👉 กดปุ่มถัดไป (Next)...")
     if d(textMatches="(?i)ถัดไป.*|Next.*").exists:
         d(textMatches="(?i)ถัดไป.*|Next.*").click()
@@ -251,7 +386,7 @@ def post_via_u2(d, video_path: pathlib.Path, caption: str = "") -> bool:
         d.click(int(w * 0.925), int(h * 0.912))
     time.sleep(4)
 
-    # 9. กดปุ่ม 'ถัดไป' ในหน้าพรีวิววิดีโอ
+    # 10. กดปุ่ม 'ถัดไป' ในหน้าพรีวิววิดีโอ
     log("👉 กดปุ่มถัดไปหน้าพรีวิว...")
     if d(textMatches="(?i)ถัดไป.*|Next.*").exists:
         d(textMatches="(?i)ถัดไป.*|Next.*").click()
@@ -259,38 +394,7 @@ def post_via_u2(d, video_path: pathlib.Path, caption: str = "") -> bool:
         d.click(int(w * 0.925), int(h * 0.912))
     time.sleep(5)
 
-def build_tiktok_caption(video_path: pathlib.Path) -> str:
-    """สร้างแคปชั่นภาษาไทยและชุดแฮชแท็กระดับท็อป (TikTok Creative Center + Official SEO) อัตโนมัติ"""
-    name = video_path.stem
-    clean_title = re.sub(r"_\d{9,12}$", "", name)
-    
-    category = "general"
-    if clean_title.startswith("celebrity_trend_"):
-        clean_title = clean_title.replace("celebrity_trend_", "")
-        category = "celebrity"
-    elif clean_title.startswith("trending_news_"):
-        clean_title = clean_title.replace("trending_news_", "")
-        category = "news"
-    elif clean_title.startswith("shopee_") or clean_title.startswith("product_"):
-        clean_title = clean_title.replace("shopee_", "").replace("product_", "")
-        category = "product"
-
-    clean_title = clean_title.replace("_", " ").strip()
-
-    # ชุดแฮชแท็กคัดสรรตามร่องรอยดิจิทัล TikTok Thailand (SEO 2026)
-    if category == "celebrity":
-        hashtags = "#เทรนด์วันนี้ #เรื่องนี้ต้องดู #ข่าวดารา #tiktokคนบันเทิง #ข่าวtiktok #fyp"
-    elif category == "news":
-        hashtags = "#เทรนด์วันนี้ #เรื่องนี้ต้องดู #ข่าวtiktok #ข่าวด่วน #tiktoknews #fyp"
-    elif category == "product":
-        hashtags = "#ของดีบอกต่อ #TikTokป้ายยา #ของใช้ในบ้าน #พิกัดshopee #ขายดี #ป้าเข็มรีวิว"
-    else:
-        hashtags = "#เทรนด์วันนี้ #เรื่องนี้ต้องดู #TikTokUni #สาระน่ารู้ #ทริคดีๆ #fyp"
-
-    return f"{clean_title} 📌 {hashtags}"
-
-
-    # 9. ใส่แคปชั่น & แฮชแท็ก (ตรวจสอบก่อนว่าอยู่หน้าโพสต์จริง!)
+    # 11. ใส่แคปชั่น & แฮชแท็ก (ตรวจสอบก่อนว่าอยู่หน้าโพสต์จริง!)
     on_post_screen = d(textMatches="(?i)โพสต์|Post").exists or d(resourceIdMatches=".*t6b.*").exists or d(resourceIdMatches=".*h3a.*").exists
     if caption and on_post_screen:
         log(f"✍️ ยืนยันอยู่หน้าโพสต์! กำลังกรอกแคปชั่นและแฮชแท็ก: {caption}")
@@ -315,14 +419,14 @@ def build_tiktok_caption(video_path: pathlib.Path) -> str:
         except Exception:
             pass
 
-    # 10. กดปุ่ม 'โพสต์' (Post)
+    # 12. กดปุ่ม 'โพสต์' (Post)
     log("🚀 กำลังกดปุ่ม 'โพสต์' ขึ้น TikTok...")
     if d(resourceIdMatches=".*t6b.*").exists:
         d(resourceIdMatches=".*t6b.*").click()
     elif d(textMatches="(?i)โพสต์|Post").exists:
         d(textMatches="(?i)โพสต์|Post").click()
     else:
-        d.click(int(w * 0.7425), int(h * 0.9164))
+        raise RuntimeError("Post button not found; no coordinate fallback allowed")
     
     time.sleep(6)
     try:
@@ -333,97 +437,46 @@ def build_tiktok_caption(video_path: pathlib.Path) -> str:
 
 
 def auto_post_video_on_tiktok_app(device_id: str, video_path: pathlib.Path, caption: str = "") -> bool:
-    """สั่งโพสต์วิดีโอขึ้น TikTok โดยเลือกระบบที่ดีที่สุด (u2 หรือ Native ADB)"""
-    log(f"🤖 เริ่มต้นกระบวนการ Zero-Touch Auto-Post สำหรับ: {video_path.name}")
-    
-    # 1. ล้างคลังมือถือและพุชคลิปใหม่
-    push_video_to_mobile(device_id, video_path)
-
-    success = False
-    if HAS_U2:
-        try:
-            d = u2.connect(device_id)
-            success = post_via_u2(d, video_path, caption=caption)
-        except Exception as e:
-            log(f"⚠️ u2 error ({e}) กำลังสลับไปใช้ Native ADB Engine...")
-            success = False
-
-    if not success:
-        log("⚙️ กำลังประมวลผลผ่าน Native ADB Shell Engine...")
-        w, h = 800, 1340
-        out = run_adb(["shell", "wm", "size"], device_id=device_id)
-        m = re.search(r"(\d+)x(\d+)", out)
-        if m:
-            w, h = int(m.group(1)), int(m.group(2))
-
-        run_adb(["shell", "input", "keyevent", "224"], device_id=device_id)
-        run_adb(["shell", "input", "keyevent", "82"], device_id=device_id)
-        time.sleep(1)
-        run_adb(["shell", "am", "force-stop", "com.ss.android.ugc.trill"], device_id=device_id)
-        time.sleep(1)
-        run_adb(["shell", "am", "start", "-a", "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER", "-p", "com.ss.android.ugc.trill"], device_id=device_id)
-        time.sleep(6)
-        
-        # Tap +
-        run_adb(["shell", "input", "tap", str(int(w * 0.5)), str(int(h * 0.927))], device_id=device_id)
-        time.sleep(4)
-        # Tap Upload
-        run_adb(["shell", "input", "tap", str(int(w * 0.066)), str(int(h * 0.919))], device_id=device_id)
-        time.sleep(4)
-        # Tap Top Left item (133, 310)
-        run_adb(["shell", "input", "tap", str(int(w * 0.166)), str(int(h * 0.231))], device_id=device_id)
-        time.sleep(3)
-        # Tap Next
-        run_adb(["shell", "input", "tap", str(int(w * 0.925)), str(int(h * 0.912))], device_id=device_id)
-        time.sleep(4)
-        # Tap Preview Next
-        run_adb(["shell", "input", "tap", str(int(w * 0.925)), str(int(h * 0.912))], device_id=device_id)
-        time.sleep(5)
-        # Type Caption
-        if caption:
-            run_adb(["shell", "input", "tap", str(int(w * 0.25)), str(int(h * 0.15))], device_id=device_id)
-            time.sleep(1)
-            clean_cap = caption.replace("\n", " ").replace("'", "")
-            run_adb(["shell", "input", "text", clean_cap[:100]], device_id=device_id)
-            time.sleep(2)
-        # Tap Post
-        run_adb(["shell", "input", "tap", str(int(w * 0.7425)), str(int(h * 0.9164))], device_id=device_id)
-        time.sleep(6)
-        success = True
-
-    # 3. บันทึกประวัติ + ย้ายไฟล์ลงคลังที่โพสต์แล้ว + ลบออกจาก VPS ป้องกันคลิปซ้ำ 100%
-    history = []
-    if HISTORY_FILE.exists():
-        try:
-            history = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            history = []
-    if video_path.name not in history:
-        history.append(video_path.name)
-        HISTORY_FILE.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    # ย้ายไปโฟลเดอร์ posted_videos
+    """One attempt only; unverified results are held, never silently retried."""
+    sys.path.insert(0, str(PROJECT_ROOT / "backend"))
+    from app.services.video_publish_policy import publication_block_reason
+    blocked = publication_block_reason(video_path, caption)
+    if blocked:
+        log(blocked)
+        return False
+    video_path = pathlib.Path(video_path)
+    config = android_settings()
+    if device_id != config["serial"]:
+        raise RuntimeError("Device does not match the configured TikTok station")
+    account = config["account"]
+    prior = inspect_history(video_path, account)
+    if prior["status"] != "pending":
+        log(f"Clip held by history: {prior['status']}")
+        return False
+    if not HAS_U2:
+        raise RuntimeError("uiautomator2 is required; coordinate-only posting is disabled")
+    # Reserve before any app action; a crash cannot result in automatic duplicate posting.
+    record_history(video_path, account, "in_progress")
     try:
-        archive_target = ARCHIVE_DIR / video_path.name
-        if video_path.exists():
-            video_path.rename(archive_target)
-            log(f"📦 ย้ายไฟล์คลิปเข้าคลังประวัติ: {archive_target.name}")
-    except Exception as e:
-        log(f"⚠️ Archive warning: {e}")
-
-    # ลบไฟล์ออกจาก VPS เพื่อไม่ให้ scp ดึงมาซ้ำ
-    try:
-        subprocess.run(["ssh", VPS_HOST, f"rm -f '{VPS_PENDING_DIR}/{video_path.name}'"], capture_output=True, timeout=15)
-        log("🧹 ลบไฟล์คลิปออกจาก VPS pending_videos เรียบร้อย")
-    except Exception as e:
-        log(f"⚠️ VPS cleanup warning: {e}")
-
-    log(f"🎉 สำเร็จ 100%! วิดีโอ {video_path.name} ถูกอัปโหลดขึ้น TikTok ผ่านมือถืออัตโนมัติเรียบร้อยครับ")
-    return True
+        d = u2.connect(device_id)
+        remote_path = push_video_to_mobile(device_id, video_path)
+        post_via_u2(d, video_path, caption=caption, remote_path=remote_path)
+    except Exception as exc:
+        log(f"Mobile attempt stopped: {exc}")
+    finally:
+        if 'd' in locals():
+            try:
+                d.watcher.stop()
+            except Exception:
+                pass
+        # The legacy UI flow has no reliable receipt. Never turn its boolean into success.
+        record_history(video_path, account, "unknown", "Publication receipt not verified")
+    log("Outcome requires review; clip retained and automatic retry blocked")
+    return False
 
 
 def main():
-    log("🤖 เริ่มต้นทำงานระบบ TikTok Zero-Touch Auto-Poster Daemon (Pro Engine)...")
+    log("🤖 เริ่มต้นทำงานระบบ TikTok Zero-Touch Auto-Poster Daemon (Pro Engine with Multi-Account)...")
     device_id = get_connected_device()
     if not device_id:
         log("❌ ไม่พบมือถือ Android เชื่อมต่ออยู่ กรุณาเชื่อมต่อสาย USB หรือต่อ Wi-Fi ADB")
@@ -431,13 +484,22 @@ def main():
 
     log(f"📱 เชื่อมต่อมือถือเรียบร้อย: Device ID = {device_id}")
 
-    video = sync_next_video_from_vps()
+    config = android_settings()
+    queue = PROJECT_ROOT / config["queue"]
+    video = next((path for path in sorted(queue.glob("*.mp4"))
+                  if inspect_history(path, config["account"])["status"] == "pending"), None)
     if not video:
         log("✅ ไม่มีวิดีโอใหม่ในคลัง ระบบพร้อมทำงานในรอบถัดไป")
         return
 
-    caption = build_tiktok_caption(video)
-    auto_post_video_on_tiktok_app(device_id, video, caption=caption)
+    caption_file = video.with_suffix(".txt")
+    if not caption_file.is_file():
+        raise RuntimeError("Reviewed caption sidecar is required; filenames are not captions")
+    caption = caption_file.read_text(encoding="utf-8").strip()
+    if not caption:
+        raise RuntimeError("Caption sidecar is empty")
+    if not auto_post_video_on_tiktok_app(device_id, video, caption=caption):
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

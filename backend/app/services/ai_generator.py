@@ -4,6 +4,7 @@ from app.config import settings
 from app.services.llm_clients import call_with_backoff, parse_llm_json, groq_json_schema_format
 from app.schemas import ScriptGeneratorResponse
 from app.services.persona import persona_system_prompt
+from app.services.content_skillclaw import content_skill_prompt
 from app.services.product_price_policy import sanitize_public_product_script
 
 logger = logging.getLogger(__name__)
@@ -79,10 +80,10 @@ def build_template_script(product_name: str, category: str = "", price: float = 
     คอนเทนต์โดยไม่ต้องเสีย Groq — field ครบ SCRIPT_KEYS เหมือนผลจาก LLM.
     """
     return {
-        "hook": f"หยุดก่อนจ๊ะ! ป้าเพิ่งเจอ {product_name} ของดี ราคาไม่แพงแต่ใช้ดีจริง ต้องมาบอกต่อ",
-        "problem": "หลายคนบ่นว่าของแบบนี้ซื้อมาแล้วพังง่าย หรือแพงเกินราคา จนบางทีก็ไม่รู้จะเชื่อใคร",
-        "solution": f"ตัวนี้ป้าลองใช้เองแล้วจ๊ะ สไตล์ {style} คุณภาพดีสมราคา ใช้ประจำได้เรื่อย ๆ คุ้มมาก",
-        "cta": "ใครสนใจกดลิงก์ในตะกร้า Shopee ได้เลยจ๊ะ ป้าจัดให้ ของแท้ราคาดี",
+        "hook": f"หยุดก่อนจ๊ะ! ป้าเพิ่งเจอ {product_name} ของดีมีคุณภาพใช้ดีจริง ต้องมาบอกต่อ",
+        "problem": "หลายคนบ่นว่าของแบบนี้ซื้อมาแล้วพังง่าย หรือคุณภาพไม่ได้ดั่งใจ จนบางทีก็ไม่รู้จะเชื่อใคร",
+        "solution": f"ตัวนี้ป้าลองใช้เองแล้วจ๊ะ สไตล์ {style} คุณภาพดีเยี่ยม ใช้ประจำได้เรื่อย ๆ คุ้มค่ามาก",
+        "cta": "ใครสนใจกดลิงก์ในตะกร้า Shopee ได้เลยจ๊ะ ป้าจัดให้ ของแท้ 100% เก็บโค้ดลดเพิ่มในคลิปได้เลย",
         # caption ต้องเป็นข้อความล้วน (ไม่มี inline hashtag) — consumer ทุกตัว
         # (cron analyze / _build_fb_caption / batch_generate_content) ต่อ hashtags
         # เองด้วย format_hashtags_text(hashtags) ถ้า caption มี tag อยู่แล้วจะซ้ำ
@@ -108,12 +109,13 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
     }
     
     style_desc = style_prompts.get(style.lower(), style_prompts["standard"])
+    skill_guidance = content_skill_prompt("product")
     
     if provider == "gemini" and settings.GEMINI_API_KEY and "mock" not in settings.GEMINI_API_KEY.lower():
         try:
             import google.generativeai as genai
             genai.configure(api_key=settings.GEMINI_API_KEY)
-            model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=persona_system_prompt(tone=tone, market_tone=market_tone))
+            model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=persona_system_prompt(tone=tone, market_tone=market_tone) + skill_guidance)
             
             prompt = f"""
             Write a short video script (15-30s) in Thai for this product:
@@ -160,7 +162,7 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
                 lambda: client.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=[
-                        {"role": "system", "content": persona_system_prompt("Respond only in JSON format with Thai texts.", tone=tone, market_tone=market_tone)},
+                        {"role": "system", "content": persona_system_prompt("Respond only in JSON format with Thai texts.", tone=tone, market_tone=market_tone) + skill_guidance},
                         {"role": "user", "content": prompt}
                     ],
                     response_format={"type": "json_object"}
@@ -172,7 +174,8 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
 
     elif provider == "groq" and settings.GROQ_API_KEY and "mock" not in settings.GROQ_API_KEY.lower():
         from app.services.llm_clients import groq_clients
-        clients = groq_clients()
+        from app.services.skillclaw_runtime import route_content_clients
+        clients = route_content_clients(groq_clients(), "product")
         prompt = f"""
         Write a TikTok script in Thai for {product_name} ({category}) priced at {price} Baht.
         Style: {style} ({style_desc})
@@ -186,7 +189,7 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
                     lambda: client.chat.completions.create(
                         model=settings.GROQ_MODEL,
                         messages=[
-                            {"role": "system", "content": persona_system_prompt("Respond only in JSON format with Thai texts.", tone=tone, market_tone=market_tone)},
+                            {"role": "system", "content": persona_system_prompt("Respond only in JSON format with Thai texts.", tone=tone, market_tone=market_tone) + skill_guidance},
                             {"role": "user", "content": prompt}
                         ],
                         # json_schema (strict) บนโมเดลที่รองรับ — การันตี schema ตรง;
@@ -219,7 +222,7 @@ def generate_script_for_product(product_name: str, category: str, price: float, 
                     lambda: client.chat.completions.create(
                         model=settings.ANTHROPIC_MODEL,
                         messages=[
-                            {"role": "system", "content": persona_system_prompt("Respond only in JSON format with Thai texts.", tone=tone, market_tone=market_tone)},
+                            {"role": "system", "content": persona_system_prompt("Respond only in JSON format with Thai texts.", tone=tone, market_tone=market_tone) + skill_guidance},
                             {"role": "user", "content": prompt}
                         ]
                     ),

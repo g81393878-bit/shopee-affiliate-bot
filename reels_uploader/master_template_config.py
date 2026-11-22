@@ -202,6 +202,20 @@ THEME_PALETTES = {
         "glow_col": (255, 235, 59),
         "hook_col": (255, 235, 59),
         "header_txt": "• จุดเด่นที่ต้องมีติดบ้านไว้",
+    },
+    "POLL_BATTLE": {
+        "name": "โพลเปรียบเทียบสินค้า A vs B",
+        "badge_bg": (147, 51, 234),      # Royal Purple
+        "badge_txt": "โพลโหวตชิ้นโปรด",
+        "card_bg": (15, 23, 42, 240),
+        "card_border": (168, 85, 247, 200),
+        "active_row_bg": (126, 34, 206),
+        "active_border": (233, 213, 255),
+        "active_num_bg": (255, 255, 255),
+        "active_num_txt": (126, 34, 206),
+        "glow_col": (255, 235, 59),
+        "hook_col": (255, 235, 59),
+        "header_txt": "• โหวตทีม A หรือ ทีม B บนหน้าจอ",
     }
 }
 

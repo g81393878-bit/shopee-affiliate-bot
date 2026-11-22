@@ -135,11 +135,11 @@ def login_flow(account_id: Optional[int] = None):
         browser.close()
 
 
-def sanitize_caption(caption: str, max_chars: int = 500) -> str:
+def sanitize_caption(caption: str, max_chars: int = 2000) -> str:
     caption = (caption or "").strip()
     caption = re.sub(r"\b\d+([.,]\d+)?\s*(บาท|฿|baht)\b", "", caption, flags=re.IGNORECASE)
     if len(caption) > max_chars:
-        caption = caption[:max_chars - 3] + "..."
+        raise ValueError("Caption exceeds limit; shorten complete sentences before posting")
     return caption
 
 
@@ -151,6 +151,11 @@ def upload_video_via_web(
     cookie_file: Optional[Union[str, pathlib.Path]] = None,
 ) -> Dict:
     """อัปโหลดวิดีโอ 9:16 เข้าสู่ TikTok Creator Center โดยอัตโนมัติผ่าน Playwright"""
+    sys.path.insert(0, str(BACKEND_DIR))
+    from app.services.video_publish_policy import publication_block_reason
+    blocked = publication_block_reason(video_path, caption)
+    if blocked:
+        return {"success": False, "error": blocked}
     from playwright.sync_api import sync_playwright
 
     video_file = pathlib.Path(video_path).resolve()

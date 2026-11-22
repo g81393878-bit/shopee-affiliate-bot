@@ -275,3 +275,36 @@ def generate_custom_script(product_id: int, style: str = "Standard", db: Session
     db.commit()
     
     return script_data
+
+
+@router.post("/{product_id}/harvest-image")
+def harvest_single_product_image(product_id: int, force: bool = False, db: Session = Depends(get_db)):
+    """ดึงและบันทึกรูปภาพแท้ Shopee Official CDN ให้กับสินค้าแบบเจาะจง"""
+    from app.services.shopee_image_service import fetch_shopee_cdn_image
+    
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+        
+    if not force and product.image_url and "susercontent.com" in product.image_url:
+        return {
+            "success": True,
+            "product_id": product_id,
+            "image_url": product.image_url,
+            "message": "สินค้ามีรูปภาพ Shopee CDN ของแท้อยู่แล้ว"
+        }
+        
+    img_url = fetch_shopee_cdn_image(product.name)
+    if not img_url:
+        raise HTTPException(status_code=404, detail="ไม่พบรูปภาพแท้สำหรับสินค้านี้")
+        
+    product.image_url = img_url
+    db.commit()
+    return {
+        "success": True,
+        "product_id": product_id,
+        "name": product.name,
+        "image_url": img_url,
+        "message": "อัปเดตรูปภาพ Shopee Official CDN สำเร็จเรียบร้อย"
+    }
+

@@ -53,7 +53,7 @@ POSTERS = [
 ]
 
 W, H = 1080, 1350  # 4:5 portrait — เหมาะ feed Facebook
-BRAND = "ป้าเข็ม ขายของ"
+BRAND = "ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้"
 FONT_DIR = Path("C:/Windows/Fonts")
 FONT_BOLD = FONT_DIR / "tahomabd.ttf"
 FONT_REG = FONT_DIR / "tahoma.ttf"

@@ -24,6 +24,7 @@ sys.path[:0] = [str(ROOT / "backend"), str(ROOT / "tools"), str(ROOT / "reels_up
 load_dotenv(ROOT / "backend/.env")
 from google_trends_report import FEED, parse_feed, rank_topics, history_titles, normalize
 from app.services.content_safety_filter import is_sensitive_forbidden_topic
+from content_captions import complete_fact, enrich_plan_caption
 
 BASE = ROOT / "artifacts/trend_autopilot"
 PENDING = ROOT / "reels_uploader/pending_videos"
@@ -32,6 +33,13 @@ BLOCKED_EDITORIAL = ("เลือกตั้ง", "รัฐบาล", "พ�
 LOG = logging.getLogger("TrendAutopilot")
 THAI_RE = re.compile(r"[\u0e00-\u0e7f]")
 SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?。！？])\s+|\n+")
+
+
+def source_sentences(article):
+    # A period in Thai units/Latin initials is not a sentence boundary.
+    protected = re.sub(r"(?:มม\.|ซม\.|กม\.|พ\.ศ\.|ค\.ศ\.|\b[A-Za-z]\.)",
+                       lambda m: m.group().replace('.', '\uE000'), article)
+    return [part.replace('\uE000', '.') for part in SENTENCE_SPLIT_RE.split(protected)]
 HOOKS_BY_CATEGORY = {
     "ไอที": ("เทคโนโลยีนี้น่าจับตา!", "สายไอทีต้องรู้เรื่องนี้!", "เรื่องใหม่วงการไอที!"),
     "ของใช้ในบ้าน": ("คนรักบ้านต้องรู้!", "เรื่องใกล้ตัวที่ควรรู้!", "บ้านยุคใหม่ต้องดู!"),
@@ -69,7 +77,8 @@ def article_text_and_image(url):
         addresses = socket.getaddrinfo(parsed.hostname, 443, type=socket.SOCK_STREAM)
         if not addresses or any(not ipaddress.ip_address(a[4][0]).is_global for a in addresses):
             raise ValueError("Non-public source address")
-        with httpx.stream("GET", url, timeout=20, follow_redirects=False) as response:
+        with httpx.stream("GET", url, timeout=20, follow_redirects=False,
+                          headers={"User-Agent": "Mozilla/5.0"}) as response:
             if response.is_redirect:
                 from urllib.parse import urljoin
                 url = urljoin(url, response.headers["location"])
@@ -111,15 +120,15 @@ def article_text(url):
 
 def validate_plan(plan, evidence, evidence_blocks=None):
     scenes = plan.get("scenes", [])
-    if len(scenes) != 5:
-        raise ValueError("Need five scenes")
+    if not 3 <= len(scenes) <= 5:
+        raise ValueError("Need three to five scenes")
     for s in scenes:
         for key, limit in (("voice", 150), ("headline", 42), ("hero", 24), ("detail", 60)):
             if not isinstance(s.get(key), str) or not 1 <= len(s[key]) <= limit:
                 raise ValueError(f"Invalid scene {key}")
     # The opening hook can be a neutral question. Only factual scenes need a
     # verbatim evidence binding; the closing scene is a call to action.
-    for s in scenes[1:4]:
+    for s in scenes[1:-1]:
         if s.get("evidence_id") is None and s.get("neutral_transition") is True:
             continue
         if evidence_blocks is not None:
@@ -156,8 +165,10 @@ def _safe_source_sentences(article, terms=()):
     """Select complete Thai source sentences without rewriting their claims."""
     selected = []
     seen = set()
-    for raw in SENTENCE_SPLIT_RE.split(article):
+    for raw in source_sentences(article):
         sentence = " ".join(raw.split()).strip(" •\t")
+        if not complete_fact(sentence):
+            continue
         folded = sentence.casefold()
         if not 35 <= len(sentence) <= 145 or not THAI_RE.search(sentence):
             continue
@@ -195,14 +206,12 @@ def _short_words(text, limit):
     return result.strip(" .,:;!?–—-ฯ")
 
 
-def _concise_fact(sentence, limit=22):
-    """Keep a source-grounded fact short enough for a roughly 15-second reel."""
-    chunks = re.split(r"[,;:]|\s+(?:โดย|ซึ่ง|ขณะที่|หลังจาก|ทั้งนี้)\s+", sentence)
-    for chunk in chunks:
-        clean = " ".join(chunk.split()).strip(" .,:;!?–—-ฯ")
-        if 14 <= len(clean) <= limit:
-            return clean
-    return _short_words(sentence, limit)
+def _concise_fact(sentence, limit=100):
+    """Never manufacture a sentence by chopping off its predicate."""
+    clean = complete_fact(sentence)
+    if not clean or len(clean) > limit:
+        raise ValueError("Source fact needs editorial rewriting, not truncation")
+    return clean
 
 
 def infer_category(row, topic):
@@ -222,19 +231,23 @@ def infer_category(row, topic):
 
 def build_rule_plan(row, headline, article):
     """Build a publishable plan using local rules and exact source text only."""
-    evidence_blocks = _safe_source_sentences(article, _topic_terms(row, headline))
+    evidence_blocks = [s for s in _safe_source_sentences(article, _topic_terms(row, headline))
+                       if len(s) <= 100 and s != headline]
     if len(evidence_blocks) < 2:
         raise ValueError("Not enough safe Thai source sentences")
     topic = " ".join((headline or row.get("title", "")).split())
-    if (not topic or len(topic) > 60 or is_sensitive_forbidden_topic(topic)
+    from app.services.video_publish_policy import public_text_block_reason
+    if public_text_block_reason(topic):
+        raise ValueError("Source headline contains price information")
+    if (not topic or is_sensitive_forbidden_topic(topic)
             or any(term in topic.casefold() for term in BLOCKED_EDITORIAL)):
-        topic = "ประเด็นที่คนกำลังสนใจ"
+        raise ValueError("Source topic rejected")
     category = infer_category(row, topic)
     topic_lead = _short_words(topic, 9) or "เรื่องนี้"
     hook = f"จับตา {topic_lead}"
     scenes = [{"voice": hook, "headline": hook, "hero": _short_words(topic, 24),
                "detail": f"สรุปข่าว{category}จากต้นฉบับ"}]
-    for evidence_id in range(min(3, len(evidence_blocks))):
+    for evidence_id in range(2):
         sentence = evidence_blocks[evidence_id]
         voice = _concise_fact(sentence)
         hero = _short_words(voice, 24)
@@ -242,22 +255,18 @@ def build_rule_plan(row, headline, article):
         scenes.append({"voice": voice, "headline": _short_words(voice, 40),
                        "hero": hero, "detail": _short_words(detail_source, 58),
                        "evidence_id": evidence_id})
-    if len(evidence_blocks) == 2:
-        scenes.append({"voice": "อ่านต่อที่ข่าวต้นฉบับ",
-                       "headline": "ตรวจข้อมูลต้นฉบับ", "hero": "อ่านให้ครบ",
-                       "detail": "ข้อมูลอาจเปลี่ยนแปลงได้", "neutral_transition": True})
     scenes.append({"voice": "คิดเห็นอย่างไร บอกได้เลย",
                    "headline": "คุณคิดเห็นอย่างไร", "hero": "คุยกันได้",
                    "detail": "ติดตามป้าเข็มบอกต่อ"})
     plan = validate_plan({"topic_title": topic, "scenes": scenes}, article, evidence_blocks)
-    if len(plan["voiceover_script"]) > 115:
+    if len(plan["voiceover_script"]) > 250:
         raise ValueError("Voice script exceeds short-video budget")
     plan["source_url"] = row["source_url"]
     plan["source_label"] = "ข้อมูลจาก " + (urlparse(row["source_url"]).hostname or "แหล่งข่าว")
     plan["category_label"] = category
     plan["generation_mode"] = "local_rules"
     plan["hook_variant"] = hook
-    return plan
+    return enrich_plan_caption(plan)
 
 
 def fetch_candidate_rows(history):
@@ -274,7 +283,7 @@ def fetch_candidate_rows(history):
         from app.services.facebook_curated import fetch_news_items
         for item in fetch_news_items(max_items=40):
             if item.get("title") and str(item.get("link", "")).startswith("https://"):
-                rows.append({"title": item["title"], "traffic": "", "published_at": "",
+                rows.append({"title": item["title"], "traffic": "", "published_at": item.get("published_at", ""),
                              "source_url": item["link"], "source_title": item.get("source", ""),
                              "feed_source": item.get("source", "Thai RSS"),
                              "source_summary": item["title"] + "\n" + BeautifulSoup(
@@ -286,6 +295,8 @@ def fetch_candidate_rows(history):
 
 def draft(row, headline, article):
     from app.services.llm_clients import groq_clients, call_with_backoff
+    from app.services.content_skillclaw import content_skill_prompt
+    from app.services.skillclaw_runtime import route_content_clients
     from app.config import settings
     evidence_blocks = [part.strip() for part in article.split("\n") if len(part.strip()) >= 40][:80]
     if len(evidence_blocks) < 3:
@@ -299,6 +310,7 @@ def draft(row, headline, article):
         "of the provided evidence block that directly supports every claim, keeping availability/language limitations. "
         "Scene 5 invites comments and following, no factual claim. Female Thai voice. No markdown, hashtags, URLs, emojis."
     )
+    system += content_skill_prompt("news")
     def parse_object(content):
         content = (content or "").strip()
         if content.startswith("```"):
@@ -345,7 +357,7 @@ def draft(row, headline, article):
             {"role":"user","content":json.dumps({"source_evidence":[s.get("evidence","") for s in plan["scenes"][:4]],
             "trend":row["title"],"plan":plan},ensure_ascii=False)}], 180, review_schema)
         return parse_object(review.choices[0].message.content)
-    for client in groq_clients()[:2]:
+    for client in route_content_clients(groq_clients()[:2], "news"):
         try:
             result = completion(client, [{"role":"system","content":system},
                 {"role":"user","content":json.dumps({"trend":row["title"],"headline":headline,
@@ -402,7 +414,11 @@ def produce_one():
 
 
 def _produce_one():
-    if len(list(PENDING.glob("*.mp4"))) >= 4:
+    unposted_pending = [
+        f for f in PENDING.glob("*.mp4")
+        if not (ROOT / "reels_uploader/posted" / f.name).exists()
+    ]
+    if len(unposted_pending) >= 4:
         return {"status":"queue_full"}
     state_path = BASE/"state.json"
     state = read_json(state_path)
@@ -410,6 +426,9 @@ def _produce_one():
     from standalone_content_generator import is_topic_duplicate, record_topic_used
     # Scan beyond cooled-down Google entries so healthy fallback feeds can run.
     for row in rows[:40]:
+        if any(section in urlparse(row["source_url"]).path.lower() for section in
+               ("/pr-partners/", "/advertorial/", "/sponsored/", "/press-release/")):
+            continue
         editorial = (row["title"] + " " + row.get("source_title", "")).casefold()
         if any(term in editorial for term in BLOCKED_EDITORIAL):
             continue
@@ -449,14 +468,49 @@ def _produce_one():
                 plan = draft(row, headline, article)
                 plan["generation_mode"] = "ai_fallback"
             plan["image_url"] = image_url
+            if not image_url:
+                raise ValueError("News video needs a source photograph before publication")
+            plan["layout"] = "photo_story_v2"
+            plan["display_subject"] = _short_words(plan["topic_title"], 50)
+            enrich_plan_caption(plan)
             if is_topic_duplicate(plan["title"], url=row["source_url"]):
                 raise ValueError("Duplicate drafted topic")
             work = BASE/key/str(int(time.time()))
+            work.mkdir(parents=True, exist_ok=True)
+
+            # ดึงภาพถ่ายจริงหลายมุม/หลายประเด็นที่เข้ากับเนื้อหาข่าว 100% (Rule 22)
+            try:
+                import image_footprint_crawler
+                distinct_imgs = image_footprint_crawler.find_three_distinct_images({
+                    "title": plan["title"],
+                    "hook": plan.get("hook", ""),
+                    "link": row["source_url"],
+                    "image_url": image_url
+                }, mode=plan.get("category_label", "TRENDING_NEWS"))
+
+                if distinct_imgs:
+                    plan["image_url"] = distinct_imgs[0]
+                    scenes = plan.get("scenes", [])
+                    for s_idx, scene in enumerate(scenes):
+                        chosen_img_url = distinct_imgs[s_idx % len(distinct_imgs)]
+                        scene_img_path = work / f"scene_{s_idx + 1}.jpg"
+                        try:
+                            resp_img = httpx.get(chosen_img_url, timeout=10.0, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"})
+                            if resp_img.status_code == 200 and len(resp_img.content) > 5000:
+                                scene_img_path.write_bytes(resp_img.content)
+                                scene["image_path"] = str(scene_img_path)
+                        except Exception:
+                            pass
+            except Exception as e_dimg:
+                LOG.warning("Multi-scene image crawler warning: %s", e_dimg)
+
             save_json(work/"plan.json",plan)
             from render_trend_sample import motion
             video = asyncio.run(motion(plan, work))
             qa = verify_video(video)
             (work/"queue_qa.log").write_text(qa,encoding="utf-8")
+            from review_generated_video import review_and_register
+            review_and_register(plan, work, video, ROOT/"reels_uploader/video_quality_approvals.json")
             PENDING.mkdir(parents=True,exist_ok=True)
             # Metadata and caption land before atomic promotion; uploaders never see a partial mp4.
             with FileLock(str(BASE/"metadata.lock"),timeout=20):
@@ -465,6 +519,8 @@ def _produce_one():
                     meta[filename] = {"product_name":plan["title"],"price":"","affiliate_link":"",
                         "is_pure_content":True,"content_mode":"TRENDING_NEWS","category":plan.get("category_label", "ข่าวและกระแส"),
                         "topic_data":{"title":plan["title"],"hook":plan["hook"],"detail":plan["caption"],
+                        "caption_text":(work/"caption.txt").read_text(encoding="utf-8"),
+                        "caption_version":2,
                         "url":row["source_url"],"voiceover_script":plan["voiceover_script"]}}
                     save_json(meta_path,meta)
                 shutil.copyfile(work/"caption.txt",target.with_suffix(".txt"))

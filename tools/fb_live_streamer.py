@@ -27,17 +27,17 @@ if str(ROOT / "backend") not in sys.path:
 load_dotenv(ROOT / "backend" / ".env", override=False)
 load_dotenv()
 
-LIVE_DEFAULT_TITLE = "🔴 [สด] ปลาสลิดแดดเดียวสุพรรณแท้ ป้าเข็ม คัดพิเศษ ล็อตใหม่วันนี้! (สั่งซื้อทักแชท/พิมพ์ สนใจ)"
+LIVE_DEFAULT_TITLE = "🔴 [สด] ปลาสลิดแดดเดียวสุพรรณแท้ ป้าเข็ม คัดพิเศษ ไซส์จัมโบ้ 4 ตัวโล! (สั่งซื้อทักแชท/พิมพ์ สนใจ)"
 LIVE_DEFAULT_DESC = (
-    "🐟 วันนี้มีปลาสลิดแดดเดียวเข้าใหม่สดๆ ร้อนๆ จ้า! ปลาสลิดสุพรรณแท้ ป้าเข็ม คัดพิเศษ ไซส์จัมโบ้ เนื้อแน่นหนาฟู มันแทรก เค็มน้อยกำลังดี!\n"
+    "🐟 วันนี้มีปลาสลิดแดดเดียวเข้าใหม่สดๆ ร้อนๆ จ้า! ปลาสลิดสุพรรณแท้ ป้าเข็ม คัดพิเศษ ไซส์จัมโบ้ 4 ตัวโล เนื้อแน่นหนาฟู มันแทรก เค็มน้อยกำลังดี!\n"
     "💬 สั่งซื้อ: กดปุ่ม \"ส่งข้อความ\" ทักแชทเพจ หรือพิมพ์คำว่า \"สนใจ\" ในคอมเมนต์ไลฟ์นี้ได้เลยจ้า!\n\n"
-    "✅ เนื้อปลาสลิดสุพรรณแท้ 97% + เกลือสมุทรธรรมชาติ 3% (ไร้สารกันบูด 0% ไร้ผงชูรส 0%)\n"
-    "✅ น้ำหนักเนื้อปลาล้วนหลังตัดหัวแล้ว (ประมาณ 5–7 ตัว/กก.)\n"
+    "✅ เนื้อปลาสลิดสุพรรณธรรมชาติแท้ 97% + เกลือสมุทรธรรมชาติ 3% (ไร้สารกันบูด 0% ไร้ผงชูรส 0%)\n"
+    "✅ น้ำหนักเนื้อปลาล้วนหลังตัดหัวแล้ว (ไซส์จัมโบ้คัดพิเศษ 4 ตัว/กก. ตัวใหญ่เท่าฝ่ามือ)\n"
     "✅ ซีลสูญญากาศแช่เยือกแข็ง -18°C แพ็กซองฟอยล์เก็บความเย็นส่งตรงถึงบ้าน (เสียเคลมฟรี 100%)\n\n"
     "📦 โปรโมชั่นล็อตใหม่วันนี้ (จำหน่ายแบบดิบแดดเดียว นำไปทอดไฟกลางเหลืองกรอบหอมฟุ้ง):\n"
-    "1️⃣ ชุดพอดีมื้อ 500 กรัม (3–4 ตัว): โอนเงิน 390 บาท ส่งฟรี! | เก็บปลายทาง 410.-\n"
-    "2️⃣ ชุดยอดฮิต 1 กิโลกรัม (5–7 ตัว): โอนเงิน 550 บาท ส่งฟรี! | เก็บปลายทาง 570.-\n"
-    "3️⃣ ชุดตุนสุดคุ้ม 2 กิโลกรัม (10–14 ตัว): โอนเงิน 1,090 บาท ส่งฟรีรถห้องเย็นควบคุมอุณหภูมิ!\n\n"
+    "1️⃣ ชุดพอดีมื้อ 500 กรัม (2 ตัวจัมโบ้): โอนเงิน 390 บาท ส่งฟรี!\n"
+    "2️⃣ 🔥 ชุดยอดฮิตสุดคุ้ม 1 กิโลกรัม (4 ตัวจัมโบ้): โอนเงิน 550 บาท ส่งฟรี! (เพิ่มแค่ 160.- ได้ปลาเพิ่มเท่าตัว!)\n"
+    "3️⃣ ชุดตุนสุดคุ้ม 2 กิโลกรัม (8 ตัวจัมโบ้): โอนเงิน 1,090 บาท ส่งฟรีรถห้องเย็นควบคุมอุณหภูมิ!\n\n"
     "👇 พิมพ์คำว่า \"สนใจ\" หรือเลขชุด 1, 2, 3 ในคอมเมนต์ไลฟ์สดนี้ เดี๋ยวป้าเข็มทักแชทไปรับออเดอร์ทันทีจ้า!"
 )
 
@@ -45,25 +45,30 @@ LIVE_DEFAULT_DESC = (
 def create_auto_facebook_live(page_id: str, page_token: str, title: str = LIVE_DEFAULT_TITLE, description: str = LIVE_DEFAULT_DESC) -> dict:
     """สร้างห้องไลฟ์สดอัตโนมัติผ่าน Facebook Graph API (ไม่ต้องก๊อปปี้ Stream Key เอง)"""
     import httpx
-    r = httpx.post(
-        f"https://graph.facebook.com/v21.0/{page_id}/live_videos",
-        data={
-            "access_token": page_token,
-            "status": "LIVE_NOW",
-            "title": title,
-            "description": description,
-        },
-        timeout=20.0,
-    )
-    if r.status_code != 200:
-        raise RuntimeError(f"Graph API error ({r.status_code}): {r.text}")
+    r = None
+    for attempt in range(4):
+        r = httpx.post(
+            f"https://graph.facebook.com/v21.0/{page_id}/live_videos",
+            data={
+                "access_token": page_token,
+                "status": "LIVE_NOW",
+                "title": title,
+                "description": description,
+            },
+            timeout=25.0,
+        )
+        if r.status_code == 200:
+            break
+        time.sleep(2.5)
+    if r is None or r.status_code != 200:
+        raise RuntimeError(f"Graph API error ({r.status_code if r else 'None'}): {r.text if r else ''}")
     data = r.json()
     live_id = data.get("id", "")
     video_id = ""
     try:
         r_info = httpx.get(
             f"https://graph.facebook.com/v21.0/{live_id}",
-            params={"access_token": page_token, "fields": "id,video,permalink_url,status"},
+            params={"access_token": page_token, "fields": "id,video,permalink_url,status,stream_url,secure_stream_url,ingest_streams"},
             timeout=15.0,
         )
         if r_info.status_code == 200:
@@ -71,6 +76,15 @@ def create_auto_facebook_live(page_id: str, page_token: str, title: str = LIVE_D
             video_id = (info_json.get("video") or {}).get("id", "")
             data["video_id"] = video_id
             data["permalink_url"] = info_json.get("permalink_url", "")
+            # ดึง Stream URL รูปแบบ FB-... (ไม่มี query params & ที่ทำให้ FFmpeg GnuTLS บน Windows แท้งด้วย TLS fatal alert)
+            ingest_list = info_json.get("ingest_streams") or []
+            clean_stream_url = ""
+            if ingest_list and isinstance(ingest_list, list):
+                clean_stream_url = ingest_list[0].get("secure_stream_url") or ingest_list[0].get("stream_url") or ""
+            if not clean_stream_url:
+                clean_stream_url = info_json.get("stream_url") or data.get("stream_url") or data.get("secure_stream_url") or ""
+            if clean_stream_url:
+                data["clean_stream_url"] = clean_stream_url
     except Exception:
         pass
     # โพสต์คอมเมนต์แรกราคา + รูปจานปลาทอดใต้ไลฟ์สดอัตโนมัติ
@@ -78,7 +92,7 @@ def create_auto_facebook_live(page_id: str, page_token: str, title: str = LIVE_D
         from app.services.facebook_poster import _auto_post_order_comment
         target_comment_id = video_id or live_id
         if target_comment_id:
-            _auto_post_order_comment(page_id, target_comment_id, page_token)
+            _auto_post_order_comment(str(target_comment_id), description, str(page_id), page_token)
     except Exception:
         pass
     return data
@@ -357,7 +371,7 @@ def main():
         target_page = pages[auto_page_choice - 1]
         print(f"\n⏳ กำลังสร้างห้องไลฟ์สดอัตโนมัติบนเพจ ID: {target_page['id']} ...")
         live_info = create_auto_facebook_live(target_page["id"], target_page["token"])
-        stream_key = live_info.get("secure_stream_url") or live_info.get("stream_url") or ""
+        stream_key = live_info.get("clean_stream_url") or live_info.get("stream_url") or live_info.get("secure_stream_url") or ""
         live_id = live_info.get("id", "")
         video_id = live_info.get("video_id") or live_id
         print(f"✅ สร้างห้องไลฟ์สดสำเร็จ! (Live ID: {live_id} | Video ID: {video_id})")
@@ -408,7 +422,7 @@ def main():
             print(f"\n⏳ [รอบที่ {cycle}] กำลังสร้างห้องไลฟ์สดใหม่บนเพจ ID: {target_page['id']} ...")
             try:
                 live_info = create_auto_facebook_live(target_page["id"], target_page["token"])
-                current_stream_key = live_info.get("secure_stream_url") or live_info.get("stream_url") or ""
+                current_stream_key = live_info.get("clean_stream_url") or live_info.get("stream_url") or live_info.get("secure_stream_url") or ""
                 live_id = live_info.get("id", "")
                 video_id = live_info.get("video_id") or live_id
                 print(f"✅ สร้างห้องไลฟ์สดรอบที่ {cycle} สำเร็จ! (Live ID: {live_id} | Video ID: {video_id})")

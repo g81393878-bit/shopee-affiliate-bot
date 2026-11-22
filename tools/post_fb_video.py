@@ -38,7 +38,7 @@ sys.path.insert(0, BACKEND)
 from dotenv import load_dotenv  # noqa: E402
 load_dotenv(os.path.join(BACKEND, ".env"))
 
-from app.services.facebook_poster import PAGE_ID, post_video  # noqa: E402
+from app.services.facebook_poster import GRAPH_URL, PAGE_ID, configured_pages, post_video, sanitize_post_text  # noqa: E402
 from app.services.bot_profile import pick_promo_caption  # noqa: E402
 
 
@@ -69,12 +69,52 @@ def main() -> int:
         file_path=args.file or "",
         title=args.title,
     )
+    ok_any = False
     if res["ok"]:
-        print("✅ โพสต์สำเร็จ video_id=%s" % res["video_id"])
-        print("   ดูคลิป: https://www.facebook.com/%s/videos/%s" % (PAGE_ID, res["video_id"]))
-        return 0
-    print("❌ โพสต์ไม่สำเร็จ: %s" % res["error"])
-    return 1
+        ok_any = True
+        print("✅ เพจ 1 โพสต์สำเร็จ video_id=%s" % res["video_id"])
+        print("   ดูคลิปเพจ 1: https://www.facebook.com/%s/videos/%s" % (PAGE_ID, res["video_id"]))
+    else:
+        print("❌ เพจ 1 โพสต์ไม่สำเร็จ: %s" % res["error"])
+
+    for p in configured_pages():
+        if p["index"] > 1:
+            import json
+            import httpx
+            from app.services.facebook_poster import _auto_post_order_comment, _ensure_top_cta_message
+            desc_clean = sanitize_post_text(caption or "")
+            if desc_clean:
+                desc_clean = _ensure_top_cta_message(desc_clean, p["id"])
+            data = {"published": "true", "call_to_action": json.dumps({"type": "MESSAGE_PAGE"})}
+            if desc_clean:
+                data["description"] = desc_clean
+            if (args.title or "").strip():
+                data["title"] = (args.title or "").strip()
+            files = None
+            if args.file:
+                with open(args.file, "rb") as fh:
+                    v_bytes = fh.read()
+                files = {"source": (os.path.basename(args.file), v_bytes, "video/mp4")}
+            else:
+                data["file_url"] = (args.url or "").strip()
+            try:
+                kwargs = {"params": {"access_token": p["token"]}, "data": data, "timeout": 180}
+                if files:
+                    kwargs["files"] = files
+                r2 = httpx.post(f"{GRAPH_URL}/{p['id']}/videos", **kwargs)
+                b2 = r2.json() if r2.status_code == 200 else {}
+                vid2 = b2.get("id") or b2.get("video_id")
+                if vid2:
+                    ok_any = True
+                    _auto_post_order_comment(str(vid2), desc_clean, p["id"], p["token"])
+                    print("✅ เพจ %s โพสต์สำเร็จ video_id=%s" % (p["index"], vid2))
+                    print("   ดูคลิปเพจ %s: https://www.facebook.com/%s/videos/%s" % (p["index"], p["id"], vid2))
+                else:
+                    print("❌ เพจ %s โพสต์ไม่สำเร็จ: %s" % (p["index"], r2.text[:200]))
+            except Exception as e:
+                print("❌ เพจ %s โพสต์ไม่สำเร็จ: %s" % (p["index"], e))
+
+    return 0 if ok_any else 1
 
 
 if __name__ == "__main__":

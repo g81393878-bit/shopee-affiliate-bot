@@ -69,9 +69,11 @@ def get_tiktok_promo_addon(index: int = 0) -> str:
     return preset["hashtags"]
 
 
-def format_tiktok_caption(base_caption: str, index: int = 0) -> str:
+def format_tiktok_caption(base_caption: str, index: int = 0, is_pure_content: bool = False) -> str:
     """นำแคปชั่นต้นทางมาผสานเข้ากับชุดแฮชแท็ก TikTok อัตโนมัติ ป้องกันคำซ้ำ"""
     clean_base = (base_caption or "").strip()
+    if is_pure_content:
+        return clean_base
     preset = get_promo_preset(index)
     
     # ถ้าในแคปชั่นมีแฮชแท็กหลักอยู่แล้ว จะไม่ใส่ซ้ำ

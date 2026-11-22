@@ -79,6 +79,7 @@ def _rss_item(el, source: dict) -> dict:
         "title": html.unescape(_text(el, "title")),
         "link": _text(el, "link"),
         "summary": html.unescape(_text(el, "description"))[:800],
+        "published_at": _text(el, "pubDate"),
         "source": source.get("name", ""),
         "topic": source.get("topic", ""),
     }
@@ -86,7 +87,7 @@ def _rss_item(el, source: dict) -> dict:
 
 def _atom_item(el, source: dict) -> dict:
     """Atom <entry> (namespace) → dict"""
-    title, link, guid, summary = "", "", "", ""
+    title, link, guid, summary, published = "", "", "", "", ""
     for child in el:
         tag = child.tag.split("}")[-1]
         if tag == "title":
@@ -97,11 +98,14 @@ def _atom_item(el, source: dict) -> dict:
             guid = child.text or ""
         elif tag in ("summary", "content"):
             summary = child.text or ""
+        elif tag == "published" or (tag == "updated" and not published):
+            published = child.text or ""
     return {
         "guid": guid or link,
         "title": html.unescape(title).strip(),
         "link": link,
         "summary": html.unescape(summary)[:800],
+        "published_at": published.strip(),
         "source": source.get("name", ""),
         "topic": source.get("topic", ""),
     }
@@ -146,7 +150,16 @@ def fetch_news_items(max_items: int = 20) -> list:
                 items.append(it)
         except Exception as e:
             logger.warning(f"[curated] feed {url} failed: {e}")
-    return items[:max_items]
+    # Keep a large first feed from excluding all later publishers.
+    groups = {}
+    for item in items:
+        groups.setdefault(item.get("source", ""), []).append(item)
+    balanced = []
+    while any(groups.values()) and len(balanced) < max_items:
+        for group in groups.values():
+            if group and len(balanced) < max_items:
+                balanced.append(group.pop(0))
+    return balanced
 
 
 def item_key(item: dict) -> str:

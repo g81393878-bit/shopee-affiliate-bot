@@ -6,7 +6,7 @@
 
 | ลำดับช่อง | ชื่อช่องบน YouTube | Handle | ไฟล์ Token | อีเมลที่เชื่อมต่อ (จดบันทึกกันลืม) |
 | :---: | :--- | :--- | :--- | :--- |
-| **ช่อง 1** | ป้าเข็ม ขายของ - ชี้เป้าของดี | `@regency1229` | `youtube_token.json` | `regency1229@gmail.com` |
+| **ช่อง 1** | ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้ - ชี้เป้าของดี | `@regency1229` | `youtube_token.json` | `regency1229@gmail.com` |
 | **ช่อง 2** | 🏠 ของดีติดบ้าน by ป้าเข็ม | `@goodthings-w4e` | `youtube_token_2.json` | `regency2919@gmail.com` |
 | **ช่อง 3** | 🛒 ชี้เป้า ไอเทมต้องมี | `@pakmud.review` | `youtube_token_3.json` | `aiforge2569@gmail.com` |
 | **ช่อง 4** | 🔥 อันดา ป้ายยาของใช้ดี | `@anda.review99` | `youtube_token_4.json` | `dev970115@gmail.com` |

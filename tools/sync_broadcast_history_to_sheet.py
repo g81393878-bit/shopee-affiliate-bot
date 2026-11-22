@@ -262,7 +262,7 @@ def sync_to_sheet():
 
     # 1. เขียนส่วนหัวตาราง
     headers = [
-        ["วัน-เวลา (ICT)", "หัวข้อคลิป", "หมวดหมู่", "TikTok Link", "Facebook Reel 1 (ป้าเข็ม ขายของ)", "Facebook Reel 2 (ป้าเข็ม ชี้เป้าของดี)", "YouTube Shorts Link", "สถานะการเผยแพร่"]
+        ["วัน-เวลา (ICT)", "หัวข้อคลิป", "หมวดหมู่", "TikTok Link", "Facebook Reel 1 (ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้)", "Facebook Reel 2 (ครัวแม่บ้าน ชี้เป้าของอร่อยของดี)", "YouTube Shorts Link", "สถานะการเผยแพร่"]
     ]
     sheets.spreadsheets().values().update(
         spreadsheetId=SPREADSHEET_ID,

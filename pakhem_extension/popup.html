@@ -2,151 +2,92 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8">
-  <title>ป้าเข็ม ผู้ช่วยกลุ่มตลาดนัด Facebook</title>
+  <title>ป้าเข็ม — ผู้ช่วยปิดการขายในแชท & เปิดบิลรับออเดอร์</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <div class="header">
+  <div class="header" style="background: linear-gradient(135deg, #0d47a1, #1976d2);">
     <div class="header-title">
-      🐟 ป้าเข็ม: ผู้ช่วยกลุ่มตลาดนัด
-      <span class="badge-ver">v5.4</span>
+      🐟 ป้าเข็ม: ผู้ช่วยปิดการขายในแชท
+      <span class="badge-ver">v8.3</span>
     </div>
   </div>
 
   <div class="content">
-    <!-- แถบแสดงสถานะแท็บปัจจุบันแบบเรียลไทม์ (Message Passing) -->
-    <div class="card" id="popup-live-card" style="display: none; border-left: 4px solid #28a745; background: #fdfdfd;">
-      <div class="card-title">
-        <span>📌 แท็บ Facebook ปัจจุบัน</span>
-        <span id="live-badge-status" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold;"></span>
+    <!-- 🔍 การ์ดที่ 1: ดึงข้อมูลจากแชท + เปิดบิลรับออเดอร์ -->
+    <div class="card" style="border: 1.5px solid #0d47a1; background: #f8fafd;">
+      <div class="card-title" style="color: #0d47a1;">
+        <span>🧾 ดึงข้อมูลลูกค้า & เปิดบิลรับออเดอร์</span>
+        <button id="btn-clear-form" style="background: transparent; border: none; color: #6c757d; font-size: 10px; cursor: pointer;">🧹 ล้างฟอร์ม</button>
       </div>
-      <div id="live-group-name" style="font-weight: bold; font-size: 12px; margin-bottom: 6px; color: #1b5e20; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">...</div>
-      
-      <div style="display: flex; gap: 4px;">
-        <button id="btn-popup-post" style="flex: 1; background: #28a745; color: white; border: none; border-radius: 6px; padding: 7px 4px; font-weight: bold; font-size: 11px; cursor: pointer;">
-          🚀 สั่งโพสต์แท็บนี้ทันที
-        </button>
-        <button id="btn-popup-answer" style="background: #ffc107; color: #212529; border: none; border-radius: 6px; padding: 7px 8px; font-weight: bold; font-size: 11px; cursor: pointer;" title="ตอบคำถามขอเข้ากลุ่ม">
-          📝 ตอบคำถาม
-        </button>
+
+      <button id="btn-extract-chat" style="width: 100%; background: linear-gradient(135deg, #0062cc, #007bff); color: #fff; border: none; border-radius: 6px; padding: 8px 6px; font-weight: bold; font-size: 11.5px; cursor: pointer; margin-bottom: 8px;">
+        🔍 ดึงชื่อ-ที่อยู่-เบอร์โทรจากหน้าแชทนี้
+      </button>
+
+      <div style="display: flex; gap: 5px; margin-bottom: 5px;">
+        <input type="text" id="ord-name" placeholder="👤 ชื่อลูกค้า" style="flex: 1; padding: 6px; font-size: 11px; border: 1px solid #ced4da; border-radius: 6px; background: #fff;">
+        <input type="text" id="ord-phone" placeholder="📞 เบอร์โทร 10 หลัก" style="flex: 1; padding: 6px; font-size: 11px; border: 1px solid #ced4da; border-radius: 6px; background: #fff; font-weight: bold;">
       </div>
+
+      <textarea id="ord-addr" placeholder="📍 ที่อยู่จัดส่ง (บ้านเลขที่ หมู่/ซอย ตำบล อำเภอ จังหวัด รหัสไปรษณีย์)" style="width: 100%; height: 48px; padding: 6px; font-size: 11px; border: 1px solid #ced4da; border-radius: 6px; background: #fff; resize: none; margin-bottom: 6px; font-family: inherit;"></textarea>
+
+      <select id="ord-pkg" style="width: 100%; padding: 6px; font-size: 11px; font-weight: bold; border: 1px solid #28a745; border-radius: 6px; background: #e8f5e9; color: #1b5e20; margin-bottom: 8px; cursor: pointer;">
+        <option value="SKU-SLID-MD-1KG|TRANSFER|550|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (โอนส่งฟรี)">⭐ ชุด 1 กก. (4–6 ตัวใหญ่ คัดพิเศษ) — โอน 550.- ส่งฟรี EMS</option>
+        <option value="SKU-SLID-MD-500G|TRANSFER|390|ปลาสลิดแดดเดียว ชุดพอดีมื้อ 500 กรัม (โอนส่งฟรี)">🐟 ชุด 500g (2–3 ตัวใหญ่ คัดพิเศษ) — โอน 390.- ส่งฟรี EMS</option>
+        <option value="SKU-SLID-MD-2KG|TRANSFER|1090|ปลาสลิดแดดเดียว ชุดตุนสุดคุ้ม 2 กิโลกรัม (ส่งฟรีรถห้องเย็น)">❄️ ชุด 2 กก. (8–12 ตัวใหญ่ คัดพิเศษ) — โอน 1,090.- ส่งฟรีรถห้องเย็น</option>
+      </select>
+
+      <button id="btn-submit-order" style="width: 100%; background: linear-gradient(135deg, #1b5e20, #28a745); color: #fff; border: none; border-radius: 6px; padding: 9px 6px; font-weight: bold; font-size: 12px; cursor: pointer; box-shadow: 0 2px 6px rgba(40,167,69,0.3);">
+        💾 บันทึกออเดอร์ + ส่งบิลสรุปยอดเข้าแชท
+      </button>
     </div>
 
-    <!-- 🎯 ระบบคิวโพสต์หลายกลุ่มแบบปลอดภัย (Safe Multi-Group Auto Queue) -->
-    <div class="card" style="border: 1.5px solid #28a745; background: #fbfdfb;">
+    <!-- ⚡ การ์ดที่ 2: ข้อความตอบแชทด่วน 1-คลิก -->
+    <div class="card">
       <div class="card-title">
-        <span>🎯 คิวโพสต์วนกลุ่มอัตโนมัติ (ปลอดภัย 100%)</span>
-        <span id="queue-daily-quota" style="font-size: 10px; background: #e8f5e9; color: #1b5e20; padding: 2px 6px; border-radius: 10px; font-weight: bold;">วันนี้: 0/10 โพสต์</span>
+        <span>⚡ ส่งข้อความตอบแชทด่วน 1-คลิก</span>
       </div>
-      
-      <div style="font-size: 11px; color: #555; margin-bottom: 6px; line-height: 1.3;">
-        ระบบจะเปิดทีละกลุ่ม ➔ สลับสูตรแคปชั่น ➔ แนบรูป ➔ เว้นพัก 3 นาทีเพื่อป้องกันสแปม
-      </div>
-
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-        <label style="font-size: 11px; font-weight: bold; color: #333;">เลือกจำนวนกลุ่ม:</label>
-        <select id="queue-count-select" style="padding: 4px 6px; font-size: 11px; border-radius: 6px; border: 1px solid #ced4da; background: #fff; cursor: pointer;">
-          <option value="3">3 กลุ่ม (แนะนำมือใหม่)</option>
-          <option value="5" selected>5 กลุ่ม (มาตรฐาน)</option>
-          <option value="8">8 กลุ่ม (เต็มโควตาวัน)</option>
-        </select>
-      </div>
-
-      <!-- กล่องแสดงความคืบหน้าของคิว -->
-      <div id="queue-status-box" style="display: none; padding: 8px; background: #e8f4fd; color: #0c5460; border-radius: 6px; font-size: 11px; font-weight: bold; margin-bottom: 8px; text-align: center;">
-        <div id="queue-status-text">⏳ กำลังเตรียมการ...</div>
-        <div id="queue-timer-text" style="font-size: 14px; color: #d9534f; margin-top: 3px; font-family: monospace;"></div>
-      </div>
-
-      <div style="display: flex; gap: 4px;">
-        <button id="btn-start-queue" style="flex: 1; background: #28a745; color: white; border: none; border-radius: 6px; padding: 8px 4px; font-weight: bold; font-size: 11px; cursor: pointer; box-shadow: 0 2px 6px rgba(40,167,69,0.3);">
-          ▶️ เริ่มคิวโพสต์วนกลุ่ม
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 6px;">
+        <button id="btn-reply-price" style="background: #e8f5e9; color: #1b5e20; border: 1px solid #a5d6a7; border-radius: 6px; padding: 6px 4px; font-size: 11px; font-weight: bold; cursor: pointer;">
+          📋 แจ้งราคา 3 ชุด
         </button>
-        <button id="btn-stop-queue" style="display: none; background: #d9534f; color: white; border: none; border-radius: 6px; padding: 8px 12px; font-weight: bold; font-size: 11px; cursor: pointer;">
-          ⏹️ หยุดคิว
+        <button id="btn-reply-bank" style="background: #fff3cd; color: #856404; border: 1px solid #ffeeba; border-radius: 6px; padding: 6px 4px; font-size: 11px; font-weight: bold; cursor: pointer;">
+          🏦 เลขบัญชีกรุงไทย
+        </button>
+        <button id="btn-reply-ask-addr" style="background: #e8f4fd; color: #004085; border: 1px solid #b8daff; border-radius: 6px; padding: 6px 4px; font-size: 11px; font-weight: bold; cursor: pointer;">
+          📍 ขอชื่อ-ที่อยู่ลูกค้า
+        </button>
+        <button id="btn-reply-shipping" style="background: #f3e5f5; color: #4a148c; border: 1px solid #e1bee7; border-radius: 6px; padding: 6px 4px; font-size: 11px; font-weight: bold; cursor: pointer;">
+          ❄️ แจ้งรอบส่ง/วิธีเก็บ
         </button>
       </div>
+
+      <div style="display: flex; gap: 5px; margin-bottom: 6px;">
+        <button id="btn-copy-img" class="action-btn btn-copy-img" style="flex: 1; padding: 6px;">🖼️ ก๊อปรูปป้ายราคา</button>
+        <button id="btn-copy-fried" class="action-btn btn-copy-fried" style="flex: 1; padding: 6px;">🍳 ก๊อปรูปปลาทอด</button>
+      </div>
+
+      <button id="btn-invite-likers" style="width: 100%; background: linear-gradient(135deg, #e65100, #f57c00); color: #fff; border: none; border-radius: 6px; padding: 8px 6px; font-weight: bold; font-size: 11.5px; cursor: pointer;">
+        👍 เชิญคนถูกใจโพสต์ให้ติดตามเพจ (1-คลิก)
+      </button>
     </div>
 
-        <!-- 📝 ระบบจดบันทึกโน้ตลูกค้า & ประวัติสั่งซื้อ (URL-based CRM + CSV Export) -->
-    <div class="card" style="border-left: 4px solid #007bff; background: #fdfefe;">
+    <!-- 📜 การ์ดที่ 3: ประวัติออเดอร์ที่บันทึกแล้ว + ส่งออก CSV -->
+    <div class="card">
       <div class="card-title">
-        <span>📝 บันทึกโน้ตลูกค้าเฉพาะหน้าแชท (CRM)</span>
-        <button id="btn-export-notes-csv" style="background: #17a2b8; color: white; border: none; border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: bold; cursor: pointer;" title="ส่งออกข้อมูลโน้ตลูกค้าทั้งหมดเป็นไฟล์ CSV">
+        <span>📜 ประวัติออเดอร์ล่าสุด (<span id="orders-count">0</span>)</span>
+        <button id="btn-export-orders-csv" style="background: #17a2b8; color: white; border: none; border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: bold; cursor: pointer;">
           📥 โหลด CSV
         </button>
       </div>
-
-      <div style="font-size: 11px; color: #555; margin-bottom: 6px;" id="crm-target-display">
-        🔗 แท็บปัจจุบัน: <span id="crm-url-preview" style="font-weight: bold; color: #007bff;">กำลังตรวจสอบ...</span>
-      </div>
-
-      <textarea id="crm-note-input" placeholder="พิมพ์โน้ตลูกค้าคนนี้ เช่น ชอบเค็มน้อย, สั่งชุด 2 กก. ส่งรถห้องเย็น, โอนแล้ว..." style="width: 100%; height: 52px; font-size: 11px; padding: 6px; box-sizing: border-box; border: 1px solid #ced4da; border-radius: 6px; resize: none; margin-bottom: 6px; font-family: inherit;"></textarea>
-
-      <!-- แท็กด่วนสำหรับร้านป้าเข็ม -->
-      <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px;">
-        <button type="button" class="crm-tag-btn" data-tag="🐟 ชอบเค็มน้อย" style="font-size: 10px; padding: 2px 6px; border: 1px solid #28a745; background: #e8f5e9; color: #1b5e20; border-radius: 4px; cursor: pointer;">+ เค็มน้อย</button>
-        <button type="button" class="crm-tag-btn" data-tag="⭐ ลูกค้าประจำ" style="font-size: 10px; padding: 2px 6px; border: 1px solid #007bff; background: #e8f4fd; color: #004085; border-radius: 4px; cursor: pointer;">+ ขาประจำ</button>
-        <button type="button" class="crm-tag-btn" data-tag="❄️ ขอส่งรถห้องเย็น" style="font-size: 10px; padding: 2px 6px; border: 1px solid #17a2b8; background: #d1ecf1; color: #0c5460; border-radius: 4px; cursor: pointer;">+ รถเย็น</button>
-        <button type="button" class="crm-tag-btn" data-tag="💰 โอนเงินแล้ว" style="font-size: 10px; padding: 2px 6px; border: 1px solid #ffc107; background: #fff3cd; color: #856404; border-radius: 4px; cursor: pointer;">+ โอนแล้ว</button>
-        <button type="button" class="crm-tag-btn" data-tag="📦 ปลายทาง COD" style="font-size: 10px; padding: 2px 6px; border: 1px solid #6c757d; background: #e2e3e5; color: #383d41; border-radius: 4px; cursor: pointer;">+ COD</button>
-      </div>
-
-      <div style="display: flex; gap: 4px;">
-        <button type="button" id="btn-save-crm-note" style="flex: 1; background: #007bff; color: white; border: none; border-radius: 6px; padding: 7px; font-weight: bold; font-size: 11px; cursor: pointer;">
-          💾 บันทึกโน้ต (ลงเครื่อง + พร้อมลง CSV)
-        </button>
-        <button type="button" id="btn-clear-crm-note" style="background: #e4e6eb; color: #333; border: none; border-radius: 6px; padding: 7px 10px; font-size: 11px; cursor: pointer;">
-          ลบ
-        </button>
-      </div>
-    </div>
-
-    <!-- ค้นหากลุ่ม -->
-    <div class="card">
-      <div class="card-title">🔍 ค้นหากลุ่ม Facebook ทันที (ล็อกเป้าเฉพาะกลุ่ม)</div>
-      <div class="search-box">
-        <input type="text" id="popup-search-input" placeholder="พิมพ์เช่น อาหารแห้ง, แดดเดียว...">
-        <button id="popup-btn-search">ค้นหา</button>
-      </div>
-    </div>
-
-    <!-- ลิงก์กลุ่มด่วน -->
-    <div class="card">
-      <div class="card-title">🛍️ ทางลัดกลุ่มตลาดนัดยอดนิยม</div>
-      <div class="btn-list">
-        <div class="btn-item primary" id="btn-open-joins">
-          📋 ⭐ 1. เปิดดู 'กลุ่มที่คุณเป็นสมาชิกแล้วทั้งหมด'
-        </div>
-        <div class="btn-item" data-url="https://www.facebook.com/groups/203180857683381">
-          🛍️ 2. ตลาดขายส่ง-ปลีก อาหารแห้ง แดดเดียว
-        </div>
-        <div class="btn-item" data-url="https://www.facebook.com/groups/562879874340349">
-          🛍️ 3. ตลาดนัดคนสุขสำราญ (ซื้อขายอาหาร)
-        </div>
-        <div class="btn-item" data-url="https://www.facebook.com/groups/1585596445047346">
-          🛍️ 4. ตลาดนัด อาหารอร่อย (ขายของกิน)
-        </div>
-      </div>
-    </div>
-
-    <!-- แคปชั่นและก๊อปปี้ด่วน -->
-    <div class="card">
-      <div class="card-title">
-        <span id="popup-cap-title">สูตรทองคำ 3 บรรทัด</span>
-        <button id="popup-btn-rand" style="background:#e4e6eb; border:none; border-radius:4px; padding:2px 6px; font-size:10px; cursor:pointer;">🎲 สุ่ม</button>
-      </div>
-      <textarea id="popup-caption-area" readonly class="caption-box"></textarea>
-      
-      <div class="actions-grid" style="margin-top: 6px;">
-        <button id="btn-copy-img" class="action-btn btn-copy-img">🖼️ ก๊อปรูปป้าย</button>
-        <button id="btn-copy-fried" class="action-btn btn-copy-fried">🍳 ก๊อปรูปทอด</button>
-        <button id="btn-copy-text" class="action-btn btn-copy-text">📋 ก๊อปข้อความ</button>
+      <div id="orders-history-list" style="max-height: 110px; overflow-y: auto; font-size: 11px; color: #444;">
+        กำลังโหลดประวัติออเดอร์...
       </div>
     </div>
 
     <div id="popup-toast" class="toast">
-      💡 เมื่อเปิดหน้า Facebook จะมีวิดเจ็ตตรวจกลุ่มทำงานอัตโนมัติครับ
+      💡 กด "🔍 ดึงชื่อ-ที่อยู่-เบอร์โทร" เพื่อสกัดข้อมูลจากแชทอัตโนมัติ
     </div>
   </div>
 

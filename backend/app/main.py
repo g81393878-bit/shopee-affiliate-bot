@@ -19,7 +19,7 @@ import httpx
 from sqlalchemy import text
 
 from app.db import engine, Base, is_sqlite
-from app.api import users, products, performance, line_bot, cron, admin_dashboard, facebook_bot, facebook_radar, creative_brief, orders, accounting
+from app.api import users, products, performance, line_bot, cron, admin_dashboard, facebook_bot, facebook_radar, creative_brief, orders, accounting, hospitals_api
 from app.api.cron import run_facebook_auto_post, run_facebook_product_post, run_facebook_content_post
 from app.services.fish_cloud_worker import fish_cloud_worker_loop, fish_hermes_analytics_loop, fish_ads_guard_loop, run_fish_cloud_scan_cycle, run_fish_cloud_ads_guard_cycle
 from app.config import settings
@@ -345,10 +345,19 @@ app.include_router(admin_dashboard.router)  # แดชบอร์ดแอด�
 app.include_router(creative_brief.router, prefix="/api")
 app.include_router(orders.router, prefix="/api")
 app.include_router(accounting.router, prefix="/api")
+app.include_router(hospitals_api.router, prefix="/api")
 
 
 
 _STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+
+@app.get("/map", response_class=HTMLResponse)
+def hospital_interactive_map_page():
+    fpath = os.path.join(_STATIC_DIR, "hospital_map.html")
+    if os.path.exists(fpath):
+        with open(fpath, encoding="utf-8") as f:
+            return f.read()
+    return "<h1>กำลังปรับปรุงหน้าแผนที่</h1>"
 
 @app.get("/shop", response_class=HTMLResponse)
 def shop_storefront_page():
@@ -407,7 +416,7 @@ def privacy_policy():
 </head>
 <body>
 <h1>🔒 นโยบายความเป็นส่วนตัว (Privacy Policy & PDPA)</h1>
-<p>ร้าน "ป้าเข็ม ขายของ" และแอปพลิเคชันระบบอัตโนมัติ เก็บข้อมูลส่วนบุคคลเพียงเท่าที่จำเป็น เพื่อให้บริการค้นหา แนะนำสินค้า และเผยแพร่คอนเทนต์</p>
+<p>ร้าน "ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้" และแอปพลิเคชันระบบอัตโนมัติ เก็บข้อมูลส่วนบุคคลเพียงเท่าที่จำเป็น เพื่อให้บริการค้นหา แนะนำสินค้า และเผยแพร่คอนเทนต์</p>
 <h2>เราเก็บอะไร</h2>
 <ul>
 <li>ชื่อบัญชี และ ID สำหรับการยืนยันตัวตนและการบริการ</li>

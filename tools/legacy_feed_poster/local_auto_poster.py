@@ -13,22 +13,11 @@ import datetime
 # เพิ่ม path ให้หาโมดูลใน backend และ tools เจอ
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT_DIR, "backend"))
-sys.path.insert(0, os.path.join(ROOT_DIR, "tools"))
-
-import render_set_env
-
-INTERVAL_MINUTES = 60  # โพสต์ทุกๆ กี่นาที (ค่าเริ่มต้น 60 นาที)
-
 def init_environment():
-    print("🔄 กำลังโหลดการตั้งค่าและ Credential จากระบบ...")
-    render_set_env.API_KEY = render_set_env.get_api_key()
-    items = render_set_env.fetch_env_vars()
-    for it in items:
-        k, v = render_set_env.decode_env_var(it.get("envVar"))
-        if k:
-            os.environ[k] = v
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(ROOT_DIR, "backend", ".env"))
     os.environ["FB_POST_PRODUCTS"] = "1"
-    print("✅ โหลดการตั้งค่าเรียบร้อยแล้ว!")
+    print("✅ โหลดการตั้งค่าจาก .env เรียบร้อยแล้ว!")
 
 def main():
     try:

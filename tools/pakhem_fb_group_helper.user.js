@@ -44,9 +44,9 @@
 • ธ.กรุงไทย: 038-0-25363-1 (นายจีรวัฒน์ พลอาจ)
 👉 โอนแล้วส่งสลิป + พิมพ์ชื่อ-ที่อยู่-เบอร์โทร ได้เลยจ้า 🙏`,
 
-        askAddress: `📍 พิมพ์แจ้ง 3 อย่างเพื่อจัดส่งได้เลยจ้า:
+        askAddress: `📍 พิมพ์แจ้งข้อมูลเพื่อจัดส่งได้เลยจ้า:
 1️⃣ ชุดที่รับ: พิมพ์ 1 (500g) / 2 (1 กก.) / 3 (2 กก.)
-2️⃣ ชำระแบบ: โอนส่งฟรี หรือ เก็บปลายทาง
+2️⃣ โอนชำระเงินส่งฟรี: ธ.กรุงไทย 038-0-25363-1 นายจีรวัฒน์ พลอาจ (งดรับ COD)
 3️⃣ ชื่อ - ที่อยู่จัดส่ง - เบอร์โทร 10 หลัก (หรือส่งรูปหน้าซองจดหมายได้จ้า)`,
 
         shipping: `❄️ ซีลสูญญากาศแช่แข็ง -18°C แพ็กซองฟอยล์เก็บความเย็น
@@ -362,8 +362,8 @@
         }
 
         // 5. สกัดแพ็กเกจและวิธีชำระเงินจากบริบทแชท
+        // 5. สกัดแพ็กเกจจากบริบทแชท (โอนเงินส่งฟรี 100% งดรับ COD ทุกกรณี)
         let detectedPkgValue = "SKU-SLID-MD-1KG|TRANSFER|550|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (โอนส่งฟรี)";
-        const isCod = customerText.includes("ปลายทาง") || customerText.toUpperCase().includes("COD") || customerText.includes("เก็บเงินปลายทาง");
 
         if (
             customerText.includes("2 โล") ||
@@ -376,23 +376,17 @@
             customerText.includes("ชุด 3") ||
             customerText.includes("ชุดที่ 3")
         ) {
-            // กฎเหล็กข้อ 7: ชุด 2 กก. ส่งฟรีรถห้องเย็น รับเฉพาะโอนเงินเท่านั้น
             detectedPkgValue = "SKU-SLID-MD-2KG|TRANSFER|1090|ปลาสลิดแดดเดียว ชุดตุนสุดคุ้ม 2 กิโลกรัม (ส่งฟรีรถห้องเย็น)";
         } else if (
             customerText.includes("ครึ่งโล") ||
             customerText.includes("500") ||
             customerText.includes("390") ||
-            customerText.includes("410") ||
             customerText.includes("ชุด 1") ||
             customerText.includes("ชุดที่ 1")
         ) {
-            detectedPkgValue = isCod
-                ? "SKU-SLID-MD-500G|COD|410|ปลาสลิดแดดเดียว ชุดพอดีมื้อ 500 กรัม (เก็บปลายทาง COD)"
-                : "SKU-SLID-MD-500G|TRANSFER|390|ปลาสลิดแดดเดียว ชุดพอดีมื้อ 500 กรัม (โอนส่งฟรี)";
+            detectedPkgValue = "SKU-SLID-MD-500G|TRANSFER|390|ปลาสลิดแดดเดียว ชุดพอดีมื้อ 500 กรัม (โอนส่งฟรี)";
         } else {
-            detectedPkgValue = isCod
-                ? "SKU-SLID-MD-1KG|COD|570|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (เก็บปลายทาง COD)"
-                : "SKU-SLID-MD-1KG|TRANSFER|550|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (โอนส่งฟรี)";
+            detectedPkgValue = "SKU-SLID-MD-1KG|TRANSFER|550|ปลาสลิดแดดเดียว ชุดยอดฮิต 1 กิโลกรัม (โอนส่งฟรี)";
         }
 
         return {

@@ -2,39 +2,29 @@
 name: products-and-links
 description: >-
   Product CRUD API + affiliate link policy: products.py endpoints, link_checker statuses
-  (ok/dead/suspect/unknown/none), link verification before insert, and image_url backfill.
+  (ok/dead/suspect/unknown/none), link verification before insert, image_url backfill,
+  and catalog storage locations (Supabase, sim_db.db, CSV archives).
   Use whenever the user mentions สินค้า API, link_status, ลิงก์ตาย, check-links, import สินค้า,
-  or "บอทไม่ตอบสินค้าตัวนี้".
+  กู้คืนสินค้า, ฐานข้อมูลสินค้า, or "บอทไม่ตอบสินค้าตัวนี้".
 ---
 
-# Products & Link Policy (เด็ดขาด)
+# Products & Master Catalog Policy (เด็ดขาด)
 
-## Link status (`link_checker.py`)
+## 1. จุดจัดเก็บฐานข้อมูลสินค้า (Master Catalog Storage)
+- **Production (Ground Truth):** Supabase PostgreSQL (`aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres`) ตาราง `products` (มีสินค้าจริง **1,903 รายการ** 9 หมวดหมู่)
+- **Local Master DB:** `backend/sim_db.db` (SQLite ขนาด 892 KB มีสินค้าต้นฉบับ 1,686 รายการ)
+- **Raw CSVs:** อยู่ใน `D:\สินค้า\` และ `D:\` (รวมไฟล์ส่งออกจริง 18 ไฟล์)
+- **Golden Snapshots:** `artifacts/backup_products_safe.json` และ `.csv` (1,903 รายการ)
+- **เครื่องมือกู้คืนมาตรฐาน:** `python tools/restore_from_sim_db.py`
+
+## 2. Link status (`link_checker.py`) & กฎห้ามลบสินค้า
 - `check_affiliate_link(url)` → `(status, detail)`; status = `OK` / `DEAD` / `SUSPECT` / `UNKNOWN` / `NO_URL`
-- ต้องเป็นลิงก์สั้น `s.shopee.co.th/...`; GET ตาม redirect (BROWSER_UA) แล้วดู:
-  - HTTP 400/404/410 หรือหน้า "ไม่พบสินค้า" → DEAD
-  - 401/403 / หน้า anti-bot ("เข้าสู่หน้าที่ต้องการไม่สำเร็จ"/captcha) → SUSPECT (เช็คมือ)
-  - redirect ไป `/product/|/opaanlp/|-i.<shop>.<item>` → OK; redirect ไปอื่น → SUSPECT
-- **กฎเหล็ก**: สินค้าเข้าระบบต้องมีลิงก์ตรวจผ่านเท่านั้น
-  - API POST/PUT /products ตรวจก่อนบันทึก (ไม่ OK → 400)
-  - `product_pipeline.py import-csv` ตรวจก่อน insert (ข้ามตัวไม่ผ่าน)
-  - **บอท LINE ตอบเฉพาะ `link_status == 'ok'`** (ทั้ง search + หมุนเวียน + matcher)
-  - cron `check-links` อัปเดตสถานะลงตาราง (`--delete` ลบตัว DEAD)
+- **กฎเหล็กห้ามลบสินค้า (Strict Zero-Delete):**
+  - **ห้ามรัน `check-links --delete` หรือ `DELETE FROM products` เด็ดขาด!** 
+  - บอท Shopee มักส่ง 403/404 จากระบบ Anti-Scraping ทำให้เข้าใจผิดว่าลิงก์ตาย หากพบปัญหาให้มาร์กเป็น `suspect` เท่านั้น ห้ามลบข้อมูลสินค้าออกจากระบบ
+- **บอท LINE ตอบเฉพาะ `link_status == 'ok'`** (ทั้ง search + หมุนเวียน + matcher)
 
-## API (`products.py`)
-- `GET /` / `GET /{id}` / `POST /` (201) / `PUT /{id}` / `DELETE /{id}` (204)
-- `POST /{id}/analyze` + `/analysis` (ai_analyzer) + `/script` (ai_generator, style param)
-- `POST /{id}/script` **upsert** แถว contents ตาม (product_id, style) — ไม่ซ้ำ
-
-## กับดัก
-1. ลูกค้าทักหา "สินค้าที่หายไป" = มักเป็นลิงก์ dead/ยังไม่ตรวจ (link_status != 'ok') — อย่า "แก้"
-   โดยปลดล็อกการกรอง; ต้องตรวจลิงก์จริงก่อน
-2. `ai_score` = คะแนนความน่าสนใจ (sales/rating/commission) — ใช้เรียงลำดับ/ป้ายสีการ์ด ไม่ใช่ราคา
-3. `image_url` ตอน import → `fetch_product_image_direct` (eager backfill) — ตรวจรูปไม่ดึง = ค่าเดิมไม่พัง
-
-## ไฟล์
-`backend/app/api/products.py`, `services/link_checker.py`, `services/product_image.py`,
-`tools/product_pipeline.py` (import-csv)
-
-## เทสต์
-`backend/tests/test_product_image.py`; test_webhook.py/test_line_bot.py ตรวจบอทตอบเฉพาะ ok
+## 3. รูปภาพสินค้า (Authentic CDN)
+- ใช้รูปภาพ Shopee Official CDN (`https://down-th.img.susercontent.com/file/...`)
+- เครื่องมือดึงภาพ: `python tools/shopee_image_harvester.py`
+- หน้าร้าน `backend/app/static/shop.html` ต้องมี `<meta name="referrer" content="no-referrer">` ป้องกัน 403 Forbidden

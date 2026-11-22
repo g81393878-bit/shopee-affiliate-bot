@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-post_all.py — ยิงโพสต์ 1 คลิปขึ้นครบทุกแพลตฟอร์มในคำสั่งเดียว (All-in-One Master Broadcast)
-  • 🔵 Facebook Reels (3 เพจ)
-  • 🔴 YouTube Shorts (6 ช่องหมุนเวียน)
-  • ⚫ TikTok Studio (4 ช่อง)
+post_all.py — ยิงโพสต์ 1 คลิปขึ้น Facebook Reels (2 เพจ)
+  • 🔵 Facebook Reels (2 เพจหลัก)
 """
 import argparse
 import pathlib
@@ -80,35 +78,24 @@ def main():
                 pass
 
     print("\n" + "=" * 65)
-    print(" 🚀 เริ่มต้นยิงโพสต์ขึ้นครบทุกแพลตฟอร์ม (All-in-One Master Broadcast)")
+    print(" 🚀 เริ่มต้นยิงโพสต์ขึ้น Facebook Reels (All-in-One Master Broadcast)")
     print("   • 🔵 Facebook Reels (2 เพจ)")
-    print("   • 🔴 YouTube Shorts (ครบทั้ง 6 ช่อง)")
-    print("   • ⚫ TikTok Studio (ครบทั้ง 4 ช่อง)")
     if target_caption:
         preview_cap = target_caption.replace("\n", " ")[:60]
         print(f"   • 📝 แคปชั่น: \"{preview_cap}...\"")
     print("=" * 65 + "\n")
 
-    # 1. FB Reels & YouTube Shorts
-    print("👉 ขั้นตอนที่ 1/2: กำลังยิงขึ้น Facebook Reels (2 เพจ) & YouTube Shorts (ครบทั้ง 6 ช่อง)...")
-    fb_cmd = [str(PYTHON_EXE), str(PROJECT_ROOT / "reels_uploader" / "uploader.py"), "--force", "--all-yt"]
+    # 1. FB Reels
+    print("👉 กำลังยิงขึ้น Facebook Reels (2 เพจ)...")
+    fb_cmd = [str(PYTHON_EXE), str(PROJECT_ROOT / "reels_uploader" / "uploader.py"), "--force"]
     if v_path:
         fb_cmd.extend(["--video", str(v_path)])
     if target_caption:
         fb_cmd.extend(["--caption", target_caption])
     subprocess.run(fb_cmd, cwd=str(PROJECT_ROOT))
 
-    # 2. TikTok Studio (ครบทุกช่อง)
-    print("\n👉 ขั้นตอนที่ 2/2: กำลังยิงขึ้น TikTok Studio (ครบทั้ง 4 ช่อง)...")
-    tt_cmd = [str(PYTHON_EXE), str(PROJECT_ROOT / "tools" / "tiktok_studio_uploader.py"), "--all-channels"]
-    if v_path:
-        tt_cmd.extend(["--video", str(v_path)])
-    if target_caption:
-        tt_cmd.extend(["--caption", target_caption])
-    subprocess.run(tt_cmd, cwd=str(PROJECT_ROOT))
-
     print("\n" + "=" * 65)
-    print(" 🎉 ดำเนินการยิงโพสต์ครบทุกแพลตฟอร์มเรียบร้อยแล้ว!")
+    print(" 🎉 ดำเนินการยิงโพสต์ Facebook Reels เรียบร้อยแล้ว!")
     print("=" * 65)
     return 0
 

@@ -40,7 +40,7 @@ import logging
 from typing import Optional, Union, Dict
 
 # บังคับ stdout UTF-8 (กัน emoji/ไทย พังบน Windows console ที่ใช้ cp874/850)
-if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
+if sys.stdout and getattr(sys.stdout, "encoding", None) and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
@@ -51,6 +51,7 @@ BACKEND = ROOT.parent / "backend"
 TOOLS = ROOT.parent / "tools"
 sys.path.insert(0, str(BACKEND))
 sys.path.insert(0, str(TOOLS))
+from product_post_history import product_id, posted_product_ids, serialize_broadcast
 
 # VPS is the primary runtime. Using local/VPS environment directly.
 from dotenv import load_dotenv  # noqa: E402
@@ -433,7 +434,7 @@ CATEGORY_HOOKS = {
     "ไอที & แกดเจ็ตมือถือ": [
         "📱 แกดเจ็ตตัวเด็ดที่ทุกคนต้องมีพกติดตัว! ป้าคัดของแท้คุณภาพดีมาให้แล้วจ้า ✨",
         "💡 อย่าเพิ่งเลื่อนผ่าน ถ้าไม่อยากพลาดไอเทมไอทีสุดคุ้มตัวนี้!",
-        "🔥 ตัวช่วยคู่ใจสายมือถือและไอที รีวิว 5 ดาวแน่น สเปกดีคุ้มเกินราคาแน่นอน!",
+        "🔥 ตัวช่วยคู่ใจสายมือถือและไอที รีวิว 5 ดาวแน่น สเปกดีคุ้มค่าน่าใช้แน่นอน!",
     ],
     "สุขภาพ & ดูแลตัวเอง": [
         "🩺 ไอเทมดูแลสุขภาพประจำบ้านที่ต้องมีติดไว้! ป้าคัดของแท้มาให้แล้วจ้า ✨",
@@ -527,12 +528,14 @@ def build_caption(product: dict) -> str:
     line_id = os.getenv("LINE_OA_ID", "@137gsref")
 
     lines = [
-        f"{hook}\n",
+        f"{hook}",
+        "💬 สนใจสินค้าในคลิป: กดปุ่ม \"ส่งข้อความ\" ทักแชท หรือพิมพ์คำว่า \"สนใจ\" ในคอมเมนต์ได้เลยจ้า!\n━━━━━━━━━━━━━━━━━━",
         f"📦 {name}",
         "รีวิว 5 ดาวแน่นมาก การันตีคุณภาพ คุ้มค่าเงินทุกบาท จิ้มดูรายละเอียดที่ลิงก์ได้เลยจ้า 👇\n"
     ]
     if link:
         lines.append(f"🛒 สั่งซื้อของแท้ / ดูโปรโมชั่น Shopee 👉 {link}")
+    lines.append(f"🌐 แคตตาล็อกหน้าร้านออนไลน์ 2,125+ ชิ้น 👉 https://watt29.github.io/pakhem-shop/")
     lines.append(f"💬 หรือทักแชทถามป้าเข็มได้ที่ LINE: {line_id} 👉 {line_url}\n")
     
     fb_tags = "#FBReels #ของดีบอกต่อ #รีวิวของใช้ #ป้าเข็มป้ายยา #Shopee"
@@ -556,7 +559,6 @@ def build_caption(product: dict) -> str:
 
 POSTED_HISTORY_TITLES_FILE = TOOLS / "posted_reels_title_history.json"
 POSTED_CONTENT_HISTORY_FILE = TOOLS / "posted_content_history.json"
-POSTED_YOUTUBE_HISTORY_FILE = TOOLS / "posted_youtube_history.json"
 
 
 def get_posted_titles() -> set:
@@ -575,22 +577,10 @@ def get_posted_titles() -> set:
         except Exception:
             pass
 
-    # 2. จากประวัติ YouTube Shorts
-    if POSTED_YOUTUBE_HISTORY_FILE.exists():
-        try:
-            yt_records = json.loads(POSTED_YOUTUBE_HISTORY_FILE.read_text(encoding="utf-8"))
-            for r in yt_records:
-                t = r.get("title", "") if isinstance(r, dict) else str(r)
-                c = re.sub(r'[^\u0E00-\u0E7Fa-zA-Z0-9]', '', t).lower()
-                if c:
-                    titles.add(c)
-        except Exception:
-            pass
-
     return titles
 
 
-def record_posted_title(title: str) -> None:
+def record_posted_title(title: str, filename: str = "") -> None:
     """บันทึกหัวข้อคลิปที่เพิ่งโพสต์สำเร็จลงประวัติ (ตัดให้สั้นกระชับ บรรทัดแรก <= 80 ตัวอักษร)"""
     if not title:
         return
@@ -608,16 +598,26 @@ def record_posted_title(title: str) -> None:
                 records = []
         records.append({
             "title": clean_title,
+            "filename": filename,
+            "product_id": product_id(filename),
             "posted_at": datetime.now(timezone.utc).isoformat()
         })
-        if len(records) > 500:
-            records = records[-500:]
-        POSTED_HISTORY_TITLES_FILE.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
+        temporary = POSTED_HISTORY_TITLES_FILE.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
+        temporary.replace(POSTED_HISTORY_TITLES_FILE)
     except Exception as e:
         log(f"[WARN] บันทึกประวัติโพสต์ Reels ล้ม: {e}")
+        raise
 
 
+@serialize_broadcast(lambda: ROOT / ".broadcast.lock", 1)
 def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True, custom_video: Optional[str] = None, custom_caption: Optional[str] = None, broadcast_all_yt: bool = False, notify: bool = True) -> int:
+    global LAST_BROADCAST_RESULT
+    LAST_BROADCAST_RESULT = {"fb": [], "yt": [], "complete": False}
+
+    if not dry_run and (ROOT / ".posting_paused").exists():
+        log("[PAUSED] Video quality review is pending")
+        return 1
     item = None
     product = {}
     pending: list[Path] = []
@@ -686,7 +686,7 @@ def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True
                         break
 
         if not cand_product:
-            m_id = re.match(r'^prod_(\d+)_', item.name)
+            m_id = re.match(r'^(?:prod|shopee_(?:extracomm|high_conv|pilot))_(\d+)_', item.name)
             if m_id:
                 try:
                     from app.db import SessionLocal
@@ -797,7 +797,7 @@ def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True
                             break
 
             if not cand_product:
-                m_id = re.match(r'^prod_(\d+)_', cand.name)
+                m_id = re.match(r'^(?:prod|shopee_(?:extracomm|high_conv|pilot))_(\d+)_', cand.name)
                 if m_id:
                     try:
                         from app.db import SessionLocal
@@ -840,11 +840,15 @@ def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True
                         is_dup = True
                         break
 
-            if is_dup and not force:
+            from product_post_history import posted_product_ids, product_id
+            is_dup = is_dup or product_id(cand.name) in posted_product_ids(ROOT, TOOLS, include_tiktok=False)
+            if is_dup:
                 log(f"⚠️ ตรวจพบคลิปซ้ำกับประวัติโพสต์จริง: {cand.name} ({cand_title[:40]}) — ข้าม")
                 if not dry_run:
                     try:
-                        cand.unlink(missing_ok=True)
+                        quarantine = ROOT / "duplicates"
+                        quarantine.mkdir(parents=True, exist_ok=True)
+                        shutil.move(str(cand), str(quarantine / f"{time.time_ns()}_{cand.name}"))
                     except Exception:
                         pass
                 continue
@@ -857,27 +861,68 @@ def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True
         log("ไม่มีคลิปใหม่ที่ไม่ซ้ำใน pending_videos/ — พักรอคลิปใหม่")
         return 0
 
-    # ตรวจสอบคุณภาพเสียงวิดีโอก่อนอัปโหลด (ห้ามคลิปไม่มีเสียงหรือไฟล์พังเด็ดขาด)
+    # Deduplication guard: product ID is strictly non-reusable; title check applies to normal automated runs
+    from product_post_history import posted_product_ids, product_id
+    title = product.get("product_name") or item.stem
+    clean_title = re.sub(r'[^\u0E00-\u0E7Fa-zA-Z0-9]', '', title).lower()
+    pid = product_id(item.name)
+    posted_ids = posted_product_ids(ROOT, TOOLS, include_tiktok=False)
+    if pid is not None and pid in posted_ids:
+        log(f"[DEDUP] Already posted; skipping {item.name}")
+        return 0
+    if not force and not custom_video and clean_title in get_posted_titles():
+        log(f"[DEDUP] Already posted; skipping {item.name}")
+        return 0
+
+    # ตรวจสอบคุณภาพเสียงวิดีโอก่อนอัปโหลด
     if item.suffix.lower() == ".mp4" and not is_image(item):
         try:
             from auto_product_reels import verify_video_has_audio
             has_audio, audio_reason = verify_video_has_audio(item)
             if not has_audio:
-                log(f"🚨 [AUDIO GUARD] คลิปเสียงไม่ผ่านเกณฑ์ ({audio_reason}): {item.name} — ย้ายไปโฟลเดอร์เสีย (corrupted/) ทันที!")
-                corrupted_dir = ROOT / "corrupted"
-                corrupted_dir.mkdir(parents=True, exist_ok=True)
-                try:
-                    shutil.move(str(item), str(corrupted_dir / item.name))
-                except Exception as e_mv_corrupt:
-                    log(f"⚠️ ย้ายคลิปเสียล้มเหลว: {e_mv_corrupt}")
-                return 1
+                if not force and not custom_video:
+                    log(f"🚨 [AUDIO GUARD] คลิปเสียงไม่ผ่านเกณฑ์ ({audio_reason}): {item.name} — ย้ายไปโฟลเดอร์เสีย (corrupted/) ทันที!")
+                    corrupted_dir = ROOT / "corrupted"
+                    corrupted_dir.mkdir(parents=True, exist_ok=True)
+                    try:
+                        shutil.move(str(item), str(corrupted_dir / item.name))
+                    except Exception as e_mv_corrupt:
+                        log(f"⚠️ ย้ายคลิปเสียล้มเหลว: {e_mv_corrupt}")
+                    return 1
+                else:
+                    log(f"[WARN] ข้าม Audio Guard สำหรับการสั่งโพสต์แบบ Force/Custom ({audio_reason})")
         except Exception as e_vfy:
             log(f"[WARN] ตรวจสอบเสียงล้มเหลว ({e_vfy}) — ดำเนินการต่อ")
+
+    # ตรวจหาไฟล์แคปชั่นคู่ (.txt sidecar) หากยังไม่ได้กำหนด custom_caption
+    if not custom_caption and item:
+        sidecar_txt = item.with_suffix(".txt")
+        if not sidecar_txt.exists():
+            alt_txt = item.parent / f"{item.stem}.txt"
+            if alt_txt.exists():
+                sidecar_txt = alt_txt
+        if sidecar_txt.exists():
+            try:
+                custom_caption = sidecar_txt.read_text(encoding="utf-8").strip()
+                log(f"📄 [Caption] ใช้แคปชั่นจากไฟล์คู่ (.txt): {sidecar_txt.name}")
+            except Exception:
+                pass
 
     if custom_caption:
         caption = custom_caption
     else:
         caption = build_caption(product)
+
+    # เสริมบรรทัด CTA สั่งซื้อ/ทักแชทไว้ที่บรรทัดที่ 2 เสมอ (สำหรับทุกคลิปใหม่ ทั้ง sidecar .txt และคอนเทนต์ไวรัล)
+    if caption and "สั่งซื้อ: กดปุ่ม" not in caption and "สนใจสินค้าในคลิป: กด" not in caption:
+        _c_lines = caption.strip().splitlines()
+        _c_first = _c_lines[0] if _c_lines else ""
+        _c_rest = "\n".join(_c_lines[1:]).strip()
+        if any(k in caption for k in ("ปลาสลิด", "ปลาแดดเดียว", "โรงตาก", "สุพรรณ")):
+            _c_cta = '💬 สั่งซื้อ: กดปุ่ม "ส่งข้อความ" ทักแชท หรือพิมพ์คำว่า "สนใจ" ในคอมเมนต์ได้เลยจ้า!\n━━━━━━━━━━━━━━━━━━'
+        else:
+            _c_cta = '💬 สนใจสินค้าในคลิป: กดปุ่ม "ส่งข้อความ" ทักแชท หรือพิมพ์คำว่า "สนใจ" ในคอมเมนต์ได้เลยจ้า!\n━━━━━━━━━━━━━━━━━━'
+        caption = f"{_c_first}\n{_c_cta}\n{_c_rest}" if _c_rest else f"{_c_first}\n{_c_cta}"
 
     # ถ้าเป็นภาพนิ่ง → แปลงเป็นวิดีโอก่อน
     is_img = is_image(item)
@@ -909,7 +954,7 @@ def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True
     KNOWN_FORMATTED_PREFIXES = (
         "prod_", "content_", "pure_", "celebrity_trend_",
         "trending_news_", "lucky_fortune_", "life_hack_tip_",
-        "work_productivity_", "reel_", "master_", "intro_"
+        "work_productivity_", "work_", "reel_", "master_", "intro_", "shopee_"
     )
     is_already_formatted = item.name.startswith(KNOWN_FORMATTED_PREFIXES)
     should_normalize = normalize and not is_already_formatted
@@ -947,20 +992,8 @@ def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True
             except Exception as page_error:
                 page_results.append({"ok": False, "error": str(page_error)[:200]})
                 log(f"[WARN] โพสต์เพจ {page['index']} ล้ม: {page_error}")
-        res = page_results[0] if page_results else {"ok": False, "error": "ไม่มีเพจที่ตั้งค่า token ครบ"}
-        # อัปโหลดขึ้น YouTube Shorts ทุกช่องที่เชื่อมต่อไว้ (Multi-Channel)
+        # YouTube Shorts: ถอดถอนออกจากระบบอย่างถาวรตามคำสั่งผู้ใช้
         yt_results = []
-        try:
-            import youtube_uploader
-            tokens = youtube_uploader.get_token_files()
-            if tokens:
-                yt_res = youtube_uploader.upload_shorts(Path(upload_path), product, broadcast_all=broadcast_all_yt)
-                if isinstance(yt_res, list):
-                    yt_results = yt_res
-                elif isinstance(yt_res, str):
-                    yt_results = [{"channel": "ช่องหลัก (@regency1229)", "url": yt_res}]
-        except Exception as e_yt:
-            log(f"[WARN] อัปโหลด YouTube Shorts ล้มเหลว: {e_yt}")
 
     finally:
         if tmp is not None:
@@ -969,7 +1002,17 @@ def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True
             except Exception:
                 pass
 
-    if any(r.get("ok") for r in page_results) or yt_results:
+    fb_ok = bool(page_results) and all(r.get("ok") and r.get("video_id") for r in page_results)
+
+    LAST_BROADCAST_RESULT = {
+        "fb": [f"https://www.facebook.com/reel/{r['video_id']}" for r in page_results if r.get("ok") and r.get("video_id")],
+        "yt": [],
+        "skipped": [f"Facebook: {r.get('error', 'upload failed')}" for r in page_results if not r.get("ok")],
+        "complete": fb_ok,
+    }
+    if any(r.get("ok") for r in page_results):
+        # Persist identity before file operations, which can fail on Windows.
+        record_posted_title((product or {}).get("product_name") or item.stem, item.name)
         POSTED_DIR.mkdir(parents=True, exist_ok=True)
         # ย้ายไฟล์ต้นฉบับ (ภาพหรือคลิป) ไป posted/
         original = item  # ใช้ไฟล์ต้นฉบับที่ถูกอัปโหลด
@@ -979,14 +1022,40 @@ def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True
         if custom_video:
             shutil.copy(str(original), str(dst))
         else:
-            shutil.move(str(original), str(dst))
+            import gc
+            moved = False
+            for attempt in range(5):
+                try:
+                    gc.collect()
+                    time.sleep(0.5 * (attempt + 1))
+                    shutil.move(str(original), str(dst))
+                    moved = True
+                    break
+                except (PermissionError, OSError):
+                    pass
+            if not moved:
+                try:
+                    shutil.copy(str(original), str(dst))
+                    try:
+                        original.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                except Exception as e_mv:
+                    log(f"[WARN] ย้ายไฟล์ไป posted/ ไม่สำเร็จ: {e_mv}")
+        # ย้ายไฟล์แคปชั่นคู่ (.txt) ไป posted/ ด้วยถ้ามี
+        try:
+            sidecar_txt = original.with_suffix(".txt")
+            if sidecar_txt.exists():
+                dst_txt = POSTED_DIR / sidecar_txt.name
+                shutil.move(str(sidecar_txt), str(dst_txt))
+        except Exception:
+            pass
         LAST_POST_FILE.write_text(str(time.time()), encoding="utf-8")
         bump_daily_count()
-        record_posted_title((product or {}).get("product_name") or original.stem)
 
         # อัปเดต timestamp สินค้าที่เพิ่งโพสต์บน Supabase เพื่อให้ LINE Bot "ของในคลิป" ดึงขึ้นอันดับ 1 ทันที
         try:
-            m_id = re.match(r'^prod_(\d+)_', original.name)
+            m_id = re.match(r'^(?:prod|shopee_(?:extracomm|high_conv|pilot))_(\d+)_', original.name)
             if m_id:
                 p_id = int(m_id.group(1))
                 supa_u = os.getenv("SUPABASE_URL")
@@ -1032,10 +1101,6 @@ def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True
                     _log_posted(product_id=_pid, category=_cat, platform=f"facebook_p{_pr.get('page_index', 1)}",
                                 video_path=original.name, content_mode=_mode,
                                 extra={"reel_id": _pr.get("video_id", "")})
-            for _yr in yt_results:
-                _log_posted(product_id=_pid, category=_cat, platform=f"youtube_{_yr.get('channel', 'ch')}",
-                            video_path=original.name, content_mode=_mode,
-                            extra={"yt_url": _yr.get("url", "")})
         except Exception:
             pass
 
@@ -1049,8 +1114,8 @@ def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True
             # จัดรูปแบบรายงานผลการโพสต์แบบ Bullet Point สวยงาม สบายตา
             channels_bullet = []
             page_names = {
-                1: "ป้าเข็ม ขายของ",
-                2: "ป้าเข็ม ชี้เป้าของดี",
+                1: "ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้",
+                2: "ครัวแม่บ้าน ชี้เป้าของอร่อยของดี",
                 3: "ป้าเข็ม ของดีบอกต่อ",
             }
             for fallback_index, page_result in enumerate(page_results, start=1):
@@ -1062,10 +1127,6 @@ def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True
                     f"  • 📍 FB เพจ {page_index} ({page_name}):\n"
                     f"    👉 https://www.facebook.com/reel/{page_result['video_id']}"
                 )
-            if yt_results:
-                for yt in yt_results:
-                    channels_bullet.append(f"  • 🔴 YouTube ({yt.get('channel', 'Shorts')}):\n    👉 {yt.get('url', '')}")
-            
             channels_text = "\n".join(channels_bullet) if channels_bullet else "  • โพสต์สำเร็จเรียบร้อย"
             pending_count = len(list_pending())
             today_count = get_today_post_count()
@@ -1074,7 +1135,7 @@ def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True
             try:
                 latest_urls = {
                     "fb": [f"https://www.facebook.com/reel/{r['video_id']}" for r in page_results if r.get("ok") and r.get("video_id")],
-                    "yt": [y.get("url") for y in yt_results if y.get("url")]
+                    "yt": []
                 }
                 (ROOT / "last_broadcast_urls.json").write_text(json.dumps(latest_urls, ensure_ascii=False, indent=2), encoding="utf-8")
                 (ROOT.parent / "last_broadcast_urls.json").write_text(json.dumps(latest_urls, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1111,7 +1172,8 @@ def post_next(dry_run: bool = False, force: bool = False, normalize: bool = True
         return 0
 
 
-    err_msg = res.get("error", "ไม่ทราบสาเหตุ")
+    err_reasons = [str(r.get("error", "")) for r in page_results if not r.get("ok")]
+    err_msg = ", ".join(filter(None, err_reasons)) or "ไม่ทราบสาเหตุ"
     log(f"[FAIL] โพสต์ไม่สำเร็จ: {err_msg}")
     if notify:
         # ใช้ระบบ notify_reels_issues ที่มี streak >= 2 และกันสแปม แทนการยิงเตือนรัวทุกรอบ

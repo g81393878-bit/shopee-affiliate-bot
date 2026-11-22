@@ -149,21 +149,43 @@ def setup_bot_commands():
         logger.warning(f"⚠️ ตั้งค่า setMyCommands ไม่สำเร็จ: {e}")
 
 
+def forward_to_accounting_worker(update: dict) -> bool:
+    """ส่งต่อคำสั่งบัญชี/รายจ่าย/สมุดรายวัน/ออเดอร์ ไปยัง Accounting Engine บน Cloudflare Worker"""
+    try:
+        req = urllib.request.Request(
+            "https://pakhem-line-webhook.regency2919.workers.dev",
+            data=json.dumps(update).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (PaKhemCommander/1.0)"
+            },
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return r.status == 200
+    except Exception as e:
+        logger.warning(f"⚠️ forward_to_accounting_worker error: {e}")
+        return False
+
+
 def get_main_menu_markup() -> dict:
     """สร้าง Inline Keyboard ปุ่มกดเมนูหลัก (ใต้ข้อความ)"""
     return {
         "inline_keyboard": [
             [
+                {"text": "📒 สมุดรายวันทั่วไป (GL)", "callback_data": "ledger"},
+                {"text": "📊 งบกำไรขาดทุน (P&L)", "callback_data": "pnl"}
+            ],
+            [
+                {"text": "📦 ดูออเดอร์ลูกค้า", "callback_data": "orders"},
+                {"text": "🌐 เปิดหน้าเว็บบัญชี", "url": "https://pakhem-line-webhook.regency2919.workers.dev/accounting"}
+            ],
+            [
+                {"text": "📑 เปิดตารางบัญชี Google Sheets", "url": "https://docs.google.com/spreadsheets/d/1gpuHGAJwt-Vq9WKfwjnCySWz_DqtTzKI91Eg_RNCLIE/edit"}
+            ],
+            [
                 {"text": "📊 เช็คสถานะสด", "callback_data": "cmd_status"},
                 {"text": "🚀 สั่งโพสต์คลิปทันที", "callback_data": "cmd_post"}
-            ],
-            [
-                {"text": "🔍 ส่องคู่แข่ง OSINT", "callback_data": "cmd_osint_help"},
-                {"text": "💳 ปลดล็อคชื่อเบอร์", "callback_data": "cmd_unmask_help"}
-            ],
-            [
-                {"text": "🎯 ขุดคำค้นหา SEO", "callback_data": "cmd_keyword_help"},
-                {"text": "🛡️ ตรวจออเดอร์เสี่ยง", "callback_data": "cmd_fraud_help"}
             ],
             [
                 {"text": "📈 ดูชีทยอดวิว", "callback_data": "cmd_sheet"},
@@ -172,9 +194,6 @@ def get_main_menu_markup() -> dict:
             [
                 {"text": "🏭 ผลิตคลิปเพิ่ม 3 ตัว", "callback_data": "cmd_produce"},
                 {"text": "📦 ดูคลังวิดีโอ", "callback_data": "cmd_stock"}
-            ],
-            [
-                {"text": "🔄 รีสตาร์ทบอท VPS", "callback_data": "cmd_restart"}
             ]
         ]
     }
@@ -184,9 +203,9 @@ def get_persistent_keyboard_markup() -> dict:
     """สร้าง ReplyKeyboardMarkup แผงปุ่มกดล่างหน้าจอถาวร (กดง่าย ไม่ต้องเลื่อนหา)"""
     return {
         "keyboard": [
+            [{"text": "📊 งบกำไรขาดทุน (P&L)"}, {"text": "📒 สมุดรายวันทั่วไป (GL)"}],
+            [{"text": "📦 ดูออเดอร์ลูกค้า"}, {"text": "📑 เปิดตารางบัญชี Google Sheets"}],
             [{"text": "📊 เช็คสถานะสด"}, {"text": "🚀 สั่งโพสต์คลิปทันที"}],
-            [{"text": "🔍 ส่องคู่แข่ง OSINT"}, {"text": "💳 ปลดล็อคชื่อเบอร์"}],
-            [{"text": "🎯 ขุดคำค้นหา SEO"}, {"text": "🛡️ ตรวจออเดอร์เสี่ยง"}],
             [{"text": "📈 ดูชีทยอดวิว"}, {"text": "🔄 ซิงค์ยอดวิวชีท"}],
             [{"text": "🏭 ผลิตคลิปเพิ่ม 3 ตัว"}, {"text": "📦 ดูคลังวิดีโอ"}],
             [{"text": "🔄 รีสตาร์ทบอท VPS"}]
@@ -597,6 +616,8 @@ def handle_telegram_update(update: dict):
                 time.sleep(1)
                 subprocess.run(["sudo", "systemctl", "restart", "shopee-bot"])
             threading.Thread(target=_restart, daemon=True).start()
+        else:
+            forward_to_accounting_worker(update)
         return
 
     # 2. จัดการข้อความพิมพ์ (Text Message หรือปุ่ม ReplyKeyboard)
@@ -732,79 +753,32 @@ def handle_telegram_update(update: dict):
             else:
                 send_tg_message("⚠️ กรุณาพิมพ์ข้อความที่ต้องการตอบ เช่น:\n`/reply สวัสดีครับ`", target_chat_id=chat_id)
         else:
-            # หากพิมพ์ข้อความอื่น ให้แนะนำแตะแผงปุ่ม
-            send_tg_message(
-                f"🤖 รับคำสั่ง: “{text}”\nกรุณาแตะสั่งการจากแผงปุ่มด้านล่างหน้าจอได้เลยครับ",
-                target_chat_id=chat_id
-            )
+            # ส่งต่อไปยังระบบบัญชีมาตรฐาน (รองรับลงรายจ่าย/ซื้อสินทรัพย์ เช่น "ซื้อตู้แช่ 4890 บาท", "แอด 300", งบกำไรขาดทุน, สมุดรายวัน, ออเดอร์)
+            forward_to_accounting_worker(update)
 
 
 def run_telegram_commander_loop():
-    """Long-Polling loop รับคำสั่งจาก Telegram แอดมินตลอด 24 ชม."""
+    """ดูแลให้ Telegram Webhook ชี้ไปยัง Cloudflare Accounting Worker (https://pakhem-line-webhook.regency2919.workers.dev) ตลอด 24 ชม. ห้ามสั่ง deleteWebhook หรือแย่งดึง getUpdates เด็ดขาด"""
     token = os.getenv("TELEGRAM_BOT_TOKEN") or TELEGRAM_BOT_TOKEN
     if not token or "mock" in token.lower():
         logger.warning("Telegram Bot token not set. Commander disabled.")
         return
 
-    # 1. ตั้งค่า Bot Commands เมนูทางการ และล้าง Webhook ค้าง (ป้องกัน HTTP 409 Conflict)
-    try:
-        urllib.request.urlopen(f"https://api.telegram.org/bot{token}/deleteWebhook?drop_pending_updates=true", timeout=10)
-    except Exception:
-        pass
-    setup_bot_commands()
-
-    logger.info("🤖 เริ่มต้นระบบ PaKhem Commander Polling Loop (24/7 Controller)...")
-    
-    # 2. ส่งข้อความเปิดระบบพร้อมแผงปุ่มกดที่ตรึงล่างหน้าจอ (มี cooldown 1 ชม. กันสแปมเวลารีสตาร์ทบอท)
-    welcome_state_file = ROOT / ".tg_commander_welcome_ts"
-    now_ts = time.time()
-    should_send_welcome = True
-    if welcome_state_file.exists():
-        try:
-            last_ts = float(welcome_state_file.read_text(encoding="utf-8").strip())
-            if (now_ts - last_ts) < 3600:
-                should_send_welcome = False
-                logger.info("ℹ️ ข้ามข้อความเปิดระบบ PaKhem Commander (ส่งไปแล้วภายใน 1 ชม.)")
-        except Exception:
-            pass
-
-    if should_send_welcome:
-        try:
-            welcome_msg = (
-                "👑 [PaKhem Commander — เปิดใช้งานแผงควบคุม 24/7]\n"
-                "━━━━━━━━━━━━━━━━━━\n"
-                "แผงสั่งการพร้อมทำงานแล้วครับ! สามารถแตะปุ่มที่ตรึงไว้ด้านล่างหน้าจอเพื่อสั่งการได้ทันทีเลยครับ"
-            )
-            send_tg_message(welcome_msg, reply_markup=get_persistent_keyboard_markup())
-            welcome_state_file.write_text(str(now_ts), encoding="utf-8")
-        except Exception as e:
-            logger.warning(f"⚠️ Startup welcome send error: {e}")
-
-    offset = 0
+    webhook_url = "https://pakhem-line-webhook.regency2919.workers.dev"
     while True:
         try:
-            url = f"https://api.telegram.org/bot{token}/getUpdates?offset={offset}&timeout=20"
-            req = urllib.request.Request(url, headers={"User-Agent": "PaKhemCommander/1.0"})
-            with urllib.request.urlopen(req, timeout=30) as response:
-                if response.status == 200:
-                    data = json.loads(response.read().decode("utf-8"))
-                    results = data.get("result", [])
-                    for item in results:
-                        offset = item["update_id"] + 1
-                        try:
-                            handle_telegram_update(item)
-                        except Exception as e_h:
-                            logger.error(f"❌ Error handling telegram update: {e_h}", exc_info=True)
+            req = urllib.request.Request(
+                f"https://api.telegram.org/bot{token}/setWebhook",
+                data=json.dumps({"url": webhook_url, "drop_pending_updates": False}).encode("utf-8"),
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=10) as r:
+                logger.info("✅ ยืนยัน Telegram Webhook ชี้ไปยัง Cloudflare Accounting Worker สำเร็จ")
         except Exception as e:
-            if "409" in str(e):
-                logger.debug("ℹ️ Telegram polling conflict (409): another instance active. Backing off 15s...")
-                time.sleep(15)
-            else:
-                logger.warning(f"⚠️ Telegram polling error: {e}")
-                time.sleep(3)
-        time.sleep(0.5)
+            logger.warning(f"⚠️ Telegram setWebhook check error: {e}")
+        time.sleep(1800)
 
 
 if __name__ == "__main__":
-    print("Starting Telegram Commander Standalone...")
+    print("Ensuring Telegram Webhook points to Cloudflare Accounting Worker...")
     run_telegram_commander_loop()

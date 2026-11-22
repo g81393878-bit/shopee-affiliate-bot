@@ -903,3 +903,116 @@ def admin_radar_cooldown(_: None = Depends(require_admin)):
     finally:
         db.close()
 
+
+@router.get("/api/admin/rea-overview")
+def admin_rea_overview(_: None = Depends(require_admin)):
+    """สรุปสถานะธุรกิจตามกรอบแนวคิด REA (Resources - Events - Agents) สำหรับ Solo Unicorn"""
+    db = _db()
+    try:
+        root = _repo_root()
+        pending_dir = root / "pending_videos"
+        pending_reels = len(list(pending_dir.glob("*.mp4"))) if pending_dir.is_dir() else 0
+
+        all_orders = (
+            db.query(models.DirectOrder)
+            .order_by(models.DirectOrder.created_at.desc())
+            .limit(200)
+            .all()
+        )
+
+        real_orders = [o for o in all_orders if (o.status or "").upper() != "LEAD_COMMENT" and (o.package_code or "") != "LEAD_GROUP_COMMENT"]
+        lead_events = [o for o in all_orders if (o.status or "").upper() == "LEAD_COMMENT" or (o.package_code or "") == "LEAD_GROUP_COMMENT"]
+
+        confirmed_statuses = {"CONFIRMED", "SHIPPED", "DELIVERED", "PAID"}
+        cash_confirmed = sum(float(o.price or 0) for o in real_orders if (o.status or "").upper() in confirmed_statuses)
+        cash_pending = sum(float(o.price or 0) for o in real_orders if (o.status or "").upper() == "PENDING")
+        shipped_count = sum(1 for o in real_orders if (o.status or "").upper() in {"SHIPPED", "DELIVERED"} or bool(o.tracking_number))
+
+        sku_counts = {"500G": 0, "1KG": 0, "2KG": 0}
+        for o in real_orders:
+            pkg = (o.package_code or "").upper()
+            if "500" in pkg:
+                sku_counts["500G"] += 1
+            elif "2KG" in pkg or "2" in pkg:
+                sku_counts["2KG"] += 1
+            else:
+                sku_counts["1KG"] += 1
+
+        recent_events = []
+        for o in all_orders[:12]:
+            is_lead = (o.status or "").upper() == "LEAD_COMMENT" or (o.package_code or "") == "LEAD_GROUP_COMMENT"
+            ev_type = "LEAD_ENGAGEMENT" if is_lead else (
+                "FULFILLMENT_SHIPPED" if (o.tracking_number or (o.status or "").upper() in {"SHIPPED", "DELIVERED"}) else "ORDER_COMMITMENT"
+            )
+            recent_events.append({
+                "id": o.id,
+                "order_code": o.order_code,
+                "event_type": ev_type,
+                "customer_agent": o.customer_name,
+                "resource_package": o.package_name,
+                "amount": float(o.price or 0),
+                "payment_method": o.payment_method,
+                "status": o.status,
+                "tracking_number": o.tracking_number or "",
+                "created_at": o.created_at.isoformat() if o.created_at else None,
+            })
+
+        return {
+            "model": "REA (Resources - Events - Agents) Solo Unicorn Engine",
+            "resources": {
+                "skus": [
+                    {"code": "SKU-SLID-MD-500G", "name": "ชุดพอดีมื้อ 500 กรัม (3-4 ตัว)", "transfer_price": 390, "cod_price": 410, "orders": sku_counts["500G"]},
+                    {"code": "SKU-SLID-MD-1KG", "name": "ชุดยอดฮิต 1 กิโลกรัม (5-7 ตัว)", "transfer_price": 550, "cod_price": 570, "orders": sku_counts["1KG"]},
+                    {"code": "SKU-SLID-MD-2KG", "name": "ชุดตุนสุดคุ้ม 2 กิโลกรัม (10-14 ตัว ส่งฟรีรถห้องเย็น)", "transfer_price": 1090, "cod_price": None, "orders": sku_counts["2KG"]},
+                ],
+                "cash_confirmed_thb": round(cash_confirmed, 2),
+                "cash_pending_thb": round(cash_pending, 2),
+                "bank_account": "ธ.กรุงไทย 038-0-25363-1 (นายจีรวัฒน์ พลอาจ)",
+                "active_live_video_url": "https://www.facebook.com/1307380735783361/videos/1506872324602251/",
+                "pending_reels_count": pending_reels,
+            },
+            "events": {
+                "total_orders": len(real_orders),
+                "total_leads": len(lead_events),
+                "shipped_orders": shipped_count,
+                "recent": recent_events,
+            },
+            "agents": [
+                {
+                    "id": "agent_1_broadcast",
+                    "name": "Agent 1: Live Broadcast & Group Share",
+                    "role": "ไลฟ์สด 24 ชม. + แชร์วิดีโอเข้า 6 กลุ่มตลาดนัดอัตโนมัติ (Chrome Ext v7.2)",
+                    "status": "ACTIVE",
+                },
+                {
+                    "id": "agent_2_comment_guard",
+                    "name": "Agent 2: Omnichannel Comment Responder",
+                    "role": "กวาดตอบคอมเมนต์เพจ + ไลฟ์สด + โพสต์แชร์ในกลุ่ม ดึงเข้า Inbox 24/7",
+                    "status": "ACTIVE",
+                },
+                {
+                    "id": "agent_3_cashier",
+                    "name": "Agent 3: Autonomous Cashier & Order Intake",
+                    "role": "แจ้งราคา 3 ชุด ตรวจสลิปกรุงไทย สกัดที่อยู่ลง direct_orders อัตโนมัติ",
+                    "status": "ACTIVE",
+                },
+                {
+                    "id": "agent_4_executive",
+                    "name": "Agent 4: Hermes Brain & Ad Guard",
+                    "role": "เฝ้างบโฆษณา 2 เพจ + แจ้งเตือนออเดอร์เข้า LINE/Telegram เจ้าของคนเดียว",
+                    "status": "ACTIVE",
+                },
+            ],
+            "rea_ast_audit": {
+                "artifact": "pakhem_extension (v7.2)",
+                "parsed_js_files": 3,
+                "visited_ast_nodes": 8693,
+                "call_flow_relations": 582,
+                "data_flow_relations": 3526,
+                "parse_failures": 0,
+            },
+        }
+    finally:
+        db.close()
+
+

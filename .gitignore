@@ -170,3 +170,30 @@ tools/update_worker.py
 # Local upstream source checkout (installed package is pinned separately)
 .local/
 !backend/requirements-skillclaw.txt
+tools/tiktok_android_history.json*
+
+# Runtime artifacts, logs, state files, and dumps
+artifacts/
+.tg_commander_welcome_ts
+.clasp.json
+last_broadcast_urls.json
+reels_uploader/last_broadcast_urls.json
+reels_uploader/.recent_product_history.json
+reels_uploader/duplicates/
+reels_uploader/video_quality_approvals.json
+reels_uploader/video_quality_review/
+tools/broadcast_attempts.json
+tools/video_analytics.jsonl
+*.xml
+*.wav
+*.aac
+*.mp4
+output_reels/
+pending_videos/
+posted_videos/
+fb_cookies.json
+tools/tiktok_cookies*.json
+tools/twitch.tv.txt
+งบยิงแอด 60 บาท.txt
+หาคนชอบกดไลค์ (POST_ENGAGEMENT).txt
+โทเคน.txt

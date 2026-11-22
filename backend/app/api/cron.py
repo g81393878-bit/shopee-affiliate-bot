@@ -760,40 +760,9 @@ def cron_facebook_post(token: str = "", limit: int = 1):
 
 
 def sweep_fake_posts(limit: int = 100, dry_run: bool = False) -> dict:
-    """กวาดโพสต์ลิงก์ปลอมบนเพจ → ลบ (หรือ dry_run ดูตัวอย่าง)
-
-    ลบโพสต์ที่มี: shope.ee (ปลอมเสมอ) / lazada.co.th (แพลตฟอร์มอื่น) /
-    s.shopee.co.th รหัส format ไม่ valid หรือ **ไม่ใช่ลิงก์ในคลังสินค้า** (เช่น
-    s.shopee.co.th/earbudsok ที่ mock poster ใช้ — base62 ผ่าน format แต่ไม่มีใน products)
-
-    ใช้ได้ทั้ง cron endpoint (/cron/clean-fake-posts) และ watcher อัตโนมัติในตัว
-    (main.py) — กัน mock poster โพสต์ลิงก์ปลอมขึ้นเพจแล้วค้างอยู่
-    """
-    db = SessionLocal()
-    try:
-        known = set()
-        for (u,) in db.query(models.Product.affiliate_url)\
-                     .filter(models.Product.affiliate_url.isnot(None)).all():
-            if u:
-                known.add(_normalize_shopee_link(u))
-        posts = fetch_page_posts(limit=limit)
-        deleted, kept = [], []
-        for p in posts:
-            if is_fake_link_post(p.get("message") or "", p.get("urls") or [],
-                                 known_links=known):
-                pid = p.get("id")
-                ok = True
-                if not dry_run:
-                    ok = delete_page_post(pid)
-                deleted.append({"id": pid, "created_time": p.get("created_time"),
-                                "message": (p.get("message") or "")[:60],
-                                "deleted": ok})
-            else:
-                kept.append(p.get("id"))
-        return {"scanned": len(posts), "deleted": deleted,
-                "kept_count": len(kept), "dry_run": dry_run}
-    finally:
-        db.close()
+    """ปิดระบบลบโพสต์บนเพจ Facebook อย่างถาวร 100% — ป้องกันการลบคลิปทุกกรณี"""
+    logger.info("ℹ️ sweep_fake_posts ถูกปิดการใช้งานถาวรตามคำสั่งผู้ใช้ (ป้องกันการลบคลิปบนเพจ)")
+    return {"scanned": 0, "deleted": [], "kept_count": 0, "dry_run": True, "disabled": True}
 
 
 @router.post("/clean-fake-posts")

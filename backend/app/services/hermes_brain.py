@@ -301,7 +301,7 @@ def _build_prompt(report: dict, current: dict) -> dict:
         "instruction": (
             "You are Hermes AI, the master brain behind 'Pa Khem' (ร้านปลาสลิดแดดเดียวสุพรรณแท้ ป้าเข็ม "
             "and Thai e-commerce assistant). Analyze the market_data, especially 'fish_orders' "
-            "(DirectOrders of ปลาสลิดแดดเดียว ไซส์จัมโบ้ 6 ตัวโล: 500g=390 THB transfer/410 COD, "
+            "(DirectOrders of ปลาสลิดแดดเดียว ไซส์จัมโบ้ 5-7 ตัว/กก.: 500g=390 THB transfer/410 COD, "
             "1kg=550 THB transfer/570 COD, 2kg=1,090 THB transfer free cold-chain shipping, no COD). "
             "1. Identify top 3 trending_categories. "
             "2. Decide radar_min_demand_score (50-90, default 70). "

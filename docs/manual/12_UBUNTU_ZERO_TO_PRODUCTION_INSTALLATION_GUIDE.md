@@ -1,4 +1,4 @@
-# 🐧 คู่มือการติดตั้งโปรเจกต์ ป้าเข็ม ขายของ บน Ubuntu Linux ฉบับสมบูรณ์
+# 🐧 คู่มือการติดตั้งโปรเจกต์ ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้ บน Ubuntu Linux ฉบับสมบูรณ์
 ## เริ่มต้นตั้งแต่ศูนย์ (Zero to Production Master Guide) — คำสั่งทีละสเต็ป, ปัญหา อุปสรรค และการแก้ไข 100%
 
 > **Google Docs ฉบับทางการ:** [เปิดดูบน Google Docs](https://docs.google.com/document/d/1CRzzmpqWURcJuQVjGLqwWHEM2O3hLUP72USUr252Oog/edit)
@@ -21,7 +21,7 @@
 
 ## 🏛️ บทที่ 1: ภาพรวมสถาปัตยกรรมระบบ (System Architecture Overview)
 
-โปรเจกต์ "ป้าเข็ม ขายของ" เป็นระบบอัตโนมัติครบวงจร 2 รางคู่ขนาน (**Dual-Engine System**):
+โปรเจกต์ "ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้" เป็นระบบอัตโนมัติครบวงจร 2 รางคู่ขนาน (**Dual-Engine System**):
 
 1. **โรงงานผลิตและกระจายสื่อวิดีโอ 13 ช่องทาง (Autonomous Media Factory 24/7):**
    - ระบบตัดต่อวิดีโอ 9:16 Full HD อัตโนมัติ โดยอิง Master Template 3 เฟส
@@ -38,7 +38,7 @@
    - Cloudflare Tunnel + Watchdog อัปเดต Webhook อัตโนมัติทันทีที่ URL เปลี่ยนแปลง
 
 3. **ศูนย์สั่งการและเฝ้าระวังหลังบ้าน (Telegram Commander):**
-   - ส่งรายงานคลิปที่โพสต์สำเร็จ, สถานะระบบ, และแจ้งเตือนข้อผิดพลาดเข้า Telegram `@pakhem_commander_bot`
+   - ส่งรายงานคลิปที่โพสต์สำเร็จ, สถานะระบบ, และแจ้งเตือนข้อผิดพลาดเข้า Telegram `@pakhem_fish_bot`
    - แอดมินสามารถพิมพ์สั่งการจากมือถือได้ตลอดเวลา เช่น `/status`, `/post`, `/stock`, `/produce`
 
 ---
@@ -394,7 +394,7 @@ systemctl status shopee-backend cloudflared-tunnel tunnel-watchdog shopee-bot --
    ```bash
    systemctl restart shopee-bot shopee-backend cloudflared-tunnel tunnel-watchdog
    ```
-4. **คำสั่งสั่งการผ่าน Telegram Commander (`@pakhem_commander_bot`):**
+4. **คำสั่งสั่งการผ่าน Telegram Commander (`@pakhem_fish_bot`):**
    - `/status` — เช็คสถานะสดของระบบและสุขภาพ VPS
    - `/stock` — ดูรายการคลิปที่รอโพสต์ในคลังสต็อก
    - `/post` — สั่งยิงโพสต์คลิปทันที

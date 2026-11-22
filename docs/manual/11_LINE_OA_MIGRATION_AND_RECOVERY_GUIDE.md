@@ -7,7 +7,7 @@
 
 ## 🏛️ บทที่ 1: ภาพรวมสถาปัตยกรรมระบบ LINE OA Webhook (Architecture Overview)
 
-ระบบ LINE Official Account (ป้าเข็ม ขายของ / `@137gsref`) ถูกออกแบบขึ้นภายใต้สถาปัตยกรรม **"Always-On Zero-Cost Webhook"** เพื่อให้สามารถตอบแชทลูกค้า ค้นหาสินค้าจากฐานข้อมูลกว่า 2,472 รายการ และปิดการขายแพ็กเกจ SaaS ได้ตลอด 24 ชั่วโมง โดยไม่ต้องเปิดเครื่องคอมพิวเตอร์ทิ้งไว้
+ระบบ LINE Official Account (ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้ / `@137gsref`) ถูกออกแบบขึ้นภายใต้สถาปัตยกรรม **"Always-On Zero-Cost Webhook"** เพื่อให้สามารถตอบแชทลูกค้า ค้นหาสินค้าจากฐานข้อมูลกว่า 2,472 รายการ และปิดการขายแพ็กเกจ SaaS ได้ตลอด 24 ชั่วโมง โดยไม่ต้องเปิดเครื่องคอมพิวเตอร์ทิ้งไว้
 
 ระบบบน Cloud VPS ทำงานร่วมกัน 3 องค์ประกอบหลัก (**3-Pillar Unified Stack**):
 
@@ -23,7 +23,7 @@
 3. **Tunnel URL Watchdog Service (`tunnel-watchdog.service`):**
    - ทำหน้าที่เฝ้าระวังเบื้องหลังตลอด 24 ชม. โดยตรวจสอบ URL ของ Cloudflare ทุกๆ 15 วินาที
    - หาก URL เกิดการเปลี่ยนแปลง (เช่น เซิร์ฟเวอร์รีบูต หรือ Tunnel หลุดชั่วคราว) ระบบจะส่งคำขอ PUT ไปยัง LINE Messaging API เพื่ออัปเดต Webhook Endpoint ทันทีในระดับวินาที
-   - ส่งข้อความแจ้งเตือนสถานะ URL ใหม่เข้า Telegram Commander (`@pakhem_commander_bot`) อัตโนมัติ
+   - ส่งข้อความแจ้งเตือนสถานะ URL ใหม่เข้า Telegram Commander (`@pakhem_fish_bot`) อัตโนมัติ
 
 ```text
 [ลูกค้าพิมพ์แชท LINE] 
@@ -56,7 +56,7 @@
    - `DATABASE_URL`: URL สำหรับเชื่อมต่อ Supabase PostgreSQL Transaction Pooler (`aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres`)
    - `LINE_CHANNEL_ACCESS_TOKEN`: โทเค็นระยะยาวของ LINE Official Account
    - `LINE_CHANNEL_SECRET`: คีย์ลับสำหรับตรวจสอบ Signature ความปลอดภัยของ LINE
-   - `TELEGRAM_BOT_TOKEN`: โทเค็นของบอทสั่งการหลังบ้าน (`@pakhem_commander_bot`)
+   - `TELEGRAM_BOT_TOKEN`: โทเค็นของบอทสั่งการหลังบ้าน (`@pakhem_fish_bot`)
    - `TELEGRAM_CHAT_ID`: ไอดีห้องแชทของแอดมิน (`6734965582`)
    - `GROQ_API_KEY`: คีย์ Groq AI Multi-Key
 
@@ -242,7 +242,7 @@ ssh root@<OLD_VPS_IP> "rm -rf /root/shopee-affiliate-bot /root/affiliate_db.db"
    ```bash
    systemctl restart shopee-backend cloudflared-tunnel tunnel-watchdog
    ```
-4. **สั่งการผ่าน Telegram Commander (`@pakhem_commander_bot`):**
+4. **สั่งการผ่าน Telegram Commander (`@pakhem_fish_bot`):**
    - `/status` — เช็คสถานะสดของระบบ
    - `/stock` — ดูคลังสินค้าและคลิป
    - `/reply <user_id> <ข้อความ>` — ส่งแชทตอบลูกค้า LINE ผ่าน Telegram โดยตรง

@@ -62,7 +62,7 @@ CURATED_HOOK_REGISTRY = {
         "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800&auto=format&fit=crop",  # ประชุมยาวเหนื่อยล้า
         "https://images.unsplash.com/photo-1507207611509-ec012433ff52?w=800&auto=format&fit=crop",  # เครียดเวลางาน
     ],
-    # 4. โชคลาภ มหาสมบัติ พลังงานดวงดาว ฮวงจุ้ย (Fortune & Mystic Energy Hook)
+    # 4. โชคลาภ มหาสมบัติ พลังงานดวงดาว & ฮวงจุ้ย (Fortune & Mystic Energy Hook)
     "FORTUNE_MYSTIC": [
         "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop",  # พลังงานสีทองจักรวาล
         "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop",  # ดวงดาวมงคล

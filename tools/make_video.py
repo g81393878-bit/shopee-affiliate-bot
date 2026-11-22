@@ -119,7 +119,7 @@ def render_hook_frame(product, t, dur):
     od.rounded_rectangle(chip, radius=29, fill=(255, 255, 255, 40))
     img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
     draw = ImageDraw.Draw(img)
-    brand = "ป้าเข็ม ขายของ 💕"
+    brand = "ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้ 💕"
     bf = font(30, bold=True)
     draw.text((W // 2, 99), brand, font=bf, fill=(255, 255, 255), anchor="mm")
 
@@ -193,7 +193,7 @@ def render_end_frame(product):
     draw.rounded_rectangle(btn, radius=60, fill=(255, 255, 255))
     draw.text((W // 2, 880), "สั่งซื้อผ่านลิงก์ใน BIO", font=font(38, bold=True), fill=(178, 69, 146), anchor="mm")
 
-    draw.text((W // 2, 1030), "ป้าเข็ม ขายของ 💕", font=font(34, bold=True), fill=(255, 255, 255), anchor="mm")
+    draw.text((W // 2, 1030), "ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้ 💕", font=font(34, bold=True), fill=(255, 255, 255), anchor="mm")
     draw.text((W // 2, 1100), "ของดีคัดให้แล้ว · ราคาสุดท้ายดูใน Shopee", font=font(26), fill=(255, 240, 245), anchor="mm")
     return np.array(img)
 

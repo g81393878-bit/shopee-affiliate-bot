@@ -46,7 +46,7 @@ def _classify_intent(text: str, default_intent: str = "💬 คอมเมน�
         return "💰 สนใจ/ถามราคา"
     if any(k in t for k in ["เค็ม", "รสชาติ", "ส่วนประกอบ", "กันบูด"]):
         return "🧂 ถามรสชาติ/ความเค็ม"
-    if any(k in t for k in ["ต่างจังหวัด", "เสียไหม", "เน่า", "บูด", "เจลเย็น", "รถเย็น", "ปลายทาง", "cod", "ส่งกี่วัน", "ส่งของยังไง"]):
+    if any(k in t for k in ["ต่างจังหวัด", "เสียไหม", "เน่า", "บูด", "รถเย็น", "ปลายทาง", "cod", "ส่งกี่วัน", "ส่งของยังไง"]):
         return "🚚 ถามส่งต่างจังหวัด/COD"
     if any(k in t for k in ["ปลาช่อน", "ปลาดุก", "ปลานิล", "มีแต่ปลาสลิด"]):
         return "🐟 ถามหาปลาชนิดอื่น"
@@ -74,12 +74,12 @@ def _get_fb_pages() -> list[dict]:
     p1_id = (os.getenv("FACEBOOK_PAGE_ID") or "1307380735783361").strip()
     p1_tk = (os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or "").strip()
     if p1_id and p1_tk:
-        pages.append({"id": p1_id, "name": "เพจ 1: ป้าเข็ม ขายของ", "token": p1_tk})
+        pages.append({"id": p1_id, "name": "เพจ 1: ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้", "token": p1_tk})
 
     p2_id = (os.getenv("FACEBOOK_PAGE_2_ID") or "1323469404180656").strip()
     p2_tk = (os.getenv("FACEBOOK_PAGE_2_ACCESS_TOKEN") or "").strip()
     if p2_id and p2_tk:
-        pages.append({"id": p2_id, "name": "เพจ 2: ป้าเข็ม ชี้เป้าของดี", "token": p2_tk})
+        pages.append({"id": p2_id, "name": "เพจ 2: ครัวแม่บ้าน ชี้เป้าของอร่อยของดี", "token": p2_tk})
     return pages
 
 
