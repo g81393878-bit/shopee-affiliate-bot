@@ -127,7 +127,10 @@ def build_friendly_chat_reply(
 
     # ตรวจจับคำถามค้นหาสถานพยาบาล (แยกแยะคนและสัตว์ชัดเจน 100%)
     try:
-        from app.services.hospital_directory_service import is_any_hospital_query, format_hospital_directory_reply
+        try:
+            from app.services.hospital_directory_service import is_any_hospital_query, format_hospital_directory_reply
+        except ImportError:
+            from backend.app.services.hospital_directory_service import is_any_hospital_query, format_hospital_directory_reply
         if is_any_hospital_query(t):
             max_res = 3 if channel == "comment" else 5
             return format_hospital_directory_reply(t, max_results=max_res)
@@ -136,7 +139,10 @@ def build_friendly_chat_reply(
 
     # ตรวจจับคำถามค้นหาร้านอาหาร / สถานที่ท่องเที่ยว / โรงแรมทั่วไทย
     try:
-        from app.services.places_directory_service import is_places_query, format_places_directory_reply
+        try:
+            from app.services.places_directory_service import is_places_query, format_places_directory_reply
+        except ImportError:
+            from backend.app.services.places_directory_service import is_places_query, format_places_directory_reply
         if is_places_query(t):
             max_res = 2 if channel == "comment" else 3
             return format_places_directory_reply(t, max_results=max_res)
@@ -154,7 +160,10 @@ def build_friendly_chat_reply(
 
     # พิมพ์แค่ชื่อจังหวัด/อำเภอ/ตำบล (เช่น "สุโขทัย", "อ.บางปะหัน อยุธยา") -> ส่งชุดพิกัด 4 หมวดทันที
     try:
-        from app.services.places_directory_service import format_area_bundle_reply
+        try:
+            from app.services.places_directory_service import format_area_bundle_reply
+        except ImportError:
+            from backend.app.services.places_directory_service import format_area_bundle_reply
         bundle = format_area_bundle_reply(t)
         if bundle:
             return bundle

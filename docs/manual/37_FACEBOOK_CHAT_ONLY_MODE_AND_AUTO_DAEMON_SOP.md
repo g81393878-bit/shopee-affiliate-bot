@@ -1,194 +1,141 @@
-# คู่มือระบบ Facebook Chat-Only Mode (หยุดขาย — ตอบทักทาย + ค้นหา รพ.) & Auto-Daemon 24/7 (SOP 37)
+# คู่มือระบบ Facebook & LINE Chat-Only Mode v3.5 (หยุดขาย — ตอบทักทาย + รพ. + ร้านอาหาร + ที่เที่ยว + โรงแรม ทั่วไทย) & Auto-Daemon 24/7 (SOP 37)
 
-> **สถานะระบบปัจจุบัน:** เปิดใช้งาน **โหมดพูดคุยทักทาย (`FB_CHAT_ONLY_MODE=true`)** เป็นค่าเริ่มต้นทั้ง 3 ชั้นของบอท Facebook
+> **สถานะระบบปัจจุบัน:** เปิดใช้งาน **โหมดบริการประชาชนและพูดคุยทักทาย v3.5 (`FB_CHAT_ONLY_MODE=true`)** เป็นค่าเริ่มต้นบนระบบคลาวด์ Cloudflare Worker และ Local Daemon
 > - **หยุดขาย 100%:** ไม่เสนอราคา, ไม่ส่งแพ็กเกจ, ไม่ส่งเลขบัญชี, ไม่ส่ง Private Offer DM, ไม่ปักหมุด First Comment ขายของ, ไม่แนบปุ่ม Quick Reply สั่งซื้อ, ไม่ตรวจสลิป และไม่สร้างออเดอร์ใหม่
-> - **ยังเก็บข้อมูล CRM ตามปกติ:** ยังบันทึก Leads ลง Supabase, ซิงก์ Google Sheets CRM แบบ Real-Time และเก็บ Likes ตามเดิม
-> - **ทำงานอัตโนมัติ 100% (Zero-Click):** รันอิสระผ่าน Windows Task Scheduler (`PaKhem_FB_AutoComment_24x7`) และ Windows Startup โดยไม่ต้องเปิดหน้าต่างหรือคลิกใดๆ
+> - **บริการสาธารณะ 24 ชม. ครอบคลุม 77 จังหวัด ทั่วไทย:** ให้บริการค้นหาพิกัดโรงพยาบาล/ฉุกเฉิน 1669, คลินิก/ร้านยา, ร้านอาหาร/คาเฟ่, สถานที่ท่องเที่ยว, และโรงแรม/รีสอร์ท/ที่พัก
+> - **ฐานข้อมูล 717 อำเภอ & แก้คำสะกดผิด:** พิมพ์แค่ชื่ออำเภอสั้นๆ (เช่น *"รีสอรท มหาราช"*, *"กิน บางปะหัน"*) ระบบจับคู่จังหวัดให้อัตโนมัติ พร้อมรองรับคำพิมพ์ผิด/ตกการันต์
+> - **สถาปัตยกรรม 2 ชั้น (Dual-Layer 24/7):**
+>   1. **ชั้นคลาวด์ความเร็วสูง (1–2 วินาที):** Cloudflare Worker (`pakhem-line-webhook.regency2919.workers.dev`) ตอบ Messenger, LINE, และ Feed Comments ทันที
+>   2. **ชั้นสำรองในเครื่อง (Local Failsafe):** Windows Task Scheduler (`PaKhem_FB_AutoComment_24x7`) รัน `fb_comment_responder.py --daemon` ตรวจจับทุก 15–25 วิ
+> - **ระบบจัดการเวอร์ชันและแบ็กอัป:** บริหารผ่าน `tools/cf_worker_manager.py` (Backup -> Test -> Deploy -> Rollback)
 
 ---
 
-## 1. ผังสถาปัตยกรรมระบบ (Architecture Overview)
+## 1. ผังสถาปัตยกรรมระบบ v3.5 (Dual-Layer Architecture)
 
 ```mermaid
 flowchart TD
-    FB["Facebook Page (คอมเมนต์ใต้โพสต์ + แชท Messenger)"] --> T1["ชั้นที่ 1: Local Daemon 24/7<br/>tools/fb_comment_responder.py --daemon<br/>(ตรวจทุก 15 วิ | Inbox รอ 3 วิ | คูลดาวน์ 5 วิ)"]
-    FB --> T2["ชั้นที่ 2: Render Cloud Worker<br/>backend/app/services/fish_cloud_worker.py"]
-    FB --> T3["ชั้นที่ 3: Messenger Webhook<br/>backend/app/api/facebook_bot.py"]
+    User["ผู้ใช้ทักแชท / คอมเมนต์ (Facebook หรือ LINE)"] --> ROUTER{"ช่องทางที่ส่งเข้ามา"}
+    
+    ROUTER -->|Facebook Messenger / Feed Webhook| CF["ชั้นที่ 1 (ความเร็วสูง 1-2 วิ): Cloudflare Worker v3.5<br/>pakhem-line-webhook.regency2919.workers.dev"]
+    ROUTER -->|LINE OA Webhook| CF
+    ROUTER -->|Polling สำรอง 15-25 วิ| LOCAL["ชั้นที่ 2 (Local Failsafe 24/7): Windows Task Scheduler<br/>tools/fb_comment_responder.py --daemon"]
 
-    T1 --> CORE["แกนกลาง: backend/app/services/fb_chat_only.py<br/>is_fb_chat_only_mode() + build_friendly_chat_reply()"]
-    T2 --> CORE
-    T3 --> CORE
+    CF --> ROUTE_LOGIC{"วิเคราะห์เจตนาข้อความ (Intent Classification)"}
+    LOCAL --> ROUTE_LOGIC
 
-    CORE --> P1{"1. ถามหาโรงพยาบาล?<br/>is_any_hospital_query()"}
-    P1 -->|ใช่| HOSP["hospital_directory_service.py<br/>คืนพิกัด รพ. คน/สัตว์ + 1669"]
-    P1 -->|ไม่ใช่| P2{"2. ถามซื้อ/ราคา/เบอร์โทร?<br/>is_purchase_inquiry()"}
-    P2 -->|ใช่| CLOSED["สุ่มตอบจาก _CLOSED_SHOP_REPLIES (3 แบบ)<br/>แจ้งสุภาพว่าเลิกขาย/งดจำหน่ายแล้ว"]
-    P2 -->|ไม่ใช่| P3{"3. สบายดีไหม / ขอบคุณ / ทักทายทั่วไป"}
-    P3 --> CHAT["สุ่มตอบจาก _HOW_ARE_YOU / _THANKS / _FRIENDLY_GREETING"]
-
-    T1 --> CRM["เก็บข้อมูลต่อเนื่อง (ยังเปิดอยู่)<br/>• Leads -> Supabase<br/>• Replied History (Local)<br/>• Google Sheets CRM + Likes"]
+    ROUTE_LOGIC -->|1. ฉุกเฉิน 1669 / รถพยาบาล| EMER["🚨 ส่งเบอร์ฉุกเฉิน 1669 (โทรฟรี) + ลิงก์ รพ. ฉุกเฉิน"]
+    ROUTE_LOGIC -->|2. โรงพยาบาล / คลินิก| HOSP["🏥 ค้นหาโรงพยาบาล/คลินิกตามพิกัด (คน/สัตว์)"]
+    ROUTE_LOGIC -->|3. ร้านอาหาร / คาเฟ่ / ของกิน| FOOD["🍜 ค้นหาร้านอาหารอร่อย + แผนที่ Google Maps"]
+    ROUTE_LOGIC -->|4. ที่เที่ยว / จุดเช็คอิน| TOUR["🗺️ ค้นหาสถานที่ท่องเที่ยวยอดนิยม + นำทาง"]
+    ROUTE_LOGIC -->|5. โรงแรม / รีสอร์ท / ที่พัก| HOTEL["🏨 ค้นหาโรงแรม/รีสอร์ท/โฮมสเตย์ + เช็คราคา/รีวิว"]
+    ROUTE_LOGIC -->|6. พิมพ์ชื่อพื้นที่โดดๆ เช่น 'มหาราช'| BUNDLE["📍 มัดรวม 4 พิกัด (รพ. + ร้านอาหาร + ที่เที่ยว + ที่พัก)"]
+    ROUTE_LOGIC -->|7. ถามซื้อ / ราคา / สั่งปลา| CLOSED["สุ่มตอบจาก _CLOSED_SHOP_REPLIES (แจ้งเลิกขายสุภาพ)"]
+    ROUTE_LOGIC -->|8. ทักทาย / สบายดีไหม / ขอบคุณ| GREET["สุ่มตอบจาก _FRIENDLY_GREETING_REPLIES สุภาพเป็นมิตร"]
 ```
 
 ---
 
-## 2. แกนกลางการทำงาน: `backend/app/services/fb_chat_only.py`
+## 2. ฟีเจอร์บริการประชาชน & การประมวลผลคำค้นหา (NLP & Geo Directory)
 
-ไฟล์เดียวที่เป็น Single Source of Truth สำหรับทั้ง 3 ชั้นของบอท Facebook
+### 2.1 บริการ 5 หมวดหมู่หลักทั่วไทย
 
-### 2.1 สวิตช์เปิด–ปิดโหมด (`is_fb_chat_only_mode`)
-- **ตำแหน่ง:** `backend/app/services/fb_chat_only.py` (บรรทัด 89–92)
-- **ตัวแปรสภาพแวดล้อม (Env Var):** `FB_CHAT_ONLY_MODE`
-- **ค่าเริ่มต้น:** `"true"` (เปิดโหมดพูดคุยทักทายอัตโนมัติแม้ไม่ได้ตั้งค่าใน `.env` หรือ Render)
-- **เงื่อนไขปิดโหมด (กลับไปขายของ):** ตั้งค่า `FB_CHAT_ONLY_MODE` เป็น `"0"`, `"false"`, `"no"`, หรือ `"off"` (ไม่สนตัวพิมพ์เล็ก-ใหญ่)
+| หมวดหมู่ | ไอคอน | คำค้นหาที่รองรับ (ครอบคลุมคำสั้น & ตกการันต์) | แหล่งข้อมูลพิกัด |
+| :--- | :---: | :--- | :--- |
+| **ฉุกเฉิน 1669** | 🚨 | `1669`, `กู้ชีพ`, `รถพยาบาล`, `หมดสติ`, `หายใจไม่ออก` | เบอร์โทรด่วน 1669 + Google Maps รพ. ฉุกเฉิน |
+| **โรงพยาบาล / ยา** | 🏥 / 💊 / 🐾 | `รพ`, `โรงพยาบาล`, `คลินิก`, `หาหมอ`, `ยา`, `ร้านขายยา`, `รพ.สัตว์` | Google Maps Search + ฐานข้อมูลสถานพยาบาล |
+| **ร้านอาหาร / คาเฟ่** | 🍜 | `กิน`, `ร้านอาหาร`, `ของกิน`, `คาเฟ่`, `กาแฟ`, `ก๋วยเตี๋ยว`, `หมูกระทะ`, `หมูกะทะ` | OpenStreetMap Cache + Google Maps Reviews |
+| **สถานที่ท่องเที่ยว** | 🗺️ | `เที่ยว`, `ที่เที่ยว`, `จุดเช็คอิน`, `ไหว้พระ`, `วัด`, `ถ่ายรูป`, `ตลาดน้ำ` | OpenStreetMap Cache + Google Maps Directions |
+| **โรงแรม / รีสอร์ท** | 🏨 | `นอน`, `โรงแรม`, `รีสอร์ท`, `รีสอรท`, `ที่พัก`, `โฮมสเตย์`, `ห้องพัก`, `กางเต็นท์` | Google Maps Hotel Search + Price / Reviews |
 
-```python
-def is_fb_chat_only_mode() -> bool:
-    val = os.getenv("FB_CHAT_ONLY_MODE", "true").strip().lower()
-    return val not in ("0", "false", "no", "off")
+### 2.2 ระบบสกัดพิกัด 3 ระดับ & ฐานข้อมูล 717 อำเภอ (Nationwide District Auto-Resolution)
+
+ผู้ใช้งานมักพิมพ์คำค้นหาสั้นๆ โดยไม่ระบุจังหวัด เช่น *"รีสอรท มหาราช"* หรือ *"กิน ปาย"* ระบบมีกลไกป้องกันการหลุดพิกัดดังนี้:
+1. **สกัดลำดับขั้น:** ตำบล/แขวง ➔ อำเภอ/เขต ➔ จังหวัด
+2. **จับคู่อำเภอ 717 แห่ง (`_AMPHOE_TO_PROVINCE_DB`):**
+   - เช่น เมื่อพบคำว่า *"มหาราช"* ➔ ระบบระบุได้ทันทีว่าเป็น `อ.มหาราช จ.พระนครศรีอยุธยา` (ไม่หลุดไปเป็นถนนมหาราชที่กระบี่หรือพระบรมมหาราชวังใน กทม.)
+   - เช่น พบคำว่า *"ปาย"* ➔ ระบุเป็น `อ.ปาย จ.แม่ฮ่องสอน`
+   - เช่น พบคำว่า *"ชะอำ"* ➔ ระบุเป็น `อ.ชะอำ จ.เพชรบุรี`
+3. **มัดรวม 4 พิกัด (Area Bundle):** หากผู้ใช้พิมพ์ชื่อพื้นที่หรืออำเภอเพียงคำเดียว เช่น *"มหาราช"*, *"สุโขทัย"* ระบบจะส่งลิงก์รวมครบ 4 ด้าน (รพ. + ร้านอาหาร + ที่เที่ยว + ที่พัก) ในข้อความเดียวทันที
+
+---
+
+## 3. สถาปัตยกรรม Cloudflare Worker v3.5 (`pakhem-line-webhook`)
+
+บอททำงานบน Cloudflare Edge Network เพื่อให้การตอบกลับรวดเร็วที่สุด (ภายใน 1–2 วินาที):
+
+### 3.1 การกำหนดค่าและเอนด์พอยต์
+- **URL โฮสต์:** `https://pakhem-line-webhook.regency2919.workers.dev`
+- **รองรับ Webhook:**
+  - `POST /` (LINE Webhook Events): ตรวจสอบ Line Signature, คืนข้อความธรรมดา หรือ Flex Carousel
+  - `GET /` & `POST /` (Facebook Webhook):
+    - `hub.verify_token` สำหรับการยืนยันระบบ Facebook Webhook
+    - `entry.messaging` สำหรับแชทข้อความ Messenger
+    - `entry.changes[value.item == "comment"]` สำหรับการตอบคอมเมนต์ใต้โพสต์/Reels แบบ Real-Time
+- **โทเค็นเพจเฟสบุ๊กในระบบ:**
+  - เพจ 1 (`1307380735783361`): ป้าเข็ม ปลาสลิดแดดเดียวสุพรรณแท้
+  - เพจ 2 (`1323469404180656`): ครัวแม่บ้าน ชี้เป้าของอร่อย
+
+---
+
+## 4. เครื่องมือจัดการเวอร์ชัน Cloudflare Worker (`tools/cf_worker_manager.py`)
+
+เพื่อความปลอดภัยสูงสุดและป้องกันปัญหา Worker ล่มในอนาคต มีระบบจัดการเวอร์ชันอัตโนมัติ:
+
+### 4.1 คำสั่งที่ใช้งานได้
+```powershell
+# 1. แบ็กอัปโค้ดเวอร์ชันปัจจุบันจาก Cloudflare ลงเครื่อง
+python tools/cf_worker_manager.py backup
+
+# 2. ดูประวัติไฟล์แบ็กอัปทั้งหมด
+python tools/cf_worker_manager.py list
+
+# 3. ตรวจสอบโค้ดและ Deploy ขึ้น Cloudflare (มี Node.js Pre-flight Unit Test ในตัว)
+python tools/cf_worker_manager.py deploy <path_to_js_file>
+
+# 4. โรลแบ็กกลับไปเวอร์ชันก่อนหน้าทันทีใน 1 วินาที
+python tools/cf_worker_manager.py rollback <backup_filename>
 ```
 
-### 2.2 การจัดรูปแบบคำทักทายชื่อผู้ส่ง (`_format_greeting`)
-- **ตำแหน่ง:** บรรทัด 95–101
-- หากชื่อขึ้นต้นด้วย `"คุณ"` → `"สวัสดีค่ะ{clean_name}"`
-- หากมีชื่อ (ไม่ขึ้นต้นด้วย `"คุณ"`) → `"สวัสดีค่ะคุณ {clean_name}"`
-- หากไม่มีชื่อ → `"สวัสดีค่ะ"`
-
-### 2.3 การตรวจจับคำถามสั่งซื้อ (`is_purchase_inquiry`)
-- **ตำแหน่ง:** บรรทัด 104–114
-- คืนค่า `True` เมื่อตรงเงื่อนไขใดเงื่อนไขหนึ่งต่อไปนี้:
-  1. **พบเบอร์โทรศัพท์มือถือไทย** ด้วย Regex `_PHONE_RE`:
-     `(?:0[689]\d{8}|0[689]\d{1}[-\s]?\d{3}[-\s]?\d{4}|0[689]\d{2}[-\s]?\d{3}[-\s]?\d{3})`
-  2. **พิมพ์เลขตัวเดียว `1`, `2`, หรือ `3`** (`re.fullmatch(r"[123]", lower)`)
-  3. **พบคำสำคัญใน `_PURCHASE_KEYWORDS` (ครบทั้ง 42 คำ):**
-     `สั่ง`, `ซื้อ`, `ราคา`, `เท่าไหร่`, `เท่าไร`, `กี่บาท`, `กี่โล`, `กิโล`, `ครึ่งโล`, `500g`, `500 กรัม`, `1 กก`, `2 กก`, `390`, `550`, `1090`, `1,090`, `สนใจ`, `โอน`, `บัญชี`, `ปลายทาง`, `cod`, `ค่าส่ง`, `ส่งฟรี`, `ส่งไหม`, `ส่งมั้ย`, `รถเย็น`, `ห้องเย็น`, `มีของไหม`, `ยังมีขาย`, `ขายไหม`, `ขายมั้ย`, `เปิดขาย`, `ปลาสลิด`, `พร้อมส่ง`, `พิกัด`, `หน้าร้าน`, `ที่อยู่`, `รับ 1`, `รับ 2`, `เอา 1`, `เอา 2`
-
-### 2.4 ลำดับการสร้างคำตอบ (`build_friendly_chat_reply`)
-- **ตำแหน่ง:** บรรทัด 117–146
-- ทำงานตามลำดับ Priority 5 ขั้นจากบนลงล่าง (ตรงขั้นไหนส่งทันที):
-
-| ลำดับ | เงื่อนไขตรวจจับ | การตอบกลับจริงตามโค้ด |
-| :---: | :--- | :--- |
-| **1** | `is_any_hospital_query(t)` จาก `hospital_directory_service.py` | คืน `format_hospital_directory_reply(t, max_results=3 if channel == "comment" else 5)` (คอมเมนต์แสดงสูงสุด 3 แห่ง, Messenger แสดงสูงสุด 5 แห่ง พร้อมพิกัด Google Maps และเบอร์ฉุกเฉิน 1669) |
-| **2** | `is_purchase_inquiry(t)` เป็น `True` | สุ่ม 1 ประโยคจาก `_CLOSED_SHOP_REPLIES` (3 แบบ) |
-| **3** | พบคำว่า `"สบายดีไหม"`, `"สบายดีมั้ย"`, `"เป็นไงบ้าง"`, `"เป็นยังไงบ้าง"` | สุ่ม 1 ประโยคจาก `_HOW_ARE_YOU_REPLIES` (2 แบบ) |
-| **4** | พบคำว่า `"ขอบคุณ"`, `"ขอบใจ"`, `"thank"` | สุ่ม 1 ประโยคจาก `_THANKS_REPLIES` (2 แบบ) |
-| **5** | อื่นๆ ทั้งหมด (เช่น `@ไฮไลท์`, `@ผู้ติดตาม`, สติกเกอร์, อีโมจิ, สวัสดี) | สุ่ม 1 ประโยคจาก `_FRIENDLY_GREETING_REPLIES` (5 แบบ) |
-
-### 2.5 คลังข้อความตอบกลับทั้งหมด (ตรงตามโค้ดทุกตัวอักษร)
-
-#### กลุ่ม `_CLOSED_SHOP_REPLIES` (เมื่อมีคนถามซื้อ/ราคา/ส่งเบอร์)
-1. `{greeting} 🙏💕 ขอบพระคุณมากๆ เลยนะคะที่แวะมาสอบถาม ตอนนี้ป้าเข็มงดจำหน่าย/เลิกขายแล้วค่ะ แต่ยังแวะมาทักทายพูดคุยกันได้เสมอเลยนะคะ ขอให้สุขภาพแข็งแรงและมีความสุขทุกวันค่ะ 🌷`
-2. `{greeting} 🙏💕 ขอบคุณที่คิดถึงกันนะคะ ตอนนี้ทางเพจไม่ได้เปิดขายแล้วค่ะ แวะมาทักทายพูดคุยกันเล่นๆ ได้ตลอดเลยนะคะ ดูแลสุขภาพด้วยน้า 😊💐`
-3. `{greeting} 🙏💕 ขอบพระคุณที่ให้ความสนใจนะคะ ปัจจุบันป้าเข็มหยุดขายแล้วค่ะ แต่ยินดีพูดคุยทักทายกับทุกท่านเสมอนะคะ ขอให้วันนี้เป็นวันที่ดีค่ะ ✨`
-
-#### กลุ่ม `_FRIENDLY_GREETING_REPLIES` (ทักทายทั่วไป / `@ไฮไลท์` / `@ผู้ติดตาม`)
-1. `{greeting} 🙏💕 ขอบคุณที่แวะมาทักทายกันนะคะ ขอให้วันนี้เป็นวันที่สดใสและมีความสุขมากๆ ค่ะ 🌷✨`
-2. `{greeting} 😊💕 ดีใจจังเลยค่ะที่แวะมาทักทายกัน ช่วงนี้สบายดีไหมคะ ดูแลสุขภาพด้วยน้า 💐`
-3. `{greeting} 🙏✨ ขอบคุณที่แวะเข้ามาเยี่ยมชมเพจนะคะ แวะมาคุยเล่นทักทายกันได้เสมอเลยค่ะ 💕`
-4. `{greeting} 🌸💕 สวัสดีวันดีๆ นะคะ ขอบคุณที่แวะมาทักทายกันค่ะ ขอให้มีแต่เรื่องดีๆ เข้ามาทั้งวันเลยน้า 😊`
-5. `{greeting} 🙏💐 แวะมาส่งกำลังใจให้เช่นกันนะคะ ขอให้สุขภาพแข็งแรง ยิ้มได้ทุกวันเลยค่ะ ✨`
-
-#### กลุ่ม `_HOW_ARE_YOU_REPLIES` (ถามสารทุกข์สุกดิบ)
-1. `{greeting} 😊💕 ป้าเข็มสบายดีค่ะ ขอบคุณที่ถามไถ่กันนะคะ ทางโน้นสบายดีไหมคะ ดูแลสุขภาพด้วยน้า 💐`
-2. `{greeting} 🙏✨ สบายดีจ้า ขอบคุณที่เป็นห่วงถามไถ่กันนะคะ ขอให้แข็งแรงสดใสเช่นกันค่ะ 🌷`
-
-#### กลุ่ม `_THANKS_REPLIES` (ขอบคุณ)
-1. `{greeting} 🙏💕 ยินดีมากๆ เลยค่ะ ขอให้มีความสุขและสุขภาพแข็งแรงเสมอนะคะ 🌷`
-2. `{greeting} 😊💐 ด้วยความยินดีเลยค่ะ แวะมาทักทายกันได้ตลอดนะคะ ✨`
+### 4.2 มาตรฐานความปลอดภัยก่อน Deploy (Pre-flight Gate)
+- รันการคอมไพล์และทดสอบตรรกะผ่าน Node.js ในแซนด์บ็อกซ์
+- ทดสอบคำสั่งค้นหาจริง (`รีสอรท มหาราช`, `กิน ปาย`, `1669`, `สบายดีไหม`)
+- หากพบ Syntax Error หรือ Runtime Exception สคริปต์จะปฏิเสธการ Deploy และคง Worker เดิมไว้ 100%
 
 ---
 
-## 3. รายละเอียดการเชื่อมต่อครบทั้ง 3 ชั้นของบอท
+## 5. ระบบ Local Failsafe Daemon บน Windows (Zero-Click Auto-Run)
 
-### 3.1 ชั้นที่ 1: บอทในเครื่อง Local Daemon (`tools/fb_comment_responder.py`)
-| จุดที่แก้ | ตำแหน่งบรรทัด | พฤติกรรมเมื่อ `FB_CHAT_ONLY_MODE=true` |
-| :--- | :---: | :--- |
-| Import โมดูล | `83` | `from app.services.fb_chat_only import build_friendly_chat_reply, is_fb_chat_only_mode` |
-| คูลดาวน์คนเดิมใน Inbox | `252` | `_INBOX_COOLDOWN_SECS = 5` (ลดจาก 300 วิ เพื่อให้คุยโต้ตอบต่อเนื่องได้; มี `replied_history[mid]` กันตอบข้อความเดิมซ้ำ) |
-| ตอบคอมเมนต์ & Inbox | `1054–1055` | ใน `generate_comment_reply(...)` คืน `(build_friendly_chat_reply(text, clean_name, channel="comment"), None)` ทันที |
-| Private Reply DM | `2520–2521` | ใน `generate_private_offer_message(...)` คืน `""` ทันที → `reply_to_fb_comment` ข้ามการทักแชทเสนอขายอัตโนมัติ |
-| Auto First Comment | `4148–4149` | เพิ่ม `not is_fb_chat_only_mode() and is_fish_post` → ไม่ปักหมุดคอมเมนต์ขายของ/โปสเตอร์ใต้โพสต์ |
-| เวลารอ Inbox ก่อนตอบ | `5286` | `if age_sec < 3: continue` (ลดจาก 20 วิ เหลือ 3 วิ) |
-| ข้ามแชทเก่าเกิน 24 ชม. | `5298` | `if age_sec > 86400:` ข้ามและบันทึก `skipped: older_than_24h` |
-| ปุ่ม Quick Reply ใน Inbox | `5356` | `if not is_fb_chat_only_mode() and ...` → ไม่แนบปุ่ม 550.- / 390.- / 2 กก. |
-| รอบสแกนหลัก (คอมเมนต์ + Inbox) | `6970, 6986` | `run_comment_responder_loop(interval_seconds=15)` (ลดจาก 30 วิ เหลือ 15 วิ ทำงานไวขึ้นทั้งคอมเมนต์และ Inbox) |
+ทำงานเป็นแนวป้องกันชั้นที่ 2 กรณีที่ Webhook มีความล่าช้า หรือ Facebook API มีการเปลี่ยนแปลง:
 
-**การเก็บข้อมูลที่ยังคงทำงานใน `tools/fb_comment_responder.py`:**
-- `_save_comment_lead_to_supabase(...)` (บรรทัด `4746`, `5450`) → ยังบันทึกชื่อ, `sender_id`, ข้อความ, `post_id`/`comment_id` ลง Supabase
-- `_save_replied_history(...)` → ยังบันทึกประวัติกันตอบซ้ำในเครื่อง
-- `_trigger_realtime_crm_sheet_sync()` และ `_trigger_bg_likes_and_crm_sync()` (บรรทัด `6738–6762`) → ยังซิงก์ Google Sheets CRM และเก็บ Likes ตามปกติ
-- `_save_comment_order_to_supabase(...)` → **ไม่ถูกเรียก** เพราะ `order_info` เป็น `None` เสมอ
-
-### 3.2 ชั้นที่ 2: Cloud Background Worker (`backend/app/services/fish_cloud_worker.py`)
-| จุดที่แก้ | ตำแหน่งบรรทัด | พฤติกรรมเมื่อ `FB_CHAT_ONLY_MODE=true` |
-| :--- | :---: | :--- |
-| Import โมดูล | `75` | `from app.services.fb_chat_only import build_friendly_chat_reply, is_fb_chat_only_mode` |
-| ตอบคอมเมนต์ & Inbox | `1152–1153` | คืน `(build_friendly_chat_reply(text, clean_name, channel="comment"), None)` |
-| Private Reply DM | `2444–2445` | คืน `""` (ไม่ทักแชทเสนอขาย) |
-| Auto First Comment | `3163` | `if post_age_ok and not is_fb_chat_only_mode():` (ไม่ปักหมุดขายของ) |
-| ปุ่ม Quick Reply ใน Inbox | `3836` | `is_postpone_reply = is_fb_chat_only_mode() or ...` → `qr_buttons = None` |
-
-### 3.3 ชั้นที่ 3: Facebook Messenger Webhook (`backend/app/api/facebook_bot.py`)
-| จุดที่แก้ | ตำแหน่งบรรทัด | พฤติกรรมเมื่อ `FB_CHAT_ONLY_MODE=true` |
-| :--- | :---: | :--- |
-| Import โมดูล | `43` | `from app.services.fb_chat_only import build_friendly_chat_reply, is_fb_chat_only_mode` |
-| `_handle_event(event, page_id)` | `1959–1975` | ข้าม `is_echo`, ข้ามเพจตัวเอง (`1307380735783361`, `1323469404180656`), ข้าม event ว่าง (เช่น delivery/read receipt) → ดึงชื่อผ่าน `_fetch_fb_profile_name` → สร้างคำตอบด้วย `build_friendly_chat_reply(..., channel="messenger")` → ส่งข้อความล้วนผ่าน `_reply_to_facebook(..., quick_replies=None)` แล้ว `return` ทันที (ไม่เข้าขั้นตอน OCR สลิป / สร้างออเดอร์) |
-
----
-
-## 4. ระบบทำงานอัตโนมัติ 100% บน Windows (Zero-Click Auto-Run)
-
-ระบบถูกตั้งค่าให้รันเองโดยสมบูรณ์ **แยกออกจาก IDE/หน้าต่างแชท** และ **เริ่มทำงานเองทุกครั้งที่เปิดคอม**
-
-| องค์ประกอบ | ตำแหน่ง / ชื่อจริง | หน้าที่ |
+| องค์ประกอบ | ตำแหน่ง / คำสั่ง | หน้าที่ |
 | :--- | :--- | :--- |
-| **Windows Task Scheduler** | `PaKhem_FB_AutoComment_24x7` (สถานะ `Ready`) | รัน `wscript.exe d:\Shopee_Web_Scraping\tools\run_fb_comment_silent.vbs` อิสระภายใต้ระบบ Windows |
-| **Windows Startup** | `C:\Users\Lenovo\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\PaKhem_FB_AutoComment.vbs` | สั่งเปิดบอทอัตโนมัติทันทีที่ล็อกอิน Windows |
-| **Silent Launcher** | `d:\Shopee_Web_Scraping\tools\run_fb_comment_silent.vbs` | เรียก `pythonw.exe -X utf8 "d:\Shopee_Web_Scraping\tools\fb_comment_responder.py" --daemon` แบบซ่อนหน้าต่าง (`0, False`) |
-| **กันรันซ้ำซ้อน (FileLock)** | `d:\Shopee_Web_Scraping\artifacts\fb_comment_responder.lock` | ป้องกันไม่ให้เปิดบอท 2 ตัวชนกัน (ตัวที่ 2 จะพิมพ์ `skipping duplicate start` แล้วปิดตัวเอง) |
-| **ไฟล์บันทึกการทำงาน (Log)** | `d:\Shopee_Web_Scraping\artifacts\fb_comment_responder.log` | เก็บบันทึกการตอบคอมเมนต์, แชท Inbox, CRM Sync และ Error ทั้งหมด |
+| **Windows Task Scheduler** | `PaKhem_FB_AutoComment_24x7` (สถานะ `Ready`) | สั่งรันทุก 5 นาที หากโปรเซสดับจะเปิดใหม่ให้อัตโนมัติ |
+| **Silent Launcher** | `d:\Shopee_Web_Scraping\tools\run_fb_comment_silent.vbs` | เรียก `pythonw.exe` รัน `tools/fb_comment_responder.py --daemon` แบบไร้หน้าต่างดำ |
+| **รอบเวลาการสแกน** | `interval_seconds = 25` | ตรวจสอบคอมเมนต์และกล่องข้อความ Inbox สม่ำเสมอ |
+| **การหน่วงเวลาตอบ** | `age_sec >= 3` | ให้โอกาส Cloudflare Webhook ตอบก่อน 3 วิ เพื่อป้องกันการส่งข้อความซ้ำ |
+| **ไฟล์บันทึกการทำงาน** | `artifacts/fb_comment_responder.log` | บันทึกประวัติการตอบและการทำงานทั้งหมด |
 
 ---
 
-## 5. คู่มือปฏิบัติการและการแก้ปัญหา (Operations & Troubleshooting)
+## 6. คู่มือการทดสอบและตรวจสอบระบบ (Verification SOP)
 
-### 5.1 ตรวจเช็กว่าบอทกำลังทำงานอยู่หรือไม่ (PowerShell)
+### 6.1 ตรวจสอบสถานะโปรเซสในเครื่อง (PowerShell)
 ```powershell
-Get-CimInstance Win32_Process |
-  Where-Object { $_.Name -match "python" -and $_.CommandLine -match "fb_comment_responder" } |
-  Select-Object ProcessId, Name, CreationDate | Format-Table -AutoSize
+Get-Process pythonw | Select-Object Id, ProcessName, StartTime
 ```
 
-### 5.2 ดู Log การทำงานล่าสุด
+### 6.2 ตรวจสอบ Log การทำงานแบบ Real-time
 ```powershell
-Get-Content "d:\Shopee_Web_Scraping\artifacts\fb_comment_responder.log" -Tail 20
+Get-Content "d:\Shopee_Web_Scraping\artifacts\fb_comment_responder.log" -Tail 25 -Wait
 ```
 
-### 5.3 รีสตาร์ทบอทแบบอัตโนมัติผ่าน Task Scheduler (ไม่ต้องดับเบิลคลิก)
-```powershell
-Get-CimInstance Win32_Process |
-  Where-Object { $_.CommandLine -match "fb_comment_responder" } |
-  ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
-Start-Sleep -Seconds 1
-Start-ScheduledTask -TaskName "PaKhem_FB_AutoComment_24x7"
-```
-
-### 5.4 การสลับกลับไปโหมดขายของ (กรณีต้องการเปิดขายอีกครั้งในอนาคต)
-1. เพิ่มในไฟล์ `.env` (ฝั่งเครื่องคอม) และใน Environment Variables บน Render:
-   ```env
-   FB_CHAT_ONLY_MODE=false
-   ```
-2. รีสตาร์ทบอทตามข้อ 5.3 และ Redeploy บน Render
-
-### 5.5 การ Push โค้ดขึ้นเซิร์ฟเวอร์ Render Cloud
-- โค้ดถูก Commit ไว้บนสาขา `main` แล้ว (`12cdeaa`, `4637da1`)
-- หาก `git push` ติด Error `403 Permission denied to watt29` ให้สลับบัญชี GitHub Credential ใน Windows Credential Manager เป็นบัญชีเจ้าของรีโมต (`g81393878-bit` สำหรับ `origin` หรือ `aiforge2569-sketch` สำหรับ `render2`) แล้วรัน:
-  ```powershell
-  git push origin main
-  ```
-
-### 5.6 ข้อควรระวังในการทดสอบด้วยตัวเอง
-1. **ห้ามใช้โปรไฟล์เพจทดสอบเอง:** บอทจะข้ามข้อความและคอมเมนต์ที่ส่งจาก Page ID ตัวเอง (`1307380735783361` และ `1323469404180656`) ต้องใช้บัญชีเฟสบุ๊กส่วนตัวทดสอบ
-2. **ระยะเวลาการตอบของบอทในเครื่อง:** ประมาณ **3–15 วินาที** (ขึ้นอยู่กับจังหวะรอบสแกน 15 วินาที)
-3. **หากพบ Error `(#4) Application request limit reached` ใน Log:** เป็น Rate Limit ชั่วคราวจาก Facebook Graph API (จะหายเองภายในไม่กี่นาที; ห้ามลด `interval_seconds` ต่ำกว่า 15 วินาที)
-4. **เพจ 2 (`1323469404180656`):** หากต้องการให้บอทตอบเพจ 2 ด้วย ต้องใส่ค่า `FACEBOOK_PAGE_ACCESS_TOKEN_2` ในไฟล์ `.env` ให้ครบถ้วน (ปัจจุบันเป็นค่าว่าง)
+### 6.3 ตัวอย่างการทดสอบข้อความ
+| ข้อความทดสอบ | คำตอบที่คาดหวัง |
+| :--- | :--- |
+| `รีสอรท มหาราช` | 🏨 รีสอร์ท อ.มหาราช จ.พระนครศรีอยุธยา + แผนที่/ราคา |
+| `กิน สุโขทัย` | 🍜 ร้านอาหารอร่อย จ.สุโขทัย + ร้านเด่น + รีวิว |
+| `เที่ยว อยุธยา` | 🗺️ สถานที่ท่องเที่ยว จ.พระนครศรีอยุธยา + นำทาง |
+| `รพ บางปะหัน` | 🏥 โรงพยาบาล อ.บางปะหัน จ.พระนครศรีอยุธยา + ฉุกเฉิน 1669 |
+| `สบายดีไหม` | ทักทายสุภาพ สบายดี ขอบคุณที่ถามไถ่ |
+| `สนใจสั่ง 1 โล` | แจ้งเลิกจำหน่าย/งดขายแล้วอย่างสุภาพ แต่ยินดีพูดคุยทักทาย |

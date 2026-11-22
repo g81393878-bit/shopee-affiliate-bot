@@ -13,9 +13,20 @@ import time
 import urllib.parse
 from typing import Dict, List, Optional, Tuple
 
+import os
+import sys
+from pathlib import Path
+
+_BACKEND_DIR = str(Path(__file__).resolve().parent.parent.parent)
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+
 import httpx
 
-from app.services.hospital_directory_service import ALL_77_PROVINCES, PROVINCE_ALIASES, extract_location_criteria
+try:
+    from app.services.hospital_directory_service import ALL_77_PROVINCES, PROVINCE_ALIASES, extract_location_criteria
+except ImportError:
+    from backend.app.services.hospital_directory_service import ALL_77_PROVINCES, PROVINCE_ALIASES, extract_location_criteria
 
 logger = logging.getLogger(__name__)
 
@@ -238,7 +249,10 @@ def extract_detailed_place_location(text: str) -> Dict[str, object]:
     #    เติมอำเภอ + จังหวัดให้อัตโนมัติจากฐานข้อมูล 928 อำเภอทั่วไทย (ไม่หลุดไปจังหวัดอื่น!)
     if not province and (amphoe or area):
         try:
-            from app.services.thai_address_validator import lookup_thai_area_by_name
+            try:
+                from app.services.thai_address_validator import lookup_thai_area_by_name
+            except ImportError:
+                from backend.app.services.thai_address_validator import lookup_thai_area_by_name
             q_area = re.sub(r"^(?:อ\.|อำเภอ|เขต|ต\.|ตำบล|แขวง)", "", (amphoe or area)).strip()
             if len(q_area) >= 2:
                 hit = lookup_thai_area_by_name(q_area)
