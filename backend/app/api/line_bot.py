@@ -3294,6 +3294,59 @@ def message_text(event):
     display_term = strip_question_suffix(normalized_text)
     line_user_id = event.source.user_id
     is_owner = line_user_id == ADMIN_LINE_USER_ID
+
+    # 0.1 ตรวจจับคำถามค้นหาสถานพยาบาล (แยกแยะคนและสัตว์ชัดเจน 100% ข้ามโหมดปิดร้าน)
+    try:
+        from app.services.hospital_directory_service import is_any_hospital_query, format_hospital_directory_reply
+        if is_any_hospital_query(normalized_text):
+            hosp_reply = format_hospital_directory_reply(normalized_text, max_results=5)
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=hosp_reply))
+            return
+    except Exception as e:
+        logger.error(f"[LINE] error in hospital directory lookup: {e}")
+
+    # 0.2 ตรวจจับคำถามค้นหาร้านอาหาร / สถานที่ท่องเที่ยว / โรงแรมทั่วไทย
+    try:
+        from app.services.places_directory_service import is_places_query, format_places_directory_reply
+        if is_places_query(normalized_text):
+            place_reply = format_places_directory_reply(normalized_text, max_results=3)
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=place_reply))
+            return
+    except Exception as e:
+        logger.error(f"[LINE] error in places directory lookup: {e}")
+
+    # 0. ยุติการจำหน่ายปลาสลิดทุกรายการ (ลบการขายปลาออกทั้งหมด 100%)
+    from app.services.fb_chat_only import is_purchase_inquiry, build_friendly_chat_reply
+
+    line_quick_reply = QuickReply(items=[
+        QuickReplyButton(action=MessageAction(label="🏥 รพ. ใกล้ฉัน", text="โรงพยาบาลคน ใกล้ฉัน")),
+        QuickReplyButton(action=MessageAction(label="🍜 ร้านอาหาร", text="ร้านอาหารอร่อย ใกล้ฉัน")),
+        QuickReplyButton(action=MessageAction(label="🗺️ ที่เที่ยว", text="สถานที่ท่องเที่ยว ใกล้ฉัน")),
+        QuickReplyButton(action=MessageAction(label="🏨 โรงแรม", text="โรงแรม ที่พัก ใกล้ฉัน")),
+        QuickReplyButton(action=MessageAction(label="🚨 ฉุกเฉิน 1669", text="ขอรถพยาบาล 1669")),
+    ])
+
+    if is_purchase_inquiry(normalized_text) or any(k in normalized_text.lower() for k in ("ปลา", "ปลาสลิด", "กี่โล", "ราคา", "สั่งซื้อ")):
+        _CLOSED_NOTICE = (
+            "🙏 สวัสดีค่ะ ขอขอบพระคุณที่แวะมาสอบถามร้านป้าเข็มนะคะ 💕\n\n"
+            "ขณะนี้ทางร้านได้ \"ยุติการจำหน่ายและเลิกขายปลาสลิดทุกรายการเรียบร้อยแล้วค่ะ\" "
+            "(ไม่มีสินค้าจำหน่าย และปิดรับออเดอร์ทุกช่องทางแล้วนะคะ)\n\n"
+            "แต่คุณพี่ยังสามารถแวะมาพูดคุยทักทาย หรือพิมพ์ชื่อจังหวัดเพื่อค้นหาโรงพยาบาลคน & สัตว์ ทั่วไทย (77 จังหวัด) ได้เสมอนะคะ 😊💐"
+        )
+        try:
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=_CLOSED_NOTICE, quick_reply=line_quick_reply))
+        except Exception as e:
+            logger.error(f"[LINE] failed to send closed notice: {e}")
+        return
+
+    # ตอบทักทายทั่วไปอย่างเป็นมิตร พร้อมปุ่มทางลัดค้นหา รพ. ทั่วไทย
+    friendly_reply = build_friendly_chat_reply(normalized_text, channel="line")
+    try:
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=friendly_reply, quick_reply=line_quick_reply))
+    except Exception as e:
+        logger.error(f"[LINE] failed to send friendly reply: {e}")
+    return
+
     intent = 'unknown'
     interest_cat = None
     

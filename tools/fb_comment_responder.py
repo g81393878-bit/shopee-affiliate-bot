@@ -3678,31 +3678,22 @@ def scan_and_reply_comments(limit_posts: int = 12) -> dict:
 
 
 
-        for endpoint, msg_field, extra_params in [
+        _endpoints = (
+            [
+                ("published_posts", "message", {}),
+                ("video_reels", "description", {}),
+            ]
+            if is_fb_chat_only_mode()
+            else [
+                ("live_videos", "description", {}),
+                ("video_reels", "description", {}),
+                ("videos", "description", {}),
+                ("published_posts", "message", {}),
+                ("ads_posts", "message", {"include_inline_create": "true"}),
+            ]
+        )
 
-
-
-            ("live_videos", "description", {}),
-
-
-
-            ("video_reels", "description", {}),
-
-
-
-            ("videos", "description", {}),
-
-
-
-            ("published_posts", "message", {}),
-
-
-
-            ("ads_posts", "message", {"include_inline_create": "true"}),
-
-
-
-        ]:
+        for endpoint, msg_field, extra_params in _endpoints:
 
 
 
@@ -6967,7 +6958,7 @@ if __name__ == "__main__":
 
 
 
-                run_comment_responder_loop(interval_seconds=15)
+                run_comment_responder_loop(interval_seconds=25)
 
 
 
@@ -6983,7 +6974,7 @@ if __name__ == "__main__":
 
 
 
-            run_comment_responder_loop(interval_seconds=15)
+            run_comment_responder_loop(interval_seconds=25)
 
 
 
